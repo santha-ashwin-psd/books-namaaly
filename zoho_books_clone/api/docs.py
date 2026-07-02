@@ -2266,7 +2266,21 @@ def create_credit_note():
     cn.submit()
     frappe.db.commit()
 
-    # If goods returned by customer, create Material Receipt to restock
+    # If goods returned by customer, create Material Receipt to restock.
+    # Restock at COST (current valuation / FIFO), never the invoice's selling
+    # rate — receiving at selling price would write inventory up by the margin
+    # and overstate profit via the Stock Adjustment contra.
+    def _restock_rate(item_code, selling_rate):
+        rate = flt(frappe.db.get_value(
+            "Bin", {"item_code": item_code, "warehouse": warehouse}, "valuation_rate"))
+        if not rate:
+            try:
+                from zoho_books_clone.inventory.utils import get_fifo_cost
+                rate = flt(get_fifo_cost(item_code, warehouse, 1))
+            except Exception:
+                rate = 0
+        return rate or flt(selling_rate)
+
     se_name = None
     if reason == "Goods Returned" and warehouse:
         se_items = [
@@ -2274,7 +2288,8 @@ def create_credit_note():
                 "item_code":   it.get("item_name") or it.get("item_code") or "",
                 "item_name":   it.get("item_name") or "",
                 "qty":         flt(it.get("qty", 1)),
-                "basic_rate":  flt(it.get("rate", 0)),
+                "basic_rate":  _restock_rate(it.get("item_name") or it.get("item_code") or "",
+                                             it.get("rate", 0)),
                 "t_warehouse": warehouse,
             }
             for it in items_raw if (it.get("item_name") or it.get("item_code"))
@@ -4638,118 +4653,6 @@ def get_accounts():
                 all_accs = get_list_by_type()
             res[key] = all_accs
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Write-off & Refund helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-@frappe.whitelist(allow_guest=False, methods=["POST"])
-def write_off_credit_note(credit_note_name, write_off_account=None):
-    """Write off the remaining balance on a Credit Note via Journal Entry."""
-    from zoho_books_clone.utils.access import require_module
-    require_module("invoices", write=True)
-    company = _get_company(frappe.session.user)
-    cn = frappe.get_doc("Sales Invoice", credit_note_name)
-    if cn.docstatus != 1:
-        frappe.throw("Credit note must be submitted before writing off")
-
-    bal_data = get_credit_note_balance(credit_note_name)
-    balance = flt(bal_data.get("balance", 0))
-    if balance <= 0:
-        frappe.throw("No outstanding balance to write off")
-
-    ar_account = frappe.db.get_value(
-        "Account", {"account_type": "Receivable", "company": company, "is_group": 0}, "name"
-    )
-    if not write_off_account:
-        write_off_account = (
-            frappe.db.get_value("Account", {"account_type": "Write Off", "company": company, "is_group": 0}, "name")
-            or frappe.db.get_value("Account", {"account_type": "Expense", "company": company, "is_group": 0}, "name")
-        )
-    if not write_off_account:
-        frappe.throw("No write-off or expense account found for the company")
-
-    je = frappe.get_doc({
-        "doctype": "Journal Entry",
-        "company": company,
-        "posting_date": today(),
-        "voucher_type": "Write Off Entry",
-        "user_remark": f"Write off remaining balance on Credit Note {credit_note_name}",
-        "accounts": [
-            {
-                "account": ar_account,
-                "debit_in_account_currency": balance,
-                "party_type": "Customer",
-                "party": cn.customer,
-                "reference_type": "Sales Invoice",
-                "reference_name": credit_note_name,
-            },
-            {
-                "account": write_off_account,
-                "credit_in_account_currency": balance,
-            },
-        ],
-    })
-    je.flags.ignore_permissions = True
-    je.insert()
-    je.submit()
-    frappe.db.commit()
-    return {"journal_entry": je.name}
-
-
-@frappe.whitelist(allow_guest=False, methods=["POST"])
-def refund_debit_note(debit_note_name, amount, refund_mode="Bank Transfer", reference_no=""):
-    """Receive a cash refund from the vendor against a Debit Note balance."""
-    from zoho_books_clone.utils.access import require_module
-    require_module("bills", write=True)
-    company = _get_company(frappe.session.user)
-    dn = frappe.get_doc("Purchase Invoice", debit_note_name)
-    if dn.docstatus != 1:
-        frappe.throw("Debit note must be submitted before processing a refund")
-
-    amount = flt(amount)
-    if amount <= 0:
-        frappe.throw("Refund amount must be greater than 0")
-
-    ap_account = frappe.db.get_value(
-        "Account", {"account_type": "Payable", "company": company, "is_group": 0}, "name"
-    )
-    account_type = "Cash" if refund_mode == "Cash" else "Bank"
-    cash_bank_account = frappe.db.get_value(
-        "Account", {"account_type": account_type, "company": company, "is_group": 0}, "name"
-    )
-    if not cash_bank_account:
-        frappe.throw(f"No {account_type} account found for the company")
-
-    je = frappe.get_doc({
-        "doctype": "Journal Entry",
-        "company": company,
-        "posting_date": today(),
-        "voucher_type": "Cash Entry" if refund_mode == "Cash" else "Bank Entry",
-        "cheque_no": reference_no or "",
-        "cheque_date": today() if reference_no else None,
-        "user_remark": f"Refund received from vendor against Debit Note {debit_note_name}",
-        "accounts": [
-            {
-                "account": cash_bank_account,
-                "debit_in_account_currency": amount,
-            },
-            {
-                "account": ap_account,
-                "credit_in_account_currency": amount,
-                "party_type": "Supplier",
-                "party": dn.supplier,
-                "reference_type": "Purchase Invoice",
-                "reference_name": debit_note_name,
-            },
-        ],
-    })
-    je.flags.ignore_permissions = True
-    je.insert()
-    je.submit()
-    frappe.db.commit()
-    return {"journal_entry": je.name}
-
     # Fallback 2: if the company itself had no accounts (stale/wrong company name),
     # retry the entire query without any company filter so the UI is never blank.
     if not any(res.values()):
@@ -4767,3 +4670,131 @@ def refund_debit_note(debit_note_name, amount, refund_mode="Bank Transfer", refe
                 res[key] = all_global
 
     return res
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Write-off & Refund helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def write_off_credit_note(credit_note_name, write_off_account=None):
+    """Write off the remaining balance on a Credit Note via Journal Entry.
+
+    The CN sits as a credit balance on AR (the customer is owed); the write-off
+    debits AR (referencing the CN, so it counts as applied) and credits the
+    write-off/expense account.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices", write=True)
+    company = _get_company(frappe.session.user)
+    cn = frappe.get_doc("Sales Invoice", credit_note_name)
+    if cn.docstatus != 1:
+        frappe.throw("Credit note must be submitted before writing off")
+
+    bal_data = get_credit_note_balance(credit_note_name)
+    balance = flt(bal_data.get("balance", 0))
+    if balance <= 0:
+        frappe.throw("No outstanding balance to write off")
+
+    ar_account = cn.debit_to or frappe.db.get_value(
+        "Account", {"account_type": "Receivable", "company": company, "is_group": 0}, "name"
+    )
+    if not write_off_account:
+        write_off_account = (
+            frappe.db.get_value("Account", {"account_type": "Write Off", "company": company, "is_group": 0}, "name")
+            or frappe.db.get_value("Account", {"account_type": "Expense", "company": company, "is_group": 0}, "name")
+        )
+    if not write_off_account:
+        frappe.throw("No write-off or expense account found for the company")
+
+    je = frappe.get_doc({
+        "doctype": "Journal Entry",
+        "naming_series": "JV-.YYYY.-",
+        "company": company,
+        "posting_date": today(),
+        "voucher_type": "Journal Entry",
+        "remark": f"Write off remaining balance on Credit Note {credit_note_name}",
+        "accounts": [
+            {
+                "account": ar_account,
+                "debit": balance,
+                "credit": 0,
+                "party_type": "Customer",
+                "party": cn.customer,
+                "reference_type": "Sales Invoice",
+                "reference_name": credit_note_name,
+            },
+            {
+                "account": write_off_account,
+                "debit": 0,
+                "credit": balance,
+            },
+        ],
+    })
+    je.flags.ignore_permissions = True
+    je.insert()
+    je.submit()
+    frappe.db.commit()
+    return {"journal_entry": je.name}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def refund_debit_note(debit_note_name, amount, refund_mode="Bank Transfer", reference_no=""):
+    """Receive a cash refund from the vendor against a Debit Note balance.
+
+    The DN sits as a debit balance on AP; the refund debits Cash/Bank and
+    credits AP (referencing the DN, so it counts as applied).
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("bills", write=True)
+    company = _get_company(frappe.session.user)
+    dn = frappe.get_doc("Purchase Invoice", debit_note_name)
+    if dn.docstatus != 1:
+        frappe.throw("Debit note must be submitted before processing a refund")
+
+    amount = flt(amount)
+    if amount <= 0:
+        frappe.throw("Refund amount must be greater than 0")
+
+    ap_account = dn.credit_to or frappe.db.get_value(
+        "Account", {"account_type": "Payable", "company": company, "is_group": 0}, "name"
+    )
+    account_type = "Cash" if refund_mode == "Cash" else "Bank"
+    cash_bank_account = frappe.db.get_value(
+        "Account", {"account_type": account_type, "company": company, "is_group": 0}, "name"
+    ) or frappe.db.get_value(
+        "Account", {"account_type": ["in", ["Bank", "Cash"]], "company": company, "is_group": 0}, "name"
+    )
+    if not cash_bank_account:
+        frappe.throw(f"No {account_type} account found for the company")
+
+    je = frappe.get_doc({
+        "doctype": "Journal Entry",
+        "naming_series": "JV-.YYYY.-",
+        "company": company,
+        "posting_date": today(),
+        "voucher_type": "Cash Entry" if refund_mode == "Cash" else "Bank Entry",
+        "remark": f"Refund received from vendor against Debit Note {debit_note_name}"
+                  + (f" — Ref: {reference_no}" if reference_no else ""),
+        "accounts": [
+            {
+                "account": cash_bank_account,
+                "debit": amount,
+                "credit": 0,
+            },
+            {
+                "account": ap_account,
+                "debit": 0,
+                "credit": amount,
+                "party_type": "Supplier",
+                "party": dn.supplier,
+                "reference_type": "Purchase Invoice",
+                "reference_name": debit_note_name,
+            },
+        ],
+    })
+    je.flags.ignore_permissions = True
+    je.insert()
+    je.submit()
+    frappe.db.commit()
+    return {"journal_entry": je.name}

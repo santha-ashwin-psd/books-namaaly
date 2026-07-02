@@ -242,6 +242,13 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
     Post GL for a Debit Note (Purchase Invoice with is_return=1).
       Goods Returned → DR AP / CR Inventory  (stock leaves, liability reduces)
       Overcharged etc → DR AP / CR Expense   (cost is reversed)
+    Tax lines with an account_head also reverse the ITC taken on the original
+    bill (CR the input-tax account), so the payable reduction stays tax-inclusive.
+
+    Debit note items carry negative qty, so grand_total/net_total/tax amounts
+    are negative — post their absolute values on the reversing sides. The DN
+    must sit as a DEBIT balance on AP (see apply_debit_note_to_bill), so the
+    amounts here have to be positive.
     """
     ap_account = getattr(doc, "credit_to", None) or _acct_by_type(doc.company, "Payable")
     if not ap_account:
@@ -268,10 +275,10 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
         )
         return
 
-    amount = flt(doc.grand_total)
+    amount = abs(flt(doc.grand_total))
     fy = getattr(doc, "fiscal_year", "") or ""
 
-    make_gl_entries([
+    gl_map = [
         {
             "account":      ap_account,
             "debit":        amount,
@@ -285,18 +292,40 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
             "fiscal_year":  fy,
             "remarks":      f"Debit Note — reduce payable — {doc.name}",
         },
-        {
-            "account":      cr_account,
+    ]
+
+    # Reverse ITC per tax line where an account is known; anything without an
+    # account falls into the expense/stock reversal so the entry stays balanced.
+    tax_reversed = flt(0)
+    for tax in (getattr(doc, "taxes", None) or []):
+        tax_amount = abs(flt(tax.tax_amount))
+        if not tax_amount or not tax.account_head:
+            continue
+        gl_map.append({
+            "account":      tax.account_head,
             "debit":        0,
-            "credit":       amount,
+            "credit":       tax_amount,
             "voucher_type": doc.doctype,
             "voucher_no":   doc.name,
             "posting_date": doc.posting_date,
             "company":      doc.company,
             "fiscal_year":  fy,
-            "remarks":      f"Debit Note — {cr_label} reversal — {doc.name}",
-        },
-    ])
+            "remarks":      f"Debit Note — ITC reversal — {doc.name}",
+        })
+        tax_reversed += tax_amount
+
+    gl_map.append({
+        "account":      cr_account,
+        "debit":        0,
+        "credit":       round(amount - tax_reversed, 2),
+        "voucher_type": doc.doctype,
+        "voucher_no":   doc.name,
+        "posting_date": doc.posting_date,
+        "company":      doc.company,
+        "fiscal_year":  fy,
+        "remarks":      f"Debit Note — {cr_label} reversal — {doc.name}",
+    })
+    make_gl_entries(gl_map)
 
 
 def _acct_by_type(company: str, account_type: str) -> str | None:

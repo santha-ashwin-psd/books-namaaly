@@ -80,12 +80,19 @@ class StockLedgerEntry(Document):
                 )
                 bin_doc = frappe.get_doc("Bin", bin_name)
 
-        # Apply the delta (now holding the exclusive lock)
+        # Apply the delta (now holding the exclusive lock).
+        # stock_value accumulates the SLE's stock_value_difference — the same
+        # number the GL posts — so Bin value ≡ Stock Ledger ≡ Stock In Hand GL
+        # at every point in time. Revaluing the whole bin at the latest rate
+        # (the old behaviour) diverged from the ledger as soon as two receipts
+        # carried different rates.
         new_qty = flt(bin_doc.actual_qty) + flt(self.actual_qty)
-        total_value = flt(new_qty) * flt(self.valuation_rate) if new_qty > 0 else 0
+        total_value = flt(bin_doc.stock_value) + flt(self.stock_value_difference)
+        if new_qty <= 0:
+            total_value = 0
 
         bin_doc.actual_qty = new_qty
-        bin_doc.valuation_rate = flt(self.valuation_rate) if new_qty > 0 else flt(bin_doc.valuation_rate)
+        bin_doc.valuation_rate = (total_value / new_qty) if new_qty > 0 else flt(bin_doc.valuation_rate)
         bin_doc.stock_value = total_value
         bin_doc.projected_qty = flt(new_qty) + flt(bin_doc.ordered_qty) - flt(bin_doc.reserved_qty)
         bin_doc.flags.ignore_links = True

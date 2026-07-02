@@ -44,9 +44,21 @@
           <span>Total Income</span>
           <span class="mono green">{{ fmt(pl.total_income) }}</span>
         </div>
+        <div v-if="pl.cogs" class="pl-row expense">
+          <span>Cost of Goods Sold</span>
+          <span class="mono red">{{ fmt(pl.cogs) }}</span>
+        </div>
+        <div v-if="pl.cogs" class="pl-row" :class="pl.gross_profit >= 0 ? 'profit' : 'loss'">
+          <span>Gross Profit</span>
+          <span class="mono">{{ fmt(pl.gross_profit) }}</span>
+        </div>
         <div class="pl-row expense">
           <span>Total Expense</span>
           <span class="mono red">{{ fmt(pl.total_expense) }}</span>
+        </div>
+        <div v-if="pl.stock_adjustment" class="pl-row expense">
+          <span>Stock Adjustment</span>
+          <span class="mono" :class="pl.stock_adjustment > 0 ? 'red' : 'green'">{{ fmt(pl.stock_adjustment) }}</span>
         </div>
         <div class="pl-divider"></div>
         <div class="pl-row net" :class="pl.net_profit >= 0 ? 'profit' : 'loss'">

@@ -14,8 +14,16 @@ class JournalEntry(Document):
         # any further checks — this guards against both "no FY found" and the
         # period lock_date, which central_validator._check_period_not_closed
         # does not cover (it only catches closed years, not missing ones).
+        # Opening Entries are exempt (same as in central_validator): they set up
+        # historical balances and may be dated before any fiscal year exists.
         if self.posting_date and self.company:
-            self.fiscal_year = validate_fiscal_year(self.posting_date, self.company)
+            if self.voucher_type == "Opening Entry":
+                try:
+                    self.fiscal_year = validate_fiscal_year(self.posting_date, self.company)
+                except Exception:
+                    self.fiscal_year = ""
+            else:
+                self.fiscal_year = validate_fiscal_year(self.posting_date, self.company)
 
         if not self.accounts:
             frappe.throw(_("Journal Entry must have at least one account row."))

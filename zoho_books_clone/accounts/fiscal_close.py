@@ -59,8 +59,11 @@ def close_fiscal_year(fiscal_year: str, retained_earnings_account: str = None) -
     income_total = _sum_by_root_type(company, start_date, end_date, "Income")
     expense_total = _sum_by_root_type(company, start_date, end_date, "Expense")
     cogs_total = _sum_by_root_type(company, start_date, end_date, "Cost of Goods Sold")
+    # Stock Adjustment is the contra credited when stock is received — a credit
+    # balance offsets purchase expense (comes back negative → adds to profit).
+    stock_adj_total = _sum_by_root_type(company, start_date, end_date, "Stock Adjustment")
 
-    net_profit = income_total - expense_total - cogs_total
+    net_profit = income_total - expense_total - cogs_total - stock_adj_total
 
     if not net_profit:
         # Still mark as closed even if zero
@@ -75,6 +78,7 @@ def close_fiscal_year(fiscal_year: str, retained_earnings_account: str = None) -
     # Build closing Journal Entry
     je = frappe.get_doc({
         "doctype": "Journal Entry",
+        "naming_series": "JV-.YYYY.-",
         "posting_date": end_date,
         "company": company,
         "fiscal_year": fiscal_year,
@@ -157,10 +161,12 @@ def _sum_by_root_type(company, start_date, end_date, account_type):
     }, as_dict=True)
 
     val = flt(result[0].net) if result else 0
-    # For Income: credit - debit is positive (income earned)
-    # For Expense/COGS: credit - debit is negative (expenses incurred) → we want positive
-    if account_type in ("Expense", "Cost of Goods Sold"):
-        return abs(val)
+    # For Income: credit - debit is positive (income earned).
+    # For Expense/COGS/Stock Adjustment: debit-normal, so negate (not abs) —
+    # a credit balance (e.g. Stock Adjustment contra) must come back negative
+    # so it adds to profit instead of being flipped into an expense.
+    if account_type in ("Expense", "Cost of Goods Sold", "Stock Adjustment"):
+        return -val
     return val
 
 
@@ -170,6 +176,7 @@ def _type_list(account_type):
         "Income": ("Income",),
         "Expense": ("Expense", "Expense Account"),
         "Cost of Goods Sold": ("Cost of Goods Sold",),
+        "Stock Adjustment": ("Stock Adjustment",),
     }.get(account_type, (account_type,))
 
 
