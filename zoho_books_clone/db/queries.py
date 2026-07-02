@@ -294,6 +294,17 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
     payables        = abs(t.get("Payable", 0.0))
     other_liab      = abs(t.get("Liability", 0.0))
 
+    # Equity = capital accounts + current-period retained earnings.
+    # Everything that isn't a balance-sheet-permanent account type is an income
+    # statement (P&L) account whose net result belongs in retained earnings.
+    # Because the trial balance nets to zero, this makes
+    #   total_assets == total_liabilities + total_equity.
+    BS_TYPES = {"Asset", "Cash", "Bank", "Receivable", "Stock",
+                "Liability", "Payable", "Tax", "Equity"}
+    equity_capital    = -flt(t.get("Equity", 0.0))                 # credit-normal → positive
+    retained_earnings = -sum(flt(bal) for atype, bal in t.items() if atype not in BS_TYPES)
+    total_equity      = equity_capital + retained_earnings
+
     return {
         "total_assets":      raw_assets + itc_asset,
         "cash_and_bank":     cash_and_bank,
@@ -305,7 +316,9 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
         "payables":          payables,
         "gst_liability":     gst_liability,
         "other_liabilities": other_liab,
-        "total_equity":      abs(t.get("Equity", 0.0)),
+        "total_equity":      total_equity,
+        "equity_capital":    equity_capital,
+        "retained_earnings": retained_earnings,
     }
 
 

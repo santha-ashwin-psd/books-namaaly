@@ -96,7 +96,16 @@
           <div class="bs-block equity">
             <div class="bs-section-title">Equity</div>
             <div class="bs-amount">{{ fmt(bs.total_equity) }}</div>
+            <div v-if="bs.retained_earnings != null" class="bs-eq-sub">
+              <span>Capital {{ fmt(bs.equity_capital) }}</span>
+              <span>Retained {{ fmt(bs.retained_earnings) }}</span>
+            </div>
           </div>
+        </div>
+        <div class="bs-balance-check" :class="bsBalanced ? 'bs-ok' : 'bs-bad'">
+          <span class="bs-bc-icon">{{ bsBalanced ? '✓' : '✕' }}</span>
+          Assets = Liabilities + Equity
+          <span class="bs-bc-eq">{{ fmt(bs.total_assets) }} = {{ fmt(bs.total_liabilities) }} + {{ fmt(bs.total_equity) }}</span>
         </div>
       </template>
       <div v-else class="empty-msg">Run the report to see results.</div>
@@ -360,6 +369,13 @@ const apLoading = ref(false);
 const arRan = ref(false);
 const apRan = ref(false);
 
+const bsBalanced = computed(() => {
+  if (!bs.value) return false;
+  const a = Number(bs.value.total_assets) || 0;
+  const l = Number(bs.value.total_liabilities) || 0;
+  const e = Number(bs.value.total_equity) || 0;
+  return Math.abs(a - (l + e)) < 1;
+});
 const maxMonthlyVal = computed(() => Math.max(...plMonthly.value.flatMap(m => [m.income||0, m.expense||0]), 1));
 function barH(v) { return Math.round((Math.max(0,v) / maxMonthlyVal.value) * 80); }
 
@@ -461,6 +477,15 @@ const reports = [
 .assets .bs-amount    { color: var(--accent); font-size: 20px; font-weight: 700; }
 .liabilities .bs-amount { color: var(--red);    font-size: 20px; font-weight: 700; }
 .equity .bs-amount    { color: var(--amber);  font-size: 20px; font-weight: 700; }
+.bs-eq-sub { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; font-size:11px; color:#94a3b8; }
+.bs-balance-check {
+  margin-top: 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding: 10px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+}
+.bs-balance-check.bs-ok  { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.bs-balance-check.bs-bad { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+.bs-bc-icon { font-weight:800; }
+.bs-bc-eq { margin-left:auto; font-family:var(--mono,monospace); font-weight:500; opacity:.85; }
 
 .cf-rows { display: flex; flex-direction: column; gap: 0; }
 .cf-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
