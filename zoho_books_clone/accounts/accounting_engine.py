@@ -28,7 +28,33 @@ def _get_tds_payable(company: str) -> str | None:
         frappe.db.get_value("Account", {"account_name": ["like", "%TDS Payable%"], "company": company, "is_group": 0}, "name")
         or frappe.db.get_value("Account", {"account_type": "Tax", "account_name": ["like", "%TDS%"], "company": company, "is_group": 0}, "name")
     )
-    return acct
+    if acct:
+        return acct
+
+    # No TDS Payable account exists → create one, otherwise the posting engine
+    # grosses Accounts Payable back up to the full bill value and the ledger
+    # stops matching the bill's net-of-TDS Grand Total / balance due.
+    parent = (
+        frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_type": "Liability", "account_name": ["like", "%Current Liabilit%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_type": "Liability"}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Liabilit%"]}, "name")
+    )
+    if not parent:
+        return None
+    try:
+        doc = frappe.get_doc({
+            "doctype": "Account",
+            "account_name": "TDS Payable",
+            "company": company,
+            "account_type": "Liability",   # statutory dues owed to the tax dept
+            "parent_account": parent,
+            "is_group": 0,
+        })
+        doc.insert(ignore_permissions=True)
+        return doc.name
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "TDS Payable auto-create failed")
+        return None
 
 
 # ─── Sales Invoice ─────────────────────────────────────────────────────────────

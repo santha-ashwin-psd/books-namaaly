@@ -594,8 +594,8 @@
                         <span>Subtotal</span>
                         <span>{{ fmtCur(viewSubtotal) }}</span>
                       </div>
-                      <template v-if="viewTaxLines.length">
-                        <div v-for="tl in viewTaxLines" :key="tl.template" class="po-view-total-row po-view-tax-row">
+                      <template v-if="viewGstLines.length">
+                        <div v-for="tl in viewGstLines" :key="tl.template" class="po-view-total-row po-view-tax-row">
                           <span class="po-view-tax-label">
                             <span class="po-view-tax-badge">TAX</span>
                             {{ tl.template }}
@@ -604,16 +604,16 @@
                           <span>{{ fmtCur(tl.amount) }}</span>
                         </div>
                       </template>
-                      <div v-else class="po-view-total-row po-view-tax-row">
+                      <div v-else-if="!viewTdsLine" class="po-view-total-row po-view-tax-row">
                         <span class="po-view-tax-label">
                           <span class="po-view-tax-badge po-view-tax-badge--none">NO TAX</span>
                           No taxes applied
                         </span>
                         <span>{{ fmtCur(0) }}</span>
                       </div>
-                      <div v-if="flt(viewDoc.tds_amount) > 0" class="po-view-total-row" style="color:#d97706">
-                        <span>TDS</span>
-                        <span>− {{ fmtCur(viewDoc.tds_amount) }}</span>
+                      <div v-if="viewTdsLine" class="po-view-total-row" style="color:#d97706">
+                        <span>{{ viewTdsLine.label }} <span style="opacity:.7">({{ viewTdsLine.rate }}%)</span></span>
+                        <span>− {{ fmtCur(viewTdsLine.amount) }}</span>
                       </div>
                       <div class="po-view-total-row po-view-grand">
                         <span>Grand Total</span>
@@ -1286,17 +1286,17 @@ const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math
 
 // View drawer tax summary
 const viewSubtotal = computed(() => viewItems.value.reduce((s, i) => s + flt(i.amount), 0));
-const viewTaxLines = computed(() => {
-  const map = {};
-  for (const i of viewItems.value) {
-    if (!i.tax_code || !i.amount) continue;
-    const tmpl = taxTemplates.value.find(t => t.name === i.tax_code);
-    const rate = tmpl?.rate ?? 0;
-    if (!rate) continue;
-    if (!map[i.tax_code]) map[i.tax_code] = { template: i.tax_code, rate, amount: 0 };
-    map[i.tax_code].amount += Math.round(flt(i.amount) * rate / 100 * 100) / 100;
-  }
-  return Object.values(map);
+// Show the *actual saved* tax lines, split into positive taxes (GST) and the
+// negative TDS deduction — so the summary reconciles with the Grand Total
+// instead of recomputing from items (which misses TDS and reads "No taxes").
+const viewGstLines = computed(() =>
+  (viewTaxes.value || [])
+    .filter(t => flt(t.rate) >= 0 && flt(t.tax_amount) >= 0)
+    .map(t => ({ template: t.description || t.tax_type || t.account_head || "Tax", rate: flt(t.rate), amount: flt(t.tax_amount) }))
+);
+const viewTdsLine = computed(() => {
+  const t = (viewTaxes.value || []).find(x => flt(x.rate) < 0 || flt(x.tax_amount) < 0);
+  return t ? { label: t.description || "TDS", rate: Math.abs(flt(t.rate)), amount: Math.abs(flt(t.tax_amount)) } : null;
 });
 
 async function copyLastItems() {
