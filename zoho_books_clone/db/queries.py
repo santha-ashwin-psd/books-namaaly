@@ -325,10 +325,18 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
 @frappe.whitelist()
 def get_cash_flow(company: str, from_date: str, to_date: str) -> dict:
     """
-    Simplified cash-flow statement.
-    Operating = Net Income (Revenue − Expenses − COGS)
-    Investing  = net movement in Asset/Stock accounts
-    Financing  = net movement in Equity − Liability accounts
+    Indirect-method cash-flow statement that reconciles to the real movement in
+    Cash & Bank: Operating + Investing + Financing = Net change in cash.
+
+    Each activity line is the *negative* of the period movement (debit − credit)
+    in its accounts — a rise in an asset uses cash, while profit or a rise in a
+    liability/equity provides cash. Because a period's GL nets to zero, the three
+    activities always sum to the actual change in cash.
+
+      Operating  = P&L (Income, Expense, COGS, Stock Adjustment, Depreciation…)
+                   + working capital (Receivable, Payable, Tax, Stock/Inventory)
+      Investing  = fixed & other Asset accounts
+      Financing  = Equity & Liability (capital / borrowings)
     """
     rows = frappe.db.sql("""
         SELECT a.account_type,
@@ -342,19 +350,35 @@ def get_cash_flow(company: str, from_date: str, to_date: str) -> dict:
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
     by_type = {r.account_type: flt(r.net) for r in rows}
-    # Operating: revenue less all cost/expense types
-    operating = (
-        -by_type.get("Income", 0)            # income is credit-normal
-        + by_type.get("Expense", 0)
-        + by_type.get("Cost of Goods Sold", 0)
-    )
-    investing  = by_type.get("Asset", 0) + by_type.get("Stock", 0)
-    financing  = by_type.get("Equity", 0) - by_type.get("Liability", 0)
+
+    CASH      = {"Cash", "Bank"}
+    INVESTING = {"Asset"}
+    FINANCING = {"Equity", "Liability"}
+
+    # Source of cash = decrease in a non-cash account (debit−credit negative),
+    # hence the leading minus. Everything not cash/investing/financing is
+    # operating (P&L + working capital) so nothing is dropped and it reconciles.
+    investing = -sum(v for k, v in by_type.items() if k in INVESTING)
+    financing = -sum(v for k, v in by_type.items() if k in FINANCING)
+    operating = -sum(v for k, v in by_type.items() if k not in (CASH | INVESTING | FINANCING))
+    net_change = operating + investing + financing
+
+    opening_cash = flt(frappe.db.sql("""
+        SELECT COALESCE(SUM(g.debit) - SUM(g.credit), 0)
+        FROM `tabGeneral Ledger Entry` g
+        JOIN `tabAccount` a ON a.name = g.account
+        WHERE g.company = %(company)s AND IFNULL(g.is_cancelled, 0) = 0
+          AND a.account_type IN ('Cash', 'Bank')
+          AND g.posting_date < %(from_date)s
+    """, {"company": company, "from_date": from_date})[0][0])
+
     return {
-        "operating":  operating,
-        "investing":  investing,
-        "financing":  financing,
-        "net_change": operating + investing + financing,
+        "operating":    operating,
+        "investing":    investing,
+        "financing":    financing,
+        "net_change":   net_change,
+        "opening_cash": opening_cash,
+        "closing_cash": opening_cash + net_change,
     }
 
 

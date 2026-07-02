@@ -117,11 +117,15 @@
       <template v-if="cfLoading"><div class="loading-shimmer" style="height:120px;border-radius:8px"></div></template>
       <template v-else-if="cf">
         <div class="cf-rows">
-          <div class="cf-row"><span>Operating Activities</span><span class="mono" :class="cf.operating >= 0 ? 'green':'red'">{{ fmt(cf.operating) }}</span></div>
-          <div class="cf-row"><span>Investing Activities</span><span class="mono" :class="cf.investing >= 0 ? 'green':'red'">{{ fmt(cf.investing) }}</span></div>
-          <div class="cf-row"><span>Financing Activities</span><span class="mono" :class="cf.financing >= 0 ? 'green':'red'">{{ fmt(cf.financing) }}</span></div>
+          <div class="cf-row"><span>Operating Activities <span class="cf-hint">P&amp;L + working capital</span></span><span class="mono" :class="cf.operating >= 0 ? 'green':'red'">{{ fmt(cf.operating) }}</span></div>
+          <div class="cf-row"><span>Investing Activities <span class="cf-hint">asset changes</span></span><span class="mono" :class="cf.investing >= 0 ? 'green':'red'">{{ fmt(cf.investing) }}</span></div>
+          <div class="cf-row"><span>Financing Activities <span class="cf-hint">equity / debt</span></span><span class="mono" :class="cf.financing >= 0 ? 'green':'red'">{{ fmt(cf.financing) }}</span></div>
           <div class="pl-divider"></div>
-          <div class="cf-row net"><span>Net Change</span><span class="mono" :class="cf.net_change >= 0 ? 'green':'red'">{{ fmt(cf.net_change) }}</span></div>
+          <div class="cf-row net"><span>Net Change in Cash</span><span class="mono" :class="cf.net_change >= 0 ? 'green':'red'">{{ fmt(cf.net_change) }}</span></div>
+          <template v-if="cf.opening_cash != null">
+            <div class="cf-row cf-sub"><span>Opening Cash &amp; Bank</span><span class="mono">{{ fmt(cf.opening_cash) }}</span></div>
+            <div class="cf-row cf-sub"><span>Closing Cash &amp; Bank</span><span class="mono">{{ fmt(cf.closing_cash) }}</span></div>
+          </template>
         </div>
       </template>
       <div v-else class="empty-msg">Run the report to see results.</div>
@@ -490,6 +494,8 @@ const reports = [
 .cf-rows { display: flex; flex-direction: column; gap: 0; }
 .cf-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .cf-row.net { border-bottom: none; font-weight: 700; font-size: 15px; margin-top: 4px; }
+.cf-row.cf-sub { font-size: 12.5px; color: #64748b; padding: 6px 0; border-bottom: none; }
+.cf-hint { font-size: 11px; color: #94a3b8; font-weight: 400; margin-left: 4px; }
 
 .aging-table th, .aging-table td { padding: 9px 12px; white-space: nowrap; }
 .aging-total { background: #F8F9FA; }
