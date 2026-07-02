@@ -345,7 +345,7 @@ async function fetchPOs(q = "") {
 }
 async function fetchItems(q = "") {
   try {
-    const filters = [["disabled", "=", 0]];
+    const filters = [["disabled", "=", 0], ["has_variants", "=", 0]];
     if (q) filters.push(["item_name", "like", `%${q}%`]);
     const rows = await apiList("Item", { fields: ["name", "item_name", "description", "stock_uom", "standard_rate", "standard_buying_rate"], filters, limit: 30, order: "item_name asc" });
     itemOptions.value = rows.map(r => ({ label: r.item_name || r.name, value: r.name, description: r.description || "", uom: r.stock_uom || "Nos", rate: r.standard_buying_rate || r.standard_rate || 0 }));

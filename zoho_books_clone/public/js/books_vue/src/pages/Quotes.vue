@@ -1514,7 +1514,7 @@ async function fetchCustomers(q = "") {
 
 async function fetchItems(q = "") {
   try {
-    const f = [["disabled","=",0]];
+    const f = [["disabled","=",0],["has_variants","=",0]];
     if (q) f.push(["item_name","like","%" + q + "%"]);
     const r = await apiList("Item", {
       fields: ["name","item_name","standard_rate","stock_uom","hsn_code","description"], filters: f, limit: 30, order: "item_name asc",

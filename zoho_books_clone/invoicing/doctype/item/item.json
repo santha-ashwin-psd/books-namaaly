@@ -40,7 +40,11 @@
   "reorder_supplier",
   "reorder_warehouse_override",
   "auto_po_enabled",
-  "reorder_notes"
+  "reorder_notes",
+  "section_variants",
+  "has_variants",
+  "variant_of",
+  "attributes"
  ],
  "fields": [
   {
@@ -240,6 +244,29 @@
    "fieldtype": "Small Text",
    "label": "Reorder Notes",
    "print_hide": 1
+  },
+  {
+   "fieldname": "section_variants",
+   "fieldtype": "Section Break",
+   "label": "Variants"
+  },
+  {
+   "fieldname": "has_variants",
+   "fieldtype": "Check",
+   "label": "Has Variants",
+   "description": "Template item \u2014 its variants are the sellable items."
+  },
+  {
+   "fieldname": "variant_of",
+   "fieldtype": "Link",
+   "label": "Variant Of",
+   "options": "Item"
+  },
+  {
+   "fieldname": "attributes",
+   "fieldtype": "Table",
+   "label": "Attributes",
+   "options": "Item Variant Attribute"
   }
  ],
  "links": [],

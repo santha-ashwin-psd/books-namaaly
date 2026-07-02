@@ -81,31 +81,58 @@
         </div>
 
         <div class="tt-body">
-          <div class="tt-grid2">
-            <div class="tt-field">
-              <label class="tt-label">Template Name <span class="tt-req">*</span></label>
-              <input v-model="form.template_name" class="b-input" placeholder="e.g. GST 18% (Intra-State)" :disabled="!!editing" />
-            </div>
-            <div class="tt-field">
-              <label class="tt-label">Type</label>
-              <select v-model="form.tax_type" class="b-input"><option>GST</option><option>VAT</option><option>Custom</option></select>
+          <div class="tt-field" style="margin-bottom:16px">
+            <label class="tt-label">Template Name <span class="tt-req">*</span></label>
+            <input v-model="form.template_name" class="b-input" :placeholder="form.tax_type==='VAT' ? 'e.g. VAT 5%' : form.tax_type==='GST' ? 'e.g. GST 18%' : 'e.g. Cess 1%'" :disabled="!!editing" />
+          </div>
+
+          <div class="tt-field" style="margin-bottom:6px">
+            <label class="tt-label">Tax Regime</label>
+            <div class="tt-pills">
+              <button v-for="t in ['GST','VAT','Custom']" :key="t" type="button" class="tt-pill" :class="{active:form.tax_type===t}" @click="setType(t)">{{ t }}</button>
             </div>
           </div>
 
-          <div class="tt-section">
-            <span class="tt-section-title">Tax Rates</span>
-            <button class="tt-add-row" @click="addRow"><span v-html="icon('plus',12)"></span> Add rate</button>
-          </div>
-          <div v-if="!form.taxes.length" class="tt-norows">No rates — this template applies 0% (e.g. Exempt).</div>
-          <div v-for="(r,i) in form.taxes" :key="i" class="tt-row">
-            <select v-model="r.tax_type" class="b-input tt-row-type"><option>CGST</option><option>SGST</option><option>IGST</option><option>Cess</option><option>Other</option></select>
-            <input v-model.number="r.rate" type="number" min="0" step="0.5" class="b-input tt-row-rate" placeholder="Rate %" />
-            <SearchableSelect v-model="r.account_head" :options="accounts" value-key="name" label-key="name" placeholder="Account head" class="tt-row-acct" />
-            <input v-model="r.description" class="b-input tt-row-desc" placeholder="Description" />
-            <button class="tt-row-del" @click="removeRow(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
-          </div>
+          <!-- GST: single total rate, auto-split at invoice time -->
+          <template v-if="form.tax_type==='GST'">
+            <div class="tt-field" style="margin-top:16px">
+              <label class="tt-label">Total GST Rate (%) <span class="tt-req">*</span></label>
+              <input v-model.number="form.total_rate" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 18" />
+            </div>
+            <div class="tt-note">
+              <span v-html="icon('info',14)"></span>
+              <span>On invoices this auto-splits by <strong>Place of Supply</strong>: intra-state → <strong>CGST {{ half }}% + SGST {{ half }}%</strong>, inter-state → <strong>IGST {{ form.total_rate||0 }}%</strong>. GST accounts are resolved from your Chart of Accounts.</span>
+            </div>
+          </template>
 
-          <div class="tt-grid2" style="margin-top:18px">
+          <!-- VAT: single flat rate -->
+          <template v-else-if="form.tax_type==='VAT'">
+            <div class="tt-field" style="margin-top:16px">
+              <label class="tt-label">VAT Rate (%) <span class="tt-req">*</span></label>
+              <input v-model.number="form.total_rate" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 5" />
+            </div>
+            <div class="tt-note">
+              <span v-html="icon('info',14)"></span>
+              <span>VAT is applied as a single flat rate on invoices &amp; bills (no place-of-supply split).</span>
+            </div>
+          </template>
+
+          <!-- Custom: free rows -->
+          <template v-else>
+            <div class="tt-section">
+              <span class="tt-section-title">Custom Rates</span>
+              <button class="tt-add-row" @click="addRow"><span v-html="icon('plus',12)"></span> Add rate</button>
+            </div>
+            <div v-if="!form.taxes.length" class="tt-norows">No rates — this template applies 0%.</div>
+            <div v-for="(r,i) in form.taxes" :key="i" class="tt-row">
+              <input v-model.number="r.rate" type="number" min="0" step="0.5" class="b-input tt-row-rate" placeholder="Rate %" />
+              <SearchableSelect v-model="r.account_head" :options="accounts" value-key="name" label-key="name" placeholder="Account head" class="tt-row-acct" />
+              <input v-model="r.description" class="b-input tt-row-desc" placeholder="Description" />
+              <button class="tt-row-del" @click="removeRow(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
+            </div>
+          </template>
+
+          <div class="tt-grid2" style="margin-top:20px">
             <label class="tt-check"><input type="checkbox" :checked="form.is_default" @change="form.is_default = $event.target.checked ? 1 : 0" /> Set as default</label>
             <label class="tt-check"><input type="checkbox" :checked="form.disabled" @change="form.disabled = $event.target.checked ? 1 : 0" /> Disabled</label>
           </div>
@@ -144,7 +171,9 @@ const drawer    = ref(false);
 const editing   = ref(null);
 const saving    = ref(false);
 
-const form = reactive({ template_name: "", tax_type: "GST", is_default: 0, disabled: 0, taxes: [] });
+const form = reactive({ template_name: "", tax_type: "GST", total_rate: 0, is_default: 0, disabled: 0, taxes: [] });
+const half = computed(() => Math.round((Number(form.total_rate) || 0) / 2 * 100) / 100);
+function setType(t) { form.tax_type = t; if (t === "Custom" && !form.taxes.length) form.taxes = [blankRow()]; }
 
 function rateSummary(taxes) {
   const rows = taxes || [];
@@ -199,15 +228,20 @@ function removeRow(i) { form.taxes.splice(i, 1); }
 
 function openNew() {
   editing.value = null;
-  Object.assign(form, { template_name: "", tax_type: "GST", is_default: 0, disabled: 0, taxes: [blankRow()] });
+  Object.assign(form, { template_name: "", tax_type: "GST", total_rate: 0, is_default: 0, disabled: 0, taxes: [] });
   drawer.value = true;
 }
 function openEdit(t) {
   editing.value = t.name;
+  const rows = (t._taxes || []).map((r) => ({ tax_type: r.tax_type, rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || "" }));
+  const type = t.tax_type || "GST";
+  // GST/VAT store their total across component rows — collapse to a single rate.
+  const total = rows.reduce((s, r) => s + (Number(r.rate) || 0), 0);
   Object.assign(form, {
-    template_name: t.template_name, tax_type: t.tax_type || "GST",
+    template_name: t.template_name, tax_type: type,
+    total_rate: type === "Custom" ? 0 : Math.round(total * 100) / 100,
     is_default: t.is_default ? 1 : 0, disabled: t.disabled ? 1 : 0,
-    taxes: (t._taxes || []).map((r) => ({ tax_type: r.tax_type, rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || "" })),
+    taxes: type === "Custom" ? (rows.length ? rows : [blankRow()]) : [],
   });
   drawer.value = true;
 }
@@ -219,6 +253,25 @@ async function save() {
   try {
     const company = await resolveCompany();
     if (!company) { toast("No company configured.", "error"); saving.value = false; return; }
+    // Build child rows per regime. GST stores its total as CGST+SGST (the
+    // intra-state view); the invoice re-splits by Place of Supply. VAT stores a
+    // single VAT row. Custom keeps the user's free rows.
+    let taxes;
+    if (form.tax_type === "GST") {
+      const total = Number(form.total_rate) || 0;
+      const h = Math.round(total / 2 * 100) / 100;
+      taxes = total > 0
+        ? [{ tax_type: "CGST", rate: h, description: `CGST @ ${h}%` },
+           { tax_type: "SGST", rate: h, description: `SGST @ ${h}%` }]
+        : [];
+    } else if (form.tax_type === "VAT") {
+      const total = Number(form.total_rate) || 0;
+      taxes = total > 0 ? [{ tax_type: "VAT", rate: total, description: `VAT @ ${total}%` }] : [];
+    } else {
+      taxes = form.taxes
+        .filter((r) => Number(r.rate))
+        .map((r) => ({ tax_type: "Other", rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || `Other @ ${Number(r.rate) || 0}%` }));
+    }
     const doc = {
       doctype: "Tax Template",
       template_name: form.template_name.trim(),
@@ -226,9 +279,7 @@ async function save() {
       tax_type: form.tax_type,
       is_default: form.is_default,
       disabled: form.disabled,
-      taxes: form.taxes
-        .filter((r) => r.tax_type)
-        .map((r) => ({ doctype: "Tax Template Detail", tax_type: r.tax_type, rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || `${r.tax_type} @ ${Number(r.rate) || 0}%` })),
+      taxes: taxes.map((r) => ({ doctype: "Tax Template Detail", ...r })),
     };
     if (editing.value) doc.name = editing.value;
     await apiSave(doc);
@@ -278,9 +329,17 @@ onMounted(() => { load(); loadAccounts(); });
 .tt-add-row { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; color:#1a6ef7; cursor:pointer; }
 .tt-add-row:hover { background:#eaf1ff; }
 .tt-norows  { font-size:12.5px; color:#94a3b8; padding:8px 0; }
-.tt-row     { display:grid; grid-template-columns:96px 80px 1fr 1fr 30px; gap:8px; align-items:center; margin-bottom:8px; }
+.tt-row     { display:grid; grid-template-columns:90px 1fr 1fr 30px; gap:8px; align-items:center; margin-bottom:8px; }
 .tt-row-del { border:none; background:none; cursor:pointer; color:#dc2626; display:flex; align-items:center; justify-content:center; padding:4px; }
 .tt-row .b-input { padding:7px 9px; }
+
+.tt-pills   { display:flex; gap:8px; }
+.tt-pill    { flex:1; border:1.5px solid #e2e8f0; background:#fff; border-radius:9px; padding:9px 0; font-size:13px; font-weight:600; color:#64748b; cursor:pointer; font-family:inherit; transition:all .15s; }
+.tt-pill:hover { border-color:#cbd5e1; }
+.tt-pill.active { border-color:#1a6ef7; background:#eaf1ff; color:#1a4fd0; }
+.tt-note    { display:flex; gap:8px; margin-top:12px; padding:10px 12px; background:#f0f7ff; border:1px solid #d6e6ff; border-radius:9px; font-size:12px; color:#475569; line-height:1.5; }
+.tt-note strong { color:#1a4fd0; }
+.tt-note :deep(svg) { flex-shrink:0; color:#1a6ef7; margin-top:1px; }
 
 .tt-check   { display:flex; align-items:center; gap:8px; font-size:13px; color:#374151; cursor:pointer; }
 .tt-save    { display:inline-flex; align-items:center; gap:6px; min-width:120px; justify-content:center; border:none; border-radius:9px; padding:9px 18px; font-size:13px; font-weight:600; color:#fff; cursor:pointer; background:linear-gradient(135deg,#2f74f5,#1a6ef7); box-shadow:0 4px 12px rgba(26,110,247,.28); }
