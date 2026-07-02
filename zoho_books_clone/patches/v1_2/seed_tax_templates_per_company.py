@@ -31,6 +31,11 @@ def execute():
     if not frappe.db.exists("DocType", "Tax Template"):
         return
 
+    # Reload Tax Template and Tax Template Detail doctypes to ensure
+    # the new autoname format (format:{template_name} - {company}) is active.
+    frappe.reload_doc("taxes", "doctype", "tax_template")
+    frappe.reload_doc("taxes", "doctype", "tax_template_detail")
+
     default_company = (
         frappe.db.get_single_value("Books Settings", "default_company") or ""
     )
@@ -57,8 +62,8 @@ def execute():
             frappe.rename_doc("Tax Template", template_name, new_name, force=True)
         except Exception as exc:
             frappe.log_error(
-                f"v1_2 tax-template rename '{template_name}' → '{new_name}': {exc}",
-                "Patch v1_2",
+                title="Patch v1_2",
+                message=f"v1_2 tax-template rename '{template_name}' → '{new_name}': {exc}",
             )
 
     # ── 2. Repair template_name pollution from rename ──

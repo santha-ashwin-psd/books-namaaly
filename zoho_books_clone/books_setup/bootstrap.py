@@ -116,7 +116,10 @@ def _seed_tax_templates(company: str) -> None:
                 ],
             }).insert(ignore_permissions=True)
         except Exception as exc:
-            frappe.log_error(f"Bootstrap Tax Template — {company}/{template_name}: {exc}", "Books Bootstrap")
+            frappe.log_error(
+                title="Books Bootstrap",
+                message=f"Bootstrap Tax Template — {company}/{template_name}: {exc}",
+            )
 
 
 def _seed_coa(company: str) -> None:
@@ -148,7 +151,8 @@ def _seed_coa(company: str) -> None:
             doc.insert(ignore_permissions=True)
         except Exception as exc:
             frappe.log_error(
-                f"Bootstrap COA — {company}/{name}: {exc}", "Books Bootstrap"
+                title="Books Bootstrap",
+                message=f"Bootstrap COA — {company}/{name}: {exc}",
             )
 
 
@@ -206,4 +210,7 @@ def _seed_fiscal_year(company: str, fy_start: str = "04-01") -> None:
         fy.insert(ignore_permissions=True)
 
     except Exception as exc:
-        frappe.log_error(f"Bootstrap FY — {company}: {exc}", "Books Bootstrap")
+        frappe.log_error(
+            title="Books Bootstrap",
+            message=f"Bootstrap FY — {company}: {exc}",
+        )
