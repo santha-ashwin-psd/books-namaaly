@@ -207,12 +207,17 @@ def get_bank_balance(bank_account: str) -> float:
 @frappe.whitelist()
 def get_profit_and_loss(company: str, from_date: str, to_date: str) -> dict:
     """
-    Return income, expense (including COGS), and net profit totals.
+    Return income, expense (including COGS and stock adjustments), and net profit.
 
     Account types included:
-      Income          → revenue
-      Expense         → operating expenses
+      Income             → revenue
+      Expense            → operating expenses
       Cost of Goods Sold → COGS posted by Stock Entry on Material Issue
+      Stock Adjustment   → contra credited when stock is received; offsets the
+                           purchase expense so cost hits the P&L once (as COGS)
+
+    Net Profit = Income − (Expense + COGS + Stock Adjustment) — this matches the
+    retained-earnings roll-up in get_balance_sheet_totals, so both reports agree.
     """
     rows = frappe.db.sql("""
         SELECT a.account_type,
@@ -225,26 +230,31 @@ def get_profit_and_loss(company: str, from_date: str, to_date: str) -> dict:
           AND a.account_type IN (
                 "Income",
                 "Expense",
-                "Cost of Goods Sold"   -- COGS from inventory GL posting
+                "Cost of Goods Sold",   -- COGS from inventory GL posting
+                "Stock Adjustment"      -- contra for stock receipts
               )
         GROUP BY a.account_type
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
     totals = {r.account_type: flt(r.amount) for r in rows}
     income  = totals.get("Income", 0.0)
-    # COGS is a debit-normal account; credit-debit gives a negative number → negate it
-    cogs    = -totals.get("Cost of Goods Sold", 0.0)
-    expense = -totals.get("Expense", 0.0)   # expenses are also debit-normal
+    # Debit-normal accounts: credit-debit gives a negative number → negate it.
+    cogs      = -totals.get("Cost of Goods Sold", 0.0)
+    expense   = -totals.get("Expense", 0.0)
+    # Stock Adjustment usually carries a credit balance (stock received), which
+    # comes out negative here — i.e. it reduces total expense.
+    stock_adj = -totals.get("Stock Adjustment", 0.0)
 
     gross_profit = income - cogs
-    net_profit   = gross_profit - expense
+    net_profit   = gross_profit - expense - stock_adj
 
     return {
-        "total_income":   income,
-        "cogs":           cogs,
-        "gross_profit":   gross_profit,
-        "total_expense":  expense,
-        "net_profit":     net_profit,
+        "total_income":     income,
+        "cogs":             cogs,
+        "gross_profit":     gross_profit,
+        "total_expense":    expense,
+        "stock_adjustment": stock_adj,
+        "net_profit":       net_profit,
     }
 
 
@@ -283,16 +293,28 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
     itc_asset    = max(tax_net, 0.0)   # positive → ITC on asset side
     gst_liability = abs(min(tax_net, 0.0))  # negative → GST payable
 
-    # Credit-normal: debit-credit is negative for balances owed
-    LIAB_TYPES = ("Liability", "Payable")
-    raw_liabilities = sum(abs(t.get(tp, 0.0)) for tp in LIAB_TYPES)
+    # Credit-normal: debit-credit is negative for balances owed → negate (not
+    # abs) so a net-debit balance (e.g. a supplier advance) reduces liabilities
+    # instead of inflating them, keeping Assets = Liabilities + Equity intact.
+    payables        = -t.get("Payable", 0.0)
+    other_liab      = -t.get("Liability", 0.0)
+    raw_liabilities = payables + other_liab
 
     inventory_value = t.get("Stock", 0.0)
     cash_and_bank   = t.get("Cash", 0.0) + t.get("Bank", 0.0)
     receivables     = t.get("Receivable", 0.0)
     other_assets    = t.get("Asset", 0.0)
-    payables        = abs(t.get("Payable", 0.0))
-    other_liab      = abs(t.get("Liability", 0.0))
+
+    # Equity = capital accounts + current-period retained earnings.
+    # Everything that isn't a balance-sheet-permanent account type is an income
+    # statement (P&L) account whose net result belongs in retained earnings.
+    # Because the trial balance nets to zero, this makes
+    #   total_assets == total_liabilities + total_equity.
+    BS_TYPES = {"Asset", "Cash", "Bank", "Receivable", "Stock",
+                "Liability", "Payable", "Tax", "Equity"}
+    equity_capital    = -flt(t.get("Equity", 0.0))                 # credit-normal → positive
+    retained_earnings = -sum(flt(bal) for atype, bal in t.items() if atype not in BS_TYPES)
+    total_equity      = equity_capital + retained_earnings
 
     return {
         "total_assets":      raw_assets + itc_asset,
@@ -305,17 +327,27 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
         "payables":          payables,
         "gst_liability":     gst_liability,
         "other_liabilities": other_liab,
-        "total_equity":      abs(t.get("Equity", 0.0)),
+        "total_equity":      total_equity,
+        "equity_capital":    equity_capital,
+        "retained_earnings": retained_earnings,
     }
 
 
 @frappe.whitelist()
 def get_cash_flow(company: str, from_date: str, to_date: str) -> dict:
     """
-    Simplified cash-flow statement.
-    Operating = Net Income (Revenue − Expenses − COGS)
-    Investing  = net movement in Asset/Stock accounts
-    Financing  = net movement in Equity − Liability accounts
+    Indirect-method cash-flow statement that reconciles to the real movement in
+    Cash & Bank: Operating + Investing + Financing = Net change in cash.
+
+    Each activity line is the *negative* of the period movement (debit − credit)
+    in its accounts — a rise in an asset uses cash, while profit or a rise in a
+    liability/equity provides cash. Because a period's GL nets to zero, the three
+    activities always sum to the actual change in cash.
+
+      Operating  = P&L (Income, Expense, COGS, Stock Adjustment, Depreciation…)
+                   + working capital (Receivable, Payable, Tax, Stock/Inventory)
+      Investing  = fixed & other Asset accounts
+      Financing  = Equity & Liability (capital / borrowings)
     """
     rows = frappe.db.sql("""
         SELECT a.account_type,
@@ -329,19 +361,35 @@ def get_cash_flow(company: str, from_date: str, to_date: str) -> dict:
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
     by_type = {r.account_type: flt(r.net) for r in rows}
-    # Operating: revenue less all cost/expense types
-    operating = (
-        -by_type.get("Income", 0)            # income is credit-normal
-        + by_type.get("Expense", 0)
-        + by_type.get("Cost of Goods Sold", 0)
-    )
-    investing  = by_type.get("Asset", 0) + by_type.get("Stock", 0)
-    financing  = by_type.get("Equity", 0) - by_type.get("Liability", 0)
+
+    CASH      = {"Cash", "Bank"}
+    INVESTING = {"Asset"}
+    FINANCING = {"Equity", "Liability"}
+
+    # Source of cash = decrease in a non-cash account (debit−credit negative),
+    # hence the leading minus. Everything not cash/investing/financing is
+    # operating (P&L + working capital) so nothing is dropped and it reconciles.
+    investing = -sum(v for k, v in by_type.items() if k in INVESTING)
+    financing = -sum(v for k, v in by_type.items() if k in FINANCING)
+    operating = -sum(v for k, v in by_type.items() if k not in (CASH | INVESTING | FINANCING))
+    net_change = operating + investing + financing
+
+    opening_cash = flt(frappe.db.sql("""
+        SELECT COALESCE(SUM(g.debit) - SUM(g.credit), 0)
+        FROM `tabGeneral Ledger Entry` g
+        JOIN `tabAccount` a ON a.name = g.account
+        WHERE g.company = %(company)s AND IFNULL(g.is_cancelled, 0) = 0
+          AND a.account_type IN ('Cash', 'Bank')
+          AND g.posting_date < %(from_date)s
+    """, {"company": company, "from_date": from_date})[0][0])
+
     return {
-        "operating":  operating,
-        "investing":  investing,
-        "financing":  financing,
-        "net_change": operating + investing + financing,
+        "operating":    operating,
+        "investing":    investing,
+        "financing":    financing,
+        "net_change":   net_change,
+        "opening_cash": opening_cash,
+        "closing_cash": opening_cash + net_change,
     }
 
 
@@ -719,14 +767,14 @@ def get_pl_monthly_breakdown(company: str, from_date: str, to_date: str) -> list
             DATE_FORMAT(gle.posting_date, '%%Y-%%m') AS month,
             SUM(CASE WHEN a.account_type = 'Income'
                      THEN gle.credit - gle.debit ELSE 0 END) AS income,
-            SUM(CASE WHEN a.account_type IN ('Expense', 'Cost of Goods Sold')
+            SUM(CASE WHEN a.account_type IN ('Expense', 'Cost of Goods Sold', 'Stock Adjustment')
                      THEN gle.debit - gle.credit ELSE 0 END) AS expense
         FROM `tabGeneral Ledger Entry` gle
         JOIN `tabAccount` a ON a.name = gle.account
         WHERE gle.company    = %(company)s
           AND gle.is_cancelled = 0
           AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
-          AND a.account_type IN ('Income', 'Expense', 'Cost of Goods Sold')
+          AND a.account_type IN ('Income', 'Expense', 'Cost of Goods Sold', 'Stock Adjustment')
         GROUP BY DATE_FORMAT(gle.posting_date, '%%Y-%%m')
         ORDER BY month
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)

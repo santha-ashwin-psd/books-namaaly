@@ -1,0 +1,21 @@
+{
+ "name": "Item Attribute Value",
+ "module": "Inventory",
+ "doctype": "DocType",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "attribute_value",
+   "fieldtype": "Data",
+   "label": "Attribute Value",
+   "in_list_view": 1,
+   "reqd": 1,
+   "idx": 1
+  }
+ ],
+ "permissions": []
+}

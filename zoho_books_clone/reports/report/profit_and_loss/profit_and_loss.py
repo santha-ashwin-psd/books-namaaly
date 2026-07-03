@@ -26,20 +26,23 @@ def get_data(filters: dict) -> list[dict]:
         WHERE IFNULL(g.is_cancelled, 0) = 0
           AND g.posting_date BETWEEN %(from_date)s AND %(to_date)s
           AND g.company = %(company)s
-          AND a.account_type IN ("Income","Expense")
+          AND a.account_type IN ("Income","Expense","Cost of Goods Sold","Stock Adjustment")
         GROUP BY g.account
         ORDER BY a.account_type, g.account
     """, filters, as_dict=True)
 
     # Income accounts naturally have credit balances (credit - debit > 0).
-    # Expense accounts naturally have debit balances, so credit - debit comes
-    # out negative — flip the sign so expenses read as positive in the report.
+    # Expense-side accounts (Expense, COGS, Stock Adjustment) naturally have
+    # debit balances, so credit - debit comes out negative — flip the sign so
+    # they read as positive in the report. A Stock Adjustment credit balance
+    # (stock received) then shows negative, correctly reducing total expenses.
+    EXPENSE_TYPES = ("Expense", "Cost of Goods Sold", "Stock Adjustment")
     for r in rows:
-        if r.account_type == "Expense":
+        if r.account_type in EXPENSE_TYPES:
             r.amount = flt(r.amount) * -1
 
     income  = [r for r in rows if r.account_type == "Income"]
-    expense = [r for r in rows if r.account_type == "Expense"]
+    expense = [r for r in rows if r.account_type in EXPENSE_TYPES]
 
     total_income  = sum(flt(r.amount) for r in income)
     total_expense = sum(flt(r.amount) for r in expense)

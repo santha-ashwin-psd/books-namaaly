@@ -1,0 +1,37 @@
+{
+ "name": "Item Attribute",
+ "module": "Inventory",
+ "doctype": "DocType",
+ "autoname": "field:attribute_name",
+ "naming_rule": "By fieldname",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "allow_rename": 1,
+ "fields": [
+  {
+   "fieldname": "attribute_name",
+   "fieldtype": "Data",
+   "label": "Attribute Name",
+   "in_list_view": 1,
+   "reqd": 1,
+   "unique": 1,
+   "idx": 1
+  },
+  {
+   "fieldname": "attribute_values",
+   "fieldtype": "Table",
+   "label": "Values",
+   "options": "Item Attribute Value",
+   "idx": 2
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1, "write": 1, "create": 1, "delete": 1,
+   "email": 1, "export": 1, "print": 1, "report": 1, "share": 1
+  }
+ ]
+}

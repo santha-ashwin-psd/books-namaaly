@@ -594,8 +594,8 @@
                         <span>Subtotal</span>
                         <span>{{ fmtCur(viewSubtotal) }}</span>
                       </div>
-                      <template v-if="viewTaxLines.length">
-                        <div v-for="tl in viewTaxLines" :key="tl.template" class="po-view-total-row po-view-tax-row">
+                      <template v-if="viewGstLines.length">
+                        <div v-for="tl in viewGstLines" :key="tl.template" class="po-view-total-row po-view-tax-row">
                           <span class="po-view-tax-label">
                             <span class="po-view-tax-badge">TAX</span>
                             {{ tl.template }}
@@ -604,16 +604,16 @@
                           <span>{{ fmtCur(tl.amount) }}</span>
                         </div>
                       </template>
-                      <div v-else class="po-view-total-row po-view-tax-row">
+                      <div v-else-if="!viewTdsLine" class="po-view-total-row po-view-tax-row">
                         <span class="po-view-tax-label">
                           <span class="po-view-tax-badge po-view-tax-badge--none">NO TAX</span>
                           No taxes applied
                         </span>
                         <span>{{ fmtCur(0) }}</span>
                       </div>
-                      <div v-if="flt(viewDoc.tds_amount) > 0" class="po-view-total-row" style="color:#d97706">
-                        <span>TDS</span>
-                        <span>− {{ fmtCur(viewDoc.tds_amount) }}</span>
+                      <div v-if="viewTdsLine" class="po-view-total-row" style="color:#d97706">
+                        <span>{{ viewTdsLine.label }} <span style="opacity:.7">({{ viewTdsLine.rate }}%)</span></span>
+                        <span>− {{ fmtCur(viewTdsLine.amount) }}</span>
                       </div>
                       <div class="po-view-total-row po-view-grand">
                         <span>Grand Total</span>
@@ -813,6 +813,8 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { apiList, apiSave, apiGet, apiGET, apiSubmit, apiDelete, apiPOST, resolveCompany, refreshCsrfToken } from "../api/client.js";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
+import { computeTaxRows } from "../composables/useTaxCalc.js";
+import { stateFromGstin } from "../composables/useCountryState.js";
 import { COUNTRIES, statesFor } from "../composables/useCountryState.js";
 import { useToast } from "../composables/useToast.js";
 import { usePermissions } from "../composables/usePermissions.js";
@@ -905,6 +907,8 @@ const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const billCollapsed = reactive({ details: false, billing: true, lines: false, remarks: true });
 const viewLoading = ref(false), viewItems = ref([]), viewPayments = ref([]), viewTaxes = ref([]), viewDebitApps = ref([]);
 const vendors = ref([]), items = ref([]), lines = ref([]), taxAccountHead = ref(""), taxTemplates = ref([]);
+const companyGstState = ref(""), supplierState = ref("");
+const gstAccounts = ref({ input_cgst:"", input_sgst:"", input_igst:"" });
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 const copyingLast = ref(false);
 
@@ -1005,17 +1009,34 @@ async function loadTaxAccount() {
     if (r?.length) taxAccountHead.value = r[0].name;
   } catch {}
   try {
-    const templates = await apiList("Tax Template", { fields: ["name", "template_name"], filters: [["disabled", "=", 0]], limit: 100, order: "template_name asc" });
+    const templates = await apiList("Tax Template", { fields: ["name", "template_name", "tax_type"], filters: [["disabled", "=", 0]], limit: 100, order: "template_name asc" });
     const withRates = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
-        const rate = doc?.taxes?.[0]?.tax_rate ?? doc?.taxes?.[0]?.rate ?? 0;
+        const rate = (doc?.taxes || []).reduce((s, r) => s + (Number(r.rate) || 0), 0);
         const account = doc?.taxes?.[0]?.account_head || taxAccountHead.value;
-        return { name: t.name, template_name: t.template_name, rate: Number(rate), account };
-      } catch { return { name: t.name, template_name: t.template_name, rate: 0, account: taxAccountHead.value }; }
+        return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || doc?.tax_type || "GST", rate: Number(rate), account };
+      } catch { return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || "GST", rate: 0, account: taxAccountHead.value }; }
     }));
     taxTemplates.value = withRates;
   } catch { taxTemplates.value = []; }
+  // Company GST state + Input GST accounts for intra/inter split (ITC side).
+  try {
+    const co = await resolveCompany();
+    const bc = await apiGet("Books Company", co);
+    companyGstState.value = bc?.gst_state || bc?.state || "";
+    gstAccounts.value = await apiGET("zoho_books_clone.api.gst.get_gst_accounts", { company: co }) || {};
+  } catch {}
+}
+
+// Shared context for the purchase-side split (supplier state vs company state).
+function billTaxCtx() {
+  return {
+    companyState: companyGstState.value,
+    placeOfSupply: supplierState.value,
+    gst: { cgst: gstAccounts.value.input_cgst, sgst: gstAccounts.value.input_sgst, igst: gstAccounts.value.input_igst },
+    defaultAccount: taxAccountHead.value,
+  };
 }
 
 const counts = computed(() => ({
@@ -1204,14 +1225,15 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code"], filters: f, limit: 30, order: "item_name asc" });
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code"], filters: [...f, ["has_variants", "=", 0]], limit: 30, order: "item_name asc" });
     items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.tax_code || "" }));
   } catch { items.value = []; }
 }
 watch(() => form.supplier, async (name) => {
-  if (!name) { form.tds_applicable = false; form.tds_section = ""; form.tds_rate = 0; return; }
+  if (!name) { form.tds_applicable = false; form.tds_section = ""; form.tds_rate = 0; supplierState.value = ""; return; }
   try {
     const doc = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Supplier", name });
+    supplierState.value = doc?.state || stateFromGstin(doc?.tax_id) || "";
     if (doc?.tds_applicable) {
       form.tds_applicable = true;
       form.tds_section = doc.tds_section || "";
@@ -1254,35 +1276,27 @@ function calcLine(l) { l.amount = Math.round(flt(l.qty) * flt(l.rate) * 100) / 1
 const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
 
 // Group tax by template name → { name, rate, amount }
-const taxLines = computed(() => {
-  const map = {};
-  for (const l of lines.value) {
-    if (!l.tax_code || !l.amount) continue;
-    const tmpl = taxTemplates.value.find(t => t.name === l.tax_code);
-    const rate = tmpl?.rate ?? 0;
-    if (!rate) continue;
-    if (!map[l.tax_code]) map[l.tax_code] = { template: l.tax_code, rate, amount: 0 };
-    map[l.tax_code].amount += Math.round(flt(l.amount) * rate / 100 * 100) / 100;
-  }
-  return Object.values(map);
-});
+const taxLines = computed(() =>
+  computeTaxRows(lines.value, taxTemplates.value, billTaxCtx())
+    .map(r => ({ template: r.description, description: r.description, tax_type: r.tax_type, rate: r.rate, account_head: r.account_head, amount: r.amount }))
+);
 const taxAmount = computed(() => taxLines.value.reduce((s, t) => s + t.amount, 0));
 const grandTotal = computed(() => subtotal.value + taxAmount.value);
 const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math.round(subtotal.value * form.tds_rate / 100 * 100) / 100 : 0);
 
 // View drawer tax summary
 const viewSubtotal = computed(() => viewItems.value.reduce((s, i) => s + flt(i.amount), 0));
-const viewTaxLines = computed(() => {
-  const map = {};
-  for (const i of viewItems.value) {
-    if (!i.tax_code || !i.amount) continue;
-    const tmpl = taxTemplates.value.find(t => t.name === i.tax_code);
-    const rate = tmpl?.rate ?? 0;
-    if (!rate) continue;
-    if (!map[i.tax_code]) map[i.tax_code] = { template: i.tax_code, rate, amount: 0 };
-    map[i.tax_code].amount += Math.round(flt(i.amount) * rate / 100 * 100) / 100;
-  }
-  return Object.values(map);
+// Show the *actual saved* tax lines, split into positive taxes (GST) and the
+// negative TDS deduction — so the summary reconciles with the Grand Total
+// instead of recomputing from items (which misses TDS and reads "No taxes").
+const viewGstLines = computed(() =>
+  (viewTaxes.value || [])
+    .filter(t => flt(t.rate) >= 0 && flt(t.tax_amount) >= 0)
+    .map(t => ({ template: t.description || t.tax_type || t.account_head || "Tax", rate: flt(t.rate), amount: flt(t.tax_amount) }))
+);
+const viewTdsLine = computed(() => {
+  const t = (viewTaxes.value || []).find(x => flt(x.rate) < 0 || flt(x.tax_amount) < 0);
+  return t ? { label: t.description || "TDS", rate: Math.abs(flt(t.rate)), amount: Math.abs(flt(t.tax_amount)) } : null;
 });
 
 async function copyLastItems() {
@@ -1309,22 +1323,9 @@ async function saveBill(submit) {
   drawerSaving.value = true;
   try {
     const company = await resolveCompany();
-    // Build taxes array from unique tax_code entries on lines (like PO)
-    const taxMap = {};
-    for (const l of lines.value.filter(l => l.item_code)) {
-      if (!l.tax_code) continue;
-      const tmpl = taxTemplates.value.find(t => t.name === l.tax_code);
-      if (!tmpl) continue;
-      if (!taxMap[l.tax_code]) {
-        taxMap[l.tax_code] = {
-          doctype: "Tax Line", charge_type: "On Net Total",
-          account_head: tmpl.account || taxAccountHead.value,
-          description: l.tax_code,
-          rate: tmpl.rate,
-        };
-      }
-    }
-    const taxes = Object.values(taxMap);
+    // Split CGST/SGST/IGST (input) by supplier vs company state.
+    const taxes = computeTaxRows(lines.value.filter(l => l.item_code), taxTemplates.value, billTaxCtx())
+      .map(r => ({ doctype: "Tax Line", charge_type: "On Net Total", account_head: r.account_head, description: r.description, rate: r.rate, tax_type: r.tax_type, tax_amount: r.amount }));
     if (form.tds_applicable && form.tds_rate > 0 && form.tds_section) {
       taxes.push({
         doctype: "Tax Line", charge_type: "On Net Total",

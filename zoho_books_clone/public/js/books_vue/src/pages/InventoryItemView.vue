@@ -509,13 +509,11 @@ async function loadDrawerOptions() {
     itemGroups.value = (grps || []).filter(g => !g.is_group).map(g => g.name);
     warehouses.value = (whs || []).map(w => ({ name: w.name, label: w.warehouse_name || w.name }));
     taxTemplates.value = (tt || []).map(t => ({ name: t.name, label: t.template_name || t.name }));
-    // Income- and expense-class leaf accounts, filtered by root_type
-    // (Expense root covers Cost of Goods Sold); fall back to account_type.
+    // Income- and expense-class leaf accounts (no root_type column on this
+    // app's Account doctype — filter by account_type directly).
     const base = [["is_group","=",0],["company","=",company]];
-    let inc = await apiList("Account", { fields:["name"], filters:[...base,["root_type","=","Income"]], limit:500 });
-    if (!inc?.length) inc = await apiList("Account", { fields:["name"], filters:[...base,["account_type","=","Income"]], limit:500 });
-    let exp = await apiList("Account", { fields:["name"], filters:[...base,["root_type","=","Expense"]], limit:500 });
-    if (!exp?.length) exp = await apiList("Account", { fields:["name"], filters:[...base,["account_type","in",["Expense","Cost of Goods Sold"]]], limit:500 });
+    const inc = await apiList("Account", { fields:["name"], filters:[...base,["account_type","=","Income"]], limit:500 });
+    const exp = await apiList("Account", { fields:["name"], filters:[...base,["account_type","in",["Expense","Cost of Goods Sold"]]], limit:500 });
     incomeAccounts.value  = (inc || []).map(a => a.name);
     expenseAccounts.value = (exp || []).map(a => a.name);
   } catch {}

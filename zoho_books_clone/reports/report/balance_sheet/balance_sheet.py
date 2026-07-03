@@ -15,7 +15,7 @@ def get_columns():
     ]
 
 
-ASSET_TYPES     = ("Asset", "Cash", "Bank", "Receivable")
+ASSET_TYPES     = ("Asset", "Cash", "Bank", "Receivable", "Stock")
 LIABILITY_TYPES = ("Liability", "Payable", "Tax")
 EQUITY_TYPES    = ("Equity",)
 
@@ -34,7 +34,9 @@ def get_data(filters: dict) -> list[dict]:
         ORDER BY a.account_type, g.account
     """, {**filters, "types": ASSET_TYPES + LIABILITY_TYPES + EQUITY_TYPES}, as_dict=True)
 
-    # Compute Net Profit so far (Income - Expenses) and add it to equity
+    # Net Profit so far = every income-statement account (i.e. any account type
+    # that isn't a balance-sheet permanent type) → rolled into equity. Covers
+    # Income, Expense, Cost of Goods Sold, Stock Adjustment, Depreciation, etc.
     pnl = frappe.db.sql("""
         SELECT SUM(g.credit) - SUM(g.debit) AS net
         FROM `tabGeneral Ledger Entry` g
@@ -42,8 +44,8 @@ def get_data(filters: dict) -> list[dict]:
         WHERE IFNULL(g.is_cancelled, 0) = 0
           AND g.posting_date <= %(as_of_date)s
           AND g.company = %(company)s
-          AND a.account_type IN ("Income", "Expense")
-    """, filters, as_dict=True)
+          AND a.account_type NOT IN %(bs_types)s
+    """, {**filters, "bs_types": ASSET_TYPES + LIABILITY_TYPES + EQUITY_TYPES}, as_dict=True)
     net_profit = flt((pnl[0] or {}).get("net") or 0)
 
     # Balance signs: assets/expenses naturally have positive (debit-credit);

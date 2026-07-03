@@ -1332,6 +1332,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import IrnQrCode from "../components/IrnQrCode.vue";
 import { useLivePreview } from "../composables/useLivePreview.js";
+import { computeTaxRows } from "../composables/useTaxCalc.js";
 
 const { toast } = useToast();
 const { canWrite } = usePermissions();
@@ -1525,6 +1526,8 @@ async function fetchWarehouses(q=""){try{const co=await resolveCompany();const r
 const costCenters = ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
 const taxTemplates = ref([]);
+const companyGstState = ref("");                              // for GST intra/inter split
+const gstAccounts = ref({ output_cgst:"", output_sgst:"", output_igst:"" });
 
 // ── View drawer ────────────────────────────────────────────────────────
 const viewOpen    = ref(false);
@@ -1640,18 +1643,14 @@ const { page, pageSize, paged } = usePagination(sorted, { storageKey: "invoices"
 
 const subtotal = computed(()=>lines.value.reduce((s,l)=>s+flt(l.amount),0));
 
-const taxLines = computed(()=>{
-  const map={};
-  for(const l of lines.value){
-    if(!l.tax_code||!l.amount) continue;
-    const tmpl=taxTemplates.value.find(t=>t.name===l.tax_code);
-    const rate=tmpl?.rate??0;
-    if(!rate) continue;
-    if(!map[l.tax_code]) map[l.tax_code]={template:l.tax_code,rate,amount:0};
-    map[l.tax_code].amount+=Math.round(flt(l.amount)*rate/100*100)/100;
-  }
-  return Object.values(map);
-});
+const taxLines = computed(()=>
+  computeTaxRows(lines.value, taxTemplates.value, {
+    companyState: companyGstState.value,
+    placeOfSupply: form.place_of_supply,
+    gst: { cgst: gstAccounts.value.output_cgst, sgst: gstAccounts.value.output_sgst, igst: gstAccounts.value.output_igst },
+    defaultAccount: taxAccountHead.value,
+  }).map(r=>({ template:r.description, description:r.description, tax_type:r.tax_type, rate:r.rate, account_head:r.account_head, amount:r.amount }))
+);
 
 const taxAmount  = computed(()=>taxLines.value.reduce((s,t)=>s+t.amount,0));
 const grandTotal = computed(()=>subtotal.value+taxAmount.value);
@@ -1841,7 +1840,7 @@ async function loadCustomers() {
   try { const r=await apiList("Customer",{fields:["name","customer_name"],filters:[["disabled","=",0]],limit:500,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
 }
 async function loadItems() {
-  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0]],limit:500,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
+  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0],["has_variants","=",0]],limit:500,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
 async function loadTaxAccount() {
   try {
@@ -1850,17 +1849,25 @@ async function loadTaxAccount() {
     taxAccountHead.value=r[0]?.name||"";
   } catch {}
   try {
-    const templates=await apiList("Tax Template",{fields:["name","template_name"],filters:[["disabled","=",0]],limit:100,order:"template_name asc"});
+    const templates=await apiList("Tax Template",{fields:["name","template_name","tax_type"],filters:[["disabled","=",0]],limit:100,order:"template_name asc"});
     const withRates=await Promise.all((templates||[]).map(async t=>{
       try{
         const doc=await apiGet("Tax Template",t.name);
-        const rate=doc?.taxes?.[0]?.tax_rate??doc?.taxes?.[0]?.rate??0;
+        // Total template rate = sum of all component rows (CGST 9 + SGST 9 = 18).
+        const rate=(doc?.taxes||[]).reduce((s,r)=>s+(Number(r.rate)||0),0);
         const account=doc?.taxes?.[0]?.account_head||taxAccountHead.value;
-        return{name:t.name,template_name:t.template_name,rate:Number(rate),account};
-      }catch{return{name:t.name,template_name:t.template_name,rate:0,account:taxAccountHead.value};}
+        return{name:t.name,template_name:t.template_name,tax_type:t.tax_type||doc?.tax_type||"GST",rate:Number(rate),account};
+      }catch{return{name:t.name,template_name:t.template_name,tax_type:t.tax_type||"GST",rate:0,account:taxAccountHead.value};}
     }));
     taxTemplates.value=withRates;
   }catch{taxTemplates.value=[];}
+  // Company GST state + Output GST accounts for intra/inter split.
+  try {
+    const co=await resolveCompany();
+    const bc=await apiGet("Books Company",co);
+    companyGstState.value=bc?.gst_state||bc?.state||"";
+    gstAccounts.value=await apiGET("zoho_books_clone.api.gst.get_gst_accounts",{company:co})||{};
+  } catch {}
 }
 
 // ── Sorting & selection ────────────────────────────────────────────────
@@ -2102,18 +2109,12 @@ async function saveInvoice(docstatus, andNew = false) {
   try {
     const company=await resolveCompany();
     const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||""}));
-    const taxMap={};
-    for(const l of lines.value.filter(l=>l.item_code)){
-      if(!l.tax_code) continue;
-      const tmpl=taxTemplates.value.find(t=>t.name===l.tax_code);
-      if(!tmpl) continue;
-      if(!taxMap[l.tax_code]){
-        const desc=(l.tax_code||"").toUpperCase();
-        const tax_type=desc.startsWith("CGST")?"CGST":desc.startsWith("SGST")?"SGST":desc.startsWith("IGST")?"IGST":desc.startsWith("CESS")?"Cess":"Other";
-        taxMap[l.tax_code]={doctype:"Tax Line",charge_type:"On Net Total",account_head:tmpl.account||taxAccountHead.value,description:l.tax_code,rate:tmpl.rate,tax_type};
-      }
-    }
-    const taxes=Object.values(taxMap);
+    const taxes=computeTaxRows(lines.value.filter(l=>l.item_code), taxTemplates.value, {
+      companyState: companyGstState.value,
+      placeOfSupply: form.place_of_supply,
+      gst: { cgst: gstAccounts.value.output_cgst, sgst: gstAccounts.value.output_sgst, igst: gstAccounts.value.output_igst },
+      defaultAccount: taxAccountHead.value,
+    }).map(r=>({doctype:"Tax Line",charge_type:"On Net Total",account_head:r.account_head,description:r.description,rate:r.rate,tax_type:r.tax_type,tax_amount:r.amount}));
     const shipAddr=sameAsBillingAddr.value?form.billing_address:form.shipping_address||"";
 
     // If form.logo is still a data URL it means the background upload failed or

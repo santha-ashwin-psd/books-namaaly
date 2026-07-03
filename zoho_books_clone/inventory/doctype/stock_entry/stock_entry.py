@@ -523,6 +523,12 @@ class StockEntry(Document):
             rev_qty = -flt(sle.actual_qty)
             qty_after = current_qty + rev_qty
 
+            # Mirror the GL reversal convention: the reversal row is ALSO flagged
+            # is_cancelled=1, so active-SLE sums (reports, FIFO layers, ageing)
+            # see net zero from a cancelled voucher. Leaving it active would
+            # double-count the cancellation and, for issue reversals, inject a
+            # bogus 0-rate FIFO layer into future COGS. Bin quantities stay
+            # correct either way because _update_bin runs on insert regardless.
             rev = frappe.get_doc({
                 "doctype": "Stock Ledger Entry",
                 "item_code": sle.item_code,
@@ -539,7 +545,7 @@ class StockEntry(Document):
                 "valuation_rate": flt(sle.valuation_rate),
                 "stock_value": flt(qty_after) * flt(sle.valuation_rate),
                 "stock_value_difference": -flt(sle.stock_value_difference),
-                "is_cancelled": 0,
+                "is_cancelled": 1,
             })
             rev.name = frappe.generate_hash(txt=f"{sle.item_code}{sle.warehouse}{frappe.utils.now()}rev", length=10)
             rev.flags.ignore_links = True

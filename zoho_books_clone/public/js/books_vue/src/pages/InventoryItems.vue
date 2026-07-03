@@ -153,7 +153,7 @@
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
           <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
           <td @click="openView(row)" data-label="Code"><span class="inv-link">{{row.item_code||row.name}}</span></td>
-          <td @click="openView(row)" class="fw-600" data-label="Name">{{row.item_name}}</td>
+          <td @click="openView(row)" class="fw-600" data-label="Name">{{row.item_name}}<span v-if="row.has_variants" class="it-tpl-badge">Template</span><span v-else-if="row.variant_of" class="it-var-badge">Variant</span></td>
           <td @click="openView(row)" class="col-hide-tablet" data-label="Group"><span v-if="row.item_group" class="it-group-badge">{{row.item_group}}</span><span v-else class="text-muted">—</span></td>
           <td @click="openView(row)" data-label="Type">
             <span class="b-badge" style="font-size:11px"
@@ -636,12 +636,60 @@
 
         <!-- ── Variants ── -->
         <template v-else>
-          <div class="ad-empty-state">
+          <div v-if="drawerMode !== 'edit'" class="ad-empty-state">
             <div class="ad-empty-icon">🧩</div>
-            <div class="ad-empty-title">Item Variants</div>
-            <div class="ad-empty-sub">Configure attributes like Size, Colour etc. to create item variants.</div>
-            <div class="ad-empty-badge">Coming soon</div>
+            <div class="ad-empty-title">Save the item first</div>
+            <div class="ad-empty-sub">Create this item, then reopen it to configure attributes and generate variants.</div>
           </div>
+          <template v-else>
+            <div class="ad-toggle-row" style="margin-bottom:18px">
+              <div class="ad-toggle-left">
+                <div class="ad-toggle-title">Variant template</div>
+                <div class="ad-toggle-sub">Define attributes (Size, Colour…) and generate a sellable item for each combination.</div>
+              </div>
+              <label class="ad-switch">
+                <input type="checkbox" :checked="!!form.has_variants" @change="form.has_variants=($event.target.checked?1:0)"/>
+                <span class="ad-switch-track ad-switch-track--green"></span>
+              </label>
+            </div>
+
+            <template v-if="form.has_variants">
+              <div class="ad-section">
+                <div class="ad-section-title" style="display:flex;justify-content:space-between;align-items:center">
+                  <span>Attributes</span>
+                  <button class="vr-add-attr" @click="addVariantAttr"><span v-html="icon('plus',12)"></span> Add attribute</button>
+                </div>
+                <div v-if="!variantAttrs.length" class="vr-hint">Add an attribute (e.g. Size) and its values (S, M, L).</div>
+                <div v-for="(a,i) in variantAttrs" :key="i" class="vr-attr-row">
+                  <SearchableSelect v-model="a.attribute" :options="attributeOptions" placeholder="Attribute" :createable="true" @create="createAttribute($event, i)" class="vr-attr-name"/>
+                  <input v-model="a.valuesText" class="ad-input vr-attr-vals" placeholder="Values, comma-separated (S, M, L)"/>
+                  <button class="vr-attr-del" @click="removeVariantAttr(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
+                </div>
+              </div>
+
+              <div class="vr-gen-bar">
+                <span class="vr-gen-count">{{ variantComboCount }} variant{{ variantComboCount===1?'':'s' }} will be generated</span>
+                <button class="ad-btn-primary" :disabled="generatingVariants || !variantComboCount" @click="generateVariants">
+                  {{ generatingVariants ? 'Generating…' : 'Save & Generate' }}
+                </button>
+              </div>
+
+              <div class="ad-section" v-if="variantsList.length">
+                <div class="ad-section-title">Generated Variants ({{ variantsList.length }})</div>
+                <div v-for="v in variantsList" :key="v.name" class="vr-item">
+                  <div class="vr-item-main">
+                    <div class="vr-item-code">{{ v.item_code }}</div>
+                    <div class="vr-item-attrs">{{ (v.attributes||[]).map(x=>x.attribute_value).join(' · ') || '—' }}</div>
+                  </div>
+                  <div class="vr-item-rate">₹{{ fmt(v.standard_rate) }}</div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="ad-empty-state" style="padding-top:8px">
+              <div class="ad-empty-icon">🧩</div>
+              <div class="ad-empty-sub">Turn on “Variant template” to define attributes and generate variants.</div>
+            </div>
+          </template>
         </template>
 
       </div>
@@ -662,7 +710,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
-import { apiList, apiGET, apiPOST, apiSave, apiDelete, resolveCompany } from "../api/client.js";
+import { apiList, apiGET, apiGet, apiPOST, apiSave, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePagination } from "../composables/usePagination.js";
 import { fmt, fmtDate, flt } from "../utils/format.js";
@@ -717,6 +765,7 @@ const form = reactive({
   income_account: "", expense_account: "",
   is_stock_item: 1, has_batch_no: 0, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0, opening_stock: 0,
+  has_variants: 0,
 });
 
 const ITEM_TYPES      = ["Raw Material", "Work In Progress", "Finished Good", "Packing Material", "Product", "Service"];
@@ -764,7 +813,7 @@ async function load() {
   loading.value = true;
   try {
     const rows = await apiList("Item", {
-      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","creation"],
+      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation"],
       order: "item_name asc", limit: 500,
     });
     list.value = rows || [];
@@ -831,19 +880,14 @@ async function createItemGroup(name) {
 }
 
 // Load income- and expense-class leaf accounts into separate dropdown lists.
-// Filter by root_type (Income / Expense — the latter covers Cost of Goods Sold),
-// falling back to account_type when a chart has no root_type populated.
+// This app's Account doctype has no root_type column, so filter by account_type
+// directly (Income; Expense covers Cost of Goods Sold).
 async function loadAccountLists(company) {
   const toOpts = (rows) => (rows || []).map((a) => ({ value: a.name, label: a.name }));
   const base = [["is_group", "=", 0], ["company", "=", company]];
 
-  let income = await apiList("Account", { fields: ["name"], filters: [...base, ["root_type", "=", "Income"]], order: "name asc", limit: 500 });
-  if (!income?.length)
-    income = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "=", "Income"]], order: "name asc", limit: 500 });
-
-  let expense = await apiList("Account", { fields: ["name"], filters: [...base, ["root_type", "=", "Expense"]], order: "name asc", limit: 500 });
-  if (!expense?.length)
-    expense = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "in", ["Expense", "Cost of Goods Sold"]]], order: "name asc", limit: 500 });
+  const income  = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "=", "Income"]], order: "name asc", limit: 500 });
+  const expense = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "in", ["Expense", "Cost of Goods Sold"]]], order: "name asc", limit: 500 });
 
   incomeAccounts.value  = toOpts(income);
   expenseAccounts.value = toOpts(expense);
@@ -1037,8 +1081,9 @@ async function openEdit(row) {
     hsn_code: "", description: "", standard_buying_rate: 0, brand: "",
     tax_code: "", income_account: "", expense_account: "",
     valuation_method: "FIFO", default_warehouse: "",
-    reorder_level: 0, reorder_qty: 0, opening_stock: 0,
+    reorder_level: 0, reorder_qty: 0, opening_stock: 0, has_variants: 0,
   });
+  variantAttrs.value = []; variantsList.value = [];
   showDrawer.value = true;
   try {
     const full = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: row.name });
@@ -1060,6 +1105,15 @@ async function openEdit(row) {
       disabled:             full.disabled ? 1 : 0,
       brand:                full.brand                || "",
     });
+    // Rebuild the variant attribute builder: group stored rows by attribute.
+    const groups = {};
+    for (const r of (full.attributes || [])) {
+      if (!r.attribute) continue;
+      (groups[r.attribute] = groups[r.attribute] || []);
+      if (r.attribute_value && !groups[r.attribute].includes(r.attribute_value)) groups[r.attribute].push(r.attribute_value);
+    }
+    variantAttrs.value = Object.entries(groups).map(([attribute, vals]) => ({ attribute, valuesText: vals.join(", ") }));
+    loadVariants();
   } catch (e) { toast("Could not load full item details: " + e.message, "error"); }
 }
 
@@ -1079,14 +1133,23 @@ function validateItem() {
   return true;
 }
 
-async function saveItem() {
-  if (!validateItem()) return;
+async function saveItem({ close = true } = {}) {
+  if (!validateItem()) return null;
   saving.value = true;
   try {
     const isEdit = drawerMode.value === "edit";
     const itemCode = form.item_code || form.item_name;
     const openingQty = flt(form.opening_stock);
     const openingRate = flt(form.standard_buying_rate) || flt(form.standard_rate) || 0;
+
+    // Flatten the variant builder into Item Variant Attribute rows.
+    const attributes = [];
+    if (form.has_variants) {
+      for (const a of variantAttrs.value) {
+        if (!a.attribute) continue;
+        for (const val of splitValues(a.valuesText)) attributes.push({ doctype: "Item Variant Attribute", attribute: a.attribute, attribute_value: val });
+      }
+    }
 
     const doc = {
       doctype: "Item", item_name: form.item_name, item_code: itemCode,
@@ -1099,10 +1162,12 @@ async function saveItem() {
       valuation_method: form.valuation_method,
       default_warehouse: form.default_warehouse, reorder_level: flt(form.reorder_level),
       reorder_qty: flt(form.reorder_qty), opening_stock: openingQty,
+      has_variants: form.has_variants ? 1 : 0, attributes,
     };
     if (isEdit) doc.name = form.name;
     const saved = await apiSave(doc);
     const savedName = saved?.name || form.name || itemCode;
+    form.name = savedName;
 
     // Opening stock is posted only when the item is first created — re-posting
     // on every edit would keep adding a Material Receipt and inflate inventory.
@@ -1122,9 +1187,15 @@ async function saveItem() {
     }
 
     await load();
-    toast(isEdit ? "Item updated" : "Item created");
-    showDrawer.value = false;
-  } catch (e) { toast("Save failed: " + e.message, "error"); }
+    if (close) {
+      toast(isEdit ? "Item updated" : "Item created");
+      showDrawer.value = false;
+    } else {
+      // Keep the drawer open in edit mode (variant generation flow).
+      drawerMode.value = "edit";
+    }
+    return savedName;
+  } catch (e) { toast("Save failed: " + e.message, "error"); return null; }
   finally { saving.value = false; }
 }
 
@@ -1148,7 +1219,7 @@ function onHashChange() {
   }
 }
 
-onMounted(() => { load(); window.addEventListener("hashchange", onHashChange); });
+onMounted(() => { load(); loadAttributeOptions(); window.addEventListener("hashchange", onHashChange); });
 onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
 </script>
 
@@ -1735,6 +1806,24 @@ onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
   margin-top: 14px; display: inline-block; padding: 4px 12px; border-radius: 20px;
   background: #f1f5f9; color: #94a3b8; font-size: 11.5px; font-weight: 600; letter-spacing: .04em;
 }
+
+.it-tpl-badge { margin-left:7px; padding:1px 7px; border-radius:11px; font-size:10px; font-weight:700; background:#eef2ff; color:#4f46e5; vertical-align:middle; }
+.it-var-badge { margin-left:7px; padding:1px 7px; border-radius:11px; font-size:10px; font-weight:700; background:#f0fdf4; color:#16a34a; vertical-align:middle; }
+
+/* Variants tab */
+.vr-add-attr { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:4px 10px; font-size:12px; font-weight:600; color:#2563eb; cursor:pointer; font-family:inherit; }
+.vr-add-attr:hover { background:#eff6ff; }
+.vr-hint { font-size:12.5px; color:#94a3b8; padding:6px 0; }
+.vr-attr-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.vr-attr-name { flex:0 0 170px; }
+.vr-attr-vals { flex:1; }
+.vr-attr-del { border:none; background:none; cursor:pointer; color:#dc2626; padding:4px; display:flex; align-items:center; }
+.vr-gen-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0 6px; padding:12px 14px; background:#f8fafc; border:1px solid #eef2f7; border-radius:10px; }
+.vr-gen-count { font-size:12.5px; font-weight:600; color:#475569; }
+.vr-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #f1f5f9; border-radius:9px; margin-bottom:8px; }
+.vr-item-code { font-size:13px; font-weight:600; color:#111827; }
+.vr-item-attrs { font-size:11.5px; color:#94a3b8; margin-top:2px; }
+.vr-item-rate { font-size:13px; font-weight:700; color:#16a34a; }
 
 /* Footer */
 .ad-footer {

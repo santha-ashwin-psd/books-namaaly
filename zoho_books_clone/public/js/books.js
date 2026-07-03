@@ -367,7 +367,7 @@ Use the quick actions below or just type naturally.`,f_={__name:"AiPanel",props:
     Print
   </button>
 </div>
-<div class="doc-wrap"><iframe id="frm" srcdoc="${I}"></iframe></div>
+<div class="doc-wrap"><iframe id="frm" srcdoc="${D}"></iframe></div>
 <script>
   document.querySelectorAll('.tbtn').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tbtn').forEach(x => x.classList.remove('active'));

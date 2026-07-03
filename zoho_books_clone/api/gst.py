@@ -25,6 +25,32 @@ def _find_account(company: str, account_type: str, name_like: str = None) -> str
     return frappe.db.get_value("Account", filters, "name")
 
 
+@frappe.whitelist(allow_guest=False)
+def get_gst_accounts(company: str | None = None) -> dict:
+    """Resolve the company's Output (sales) and Input (purchase) GST accounts so
+    the SPA can post correctly-split CGST/SGST/IGST tax lines. Falls back across
+    the common naming conventions ('Output CGST' / 'CGST Payable', etc.)."""
+    from zoho_books_clone.api.session import _get_company
+    if not company:
+        company = _get_company(frappe.session.user)
+
+    def find(*names):
+        for n in names:
+            acc = _find_account(company, "Tax", n)
+            if acc:
+                return acc
+        return ""
+
+    return {
+        "output_cgst": find("Output CGST", "CGST Payable"),
+        "output_sgst": find("Output SGST", "SGST Payable"),
+        "output_igst": find("Output IGST", "IGST Payable"),
+        "input_cgst":  find("Input CGST", "CGST Input"),
+        "input_sgst":  find("Input SGST", "SGST Input"),
+        "input_igst":  find("Input IGST", "IGST Input"),
+    }
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
