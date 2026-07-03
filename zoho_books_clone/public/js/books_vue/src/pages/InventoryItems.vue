@@ -768,6 +768,67 @@ const form = reactive({
   has_variants: 0,
 });
 
+// ── Variants ──
+const variantAttrs      = ref([]);   // [{ attribute, valuesText }]
+const attributeOptions  = ref([]);   // Item Attribute masters for the picker
+const variantsList      = ref([]);
+const generatingVariants = ref(false);
+const splitValues = (s) => String(s || "").split(",").map(v => v.trim()).filter(Boolean);
+const variantComboCount = computed(() =>
+  variantAttrs.value.reduce((n, a) => {
+    const c = splitValues(a.valuesText).length;
+    return c ? n * c : n;
+  }, variantAttrs.value.some(a => splitValues(a.valuesText).length) ? 1 : 0)
+);
+async function loadAttributeOptions() {
+  try {
+    const r = await apiList("Item Attribute", { fields: ["name"], order: "name asc", limit: 200 });
+    attributeOptions.value = (r || []).map(a => ({ value: a.name, label: a.name }));
+  } catch { attributeOptions.value = []; }
+}
+function addVariantAttr() { variantAttrs.value.push({ attribute: "", valuesText: "" }); }
+function removeVariantAttr(i) { variantAttrs.value.splice(i, 1); }
+async function createAttribute(name, i) {
+  const nm = String(name || "").trim();
+  if (!nm) return;
+  try {
+    await apiSave({ doctype: "Item Attribute", attribute_name: nm });
+    await loadAttributeOptions();
+    if (variantAttrs.value[i]) variantAttrs.value[i].attribute = nm;
+    toast(`Attribute "${nm}" created`);
+  } catch (e) { toast("Could not create attribute: " + e.message, "error"); }
+}
+async function loadVariants() {
+  if (drawerMode.value !== "edit" || !form.name) { variantsList.value = []; return; }
+  try { variantsList.value = await apiGET("zoho_books_clone.api.variants.get_variants", { template_item: form.name }) || []; }
+  catch { variantsList.value = []; }
+}
+async function generateVariants() {
+  if (!variantComboCount.value) return;
+  generatingVariants.value = true;
+  try {
+    form.has_variants = 1;
+    const savedName = await saveItem({ close: false });
+    if (!savedName) return;
+    // Merge typed values into each Item Attribute master so they're reusable.
+    for (const a of variantAttrs.value) {
+      const vals = splitValues(a.valuesText);
+      if (!a.attribute || !vals.length) continue;
+      try {
+        const doc = await apiGet("Item Attribute", a.attribute);
+        const have = new Set((doc.attribute_values || []).map(v => v.attribute_value));
+        const merged = [...(doc.attribute_values || [])];
+        vals.forEach(v => { if (!have.has(v)) merged.push({ doctype: "Item Attribute Value", attribute_value: v }); });
+        await apiSave({ ...doc, attribute_values: merged });
+      } catch {}
+    }
+    const res = await apiPOST("zoho_books_clone.api.variants.create_variants", { template_item: savedName });
+    toast(`Generated ${res.count} variant(s)` + (res.skipped?.length ? ` · ${res.skipped.length} already existed` : ""));
+    await loadVariants();
+  } catch (e) { toast("Failed to generate variants: " + e.message, "error"); }
+  finally { generatingVariants.value = false; }
+}
+
 const ITEM_TYPES      = ["Raw Material", "Work In Progress", "Finished Good", "Packing Material", "Product", "Service"];
 const ITEM_TYPE_ICONS = {
   "Raw Material":     "🌿",
@@ -884,10 +945,28 @@ async function createItemGroup(name) {
 // directly (Income; Expense covers Cost of Goods Sold).
 async function loadAccountLists(company) {
   const toOpts = (rows) => (rows || []).map((a) => ({ value: a.name, label: a.name }));
-  const base = [["is_group", "=", 0], ["company", "=", company]];
 
-  const income  = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "=", "Income"]], order: "name asc", limit: 500 });
-  const expense = await apiList("Account", { fields: ["name"], filters: [...base, ["account_type", "in", ["Expense", "Cost of Goods Sold"]]], order: "name asc", limit: 500 });
+  const fetchByType = async (typeFilter, scopeCompany) => {
+    const filters = [["is_group", "=", 0]];
+    if (scopeCompany) filters.push(["company", "=", scopeCompany]);
+    filters.push(typeFilter);
+    return await apiList("Account", { fields: ["name"], filters, order: "name asc", limit: 500 });
+  };
+
+  const incomeFilter  = ["account_type", "=", "Income"];
+  const expenseFilter = ["account_type", "in", ["Expense", "Cost of Goods Sold"]];
+
+  let income  = await fetchByType(incomeFilter, company);
+  let expense = await fetchByType(expenseFilter, company);
+
+  // Fallback: the resolved company had no matching accounts at all (stale/
+  // mismatched company on Books Settings vs. what the Chart of Accounts was
+  // seeded with). Retry without the company filter rather than leaving the
+  // dropdown permanently empty.
+  if (!income.length && !expense.length) {
+    income  = await fetchByType(incomeFilter, "");
+    expense = await fetchByType(expenseFilter, "");
+  }
 
   incomeAccounts.value  = toOpts(income);
   expenseAccounts.value = toOpts(expense);
