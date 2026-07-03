@@ -1,0 +1,72 @@
+{
+ "name": "QC Inspection Template Parameter",
+ "module": "Quality",
+ "doctype": "DocType",
+ "creation": "2026-06-29 00:00:00.000000",
+ "modified": "2026-06-29 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "istable": 1,
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "parameter",
+   "fieldtype": "Data",
+   "label": "Parameter",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "parameter_type",
+   "fieldtype": "Select",
+   "label": "Type",
+   "options": "Numeric\nNon-Numeric\nFormula",
+   "default": "Numeric",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "min_value",
+   "fieldtype": "Float",
+   "label": "Min Value",
+   "in_list_view": 1,
+   "depends_on": "eval:doc.parameter_type=='Numeric'"
+  },
+  {
+   "fieldname": "max_value",
+   "fieldtype": "Float",
+   "label": "Max Value",
+   "in_list_view": 1,
+   "depends_on": "eval:doc.parameter_type=='Numeric'"
+  },
+  {
+   "fieldname": "acceptance_criteria_value",
+   "fieldtype": "Data",
+   "label": "Acceptance Criteria",
+   "in_list_view": 1,
+   "depends_on": "eval:doc.parameter_type=='Non-Numeric'"
+  },
+  {
+   "fieldname": "formula",
+   "fieldtype": "Code",
+   "label": "Formula",
+   "depends_on": "eval:doc.parameter_type=='Formula'"
+  },
+  {
+   "fieldname": "required",
+   "fieldtype": "Check",
+   "label": "Required",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description / Instructions"
+  }
+ ]
+}

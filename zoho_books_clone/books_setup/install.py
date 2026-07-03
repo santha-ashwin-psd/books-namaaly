@@ -19,6 +19,7 @@ def after_install():
     seed_supplier_custom_fields()
     seed_invoice_custom_fields()
     seed_books_company_field()
+    seed_qc_item_fields()
     frappe.db.commit()
     print("✅  Zoho Books Clone installed successfully!")
 
@@ -39,6 +40,7 @@ def after_migrate():
     seed_supplier_custom_fields()
     seed_invoice_custom_fields()
     seed_books_company_field()
+    seed_qc_item_fields()
     _normalize_company_names()
     frappe.db.commit()
 
@@ -100,6 +102,7 @@ def seed_naming_series():
         "Bank Transaction": "BTXN-.YYYY.-.#####",
         "Customer":         "CUST-.YYYY.-.#####",
         "Supplier":         "SUPP-.YYYY.-.#####",
+        "QC Inspection":    "QCI-.YYYY.-.#####",
     }
     for doctype, prefix in series.items():
         key = f"{prefix}."
@@ -775,5 +778,132 @@ def seed_books_company_field():
                 )
             except Exception as e:
                 frappe.log_error(str(e), f"ALTER TABLE {table} add books_company")
+
+    frappe.db.commit()
+
+
+# ─── QC Item Custom Fields ───────────────────────────────────────────────
+def seed_qc_item_fields():
+    """
+    Add QC-related custom fields to the Item doctype:
+      - Section break: Quality Control
+      - inspection_required_before_purchase  (Check)
+      - inspection_required_before_delivery  (Check)
+      - inspection_required_before_manufacture (Check)
+      - default_qc_inspection_template       (Link -> QC Inspection Template)
+
+    Idempotent: checks existence before inserting.
+    Also seeds the Books Settings qc_warn_on_missing_inspection flag.
+    """
+    qc_fields = [
+        {
+            "fieldname": "section_qc",
+            "fieldtype": "Section Break",
+            "label":     "Quality Control",
+            "insert_after": "section_inventory",
+        },
+        {
+            "fieldname": "inspection_required_before_purchase",
+            "fieldtype": "Check",
+            "label":     "Inspection Required Before Purchase",
+            "description": "QC Inspection required when receiving this item (Purchase Receipt / Purchase Invoice)",
+            "insert_after": "section_qc",
+        },
+        {
+            "fieldname": "inspection_required_before_delivery",
+            "fieldtype": "Check",
+            "label":     "Inspection Required Before Delivery",
+            "description": "QC Inspection required before dispatching this item (Sales Invoice / Delivery Note)",
+            "insert_after": "inspection_required_before_purchase",
+        },
+        {
+            "fieldname": "inspection_required_before_manufacture",
+            "fieldtype": "Check",
+            "label":     "Inspection Required Before Manufacture",
+            "description": "QC Inspection required for Manufacture-type Stock Entries",
+            "insert_after": "inspection_required_before_delivery",
+        },
+        {
+            "fieldname": "default_qc_inspection_template",
+            "fieldtype": "Link",
+            "label":     "Default QC Inspection Template",
+            "options":   "QC Inspection Template",
+            "description": "Auto-populated into new QC Inspections for this item",
+            "insert_after": "inspection_required_before_manufacture",
+        },
+    ]
+
+    for fld in qc_fields:
+        cf_name = f"Item-{fld['fieldname']}"
+        if frappe.db.exists("Custom Field", cf_name):
+            continue
+        try:
+            doc = frappe.get_doc({
+                "doctype":      "Custom Field",
+                "name":         cf_name,
+                "dt":           "Item",
+                "fieldname":    fld["fieldname"],
+                "label":        fld["label"],
+                "fieldtype":    fld["fieldtype"],
+                "options":      fld.get("options", ""),
+                "insert_after": fld.get("insert_after", ""),
+                "description":  fld.get("description", ""),
+                "hidden":       0,
+                "in_list_view": 0,
+            })
+            doc.insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.log_error(str(e), f"QC Custom Field seed: {cf_name}")
+
+    # Physical columns on tabItem for the check fields
+    db_name = frappe.conf.get("db_name")
+    check_columns = [
+        "inspection_required_before_purchase",
+        "inspection_required_before_delivery",
+        "inspection_required_before_manufacture",
+        "default_qc_inspection_template",
+    ]
+    existing_cols = set(
+        r[0] for r in frappe.db.sql(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'tabItem'",
+            (db_name,),
+        )
+    )
+    for col in check_columns:
+        if col not in existing_cols:
+            try:
+                col_type = "tinyint(1) DEFAULT 0" if "inspection_required" in col or col == "inspection_required_before_manufacture" else "varchar(140) DEFAULT NULL"
+                frappe.db.sql(f"ALTER TABLE `tabItem` ADD COLUMN `{col}` {col_type}")
+            except Exception as e:
+                frappe.log_error(str(e), f"ALTER TABLE tabItem add {col}")
+
+    # Seed Books Settings QC master switch if the doctype exists
+    try:
+        if frappe.db.exists("DocType", "Books Settings"):
+            # Add qc_warn_on_missing_inspection custom field to Books Settings if missing
+            cf_name_bs = "Books Settings-qc_warn_on_missing_inspection"
+            if not frappe.db.exists("Custom Field", cf_name_bs):
+                frappe.get_doc({
+                    "doctype":      "Custom Field",
+                    "name":         cf_name_bs,
+                    "dt":           "Books Settings",
+                    "fieldname":    "qc_warn_on_missing_inspection",
+                    "label":        "Warn When QC Inspection is Missing or Failed",
+                    "fieldtype":    "Check",
+                    "default":      "1",
+                    "description":  "If enabled, submitting a document without a passed QC Inspection shows a warning dialog.",
+                    "insert_after": "auto_reconcile",
+                }).insert(ignore_permissions=True)
+            # Set default value on the singleton
+            try:
+                bs = frappe.get_doc("Books Settings", "Books Settings")
+                if bs.get("qc_warn_on_missing_inspection") is None:
+                    frappe.db.set_value("Books Settings", "Books Settings",
+                                        "qc_warn_on_missing_inspection", 1)
+            except Exception:
+                pass
+    except Exception as e:
+        frappe.log_error(str(e), "QC Books Settings seed")
 
     frappe.db.commit()

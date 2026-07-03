@@ -69,6 +69,8 @@ import BulkImport             from "./pages/BulkImport.vue";
 import DeliveryChallans       from "./pages/DeliveryChallans.vue";
 import ProformaInvoices       from "./pages/ProformaInvoices.vue";
 import PurchaseReceipts       from "./pages/PurchaseReceipts.vue";
+import QualityInspections     from "./pages/QualityInspections.vue";
+import QCTemplates            from "./pages/QCTemplates.vue";
 
 import { useToast } from "./composables/useToast.js";
 import { usePermissions } from "./composables/usePermissions.js";
@@ -234,6 +236,9 @@ const routes = [
   { path: "/delivery-challans",   name: "delivery-challans",   component: DeliveryChallans,   meta: { module: "invoices" } },
   { path: "/proforma-invoices",   name: "proforma-invoices",   component: ProformaInvoices,   meta: { module: "invoices" } },
   { path: "/purchase-receipts",   name: "purchase-receipts",   component: PurchaseReceipts,   meta: { module: "bills"    } },
+  // Quality
+  { path: "/quality/inspections", name: "quality-inspections", component: QualityInspections, meta: { module: "inventory" } },
+  { path: "/quality/templates",   name: "quality-templates",   component: QCTemplates,         meta: { module: "inventory" } },
   // Future phases append entries here.
   {
     path: "/:pathMatch(.*)*",

@@ -22,15 +22,19 @@ _CV = "zoho_books_clone.accounts.central_validator"
 _SL = "zoho_books_clone.inventory.stock_link"
 # Multi-tenant data isolation — must be defined before doc_events, permission_query_conditions, and has_permission
 _TN = "zoho_books_clone.utils.tenancy"
+# Quality Control gate — soft-warn before stock moves (runs BEFORE _SL on submit)
+_QC = "zoho_books_clone.quality.qc_engine"
+# Quality Hold Manager — auto-quarantine on failed QC Inspection
+_QH = "zoho_books_clone.quality.qc_hold_manager"
 doc_events = {
     "Sales Invoice": {
         "validate":  f"{_CV}.on_validate",
-        "on_submit": [f"{_CV}.on_submit", f"{_SL}.on_sales_invoice_submit"],
+        "on_submit": [f"{_CV}.on_submit", f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_sales_invoice_submit"],
         "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_sales_invoice_cancel"], "before_delete": f"{_CV}.before_delete",
     },
     "Purchase Invoice": {
         "validate":  f"{_CV}.on_validate",
-        "on_submit": [f"{_CV}.on_submit", f"{_SL}.on_purchase_invoice_submit"],
+        "on_submit": [f"{_CV}.on_submit", f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_purchase_invoice_submit"],
         "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_purchase_invoice_cancel"], "before_delete": f"{_CV}.before_delete",
     },
     "Payment Entry":    {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
@@ -40,13 +44,16 @@ doc_events = {
     "Expense Claim":    {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # Goods documents own the physical stock movement (Delivery Note out / Purchase Receipt in)
     # Phase 2: validate hook added so central_validator period/lock checks run on these too.
-    "Delivery Note":    {"validate": f"{_CV}.on_validate", "on_submit": f"{_SL}.on_delivery_note_submit",    "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_delivery_note_cancel"], "before_delete": f"{_CV}.before_delete"},
-    "Purchase Receipt": {"validate": f"{_CV}.on_validate", "on_submit": f"{_SL}.on_purchase_receipt_submit", "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_purchase_receipt_cancel"], "before_delete": f"{_CV}.before_delete"},
+    "Delivery Note":    {"validate": f"{_CV}.on_validate", "on_submit": [f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_delivery_note_submit"],    "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_delivery_note_cancel"], "before_delete": f"{_CV}.before_delete"},
+    "Purchase Receipt": {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_purchase_receipt", "on_submit": [f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_purchase_receipt_submit"], "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_purchase_receipt_cancel"], "before_delete": f"{_CV}.before_delete"},
     # Purchase Order — wired so fiscal/period lock checks run on save and submit.
     "Purchase Order":   {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # Phase 2: Stock Entry and Bank Transaction wired to central_validator for period/lock checks.
-    "Stock Entry":      {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
+    # Stock Entry also gets QC gate for Manufacture type entries.
+    "Stock Entry":      {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_stock_entry", "on_submit": f"{_QC}.check_qc_before_stock_link", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     "Bank Transaction": {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
+    # QC Inspection — auto-handle hold/quarantine on submit
+    "QC Inspection":    {"on_submit": f"{_QH}.handle_qc_result"},
     # Phase 3: pre-sales and GST docs wired so Books lock date + fiscal-year
     # period lock are enforced on these document types too.
     "Sales Order":      {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
@@ -94,6 +101,11 @@ global_search_doctypes = {
         {"doctype": "Stock Entry"},
         {"doctype": "Item Price"},
         {"doctype": "Price List"},
+    ],
+    "Quality": [
+        {"doctype": "QC Inspection"},
+        {"doctype": "QC Inspection Template"},
+        {"doctype": "QC Approval Request"},
     ],
     "Books Setup": [
         {"doctype": "Currency"},

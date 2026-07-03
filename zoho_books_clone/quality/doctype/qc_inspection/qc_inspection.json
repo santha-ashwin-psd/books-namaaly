@@ -1,0 +1,249 @@
+{
+ "name": "QC Inspection",
+ "module": "Quality",
+ "doctype": "DocType",
+ "creation": "2026-06-29 00:00:00.000000",
+ "modified": "2026-06-29 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "document_type": "",
+ "search_fields": "reference_name,item,inspection_type,status",
+ "title_field": "reference_name",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By \"Naming Series\" field",
+ "autoname": "naming_series:QCI-.YYYY.-.#####",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "QCI-.YYYY.-.#####",
+   "reqd": 0,
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "inspection_type",
+   "fieldtype": "Select",
+   "label": "Inspection Type",
+   "options": "Incoming\nOutgoing\nIn Process",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_top",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nPass\nFail",
+   "default": "Pending",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1,
+   "read_only": 1,
+   "description": "Auto-computed on save — Pass only if all readings Accepted"
+  },
+  {
+   "fieldname": "sec_ref",
+   "fieldtype": "Section Break",
+   "label": "Reference Document"
+  },
+  {
+   "fieldname": "reference_type",
+   "fieldtype": "Select",
+   "label": "Reference DocType",
+   "options": "\nPurchase Receipt\nPurchase Invoice\nDelivery Note\nSales Invoice\nStock Entry",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_type",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item.item_name",
+   "read_only": 1,
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Data",
+   "label": "Batch No",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "sec_inspection",
+   "fieldtype": "Section Break",
+   "label": "Inspection Details"
+  },
+  {
+   "fieldname": "qc_inspection_template",
+   "fieldtype": "Link",
+   "label": "QC Inspection Template",
+   "options": "QC Inspection Template",
+   "description": "Auto-fetched from Item if set"
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Data",
+   "label": "Work Order / Batch Ref",
+   "description": "Auto-stamped for Stock Entry (Manufacture) type inspections",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "sample_size",
+   "fieldtype": "Float",
+   "label": "Sample Size",
+   "default": "1"
+  },
+  {
+   "fieldname": "sample_uom",
+   "fieldtype": "Link",
+   "label": "Sample UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "col_break_insp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inspected_by",
+   "fieldtype": "Link",
+   "label": "Inspected By",
+   "options": "User",
+   "default": "__user",
+   "reqd": 1
+  },
+  {
+   "fieldname": "inspection_date",
+   "fieldtype": "Date",
+   "label": "Inspection Date",
+   "default": "Today",
+   "reqd": 1
+  },
+  {
+   "fieldname": "verified_by",
+   "fieldtype": "Link",
+   "label": "Verified By (2nd Sign-off)",
+   "options": "User",
+   "description": "Optional second sign-off before submission"
+  },
+  {
+   "fieldname": "sec_readings",
+   "fieldtype": "Section Break",
+   "label": "Readings"
+  },
+  {
+   "fieldname": "readings",
+   "fieldtype": "Table",
+   "label": "Readings",
+   "options": "QC Inspection Reading"
+  },
+  {
+   "fieldname": "sec_summary",
+   "fieldtype": "Section Break",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "total_readings",
+   "fieldtype": "Int",
+   "label": "Total Readings",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accepted_readings",
+   "fieldtype": "Int",
+   "label": "Accepted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_sum",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_readings",
+   "fieldtype": "Int",
+   "label": "Rejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks / Observations"
+  },
+  {
+   "fieldname": "sec_hold",
+   "fieldtype": "Section Break",
+   "label": "QC Hold / Quarantine",
+   "depends_on": "eval:doc.status=='Fail'"
+  },
+  {
+   "fieldname": "qc_hold",
+   "fieldtype": "Check",
+   "label": "On QC Hold (Quarantine)",
+   "default": "0",
+   "read_only": 1,
+   "in_list_view": 0,
+   "description": "Auto-set when QC fails and hold is placed"
+  },
+  {
+   "fieldname": "quarantine_warehouse",
+   "fieldtype": "Link",
+   "label": "Quarantine Warehouse",
+   "options": "Warehouse",
+   "read_only": 1,
+   "in_list_view": 0,
+   "depends_on": "eval:doc.qc_hold"
+  },
+  {
+   "fieldname": "hold_reason",
+   "fieldtype": "Small Text",
+   "label": "Hold Reason",
+   "read_only": 1,
+   "depends_on": "eval:doc.qc_hold"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "QC Inspection",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",    "read": 1, "write": 1, "create": 1, "delete": 1, "submit": 1, "cancel": 1, "amend": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager",  "read": 1, "write": 1, "create": 1, "delete": 0, "submit": 1, "cancel": 0, "amend": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",     "read": 1, "write": 1, "create": 1, "delete": 0, "submit": 1, "cancel": 0, "amend": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Viewer",   "read": 1, "write": 0, "create": 0, "delete": 0, "submit": 0, "cancel": 0, "amend": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

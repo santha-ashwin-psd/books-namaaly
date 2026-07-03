@@ -268,6 +268,13 @@ export async function apiLinkValues(doctype, txt, filters) {
 // Legacy alias kept for any direct api() calls still in ported code.
 export async function api(method, args) { return await apiGET(method, args); }
 
+// Universal method caller — used by the Quality module and other API endpoints
+// that accept both GET and POST. Sends as POST so CSRF is included.
+export async function apiCall(method, args = {}) {
+  return await apiPOST(method, args);
+}
+
+
 // Resolves the current company. Mirrors books.js:258-271.
 export async function resolveCompany() {
   if (window.__booksCompany) return window.__booksCompany;

@@ -1,0 +1,91 @@
+{
+ "name": "QC Inspection Template",
+ "module": "Quality",
+ "doctype": "DocType",
+ "creation": "2026-06-29 00:00:00.000000",
+ "modified": "2026-06-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "template_name,item,dosage_form",
+ "title_field": "template_name",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By fieldname",
+ "autoname": "field:template_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "label": "Template Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item (Optional)",
+   "options": "Item",
+   "in_list_view": 1,
+   "description": "Leave blank to use this template as a generic template for any item"
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Data",
+   "label": "Item Group (Optional)",
+   "in_list_view": 1,
+   "description": "Fallback if no item-specific template exists"
+  },
+  {
+   "fieldname": "dosage_form",
+   "fieldtype": "Select",
+   "label": "Dosage Form (Ayurvedic)",
+   "options": "\nChurna\nKwath\nArishta\nAsava\nTablet\nCapsule\nTaila\nGhrita\nLeha\nSyrup\nOintment\nOther",
+   "in_list_view": 1,
+   "description": "Ayurvedic dosage form — used for template resolution when no item-specific template is found"
+  },
+  {
+   "fieldname": "inspection_type",
+   "fieldtype": "Select",
+   "label": "Applicable Inspection Type",
+   "options": "\nAll\nIncoming\nOutgoing\nIn Process",
+   "default": "All",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "sec_params",
+   "fieldtype": "Section Break",
+   "label": "Inspection Parameters"
+  },
+  {
+   "fieldname": "parameters",
+   "fieldtype": "Table",
+   "label": "Parameters",
+   "options": "QC Inspection Template Parameter",
+   "reqd": 0
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",    "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager",  "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",     "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Viewer",   "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}
