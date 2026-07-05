@@ -153,7 +153,7 @@
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
           <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
           <td @click="openView(row)" data-label="Code"><span class="inv-link">{{row.item_code||row.name}}</span></td>
-          <td @click="openView(row)" class="fw-600" data-label="Name">{{row.item_name}}<span v-if="row.has_variants" class="it-tpl-badge">Template</span><span v-else-if="row.variant_of" class="it-var-badge">Variant</span></td>
+          <td class="fw-600" data-label="Name"><span @click="openView(row)">{{row.item_name}}</span><span v-if="row.has_variants" class="it-tpl-badge it-tpl-badge--link" @click.stop="openVariants(row)" title="Manage variants">Template ↗</span><span v-else-if="row.variant_of" class="it-var-badge">Variant</span></td>
           <td @click="openView(row)" class="col-hide-tablet" data-label="Group"><span v-if="row.item_group" class="it-group-badge">{{row.item_group}}</span><span v-else class="text-muted">—</span></td>
           <td @click="openView(row)" data-label="Type">
             <span class="b-badge" style="font-size:11px"
@@ -654,35 +654,14 @@
             </div>
 
             <template v-if="form.has_variants">
-              <div class="ad-section">
-                <div class="ad-section-title" style="display:flex;justify-content:space-between;align-items:center">
-                  <span>Attributes</span>
-                  <button class="vr-add-attr" @click="addVariantAttr"><span v-html="icon('plus',12)"></span> Add attribute</button>
+              <div class="vr-manage-cta">
+                <div class="vr-manage-text">
+                  <div class="vr-manage-title">Variant Manager</div>
+                  <div class="vr-manage-sub">Define attributes, generate variants, and edit prices, SKUs &amp; stock on a dedicated page.</div>
                 </div>
-                <div v-if="!variantAttrs.length" class="vr-hint">Add an attribute (e.g. Size) and its values (S, M, L).</div>
-                <div v-for="(a,i) in variantAttrs" :key="i" class="vr-attr-row">
-                  <SearchableSelect v-model="a.attribute" :options="attributeOptions" placeholder="Attribute" :createable="true" @create="createAttribute($event, i)" class="vr-attr-name"/>
-                  <input v-model="a.valuesText" class="ad-input vr-attr-vals" placeholder="Values, comma-separated (S, M, L)"/>
-                  <button class="vr-attr-del" @click="removeVariantAttr(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
-                </div>
-              </div>
-
-              <div class="vr-gen-bar">
-                <span class="vr-gen-count">{{ variantComboCount }} variant{{ variantComboCount===1?'':'s' }} will be generated</span>
-                <button class="ad-btn-primary" :disabled="generatingVariants || !variantComboCount" @click="generateVariants">
-                  {{ generatingVariants ? 'Generating…' : 'Save & Generate' }}
+                <button class="ad-btn-primary" :disabled="openingVariants" @click="openVariantManager">
+                  {{ openingVariants ? 'Opening…' : 'Open Variant Manager →' }}
                 </button>
-              </div>
-
-              <div class="ad-section" v-if="variantsList.length">
-                <div class="ad-section-title">Generated Variants ({{ variantsList.length }})</div>
-                <div v-for="v in variantsList" :key="v.name" class="vr-item">
-                  <div class="vr-item-main">
-                    <div class="vr-item-code">{{ v.item_code }}</div>
-                    <div class="vr-item-attrs">{{ (v.attributes||[]).map(x=>x.attribute_value).join(' · ') || '—' }}</div>
-                  </div>
-                  <div class="vr-item-rate">₹{{ fmt(v.standard_rate) }}</div>
-                </div>
               </div>
             </template>
             <div v-else class="ad-empty-state" style="padding-top:8px">
@@ -710,6 +689,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
 import { apiList, apiGET, apiGet, apiPOST, apiSave, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePagination } from "../composables/usePagination.js";
@@ -720,6 +700,7 @@ import Pagination from "../components/Pagination.vue";
 import BulkActionBar from "../components/BulkActionBar.vue";
 
 const { toast } = useToast();
+const router = useRouter();
 
 const tabs = [
   { key: "all",       label: "All" },
@@ -773,6 +754,7 @@ const variantAttrs      = ref([]);   // [{ attribute, valuesText }]
 const attributeOptions  = ref([]);   // Item Attribute masters for the picker
 const variantsList      = ref([]);
 const generatingVariants = ref(false);
+const openingVariants = ref(false);
 const splitValues = (s) => String(s || "").split(",").map(v => v.trim()).filter(Boolean);
 const variantComboCount = computed(() =>
   variantAttrs.value.reduce((n, a) => {
@@ -798,35 +780,26 @@ async function createAttribute(name, i) {
     toast(`Attribute "${nm}" created`);
   } catch (e) { toast("Could not create attribute: " + e.message, "error"); }
 }
-async function loadVariants() {
-  if (drawerMode.value !== "edit" || !form.name) { variantsList.value = []; return; }
-  try { variantsList.value = await apiGET("zoho_books_clone.api.variants.get_variants", { template_item: form.name }) || []; }
-  catch { variantsList.value = []; }
+// Navigate to the dedicated Variant Manager page (used from the list badge).
+function openVariants(row) {
+  router.push({ name: "inventory-variants", params: { template: row.name } });
 }
-async function generateVariants() {
-  if (!variantComboCount.value) return;
-  generatingVariants.value = true;
+
+// From the drawer: make sure the template item is saved (mark it as a variant
+// template), then open the dedicated Variant Manager page.
+async function openVariantManager() {
+  openingVariants.value = true;
   try {
     form.has_variants = 1;
-    const savedName = await saveItem({ close: false });
-    if (!savedName) return;
-    // Merge typed values into each Item Attribute master so they're reusable.
-    for (const a of variantAttrs.value) {
-      const vals = splitValues(a.valuesText);
-      if (!a.attribute || !vals.length) continue;
-      try {
-        const doc = await apiGet("Item Attribute", a.attribute);
-        const have = new Set((doc.attribute_values || []).map(v => v.attribute_value));
-        const merged = [...(doc.attribute_values || [])];
-        vals.forEach(v => { if (!have.has(v)) merged.push({ doctype: "Item Attribute Value", attribute_value: v }); });
-        await apiSave({ ...doc, attribute_values: merged });
-      } catch {}
+    let name = form.name;
+    if (drawerMode.value !== "edit" || !name) {
+      name = await saveItem({ close: false });
+      if (!name) return;
     }
-    const res = await apiPOST("zoho_books_clone.api.variants.create_variants", { template_item: savedName });
-    toast(`Generated ${res.count} variant(s)` + (res.skipped?.length ? ` · ${res.skipped.length} already existed` : ""));
-    await loadVariants();
-  } catch (e) { toast("Failed to generate variants: " + e.message, "error"); }
-  finally { generatingVariants.value = false; }
+    showDrawer.value = false;
+    router.push({ name: "inventory-variants", params: { template: name } });
+  } catch (e) { toast("Could not open Variant Manager: " + e.message, "error"); }
+  finally { openingVariants.value = false; }
 }
 
 const ITEM_TYPES      = ["Raw Material", "Work In Progress", "Finished Good", "Packing Material", "Product", "Service"];
@@ -1150,6 +1123,7 @@ function openAdd(presetType) {
     const match = warehouses.value.find(w => (w.label || "").toLowerCase().includes(d.warehouse_type.toLowerCase()));
     if (match) form.default_warehouse = match.name;
   }
+  variantAttrs.value = [];
   showDrawer.value = true;
 }
 
@@ -1162,7 +1136,7 @@ async function openEdit(row) {
     valuation_method: "FIFO", default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0, has_variants: 0,
   });
-  variantAttrs.value = []; variantsList.value = [];
+  variantAttrs.value = [];
   showDrawer.value = true;
   try {
     const full = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: row.name });
@@ -1192,7 +1166,6 @@ async function openEdit(row) {
       if (r.attribute_value && !groups[r.attribute].includes(r.attribute_value)) groups[r.attribute].push(r.attribute_value);
     }
     variantAttrs.value = Object.entries(groups).map(([attribute, vals]) => ({ attribute, valuesText: vals.join(", ") }));
-    loadVariants();
   } catch (e) { toast("Could not load full item details: " + e.message, "error"); }
 }
 
@@ -1887,7 +1860,14 @@ onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
 }
 
 .it-tpl-badge { margin-left:7px; padding:1px 7px; border-radius:11px; font-size:10px; font-weight:700; background:#eef2ff; color:#4f46e5; vertical-align:middle; }
+.it-tpl-badge--link { cursor:pointer; }
+.it-tpl-badge--link:hover { background:#4f46e5; color:#fff; }
 .it-var-badge { margin-left:7px; padding:1px 7px; border-radius:11px; font-size:10px; font-weight:700; background:#f0fdf4; color:#16a34a; vertical-align:middle; }
+
+/* Variant Manager CTA (drawer) */
+.vr-manage-cta { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 18px; background:#f8fafc; border:1px solid #eef2f7; border-radius:12px; }
+.vr-manage-title { font-size:14px; font-weight:700; color:#111827; margin-bottom:4px; }
+.vr-manage-sub { font-size:12.5px; color:#64748b; line-height:1.45; }
 
 /* Variants tab */
 .vr-add-attr { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:4px 10px; font-size:12px; font-weight:600; color:#2563eb; cursor:pointer; font-family:inherit; }
