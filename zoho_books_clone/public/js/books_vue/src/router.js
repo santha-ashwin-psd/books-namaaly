@@ -11,6 +11,7 @@ import CustomerProfile      from "./pages/CustomerProfile.vue";
 import Vendors              from "./pages/Vendors.vue";
 import InventoryItems       from "./pages/InventoryItems.vue";
 import InventoryItemView    from "./pages/InventoryItemView.vue";
+import InventoryVariants    from "./pages/InventoryVariants.vue";
 import InventoryItemGroups  from "./pages/InventoryItemGroups.vue";
 import InventoryWarehouses  from "./pages/InventoryWarehouses.vue";
 import SettingsProfile       from "./pages/SettingsProfile.vue";
@@ -123,6 +124,12 @@ const routes = [
     meta: { module: "inventory" },
   },
   {
+    path: "/inventory/variants/:template",
+    name: "inventory-variants",
+    component: InventoryVariants,
+    meta: { module: "inventory" },
+  },
+  {
     path: "/inventory/item-groups",
     name: "inventory-item-groups",
     component: InventoryItemGroups,
@@ -224,11 +231,11 @@ const routes = [
   { path: "/proforma-invoices",   name: "proforma-invoices",   component: ProformaInvoices,   meta: { module: "invoices" } },
   { path: "/purchase-receipts",   name: "purchase-receipts",   component: PurchaseReceipts,   meta: { module: "bills"    } },
   // Future phases append entries here.
+  // Any unknown / wrong URL falls through to the dashboard instead of a 404.
   {
     path: "/:pathMatch(.*)*",
     name: "not-found",
-    component: PhaseAHome,
-    meta: { module: null, fallback: true },
+    redirect: "/dashboard",
   },
 ];
 

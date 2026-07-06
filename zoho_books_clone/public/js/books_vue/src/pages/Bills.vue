@@ -1013,10 +1013,13 @@ async function loadTaxAccount() {
     const withRates = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
-        const rate = (doc?.taxes || []).reduce((s, r) => s + (Number(r.rate) || 0), 0);
-        const account = doc?.taxes?.[0]?.account_head || taxAccountHead.value;
-        return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || doc?.tax_type || "GST", rate: Number(rate), account };
-      } catch { return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || "GST", rate: 0, account: taxAccountHead.value }; }
+        // Keep the full component rows so computeTaxRows can post to each row's
+        // own (input-GST) account head, chosen by supplier place of supply.
+        const rows = (doc?.taxes || []);
+        const rate = rows.reduce((s, r) => s + (Number(r.rate) || 0), 0);
+        const account = rows?.[0]?.account_head || taxAccountHead.value;
+        return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || doc?.tax_type || "GST", rate: Number(rate), account, taxes: rows };
+      } catch { return { name: t.name, template_name: t.template_name, tax_type: t.tax_type || "GST", rate: 0, account: taxAccountHead.value, taxes: [] }; }
     }));
     taxTemplates.value = withRates;
   } catch { taxTemplates.value = []; }

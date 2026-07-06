@@ -1071,6 +1071,7 @@ import { useConfirm } from "../composables/useConfirm.js";
 import { useLivePreview } from "../composables/useLivePreview.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
+import { templateHeadlineRate } from "../composables/useTaxCalc.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
@@ -1370,7 +1371,7 @@ async function loadTaxAccount() {
     const withRates = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
-        const rate = doc?.taxes?.[0]?.tax_rate ?? doc?.taxes?.[0]?.rate ?? 0;
+        const rate = templateHeadlineRate(doc?.taxes);
         const account = doc?.taxes?.[0]?.account_head || taxAccountHead.value;
         return { name: t.name, template_name: t.template_name, rate: Number(rate), account };
       } catch { return { name: t.name, template_name: t.template_name, rate: 0, account: taxAccountHead.value }; }
