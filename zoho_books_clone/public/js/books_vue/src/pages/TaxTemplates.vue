@@ -27,8 +27,8 @@
         <tr>
           <th>Template</th>
           <th>Type</th>
-          <th>Rates</th>
-          <th class="ta-r">Total Rate</th>
+          <th>Components</th>
+          <th class="ta-r">Rate</th>
           <th>Default</th>
           <th>Status</th>
           <th style="width:90px"></th>
@@ -40,8 +40,8 @@
           <tr v-for="t in filtered" :key="t.name" class="inv-row" @click="openEdit(t)">
             <td data-label="Template" class="td-id"><span class="inv-link">{{ t.template_name }}</span></td>
             <td data-label="Type">{{ t.tax_type || 'GST' }}</td>
-            <td data-label="Rates" class="text-muted" style="font-size:12px">{{ t.rateLabel || '—' }}</td>
-            <td data-label="Total Rate" class="ta-r">{{ t.totalRate != null ? t.totalRate + '%' : '—' }}</td>
+            <td data-label="Components" class="text-muted" style="font-size:12px">{{ t.rateLabel || '—' }}</td>
+            <td data-label="Rate" class="ta-r">{{ t.headlineRate != null ? t.headlineRate + '%' : '—' }}</td>
             <td data-label="Default"><span v-if="t.is_default" class="inv-status-badge status-active">Default</span><span v-else class="text-muted">—</span></td>
             <td data-label="Status"><span class="inv-status-badge" :class="t.disabled ? 'status-inactive' : 'status-active'">{{ t.disabled ? 'Disabled' : 'Active' }}</span></td>
             <td data-label="" @click.stop>
@@ -74,7 +74,7 @@
             <div class="tt-badge"><span v-html="icon('percent',18)"></span></div>
             <div>
               <div class="tt-title">{{ editing ? 'Edit Tax Template' : 'New Tax Template' }}</div>
-              <div class="tt-sub">Applied to invoice & bill line items</div>
+              <div class="tt-sub">Applied to invoice &amp; bill line items</div>
             </div>
           </div>
           <button class="tt-x" @click="closeDrawer"><span v-html="icon('x',16)"></span></button>
@@ -93,44 +93,52 @@
             </div>
           </div>
 
-          <!-- GST: single total rate, auto-split at invoice time -->
-          <template v-if="form.tax_type==='GST'">
-            <div class="tt-field" style="margin-top:16px">
-              <label class="tt-label">Total GST Rate (%) <span class="tt-req">*</span></label>
-              <input v-model.number="form.total_rate" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 18" />
+          <!-- GST quick-fill: build CGST + SGST + IGST from a single total -->
+          <div v-if="form.tax_type==='GST'" class="tt-quickfill">
+            <div>
+              <div class="tt-qf-label">Quick fill</div>
+              <div class="tt-qf-sub">Enter a total GST % — we'll add CGST, SGST &amp; IGST rows you can edit.</div>
             </div>
-            <div class="tt-note">
-              <span v-html="icon('info',14)"></span>
-              <span>On invoices this auto-splits by <strong>Place of Supply</strong>: intra-state → <strong>CGST {{ half }}% + SGST {{ half }}%</strong>, inter-state → <strong>IGST {{ form.total_rate||0 }}%</strong>. GST accounts are resolved from your Chart of Accounts.</span>
+            <div class="tt-qf-input">
+              <input v-model.number="quick" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 18" style="width:90px" />
+              <button class="tt-qf-btn" @click="quickFillGst" :disabled="!quick">Generate</button>
             </div>
-          </template>
+          </div>
 
-          <!-- VAT: single flat rate -->
-          <template v-else-if="form.tax_type==='VAT'">
-            <div class="tt-field" style="margin-top:16px">
-              <label class="tt-label">VAT Rate (%) <span class="tt-req">*</span></label>
-              <input v-model.number="form.total_rate" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 5" />
+          <!-- Component rows editor (all regimes) -->
+          <div class="tt-section">
+            <span class="tt-section-title">Tax Components</span>
+            <div class="tt-add-menu">
+              <button v-for="c in allowedComponents" :key="c" class="tt-add-chip" @click="addRow(c)"><span v-html="icon('plus',11)"></span>{{ c }}</button>
             </div>
-            <div class="tt-note">
-              <span v-html="icon('info',14)"></span>
-              <span>VAT is applied as a single flat rate on invoices &amp; bills (no place-of-supply split).</span>
-            </div>
-          </template>
+          </div>
 
-          <!-- Custom: free rows -->
-          <template v-else>
-            <div class="tt-section">
-              <span class="tt-section-title">Custom Rates</span>
-              <button class="tt-add-row" @click="addRow"><span v-html="icon('plus',12)"></span> Add rate</button>
-            </div>
-            <div v-if="!form.taxes.length" class="tt-norows">No rates — this template applies 0%.</div>
-            <div v-for="(r,i) in form.taxes" :key="i" class="tt-row">
-              <input v-model.number="r.rate" type="number" min="0" step="0.5" class="b-input tt-row-rate" placeholder="Rate %" />
-              <SearchableSelect v-model="r.account_head" :options="accounts" value-key="name" label-key="name" placeholder="Account head" class="tt-row-acct" />
-              <input v-model="r.description" class="b-input tt-row-desc" placeholder="Description" />
-              <button class="tt-row-del" @click="removeRow(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
-            </div>
-          </template>
+          <div v-if="form.rows.length" class="tt-rows-head">
+            <span>Component</span><span>Rate %</span><span>Account head</span><span></span>
+          </div>
+          <div v-for="(r,i) in form.rows" :key="i" class="tt-row2">
+            <select v-model="r.tax_type" class="b-input tt-r-type">
+              <option v-for="c in allowedComponents" :key="c" :value="c">{{ c }}</option>
+            </select>
+            <input v-model.number="r.rate" type="number" min="0" step="0.5" class="b-input tt-r-rate" placeholder="0" />
+            <SearchableSelect v-model="r.account_head" :options="accounts" value-key="name" label-key="name" placeholder="Account head" class="tt-r-acct" />
+            <button class="tt-row-del" @click="removeRow(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
+          </div>
+          <div v-if="!form.rows.length" class="tt-norows">
+            {{ form.tax_type==='GST'
+              ? 'No components yet — add CGST + SGST (used for same-state sales) and IGST (used for other-state sales).'
+              : form.tax_type==='VAT' ? 'Add a VAT component.' : 'Add tax components.' }}
+          </div>
+
+          <!-- GST intra/inter preview -->
+          <div v-if="form.tax_type==='GST' && form.rows.length" class="tt-note">
+            <span v-html="icon('info',14)"></span>
+            <span>
+              <strong>Same-state (intra):</strong> {{ intraLabel || '—' }} = <strong>{{ intraRate }}%</strong>.
+              <strong>Other-state (inter):</strong> {{ interLabel || '—' }} = <strong>{{ interRate }}%</strong>.
+              Invoices &amp; bills post to the account head on each row, chosen automatically by Place of Supply.
+            </span>
+          </div>
 
           <div class="tt-grid2" style="margin-top:20px">
             <label class="tt-check"><input type="checkbox" :checked="form.is_default" @change="form.is_default = $event.target.checked ? 1 : 0" /> Set as default</label>
@@ -161,6 +169,16 @@ const { toast } = useToast();
 const { confirm } = useConfirm();
 
 const TYPE_PILLS = ["All", "GST", "VAT", "Custom"];
+// Components offered per regime. Values must match the Tax Template Detail
+// doctype's `tax_type` Select options (CGST/SGST/IGST/VAT/Cess/Other).
+const COMPONENTS_BY_TYPE = {
+  GST:    ["CGST", "SGST", "IGST", "Cess"],
+  VAT:    ["VAT"],
+  Custom: ["CGST", "SGST", "IGST", "VAT", "Cess", "Other"],
+};
+const INTRA = new Set(["CGST", "SGST"]);
+const INTER = new Set(["IGST"]);
+const BOTH = new Set(["Cess"]);
 
 const list      = ref([]);
 const loading   = ref(true);
@@ -170,16 +188,66 @@ const accounts  = ref([]);
 const drawer    = ref(false);
 const editing   = ref(null);
 const saving    = ref(false);
+const quick     = ref(null);
 
-const form = reactive({ template_name: "", tax_type: "GST", total_rate: 0, is_default: 0, disabled: 0, taxes: [] });
-const half = computed(() => Math.round((Number(form.total_rate) || 0) / 2 * 100) / 100);
-function setType(t) { form.tax_type = t; if (t === "Custom" && !form.taxes.length) form.taxes = [blankRow()]; }
+const form = reactive({ template_name: "", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
 
-function rateSummary(taxes) {
-  const rows = taxes || [];
-  const total = rows.reduce((s, r) => s + (Number(r.rate) || 0), 0);
-  const label = rows.map((r) => `${r.tax_type} ${Number(r.rate) || 0}%`).join(" + ");
-  return { totalRate: Math.round(total * 100) / 100, rateLabel: label };
+const allowedComponents = computed(() => COMPONENTS_BY_TYPE[form.tax_type] || COMPONENTS_BY_TYPE.Custom);
+
+// ── GST intra/inter preview ──
+const intraRows = computed(() => form.rows.filter((r) => INTRA.has(r.tax_type) || BOTH.has(r.tax_type)));
+const interRows = computed(() => form.rows.filter((r) => INTER.has(r.tax_type) || BOTH.has(r.tax_type)));
+const sumRate = (rows) => Math.round(rows.reduce((s, r) => s + (Number(r.rate) || 0), 0) * 100) / 100;
+const labelOf = (rows) => rows.filter((r) => Number(r.rate)).map((r) => `${r.tax_type} ${Number(r.rate)}%`).join(" + ");
+const intraRate  = computed(() => sumRate(intraRows.value));
+const interRate  = computed(() => sumRate(interRows.value));
+const intraLabel = computed(() => labelOf(intraRows.value));
+const interLabel = computed(() => labelOf(interRows.value));
+
+// Guess a GL account for a component by matching its keyword in the account name.
+function guessAccount(component) {
+  const kw = component.toUpperCase();
+  const hit = accounts.value.find((a) => (a.name || "").toUpperCase().includes(kw));
+  return hit ? hit.name : "";
+}
+
+function setType(t) {
+  form.tax_type = t;
+  // Drop rows whose component isn't valid for the new regime.
+  const allowed = new Set(COMPONENTS_BY_TYPE[t] || []);
+  form.rows = form.rows.filter((r) => allowed.has(r.tax_type));
+  if (t === "VAT" && !form.rows.length) addRow("VAT");
+}
+
+function quickFillGst() {
+  const total = Number(quick.value) || 0;
+  if (!total) return;
+  const half = Math.round(total / 2 * 100) / 100;
+  form.rows = [
+    { tax_type: "CGST", rate: half,  account_head: guessAccount("CGST"), description: `CGST @ ${half}%` },
+    { tax_type: "SGST", rate: half,  account_head: guessAccount("SGST"), description: `SGST @ ${half}%` },
+    { tax_type: "IGST", rate: total, account_head: guessAccount("IGST"), description: `IGST @ ${total}%` },
+  ];
+}
+
+function addRow(type) {
+  form.rows.push({ tax_type: type, rate: 0, account_head: guessAccount(type), description: "" });
+}
+function removeRow(i) { form.rows.splice(i, 1); }
+
+// Build a per-template summary: the headline is the intra total for GST (what a
+// same-state invoice charges), with a component breakdown label.
+function summarize(taxes, type) {
+  const rows = (taxes || []).map((r) => ({ tax_type: r.tax_type, rate: Number(r.rate) || 0 }));
+  const label = rows.filter((r) => r.rate).map((r) => `${r.tax_type} ${r.rate}%`).join(" + ");
+  let headline;
+  if ((type || "GST") === "GST") {
+    headline = sumRate(rows.filter((r) => INTRA.has(r.tax_type) || BOTH.has(r.tax_type)));
+    if (!headline) headline = sumRate(rows.filter((r) => INTER.has(r.tax_type) || BOTH.has(r.tax_type)));
+  } else {
+    headline = sumRate(rows);
+  }
+  return { headlineRate: headline, rateLabel: label };
 }
 
 async function load() {
@@ -189,12 +257,11 @@ async function load() {
       fields: ["name", "template_name", "tax_type", "is_default", "disabled"],
       order: "template_name asc", limit: 200,
     }) || [];
-    // Lazy-load child rows to show a rate summary (mirrors Invoices.vue).
     list.value = await Promise.all(rows.map(async (r) => {
       try {
         const doc = await apiGet("Tax Template", r.name);
-        return { ...r, ...rateSummary(doc?.taxes), _taxes: doc?.taxes || [] };
-      } catch { return { ...r, totalRate: null, rateLabel: "", _taxes: [] }; }
+        return { ...r, ...summarize(doc?.taxes, r.tax_type), _taxes: doc?.taxes || [] };
+      } catch { return { ...r, headlineRate: null, rateLabel: "", _taxes: [] }; }
     }));
   } catch (e) { toast(e.message || "Failed to load tax templates", "error"); list.value = []; }
   loading.value = false;
@@ -222,26 +289,27 @@ const filtered = computed(() => {
   return r;
 });
 
-function blankRow() { return { tax_type: "CGST", rate: 0, account_head: "", description: "" }; }
-function addRow() { form.taxes.push(blankRow()); }
-function removeRow(i) { form.taxes.splice(i, 1); }
-
 function openNew() {
   editing.value = null;
-  Object.assign(form, { template_name: "", tax_type: "GST", total_rate: 0, is_default: 0, disabled: 0, taxes: [] });
+  quick.value = null;
+  Object.assign(form, { template_name: "", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
   drawer.value = true;
 }
 function openEdit(t) {
   editing.value = t.name;
-  const rows = (t._taxes || []).map((r) => ({ tax_type: r.tax_type, rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || "" }));
-  const type = t.tax_type || "GST";
-  // GST/VAT store their total across component rows — collapse to a single rate.
-  const total = rows.reduce((s, r) => s + (Number(r.rate) || 0), 0);
+  quick.value = null;
+  const rows = (t._taxes || []).map((r) => ({
+    tax_type: r.tax_type || "Other",
+    rate: Number(r.rate) || 0,
+    account_head: r.account_head || "",
+    description: r.description || "",
+  }));
   Object.assign(form, {
-    template_name: t.template_name, tax_type: type,
-    total_rate: type === "Custom" ? 0 : Math.round(total * 100) / 100,
-    is_default: t.is_default ? 1 : 0, disabled: t.disabled ? 1 : 0,
-    taxes: type === "Custom" ? (rows.length ? rows : [blankRow()]) : [],
+    template_name: t.template_name,
+    tax_type: t.tax_type || "GST",
+    is_default: t.is_default ? 1 : 0,
+    disabled: t.disabled ? 1 : 0,
+    rows,
   });
   drawer.value = true;
 }
@@ -249,29 +317,21 @@ function closeDrawer() { drawer.value = false; editing.value = null; }
 
 async function save() {
   if (!form.template_name.trim()) { toast("Template name is required", "error"); return; }
+  const rows = form.rows.filter((r) => Number(r.rate) > 0);
+  if (form.tax_type !== "Custom" && !rows.length) {
+    toast("Add at least one component with a rate", "error"); return;
+  }
   saving.value = true;
   try {
     const company = await resolveCompany();
     if (!company) { toast("No company configured.", "error"); saving.value = false; return; }
-    // Build child rows per regime. GST stores its total as CGST+SGST (the
-    // intra-state view); the invoice re-splits by Place of Supply. VAT stores a
-    // single VAT row. Custom keeps the user's free rows.
-    let taxes;
-    if (form.tax_type === "GST") {
-      const total = Number(form.total_rate) || 0;
-      const h = Math.round(total / 2 * 100) / 100;
-      taxes = total > 0
-        ? [{ tax_type: "CGST", rate: h, description: `CGST @ ${h}%` },
-           { tax_type: "SGST", rate: h, description: `SGST @ ${h}%` }]
-        : [];
-    } else if (form.tax_type === "VAT") {
-      const total = Number(form.total_rate) || 0;
-      taxes = total > 0 ? [{ tax_type: "VAT", rate: total, description: `VAT @ ${total}%` }] : [];
-    } else {
-      taxes = form.taxes
-        .filter((r) => Number(r.rate))
-        .map((r) => ({ tax_type: "Other", rate: Number(r.rate) || 0, account_head: r.account_head || "", description: r.description || `Other @ ${Number(r.rate) || 0}%` }));
-    }
+    const taxes = rows.map((r) => ({
+      doctype: "Tax Template Detail",
+      tax_type: r.tax_type,
+      rate: Number(r.rate) || 0,
+      account_head: r.account_head || "",
+      description: r.description || `${r.tax_type} @ ${Number(r.rate) || 0}%`,
+    }));
     const doc = {
       doctype: "Tax Template",
       template_name: form.template_name.trim(),
@@ -279,7 +339,7 @@ async function save() {
       tax_type: form.tax_type,
       is_default: form.is_default,
       disabled: form.disabled,
-      taxes: taxes.map((r) => ({ doctype: "Tax Template Detail", ...r })),
+      taxes,
     };
     if (editing.value) doc.name = editing.value;
     await apiSave(doc);
@@ -305,7 +365,7 @@ onMounted(() => { load(); loadAccounts(); });
 
 /* Drawer */
 .tt-bg     { position:fixed; inset:0; z-index:9000; background:rgba(15,23,42,.45); display:flex; justify-content:flex-end; backdrop-filter:blur(3px); }
-.tt-drawer { width:560px; max-width:96vw; height:100%; background:#fff; display:flex; flex-direction:column; box-shadow:-24px 0 70px rgba(15,23,42,.22); }
+.tt-drawer { width:600px; max-width:96vw; height:100%; background:#fff; display:flex; flex-direction:column; box-shadow:-24px 0 70px rgba(15,23,42,.22); }
 .tt-hdr    { background:linear-gradient(180deg,#f6f9ff,#fff); border-bottom:1px solid #eef0f3; padding:18px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .tt-hdr-left { display:flex; align-items:center; gap:12px; }
 .tt-badge  { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:#fff; background:linear-gradient(135deg,#2f74f5,#1a6ef7); box-shadow:0 4px 12px rgba(26,110,247,.32); }
@@ -324,20 +384,33 @@ onMounted(() => { load(); loadAccounts(); });
 .b-input:focus { border-color:#1a6ef7; box-shadow:0 0 0 3px rgba(26,110,247,.13); outline:none; }
 .b-input:disabled { background:#f8fafc; color:#94a3b8; }
 
-.tt-section { display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px; }
+/* Quick fill */
+.tt-quickfill { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:16px; padding:12px 14px; background:#f6f9ff; border:1px solid #e2ebff; border-radius:11px; }
+.tt-qf-label { font-size:12.5px; font-weight:700; color:#1a4fd0; }
+.tt-qf-sub   { font-size:11.5px; color:#64748b; margin-top:2px; }
+.tt-qf-input { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.tt-qf-btn   { border:none; background:#1a6ef7; color:#fff; border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:600; cursor:pointer; }
+.tt-qf-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+.tt-section { display:flex; align-items:center; justify-content:space-between; margin:22px 0 10px; gap:10px; flex-wrap:wrap; }
 .tt-section-title { font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:#64748b; }
-.tt-add-row { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; color:#1a6ef7; cursor:pointer; }
-.tt-add-row:hover { background:#eaf1ff; }
-.tt-norows  { font-size:12.5px; color:#94a3b8; padding:8px 0; }
-.tt-row     { display:grid; grid-template-columns:90px 1fr 1fr 30px; gap:8px; align-items:center; margin-bottom:8px; }
+.tt-add-menu { display:flex; gap:6px; flex-wrap:wrap; }
+.tt-add-chip { display:inline-flex; align-items:center; gap:3px; border:1px solid #e2e8f0; background:#fff; border-radius:7px; padding:4px 9px; font-size:11.5px; font-weight:600; color:#1a6ef7; cursor:pointer; }
+.tt-add-chip:hover { background:#eaf1ff; }
+.tt-add-chip :deep(svg) { margin-top:0; }
+.tt-norows  { font-size:12.5px; color:#94a3b8; padding:8px 0; line-height:1.5; }
+
+.tt-rows-head { display:grid; grid-template-columns:120px 90px 1fr 30px; gap:8px; padding:0 2px 6px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#94a3b8; }
+.tt-row2    { display:grid; grid-template-columns:120px 90px 1fr 30px; gap:8px; align-items:center; margin-bottom:8px; }
+.tt-row2 .b-input { padding:7px 9px; }
+.tt-r-type  { font-weight:600; }
 .tt-row-del { border:none; background:none; cursor:pointer; color:#dc2626; display:flex; align-items:center; justify-content:center; padding:4px; }
-.tt-row .b-input { padding:7px 9px; }
 
 .tt-pills   { display:flex; gap:8px; }
 .tt-pill    { flex:1; border:1.5px solid #e2e8f0; background:#fff; border-radius:9px; padding:9px 0; font-size:13px; font-weight:600; color:#64748b; cursor:pointer; font-family:inherit; transition:all .15s; }
 .tt-pill:hover { border-color:#cbd5e1; }
 .tt-pill.active { border-color:#1a6ef7; background:#eaf1ff; color:#1a4fd0; }
-.tt-note    { display:flex; gap:8px; margin-top:12px; padding:10px 12px; background:#f0f7ff; border:1px solid #d6e6ff; border-radius:9px; font-size:12px; color:#475569; line-height:1.5; }
+.tt-note    { display:flex; gap:8px; margin-top:14px; padding:10px 12px; background:#f0f7ff; border:1px solid #d6e6ff; border-radius:9px; font-size:12px; color:#475569; line-height:1.55; }
 .tt-note strong { color:#1a4fd0; }
 .tt-note :deep(svg) { flex-shrink:0; color:#1a6ef7; margin-top:1px; }
 
@@ -353,7 +426,9 @@ onMounted(() => { load(); loadAccounts(); });
 
 @media (max-width: 600px) {
   .tt-drawer { width:100%; }
-  .tt-row { grid-template-columns:1fr 1fr; }
-  .tt-row-acct, .tt-row-desc { grid-column:1 / -1; }
+  .tt-rows-head { display:none; }
+  .tt-row2 { grid-template-columns:1fr 1fr; }
+  .tt-r-acct { grid-column:1 / -1; }
+  .tt-quickfill { flex-direction:column; align-items:flex-start; }
 }
 </style>
