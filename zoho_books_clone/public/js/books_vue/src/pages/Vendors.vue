@@ -6,12 +6,19 @@
     <div class="sales-toolbar">
       <div class="cust-toolbar-left">
         <div class="sales-pills">
-          <button class="sales-pill" :class="{'active':activeFilter==='all'}" @click="activeFilter='all'">All <span class="sales-pill-count" :class="activeFilter==='all'?'':'zb-pc-muted'">{{counts.all}}</span></button>
-          <button class="sales-pill" :class="{'active':activeFilter==='active'}" @click="activeFilter='active'">Active <span class="sales-pill-count" :class="activeFilter==='active'?'':'zb-pc-muted'">{{counts.active}}</span></button>
-          <button class="sales-pill" :class="{'active':activeFilter==='disabled'}" @click="activeFilter='disabled'">Disabled <span class="sales-pill-count" :class="activeFilter==='disabled'?'':'zb-pc-muted'">{{counts.disabled}}</span></button>
+          <button v-for="f in [{k:'all',l:'All'},{k:'active',l:'Active'},{k:'disabled',l:'Disabled'},{k:'dealer',l:'🏪 Dealers'},{k:'distributor',l:'🚚 Distributors'}]"
+            :key="f.k" class="sales-pill" :class="{'active': activeFilter===f.k}"
+            @click="activeFilter=f.k">
+            {{f.l}}
+            <span class="sales-pill-count" :class="activeFilter===f.k?'':'zb-pc-muted'">{{counts[f.k]}}</span>
+          </button>
         </div>
       </div>
       <div class="cust-toolbar-right">
+        <select v-if="supplierGroups.length" class="sales-select" v-model="groupFilterV" title="Filter by supplier group">
+          <option value="">All Groups</option>
+          <option v-for="g in supplierGroups" :key="g" :value="g">{{ g }}</option>
+        </select>
         <div class="sales-search">
           <span v-html="icon('search',13)" style="color:#9ca3af;flex-shrink:0"></span>
           <input v-model="search" placeholder="Search vendors…" class="sales-search-input" autocomplete="off"/>
@@ -248,9 +255,12 @@
           <input v-model="search" placeholder="Search vendors…" class="sales-search-input" autocomplete="off"/>
         </div>
         <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
-          <button class="sales-pill" :class="{'active':activeFilter==='all'}" @click="activeFilter='all'" style="font-size:11.5px">All <span class="sales-pill-count" :class="activeFilter==='all'?'':'zb-pc-muted'">{{counts.all}}</span></button>
-          <button class="sales-pill" :class="{'active':activeFilter==='active'}" @click="activeFilter='active'" style="font-size:11.5px">Active <span class="sales-pill-count" :class="activeFilter==='active'?'':'zb-pc-muted'">{{counts.active}}</span></button>
-          <button class="sales-pill" :class="{'active':activeFilter==='disabled'}" @click="activeFilter='disabled'" style="font-size:11.5px">Disabled <span class="sales-pill-count" :class="activeFilter==='disabled'?'':'zb-pc-muted'">{{counts.disabled}}</span></button>
+          <button v-for="f in [{k:'all',l:'All'},{k:'active',l:'Active'},{k:'disabled',l:'Disabled'},{k:'dealer',l:'🏪 Dealers'},{k:'distributor',l:'🚚 Distributors'}]"
+            :key="f.k" class="sales-pill" :class="{'active': activeFilter===f.k}"
+            @click="activeFilter=f.k" style="font-size:11.5px">
+            {{f.l}}
+            <span class="sales-pill-count" :class="activeFilter===f.k?'':'zb-pc-muted'">{{counts[f.k]}}</span>
+          </button>
         </div>
       </div>
 
@@ -669,9 +679,29 @@
               <button v-for="opt in SUPPLIER_TYPES" :key="opt" type="button"
                 @click="form.supplier_type=opt"
                 :style="'padding:6px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;border:1.5px solid '+(form.supplier_type===opt?'#E67700':'#e2e8f0')+';background:'+(form.supplier_type===opt?'#fff7ed':'#fff')+';color:'+(form.supplier_type===opt?'#C96200':'#6b7280')">
-                {{opt}}
+                {{STYPE_META[opt]?.icon}} {{opt}}
               </button>
             </div>
+            <div v-if="form.supplier_type && STYPE_META[form.supplier_type]?.desc"
+              style="margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;display:inline-block"
+              :style="{background: STYPE_META[form.supplier_type].bg, color: STYPE_META[form.supplier_type].text}">
+              {{ STYPE_META[form.supplier_type].icon }} {{ STYPE_META[form.supplier_type].desc }}
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px" v-if="form.supplier_type==='Dealer' || form.supplier_type==='Distributor'">
+            <label class="inv-lbl" style="margin-bottom:8px;display:block">
+              {{ form.supplier_type }} Group
+            </label>
+            <select v-model="form.supplier_group" class="inv-fi">
+              <option value="">Select group</option>
+              <optgroup v-if="form.supplier_type==='Distributor'" label="Distributor Groups">
+                <option v-for="g in supplierGroups.filter(g=>g.toLowerCase().includes('distributor'))" :key="g" :value="g">{{ g }}</option>
+              </optgroup>
+              <optgroup v-if="form.supplier_type==='Dealer'" label="Dealer Groups">
+                <option v-for="g in supplierGroups.filter(g=>g.toLowerCase().includes('dealer'))" :key="g" :value="g">{{ g }}</option>
+              </optgroup>
+            </select>
           </div>
 
           <div class="inv-sec-lbl" style="margin-top:0">Basic Information</div>
@@ -1041,21 +1071,29 @@ const pendingAddresses = ref([]);
 
 const collapsed = reactive({ address: false, otherDetails: false });
 
-const SUPPLIER_TYPES = ["Company", "Individual"];
+const SUPPLIER_TYPES = ["Company", "Individual", "Dealer", "Distributor"];
 
 // Supplier type metadata
 const STYPE_META = {
-  "Company":    { bg: "#dbeafe", text: "#1d4ed8", icon: "🏢" },
-  "Individual": { bg: "#f1f5f9", text: "#475569", icon: "👤" },
+  "Company":     { bg: "#dbeafe", text: "#1d4ed8", icon: "🏢" },
+  "Individual":  { bg: "#f1f5f9", text: "#475569", icon: "👤" },
+  "Dealer":      { bg: "#fef9c3", text: "#a16207", icon: "🏪", desc: "Authorised dealer / reseller supplying stock" },
+  "Distributor": { bg: "#dcfce7", text: "#15803d", icon: "🚚", desc: "Regional distributor / stockist supplying stock" },
 };
 
-// Supplier groups seeded for Ayurvedic raw material sourcing
+// Supplier groups seeded for Ayurvedic raw material sourcing, plus
+// distributor/dealer groups (Phase 2: Supplier & customer master setup
+// with distributor/dealer groups)
 const supplierGroups = ref([]);
 const supplierGroupOptions = [
   "Raw Material Supplier", "Herb Supplier", "Mineral Supplier",
   "Packing Material Supplier", "Service Provider",
   "Equipment Supplier", "Contract Manufacturer", "Transporter",
 ];
+const DEFAULT_SUPPLIER_GROUPS = {
+  "Dealer":      ["Dealer - Local", "Dealer - Regional", "Dealer - National"],
+  "Distributor": ["Distributor - State", "Distributor - Zone", "Distributor - National"],
+};
 
 const groupFilterV    = ref("");
 
@@ -1077,15 +1115,19 @@ const formErrors = reactive({});
 const shipSameAsBilling = ref(false);
 
 const counts = computed(() => ({
-  all:      list.value.length,
-  active:   list.value.filter((v) => !v.disabled).length,
-  disabled: list.value.filter((v) =>  v.disabled).length,
+  all:         list.value.length,
+  active:      list.value.filter((v) => !v.disabled).length,
+  disabled:    list.value.filter((v) =>  v.disabled).length,
+  dealer:      list.value.filter((v) => v.supplier_type === "Dealer").length,
+  distributor: list.value.filter((v) => v.supplier_type === "Distributor").length,
 }));
 
 const filtered = computed(() => {
   let r = list.value;
-  if (activeFilter.value === "active")   r = r.filter((v) => !v.disabled);
-  if (activeFilter.value === "disabled") r = r.filter((v) =>  v.disabled);
+  if (activeFilter.value === "active")      r = r.filter((v) => !v.disabled);
+  if (activeFilter.value === "disabled")    r = r.filter((v) =>  v.disabled);
+  if (activeFilter.value === "dealer")      r = r.filter((v) => v.supplier_type === "Dealer");
+  if (activeFilter.value === "distributor") r = r.filter((v) => v.supplier_type === "Distributor");
   if (groupFilterV.value) r = r.filter((v) => v.supplier_group === groupFilterV.value);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter((v) =>
@@ -1109,15 +1151,16 @@ async function load() {
     });
     list.value = rows || [];
 
-    // Load supplier groups
+    // Load supplier groups (sourcing categories + distributor/dealer groups)
+    const dealerDistGroups = [...DEFAULT_SUPPLIER_GROUPS.Dealer, ...DEFAULT_SUPPLIER_GROUPS.Distributor];
     try {
       const grps = await apiList("Supplier Group", { fields: ["name"], order: "name asc", limit: 100 }).catch(() => null);
       if (grps && grps.length) {
-        supplierGroups.value = grps.map(g => g.name);
+        supplierGroups.value = [...new Set([...grps.map(g => g.name), ...dealerDistGroups])];
       } else {
-        supplierGroups.value = supplierGroupOptions;
+        supplierGroups.value = [...new Set([...supplierGroupOptions, ...dealerDistGroups])];
       }
-    } catch { supplierGroups.value = supplierGroupOptions; }
+    } catch { supplierGroups.value = [...new Set([...supplierGroupOptions, ...dealerDistGroups])]; }
 
   } catch (e) {
     toast("Failed to load vendors: " + (e.message || e), "error");

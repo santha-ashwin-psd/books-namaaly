@@ -134,7 +134,7 @@
       "fieldname": "supplier_type",
       "fieldtype": "Select",
       "label": "Supplier Type",
-      "options": "Company\nIndividual",
+      "options": "Company\nIndividual\nDealer\nDistributor",
       "default": "Company"
     },
     {
