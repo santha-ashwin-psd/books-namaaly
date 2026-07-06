@@ -791,11 +791,8 @@ async function openVariantManager() {
   openingVariants.value = true;
   try {
     form.has_variants = 1;
-    let name = form.name;
-    if (drawerMode.value !== "edit" || !name) {
-      name = await saveItem({ close: false });
-      if (!name) return;
-    }
+    const name = await saveItem({ close: false });
+    if (!name) return;
     showDrawer.value = false;
     router.push({ name: "inventory-variants", params: { template: name } });
   } catch (e) { toast("Could not open Variant Manager: " + e.message, "error"); }
@@ -1134,7 +1131,7 @@ async function openEdit(row) {
     hsn_code: "", description: "", standard_buying_rate: 0, brand: "",
     tax_code: "", income_account: "", expense_account: "",
     valuation_method: "FIFO", default_warehouse: "",
-    reorder_level: 0, reorder_qty: 0, opening_stock: 0, has_variants: 0,
+    reorder_level: 0, reorder_qty: 0, opening_stock: 0,
   });
   variantAttrs.value = [];
   showDrawer.value = true;
@@ -1157,6 +1154,7 @@ async function openEdit(row) {
       opening_stock:        flt(full.opening_stock),
       disabled:             full.disabled ? 1 : 0,
       brand:                full.brand                || "",
+      has_variants:         full.has_variants ? 1 : 0,
     });
     // Rebuild the variant attribute builder: group stored rows by attribute.
     const groups = {};

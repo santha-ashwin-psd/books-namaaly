@@ -165,11 +165,16 @@ def get_variant_manager(template_item: str) -> dict:
 
     stock_by_code = {}
     if codes:
-        for row in frappe.get_all(
-            "Bin",
-            filters={"item_code": ["in", codes]},
-            fields=["item_code", "sum(actual_qty) as actual_qty", "sum(stock_value) as stock_value"],
-            group_by="item_code",
+        placeholders = ", ".join(["%s"] * len(codes))
+        for row in frappe.db.sql(
+            f"""
+            SELECT item_code, SUM(actual_qty) AS actual_qty, SUM(stock_value) AS stock_value
+            FROM `tabBin`
+            WHERE item_code IN ({placeholders})
+            GROUP BY item_code
+            """,
+            tuple(codes),
+            as_dict=True,
         ):
             stock_by_code[row.item_code] = row
 
@@ -208,9 +213,11 @@ def set_template_attributes(template_item: str, attributes=None) -> dict:
         attr = str((row or {}).get("attribute") or "").strip()
         if not attr:
             continue
+        seen = set()
         for val in (row or {}).get("values") or []:
             val = str(val).strip()
-            if val:
+            if val and val not in seen:
+                seen.add(val)
                 tmpl.append("attributes", {"attribute": attr, "attribute_value": val})
 
     if not tmpl.get("has_variants"):
