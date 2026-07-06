@@ -14,6 +14,7 @@ import InventoryItemView    from "./pages/InventoryItemView.vue";
 import InventoryItemGroups  from "./pages/InventoryItemGroups.vue";
 import InventoryWarehouses  from "./pages/InventoryWarehouses.vue";
 import InventoryBatches     from "./pages/InventoryBatches.vue";
+import InventoryVariants    from "./pages/InventoryVariants.vue";
 import InventorySettings    from "./pages/InventorySettings.vue";
 import OpeningStockBatchEntry from "./pages/OpeningStockBatchEntry.vue";
 import SettingsProfile       from "./pages/SettingsProfile.vue";
@@ -226,6 +227,12 @@ const routes = [
   { path: "/inventory/reorder-alerts", name: "reorder-alerts",  component: ReorderAlerts,  meta: { module: "inventory" } },
   { path: "/inventory/price-lists",    name: "price-lists",     component: PriceLists,     meta: { module: "inventory" } },
   { path: "/inventory/batches",        name: "inventory-batches", component: InventoryBatches, meta: { module: "inventory" } },
+  {
+    path: "/inventory/items/:template/variants",
+    name: "inventory-variants",
+    component: InventoryVariants,
+    meta: { module: "inventory" },
+  },
   { path: "/gst/gstr1",    name: "gstr1",    component: GSTReturn1,  meta: { module: "accounts" } },
   { path: "/gst/gstr3b",   name: "gstr3b",   component: GSTReturn3B, meta: { module: "accounts" } },
   { path: "/gst/einvoice", name: "einvoice", component: EInvoice,    meta: { module: "invoices" } },

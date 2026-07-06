@@ -861,6 +861,27 @@ def get_customer_last_invoice():
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_vendor_last_bill():
+    """Return {supplier: {name, date, amount}} of the most recent submitted Purchase Invoice."""
+    company = _get_company(frappe.session.user)
+    rows = frappe.db.sql("""
+        SELECT supplier, name, posting_date, grand_total
+        FROM `tabPurchase Invoice`
+        WHERE docstatus=1 AND is_return=0 AND company=%s
+        ORDER BY posting_date DESC, creation DESC
+    """, company, as_dict=True)
+    out = {}
+    for r in rows:
+        if r.supplier not in out:   # first row per supplier = most recent
+            out[r.supplier] = {
+                "name": r.name,
+                "date": str(r.posting_date) if r.posting_date else "",
+                "amount": float(r.grand_total or 0),
+            }
+    return out
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
 def get_vendor_outstanding():
     """Return {supplier: outstanding_amount} for all suppliers with open bills."""
     company = _get_company(frappe.session.user)

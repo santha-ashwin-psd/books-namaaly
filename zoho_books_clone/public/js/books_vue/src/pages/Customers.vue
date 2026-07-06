@@ -85,7 +85,6 @@
               <th class="vt-th vt-th-num">Outstanding</th>
               <th class="vt-th">Last Invoice</th>
               <th class="vt-th">Mobile</th>
-              <th class="vt-th">City / State</th>
               <th class="vt-th">Status</th>
               <th class="vt-th vt-th-actions">Actions</th>
             </tr>
@@ -93,11 +92,11 @@
           <tbody>
             <template v-if="loading">
               <tr v-for="n in 6" :key="n" class="vt-row-shimmer">
-                <td colspan="11"><div class="shimmer" style="height:12px;border-radius:3px;width:65%"></div></td>
+                <td colspan="10"><div class="shimmer" style="height:12px;border-radius:3px;width:65%"></div></td>
               </tr>
             </template>
             <tr v-else-if="!filtered.length">
-              <td colspan="11" class="vt-empty">
+              <td colspan="10" class="vt-empty">
                 <div class="vt-empty-icon">
                   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.3"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </div>
@@ -150,7 +149,6 @@
                 <span v-else>—</span>
               </td>
               <td class="vt-td vt-td-secondary">{{c.mobile_no||'—'}}</td>
-              <td class="vt-td vt-td-secondary">{{c.city ? (c.city + (c.state ? ', '+c.state : '')) : '—'}}</td>
               <td class="vt-td">
                 <span class="inv-status-badge" :class="c.disabled ? 'vt-badge-red' : 'vt-badge-green'">
                   <span class="vt-badge-dot"></span>{{c.disabled ? 'Disabled' : 'Active'}}
@@ -186,7 +184,6 @@
               </div>
               <div class="cus-mc-meta">
                 <span>{{ c.mobile_no || '—' }}</span>
-                <span>{{ c.city ? (c.city + (c.state ? ', '+c.state : '')) : '—' }}</span>
               </div>
               <div class="cus-mc-meta">
                 <span :style="(c.outstanding||0)>0 ? 'color:#dc2626;font-weight:600' : ''">
@@ -239,8 +236,7 @@
                 <span class="vt-badge-dot"></span>{{c.disabled ? 'Disabled' : 'Active'}}
               </span>
             </div>
-            <div style="font-size:12px;color:#6b7280;display:flex;justify-content:space-between;align-items:center">
-              <span>{{c.city ? (c.city + (c.state ? ', '+c.state : '')) : '—'}}</span>
+            <div style="font-size:12px;color:#6b7280;display:flex;justify-content:flex-end;align-items:center">
               <span class="vt-badge" :class="c.customer_type==='Company' ? 'vt-badge-blue' : 'vt-badge-gray'">{{c.customer_type||'—'}}</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f3f4f6;padding-top:10px">
@@ -1623,20 +1619,13 @@ async function load() {
     lastInvoiceByCust.value = lastInvs || {};
     list.value = (rows || []).map(c => ({ ...c, outstanding: balances[c.name] || 0, unused_credits: credits[c.name] || 0 }));
 
-    // Load customer groups
-    try {
-      const grps = await apiList("Customer Group", { fields: ["name"], order: "name asc", limit: 200 }).catch(() => null);
-      if (grps && grps.length) {
-        customerGroups.value = grps.map(g => g.name);
-      } else {
-        // Fallback seed list for Ayurvedic distributor/dealer channels
-        customerGroups.value = [
-          "Distributor - State", "Distributor - Zone", "Distributor - National",
-          "Dealer - Local", "Dealer - Regional", "Dealer - National",
-          "Wholesale", "Retail", "Institutional", "Government", "Walk-in", "Online",
-        ];
-      }
-    } catch { customerGroups.value = []; }
+    // Customer groups: "Customer Group" is not a registered doctype in this app,
+    // so use the fixed Ayurvedic distributor/dealer channel list directly (no server call).
+    customerGroups.value = [
+      "Distributor - State", "Distributor - Zone", "Distributor - National",
+      "Dealer - Local", "Dealer - Regional", "Dealer - National",
+      "Wholesale", "Retail", "Institutional", "Government", "Walk-in", "Online",
+    ];
 
     // Load territories
     try {

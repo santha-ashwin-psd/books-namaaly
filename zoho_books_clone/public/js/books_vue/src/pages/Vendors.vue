@@ -74,10 +74,11 @@
               </th>
               <th class="vt-th">Vendor Name</th>
               <th class="vt-th">Type</th>
+              <th class="vt-th">Group</th>
               <th class="vt-th">GSTIN</th>
               <th class="vt-th vt-th-num">Outstanding</th>
+              <th class="vt-th">Last Bill</th>
               <th class="vt-th">Mobile</th>
-              <th class="vt-th">City / State</th>
               <th class="vt-th">Status</th>
               <th class="vt-th vt-th-actions">Actions</th>
             </tr>
@@ -85,11 +86,11 @@
           <tbody>
             <template v-if="loading">
               <tr v-for="n in 6" :key="n" class="vt-row-shimmer">
-                <td colspan="10"><div class="shimmer" style="height:12px;border-radius:3px;width:65%"></div></td>
+                <td colspan="11"><div class="shimmer" style="height:12px;border-radius:3px;width:65%"></div></td>
               </tr>
             </template>
             <tr v-else-if="!filtered.length">
-              <td colspan="10" class="vt-empty">
+              <td colspan="11" class="vt-empty">
                 <div class="vt-empty-icon">
                   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
@@ -115,7 +116,14 @@
                 </div>
               </td>
               <td class="vt-td">
-                <span class="vt-badge" :class="v.supplier_type==='Company' ? 'vt-badge-blue' : 'vt-badge-gray'">{{v.supplier_type||'—'}}</span>
+                <span class="vt-badge"
+                  :style="STYPE_META[v.supplier_type] ? { background: STYPE_META[v.supplier_type].bg, color: STYPE_META[v.supplier_type].text, border: 'none' } : {}">
+                  {{ STYPE_META[v.supplier_type]?.icon || '' }} {{v.supplier_type||'—'}}
+                </span>
+              </td>
+              <td class="vt-td vt-td-secondary">
+                <div v-if="v.supplier_group" style="font-size:12px;font-weight:600;color:#374151">{{ v.supplier_group }}</div>
+                <span v-else>—</span>
               </td>
               <td class="vt-td vt-td-mono">
                 <span v-if="v.tax_id">{{v.tax_id}}</span>
@@ -126,8 +134,14 @@
                   {{ (balancesByVendor[v.name]||0)>0 ? fmtCur(balancesByVendor[v.name]) : '—' }}
                 </span>
               </td>
+              <td class="vt-td vt-td-secondary">
+                <template v-if="lastBillByVendor[v.name]">
+                  <div class="vt-lastinv-ref">{{ lastBillByVendor[v.name].name }}</div>
+                  <div class="vt-lastinv-date">{{ fmtDate(lastBillByVendor[v.name].date) }} · {{ fmtCur(lastBillByVendor[v.name].amount) }}</div>
+                </template>
+                <span v-else>—</span>
+              </td>
               <td class="vt-td vt-td-secondary">{{v.mobile_no||'—'}}</td>
-              <td class="vt-td vt-td-secondary">{{v.city ? (v.city + (v.state ? ', '+v.state : '')) : '—'}}</td>
               <td class="vt-td">
                 <span class="inv-status-badge" :class="v.disabled ? 'vt-badge-red' : 'vt-badge-green'">
                   <span class="vt-badge-dot"></span>{{v.disabled ? 'Disabled' : 'Active'}}
@@ -163,7 +177,6 @@
               </div>
               <div class="ven-mc-meta">
                 <span>{{ v.mobile_no || '—' }}</span>
-                <span>{{ v.city ? (v.city + (v.state ? ', '+v.state : '')) : '—' }}</span>
               </div>
               <div class="ven-mc-meta">
                 <span :style="(balancesByVendor[v.name]||0)>0 ? 'color:#E67700;font-weight:600' : ''">
@@ -216,9 +229,15 @@
                 <span class="vt-badge-dot"></span>{{v.disabled ? 'Disabled' : 'Active'}}
               </span>
             </div>
-            <div style="font-size:12px;color:#6b7280;display:flex;justify-content:space-between;align-items:center">
-              <span>{{v.city ? (v.city + (v.state ? ', '+v.state : '')) : '—'}}</span>
-              <span class="vt-badge" :class="v.supplier_type==='Company' ? 'vt-badge-blue' : 'vt-badge-gray'">{{v.supplier_type||'—'}}</span>
+            <div style="font-size:12px;color:#6b7280;display:flex;justify-content:flex-end;align-items:center">
+              <span class="vt-badge"
+                :style="STYPE_META[v.supplier_type] ? { background: STYPE_META[v.supplier_type].bg, color: STYPE_META[v.supplier_type].text, border: 'none' } : {}">
+                {{ STYPE_META[v.supplier_type]?.icon || '' }} {{v.supplier_type||'—'}}
+              </span>
+            </div>
+            <div v-if="v.supplier_group" style="font-size:11.5px;color:#374151;font-weight:600">{{ v.supplier_group }}</div>
+            <div style="font-size:11.5px;color:#9ca3af">
+              <span>{{ lastBillByVendor[v.name] ? 'Last: '+lastBillByVendor[v.name].name : '—' }}</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f3f4f6;padding-top:10px">
               <span style="font-size:12px;color:#6b7280">{{v.mobile_no||'—'}}</span>
@@ -1144,23 +1163,21 @@ const filtered = computed(() => {
 async function load() {
   loading.value = true;
   try {
-    const rows = await apiList("Supplier", {
-      fields: ["name","supplier_name","supplier_type","supplier_group","email_id","mobile_no",
-        "tax_id","city","state","disabled","default_currency"],
-      order: "supplier_name asc", limit: 300,
-    });
+    const [rows, lastBills] = await Promise.all([
+      apiList("Supplier", {
+        fields: ["name","supplier_name","supplier_type","supplier_group","email_id","mobile_no",
+          "tax_id","city","state","disabled","default_currency"],
+        order: "supplier_name asc", limit: 300,
+      }),
+      apiGET("zoho_books_clone.api.books_data.get_vendor_last_bill").catch(() => ({})),
+    ]);
     list.value = rows || [];
+    lastBillByVendor.value = lastBills || {};
 
-    // Load supplier groups (sourcing categories + distributor/dealer groups)
+    // Supplier groups: "Supplier Group" is not a registered doctype in this app,
+    // so combine the fixed sourcing-category list with dealer/distributor groups directly (no server call).
     const dealerDistGroups = [...DEFAULT_SUPPLIER_GROUPS.Dealer, ...DEFAULT_SUPPLIER_GROUPS.Distributor];
-    try {
-      const grps = await apiList("Supplier Group", { fields: ["name"], order: "name asc", limit: 100 }).catch(() => null);
-      if (grps && grps.length) {
-        supplierGroups.value = [...new Set([...grps.map(g => g.name), ...dealerDistGroups])];
-      } else {
-        supplierGroups.value = [...new Set([...supplierGroupOptions, ...dealerDistGroups])];
-      }
-    } catch { supplierGroups.value = [...new Set([...supplierGroupOptions, ...dealerDistGroups])]; }
+    supplierGroups.value = [...new Set([...supplierGroupOptions, ...dealerDistGroups])];
 
   } catch (e) {
     toast("Failed to load vendors: " + (e.message || e), "error");
@@ -1183,6 +1200,7 @@ function resetForm() {
   pendingAddresses.value = [];
   Object.assign(form, {
     name: "", supplier_name: "", supplier_type: "Company",
+    supplier_group: "",
     tax_id: "", default_currency: "INR", payment_terms: "",
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
     address_line1: "", address_line2: "",
@@ -1233,6 +1251,7 @@ async function openEdit(name) {
       name: doc.name,
       supplier_name: doc.supplier_name || "",
       supplier_type: doc.supplier_type || "Company",
+      supplier_group: doc.supplier_group || "",
       tax_id: doc.tax_id || "",
       default_currency: doc.default_currency || "INR",
       payment_terms: doc.payment_terms || "",
@@ -1328,6 +1347,7 @@ async function saveVendor() {
       books_company: booksCompany,
       supplier_name: form.supplier_name.trim(),
       supplier_type: form.supplier_type,
+      supplier_group: form.supplier_group,
       tax_id: form.tax_id.trim(),
       default_currency: form.default_currency,
       payment_terms: form.payment_terms,
@@ -1435,6 +1455,7 @@ const vendorSummary      = ref({});       // {outstanding, dn_credit, open_bill_
 const vendorTxns         = ref([]);       // chronological transactions
 const vendorStatement    = ref({ rows: [], totals: {} });
 const balancesByVendor   = ref({});       // {vendor_name: outstanding} — for the list view
+const lastBillByVendor   = ref({});       // {vendor_name: {name, date, amount}} — for the list view
 const detailLoading      = ref(false);
 const stmtRange          = reactive({ from: "", to: "" });
 
