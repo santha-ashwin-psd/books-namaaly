@@ -96,7 +96,20 @@ def on_delivery_note_submit(doc, method=None):
     """
     Goods dispatched → deduct stock from the dispatch warehouse.
     Issue is valued at FIFO cost (zero_rate) so selling price never becomes COGS.
+
+    Skipped when the linked Sales Order was already invoiced directly with
+    Update Inventory on — that Sales Invoice already deducted this stock.
     """
+    if doc.sales_order and frappe.db.exists(
+        "Sales Invoice",
+        {"sales_order": doc.sales_order, "docstatus": 1, "update_stock": 1},
+    ):
+        frappe.msgprint(
+            _("Stock not deducted — already dispatched via a direct Invoice "
+              "for this Sales Order."),
+            indicator="blue", alert=True,
+        )
+        return
     rows = _stock_rows(doc, direction="issue", zero_rate=True)
     if not rows:
         return
@@ -199,6 +212,12 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
             "qty":        qty,
             "basic_rate": 0 if zero_rate else flt(getattr(row, "rate", 0)),
             "warehouse":  warehouse,
+            # Batch-tracked receipts (e.g. Purchase Receipt rows) carry their
+            # own batch_no — forward it so the auto-generated Stock Entry
+            # satisfies StockEntry.validate()'s "Batch No is required" check
+            # instead of failing on submit. Non-batch-tracked / outgoing rows
+            # simply carry None here and are unaffected.
+            "batch_no":   getattr(row, "batch_no", None) or None,
         })
 
     return rows
@@ -223,6 +242,7 @@ def _build_stock_entry(
             "qty":          r["qty"],
             "basic_rate":   r["basic_rate"],
             warehouse_key:  r["warehouse"],
+            **({"batch_no": r["batch_no"]} if r.get("batch_no") else {}),
         }
         for r in rows
     ]

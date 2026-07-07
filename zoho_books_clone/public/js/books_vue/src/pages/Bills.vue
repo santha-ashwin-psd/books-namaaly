@@ -357,6 +357,11 @@
                     <div class="po-item-hint">Pricing is calculated based on current inventory stock and regional tax policies.</div>
                   </div>
                 </div>
+                <div v-if="form.update_stock && line.has_batch_no" class="po-item-col" style="grid-column:1 / -1;display:grid;grid-template-columns:2fr 1fr;gap:6px;padding:0 0 12px" v-show="!line.collapsed">
+                  <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Batch No — select existing or type to create new"
+                    createable @search="q => fetchBillLineBatches(line, q)" @select="opt => onBillLineBatchSelect(line, opt)" @create="val => onBillLineBatchCreate(line, val)" style="font-size:12px"/>
+                  <span style="font-size:11px;color:#9ca3af;align-self:center">{{ line.batchOptions.length ? 'Batch-tracked — required' : 'No batches yet — type a new code' }}</span>
+                </div>
               </div>
             </div>
             <button class="inv-add-line-btn" style="margin-top:10px" @click="addLine"><span v-html="icon('plus',12)"></span> Add Item</button>
@@ -913,7 +918,7 @@ const sortCol = ref("posting_date"), sortDir = ref("desc");
 const copyingLast = ref(false);
 
 let _id = 1;
-const blankLine = () => ({ id: _id++, item_code: "", description: "", qty: 1, rate: 0, amount: 0, tax_code: "", collapsed: false });
+const blankLine = () => ({ id: _id++, item_code: "", description: "", qty: 1, rate: 0, amount: 0, tax_code: "", collapsed: false, has_batch_no: 0, batch_no: "", batchOptions: [] });
 const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
 const vendorAddresses = ref([]);
 const addrModal = reactive({
@@ -1145,7 +1150,18 @@ async function openEdit(b) {
         id: _id++, item_code: i.item_code || "", description: i.description || "",
         qty: i.qty || 1, rate: i.rate || 0, amount: i.amount || 0,
         tax_code: i.tax_code || "", collapsed: false,
+        has_batch_no: 0, batch_no: i.batch_no || "", batchOptions: [],
       }));
+      // Resolve has_batch_no per item so the Batch No field shows for
+      // batch-tracked items already on this draft bill.
+      const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
+      if (codes.length) {
+        try {
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+          const flagMap = Object.fromEntries(itemRows.map(r => [r.name, r.has_batch_no ? 1 : 0]));
+          lines.value.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBillLineBatches(l, ""); });
+        } catch {}
+      }
     }
     if (doc?.currency) form.currency = doc.currency;
     if (doc?.conversion_rate) form.exchange_rate = doc.conversion_rate;
@@ -1271,8 +1287,51 @@ async function onItemSelect(line, opt) {
       if (doc?.tax_code) line.tax_code = doc.tax_code;
     } catch {}
   }
+  // Resolve has_batch_no so the Batch No field shows up for batch-tracked
+  // items when Update Inventory on Submit is on — mirrors PurchaseReceipts.vue.
+  line.batch_no = ""; line.batchOptions = [];
+  if (line.item_code) {
+    try {
+      line.has_batch_no = (await apiList("Item", { fields: ["has_batch_no"], filters: [["name", "=", line.item_code]], limit: 1 }))[0]?.has_batch_no ? 1 : 0;
+    } catch { line.has_batch_no = 0; }
+    if (line.has_batch_no) fetchBillLineBatches(line, "");
+  } else {
+    line.has_batch_no = 0;
+  }
   calcLine(line);
 }
+
+// ── Batch helpers (mirrors PurchaseReceipts.vue / PurchaseOrders.vue convert-to-bill) ──
+async function fetchBillLineBatches(line, q = "") {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  const itemCode = line.item_code;
+  try {
+    let rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: itemCode, search: q || "" }) || [];
+    if (!rows.length && !q) {
+      // Fallback: the batch may be linked to a different Item record that
+      // shares this item's display name (e.g. after a rename, or a
+      // duplicate Item was created). Look up by item_name instead of code.
+      try {
+        const itemRows = await apiList("Item", { fields: ["name", "item_name"], filters: [["name", "=", itemCode]], limit: 1 });
+        const itemName = itemRows[0]?.item_name;
+        if (itemName) {
+          const altItems = await apiList("Item", { fields: ["name"], filters: [["item_name", "=", itemName], ["name", "!=", itemCode]], limit: 5 });
+          for (const alt of altItems) {
+            const altRows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: alt.name, search: "" }) || [];
+            if (altRows.length) { rows = altRows; break; }
+          }
+        }
+      } catch {}
+    }
+    if (line.item_code !== itemCode) return; // item changed while awaiting
+    line.batchOptions = rows.map(b => ({
+      value: b.batch_no,
+      label: (b.qty !== undefined && b.qty !== null) ? `${b.batch_no} (Qty: ${b.qty})` : b.batch_no,
+    }));
+  } catch { if (line.item_code === itemCode) line.batchOptions = []; }
+}
+function onBillLineBatchSelect(line, opt) { line.batch_no = opt?.value ?? opt; }
+function onBillLineBatchCreate(line, val) { line.batch_no = val; }
 function addLine() { lines.value.push(blankLine()); }
 function removeLine(id) { if (lines.value.length > 1) lines.value = lines.value.filter(l => l.id !== id); }
 function calcLine(l) { l.amount = Math.round(flt(l.qty) * flt(l.rate) * 100) / 100; }
@@ -1312,7 +1371,16 @@ async function copyLastItems() {
         id: _id++, item_code: it.item_code || "", description: it.description || it.item_name || "",
         qty: flt(it.qty) || 1, rate: flt(it.rate) || 0,
         amount: Math.round(flt(it.qty || 1) * flt(it.rate || 0) * 100) / 100,
+        has_batch_no: 0, batch_no: "", batchOptions: [],
       }));
+      const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
+      if (codes.length) {
+        try {
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+          const flagMap = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.has_batch_no ? 1 : 0]));
+          lines.value.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBillLineBatches(l, ""); });
+        } catch {}
+      }
       toast.success(`Copied ${r.items.length} item(s) from ${r.source || "last bill"}`);
     } else { toast.info("No previous items found for this vendor"); }
   } catch (e) { toast.error("Failed to copy items"); }
@@ -1323,6 +1391,23 @@ async function saveBill(submit) {
   if (!form.supplier) return toast.error("Vendor is required");
   if (!lines.value.some(l => l.item_code && flt(l.qty) > 0)) return toast.error("At least one item required");
   if (form.update_stock && !form.set_warehouse) return toast.error("Receiving Warehouse is required when Update Inventory is on");
+
+  // Batch-tracked items must carry a Batch No when Update Inventory on Submit
+  // is on — that's what actually creates the incoming Stock Entry, and
+  // StockEntry.validate() rejects batch-tracked rows with no batch_no.
+  const activeLines = lines.value.filter(l => l.item_code && flt(l.qty) > 0);
+  if (form.update_stock) {
+    for (const l of activeLines) {
+      if (!l.has_batch_no) continue;
+      if (!l.batch_no) { toast.error(`${l.item_name || l.item_code} is batch-tracked — Batch No is required`); return; }
+      const existing = await apiList("Batch", { fields: ["name", "disabled", "item"], filters: [["name", "=", l.batch_no]], limit: 1 }).catch(() => []);
+      if (existing.length && existing[0].disabled) { toast.error(`Batch "${l.batch_no}" is disabled and can't be used.`); return; }
+      if (existing.length && existing[0].item && existing[0].item !== l.item_code) {
+        toast.error(`Batch "${l.batch_no}" already exists for item "${existing[0].item}", not "${l.item_code}".`); return;
+      }
+    }
+  }
+
   drawerSaving.value = true;
   try {
     const company = await resolveCompany();
@@ -1348,15 +1433,33 @@ async function saveBill(submit) {
       cost_center: form.cost_center || "",
       currency: form.currency || "INR",
       conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
-      items: lines.value.filter(l => l.item_code).map(l => ({
+      items: activeLines.map(l => ({
         doctype: "Purchase Invoice Item", item_code: l.item_code,
         description: l.description || l.item_code,
         qty: flt(l.qty) || 1, rate: flt(l.rate), amount: flt(l.amount),
         tax_code: l.tax_code || "",
+        batch_no: (form.update_stock && l.has_batch_no) ? l.batch_no : "",
       })),
       taxes,
     };
     if (editingName.value) doc.name = editingName.value;
+
+    // Pre-create Batch records for batch-tracked lines so the auto-generated
+    // Stock Entry can resolve batch_no as a valid Link on submit — mirrors
+    // PurchaseReceipts.vue.
+    if (form.update_stock) {
+      for (const l of activeLines) {
+        if (!l.has_batch_no || !l.batch_no) continue;
+        const exists = await apiList("Batch", { fields: ["name"], filters: [["name", "=", l.batch_no]], limit: 1 });
+        if (!exists.length) {
+          await apiSave({
+            doctype: "Batch", batch_no: l.batch_no, item: l.item_code,
+            warehouse: form.set_warehouse || null, batch_qty: 0,
+          });
+        }
+      }
+    }
+
     const saved = await apiSave(doc);
     if (submit && saved?.name) await apiSubmit("Purchase Invoice", saved.name);
     toast.success(`Bill ${saved?.name || ""} ${submit ? "submitted" : "saved"}`);

@@ -1,5 +1,6 @@
 import frappe
 import json
+from frappe import _
 from frappe.utils import flt, today, getdate
 from zoho_books_clone.api.session import _get_company
 from zoho_books_clone.db.validators import validate_fiscal_year
@@ -2877,6 +2878,16 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
     if not si_items:
         frappe.throw("Nothing left to invoice on this Sales Order")
 
+    # Stock ownership rule (mirrors inventory/stock_link.py):
+    #   SO -> Delivery Note -> Invoice  => DN already deducted stock;
+    #                                      the invoice must NOT deduct it again.
+    #   SO -> Invoice (no DN)           => invoice is the only stock movement,
+    #                                      so it should deduct on submit.
+    has_delivery_note = frappe.db.exists(
+        "Delivery Note", {"sales_order": so.name, "docstatus": 1}
+    )
+    auto_update_stock = 0 if has_delivery_note else 1
+
     si = frappe.get_doc({
         "doctype":               "Sales Invoice",
         "company":               company,
@@ -2887,7 +2898,7 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
         "income_account":        inc,
         "sales_order":           so.name,
         "notes":                 f"From Sales Order {so.name}",
-        "update_stock":          1,
+        "update_stock":          auto_update_stock,
         "set_warehouse":         getattr(so, "set_warehouse", "") or "",
         "billing_address":       getattr(so, "billing_address", "") or "",
         "billing_address_name":  getattr(so, "billing_address_name", "") or "",
@@ -2928,7 +2939,11 @@ def get_sales_order_links(sales_order):
         filters={"sales_order": sales_order, "is_return": 0},
         fields=["name", "posting_date", "grand_total", "outstanding_amount", "status", "docstatus"],
         order_by="posting_date desc")
-    return {"sales_invoices": sis or [], "delivery_challans": []}
+    dns = frappe.get_all("Delivery Note",
+        filters={"sales_order": sales_order},
+        fields=["name", "posting_date", "delivery_date", "total_qty", "status", "docstatus"],
+        order_by="posting_date desc")
+    return {"sales_invoices": sis or [], "delivery_challans": dns or []}
 
 
 
@@ -3143,8 +3158,15 @@ def mark_po_received(purchase_order, line_qtys=None):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
-                                   bill_date="", due_date=""):
-    """Create a Bill (Purchase Invoice) from a PO (partial or full)."""
+                                   bill_date="", due_date="", batch_nos=None):
+    """Create a Bill (Purchase Invoice) from a PO (partial or full).
+
+    batch_nos: optional {po_item_name: batch_no} map for batch-tracked items.
+    Bill creation sets update_stock=1 (this is the actual stock-in point for
+    goods on a PO — see stock_link.on_purchase_invoice_submit), so batch-
+    tracked items must carry a batch_no or the auto-generated Stock Entry
+    fails StockEntry.validate()'s "Batch No is required" check.
+    """
     from zoho_books_clone.utils.access import require_module
     require_module("bills", write=True)
     if frappe.session.user == "Guest":
@@ -3156,6 +3178,13 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
             line_qtys = None
     if line_qtys:
         line_qtys = {str(k): v for k, v in line_qtys.items()}
+    if isinstance(batch_nos, str):
+        try:
+            batch_nos = json.loads(batch_nos) if batch_nos else None
+        except json.JSONDecodeError:
+            batch_nos = None
+    if batch_nos:
+        batch_nos = {str(k): v for k, v in batch_nos.items()}
 
     po = frappe.get_doc("Purchase Order", purchase_order)
     company = po.company
@@ -3184,6 +3213,39 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
                 f"{it.item_name or it.item_code}: billing {qty_bill} "
                 f"but only {flt(it.received_qty) - flt(it.billed_qty)} received"
             )
+
+        # Batch-tracked items must carry a Batch No — this Bill's
+        # update_stock=1 is what actually creates the incoming Stock Entry
+        # (via stock_link.on_purchase_invoice_submit), and StockEntry.validate()
+        # rejects batch-tracked rows with no batch_no.
+        has_batch_no = frappe.db.get_value("Item", it.item_code, "has_batch_no")
+        batch_no = (batch_nos or {}).get(str(it.name)) if has_batch_no else None
+        if has_batch_no:
+            if not batch_no:
+                frappe.throw(_(
+                    "Item {0} is batch-tracked — select or create a Batch No before billing."
+                ).format(it.item_name or it.item_code))
+            existing = frappe.db.get_value("Batch", batch_no, ["item", "disabled"], as_dict=True)
+            if existing:
+                if existing.disabled:
+                    frappe.throw(_("Batch {0} is disabled and cannot be used.").format(batch_no))
+                if existing.item and existing.item != it.item_code:
+                    frappe.throw(_(
+                        "Batch {0} belongs to item {1}, not {2}."
+                    ).format(batch_no, existing.item, it.item_code))
+            else:
+                # Pre-create the Batch record so the auto-generated Stock
+                # Entry can resolve batch_no as a valid Link on submit —
+                # mirrors the Purchase Receipt flow.
+                b = frappe.get_doc({
+                    "doctype": "Batch",
+                    "batch_no": batch_no,
+                    "item": it.item_code,
+                    "batch_qty": 0,
+                })
+                b.flags.ignore_permissions = True
+                b.insert()
+
         pi_items.append({
             "doctype": "Purchase Invoice Item",
             "item_code":   it.item_code,
@@ -3194,6 +3256,7 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
             "rate":        flt(it.rate),
             "amount":      flt(it.rate) * qty_bill,
             "expense_account": exp,
+            "batch_no":    batch_no,
         })
         line_updates.append((it.name, qty_bill))
 
@@ -3244,7 +3307,11 @@ def get_purchase_order_links(purchase_order):
         filters={"purchase_order": purchase_order, "is_return": 0},
         fields=["name", "posting_date", "grand_total", "outstanding_amount", "status", "docstatus"],
         order_by="posting_date desc")
-    return {"bills": bills or [], "purchase_receipts": []}
+    prs = frappe.get_all("Purchase Receipt",
+        filters={"purchase_order": purchase_order},
+        fields=["name", "posting_date", "total_qty", "status", "docstatus"],
+        order_by="posting_date desc")
+    return {"bills": bills or [], "purchase_receipts": prs or []}
 
 
 
@@ -4301,6 +4368,15 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
         line_qtys = {str(k): v for k, v in line_qtys.items()}
 
     so = frappe.get_doc("Sales Order", sales_order)
+
+    # NOTE: if this SO was already invoiced directly with update_stock=1,
+    # the Sales Invoice already deducted stock and released the reservation.
+    # This Delivery Note is still created/saved as a dispatch record, but
+    # DeliveryNote.on_submit / stock_link.on_delivery_note_submit detect that
+    # (via _stock_owned_by_invoice / a DB check) and skip touching stock or
+    # reserved_qty a second time — see invoicing/doctype/delivery_note and
+    # inventory/stock_link.py.
+
     _default_wh = frappe.db.get_single_value("Books Settings", "default_warehouse") or None
     dn_items = []
     for it in (so.items or []):
@@ -4538,11 +4614,11 @@ def get_purchase_receipt_list(company=None, limit=200):
             "supplier":              p.supplier, "supplier_name": p.supplier_name,
             "posting_date":          p.posting_date,
             "supplier_delivery_note":p.supplier_delivery_note,
-            "status":                p.status or ("Cancelled" if p.docstatus == 2 else "Submitted"),
-            "receipt_status":        "Cancelled" if p.docstatus == 2 else "Submitted",
+            "status":                p.status or ("Cancelled" if p.docstatus == 2 else ("Draft" if p.docstatus == 0 else "Submitted")),
+            "receipt_status":        "Cancelled" if p.docstatus == 2 else ("Draft" if p.docstatus == 0 else "Submitted"),
             "qty_received":          flt(p.total_qty),
             "qty_ordered":           flt(p.total_qty),
-            "pct_received":          100.0,
+            "pct_received":          100.0 if p.docstatus == 1 else 0.0,
             "docstatus":             p.docstatus,
             "source":                "real",
         })

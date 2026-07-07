@@ -4,7 +4,7 @@ QC Engine — zoho_books_clone.quality.qc_engine
 ===============================================
 The 4th cross-cutting middleware layer (alongside _CV, _SL, _TN).
 
-Wired via hooks.py doc_events to 5 doctypes on on_submit/before_submit,
+Wired via hooks.py doc_events to 7 doctypes on on_submit/before_submit,
 and MUST run BEFORE _SL (stock_link) so QC state is known before stock moves.
 
 Design:
@@ -13,9 +13,11 @@ Design:
 
 Public surface
 --------------
-check_qc_before_stock_link(doc, method=None)          -- on_submit hook (QC gate)
-auto_create_qc_for_purchase_receipt(doc, method=None) -- before_submit hook (PR)
-auto_create_qc_for_stock_entry(doc, method=None)      -- before_submit hook (SE Manufacture)
+check_qc_before_stock_link(doc, method=None)              -- on_submit hook (QC gate)
+auto_create_qc_for_purchase_receipt(doc, method=None)     -- before_submit hook (PR)
+auto_create_qc_for_stock_entry(doc, method=None)          -- before_submit hook (SE Manufacture)
+auto_create_qc_for_delivery_note(doc, method=None)        -- before_submit hook (DN)
+auto_create_qc_for_sales_invoice(doc, method=None)        -- before_submit hook (SI)
 doc_requires_qc(doc) -> bool
 get_linked_qc_status(doc) -> str
 create_qc_inspection_for_item(reference_type, reference_name, item_code, inspection_type) -> str
@@ -243,6 +245,122 @@ def auto_create_qc_for_stock_entry(doc, method=None):
         )
 
 
+# --- Point 5: Auto-create QC for Delivery Note (Outgoing) -------------------
+
+def auto_create_qc_for_delivery_note(doc, method=None):
+    """
+    before_submit hook on Delivery Note.
+    For every item with inspection_required_before_delivery=1,
+    automatically creates a draft QC Inspection (if not already existing).
+    Inspector receives a blue notification with the inspection name(s).
+    """
+    if not _qc_master_switch_on():
+        return
+
+    created = []
+    for row in (getattr(doc, "items", []) or []):
+        item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
+        if not item_code:
+            continue
+        if not frappe.db.get_value("Item", item_code, "inspection_required_before_delivery"):
+            continue
+
+        # Skip if QC Inspection already exists (non-cancelled)
+        existing = frappe.db.get_value(
+            "QC Inspection",
+            {
+                "reference_type": doc.doctype,
+                "reference_name": doc.name,
+                "item": item_code,
+                "docstatus": ["!=", 2],
+            },
+            "name",
+        )
+        if existing:
+            continue
+
+        try:
+            qci_name = create_qc_inspection_for_item(
+                doc.doctype, doc.name, item_code, "Outgoing"
+            )
+            created.append(qci_name)
+        except Exception:
+            frappe.log_error(
+                title=f"QC auto-create failed for {item_code} on {doc.name}",
+                message=frappe.get_traceback(),
+            )
+
+    if created:
+        frappe.msgprint(
+            _("Outgoing QC Inspection(s) auto-created for {0} item(s): {1}. "
+              "Please complete readings before goods are dispatched.").format(
+                len(created), ", ".join(created)
+            ),
+            indicator="blue",
+            title=_("Outgoing QC Inspections Created"),
+            alert=True,
+        )
+
+
+# --- Point 6: Auto-create QC for Sales Invoice (Outgoing) -------------------
+
+def auto_create_qc_for_sales_invoice(doc, method=None):
+    """
+    before_submit hook on Sales Invoice.
+    For every item with inspection_required_before_delivery=1,
+    automatically creates a draft QC Inspection (if not already existing).
+    Uses the same Outgoing inspection type as Delivery Note per
+    _DOCTYPE_TO_INSPECTION_TYPE.
+    Inspector receives a blue notification with the inspection name(s).
+    """
+    if not _qc_master_switch_on():
+        return
+
+    created = []
+    for row in (getattr(doc, "items", []) or []):
+        item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
+        if not item_code:
+            continue
+        if not frappe.db.get_value("Item", item_code, "inspection_required_before_delivery"):
+            continue
+
+        # Skip if QC Inspection already exists (non-cancelled)
+        existing = frappe.db.get_value(
+            "QC Inspection",
+            {
+                "reference_type": doc.doctype,
+                "reference_name": doc.name,
+                "item": item_code,
+                "docstatus": ["!=", 2],
+            },
+            "name",
+        )
+        if existing:
+            continue
+
+        try:
+            qci_name = create_qc_inspection_for_item(
+                doc.doctype, doc.name, item_code, "Outgoing"
+            )
+            created.append(qci_name)
+        except Exception:
+            frappe.log_error(
+                title=f"QC auto-create failed for {item_code} on {doc.name}",
+                message=frappe.get_traceback(),
+            )
+
+    if created:
+        frappe.msgprint(
+            _("Outgoing QC Inspection(s) auto-created for {0} item(s): {1}. "
+              "Please complete readings before invoice is finalised.").format(
+                len(created), ", ".join(created)
+            ),
+            indicator="blue",
+            title=_("Outgoing QC Inspections Created"),
+            alert=True,
+        )
+
+
 # --- doc_requires_qc ---------------------------------------------------------
 
 def doc_requires_qc(doc) -> bool:
@@ -422,7 +540,7 @@ def _resolve_template(item_code: str, inspection_type: str) -> str | None:
             "QC Inspection Template",
             {"item": item_code, "inspection_type": ["in", [inspection_type, "All", ""]]},
             "name",
-            order_by="inspection_type asc",
+            order_by="inspection_type desc",
         )
         if tmpl:
             return tmpl
@@ -445,7 +563,7 @@ def _resolve_template(item_code: str, inspection_type: str) -> str | None:
                     "inspection_type": ["in", [inspection_type, "All", ""]],
                 },
                 "name",
-                order_by="inspection_type asc",
+                order_by="inspection_type desc",
             )
             if tmpl:
                 return tmpl
@@ -460,7 +578,7 @@ def _resolve_template(item_code: str, inspection_type: str) -> str | None:
                 "QC Inspection Template",
                 {"item_group": item_group, "inspection_type": ["in", [inspection_type, "All"]]},
                 "name",
-                order_by="inspection_type asc",
+                order_by="inspection_type desc",
             )
             if tmpl:
                 return tmpl

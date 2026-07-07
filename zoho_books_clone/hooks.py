@@ -29,6 +29,7 @@ _QH = "zoho_books_clone.quality.qc_hold_manager"
 doc_events = {
     "Sales Invoice": {
         "validate":  f"{_CV}.on_validate",
+        "before_submit": f"{_QC}.auto_create_qc_for_sales_invoice",
         "on_submit": [f"{_CV}.on_submit", f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_sales_invoice_submit"],
         "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_sales_invoice_cancel"], "before_delete": f"{_CV}.before_delete",
     },
@@ -44,7 +45,7 @@ doc_events = {
     "Expense Claim":    {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # Goods documents own the physical stock movement (Delivery Note out / Purchase Receipt in)
     # Phase 2: validate hook added so central_validator period/lock checks run on these too.
-    "Delivery Note":    {"validate": f"{_CV}.on_validate", "on_submit": [f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_delivery_note_submit"],    "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_delivery_note_cancel"], "before_delete": f"{_CV}.before_delete"},
+    "Delivery Note":    {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_delivery_note", "on_submit": [f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_delivery_note_submit"],    "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_delivery_note_cancel"], "before_delete": f"{_CV}.before_delete"},
     "Purchase Receipt": {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_purchase_receipt", "on_submit": [f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_purchase_receipt_submit"], "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_purchase_receipt_cancel"], "before_delete": f"{_CV}.before_delete"},
     # Purchase Order — wired so fiscal/period lock checks run on save and submit.
     "Purchase Order":   {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
@@ -215,6 +216,8 @@ website_route_rules = [
     {"from_route": "/delivery-challans", "to_route": "books"},
     {"from_route": "/proforma-invoices", "to_route": "books"},
     {"from_route": "/purchase-receipts", "to_route": "books"},
+    {"from_route": "/quality", "to_route": "books"},
+    {"from_route": "/quality/<path:path>", "to_route": "books"},
 ]
 
 # Frappe's built-in account pages are not used by Books — bounce them to the

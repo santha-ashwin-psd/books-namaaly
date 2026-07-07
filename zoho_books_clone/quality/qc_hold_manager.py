@@ -16,6 +16,7 @@ When QC Hold is released:
 Public surface
 --------------
 handle_qc_result(doc, method=None)           -- on_submit hook on QC Inspection
+validate_approval_request(doc, method=None)  -- validate hook on QC Approval Request
 place_on_hold(inspection_name, quarantine_warehouse, hold_reason) -> dict
 release_from_hold(inspection_name, disposition, target_warehouse)  -> dict
 get_quarantine_summary() -> list
@@ -26,13 +27,29 @@ from frappe import _
 from frappe.utils import nowdate, flt
 
 
+# --- validate hook on QC Approval Request ------------------------------------
+
+def validate_approval_request(doc, method=None):
+    """
+    Validate hook for QC Approval Request.
+    Delegates to the controller's own validate() so the rejection_reason
+    requirement is enforced through the standard doc_events path as well
+    as via the controller directly.
+    """
+    if doc.approval_status == "Rejected" and not (doc.rejection_reason or "").strip():
+        frappe.throw(_(
+            "Rejection Reason is required when rejecting a QC Approval Request."
+        ))
+
+
 # --- on_submit hook -----------------------------------------------------------
 
 def handle_qc_result(doc, method=None):
     """
     Called on_submit of QC Inspection.
     If status = Fail and a quarantine warehouse is configured in Books Settings,
-    automatically places the item on QC Hold.
+    automatically places the item on QC Hold and creates a QC Approval Request
+    so a QA Manager can formally approve/reject the disposition.
     """
     if doc.status != "Fail":
         return
@@ -54,13 +71,26 @@ def handle_qc_result(doc, method=None):
             indicator="red",
             title=_("QC Failed — Item on Hold"),
         )
-        return
+    else:
+        try:
+            place_on_hold(doc.name, quarantine_wh, f"Auto-hold: QC Inspection {doc.name} Failed")
+        except Exception:
+            frappe.log_error(
+                title=f"QC Hold auto-placement failed for {doc.name}",
+                message=frappe.get_traceback(),
+            )
 
+    # Auto-create a QC Approval Request for the QA manager to action
     try:
-        place_on_hold(doc.name, quarantine_wh, f"Auto-hold: QC Inspection {doc.name} Failed")
+        from zoho_books_clone.api.qc_approval import create_qc_approval_request
+        create_qc_approval_request(
+            inspection_name=doc.name,
+            reason=f"Auto-raised: QC Inspection {doc.name} resolved to Fail.",
+        )
     except Exception:
+        # Non-fatal — hold is already placed; log and continue
         frappe.log_error(
-            title=f"QC Hold auto-placement failed for {doc.name}",
+            title=f"QC Approval Request auto-creation failed for {doc.name}",
             message=frappe.get_traceback(),
         )
 
@@ -128,6 +158,23 @@ def release_from_hold(
     """
     if disposition not in ("Release to Stock", "Scrap", "Return to Supplier"):
         frappe.throw(_("Invalid disposition. Choose: Release to Stock, Scrap, or Return to Supplier."))
+
+    # QC Hold can only be released once the QA Manager has formally Approved
+    # the linked QC Approval Request — a Pending or Rejected request must
+    # never allow stock to leave quarantine.
+    from zoho_books_clone.api.qc_approval import get_approval_status_for_inspection
+    approval = get_approval_status_for_inspection(inspection_name)
+    if not approval.get("found"):
+        frappe.throw(_(
+            "Cannot release QC Hold: no QC Approval Request found for {0}. "
+            "A QA Manager must review and approve the disposition first."
+        ).format(inspection_name))
+    if approval.get("approval_status") != "Approved":
+        frappe.throw(_(
+            "Cannot release QC Hold: the linked QC Approval Request {0} is "
+            "<b>{1}</b>, not Approved. Stock cannot leave quarantine until "
+            "a QA Manager approves the request."
+        ).format(approval.get("request_name"), approval.get("approval_status")))
 
     qci = frappe.get_doc("QC Inspection", inspection_name)
     item_code = qci.item
@@ -309,14 +356,29 @@ def _create_release_stock_entry(
 
 
 def _get_source_warehouse(qci) -> str | None:
-    """Infer the source warehouse from the reference document."""
+    """
+    Infer the source warehouse from the reference document.
+
+    - Purchase Receipt / Purchase Invoice (Incoming): stock lands in the row's
+      `warehouse` (or `t_warehouse` for stock-updating invoices) — that's the
+      warehouse to pull from into quarantine.
+    - Stock Entry (In Process / Manufacture): finished goods land in `t_warehouse`.
+    - Delivery Note / Sales Invoice (Outgoing): stock is picked from the row's
+      `warehouse` (or `s_warehouse` for stock-updating invoices) before dispatch.
+    """
     try:
-        if qci.reference_type == "Purchase Receipt":
-            doc = frappe.get_doc(qci.reference_type, qci.reference_name)
-            for row in (getattr(doc, "items", []) or []):
-                ic = getattr(row, "item_code", None) or getattr(row, "item", None)
-                if ic == qci.item:
-                    return getattr(row, "warehouse", None) or getattr(row, "t_warehouse", None)
+        doc = frappe.get_doc(qci.reference_type, qci.reference_name)
+        for row in (getattr(doc, "items", []) or []):
+            ic = getattr(row, "item_code", None) or getattr(row, "item", None)
+            if ic != qci.item:
+                continue
+
+            if qci.reference_type in ("Purchase Receipt", "Purchase Invoice"):
+                return getattr(row, "warehouse", None) or getattr(row, "t_warehouse", None)
+            elif qci.reference_type == "Stock Entry":
+                return getattr(row, "t_warehouse", None)
+            elif qci.reference_type in ("Delivery Note", "Sales Invoice"):
+                return getattr(row, "warehouse", None) or getattr(row, "s_warehouse", None)
     except Exception:
         pass
     return None

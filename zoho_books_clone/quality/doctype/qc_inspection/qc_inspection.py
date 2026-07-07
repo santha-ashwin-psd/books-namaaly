@@ -12,6 +12,9 @@ on_submit(): Logs the inspection event to Frappe Activity Log.
 on_cancel(): Clears any ignore_qc_warning flags on the parent reference doc.
 """
 
+import ast
+import operator
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -45,6 +48,15 @@ class QCInspection(Document):
                 "Cannot submit a QC Inspection with no readings. "
                 "Please add at least one reading before submitting."
             ))
+
+        pending_rows = [r for r in self.readings if (r.status or "Pending") == "Pending"]
+        if pending_rows:
+            frappe.throw(_(
+                "Cannot submit — {0} reading row(s) are still <b>Pending</b>. "
+                "Every reading must be filled in and resolved to Accepted or "
+                "Rejected before the QC Inspection can be submitted, since a "
+                "submitted document cannot be edited afterwards."
+            ).format(len(pending_rows)))
 
     # ──────────────────────────────────────────────────────────────────────────
     # Core: reading evaluation
@@ -152,11 +164,14 @@ def _evaluate_reading_row(row) -> str:
             val = float(reading)
         except (ValueError, TypeError):
             return "Rejected"  # Non-numeric input for a numeric parameter
-        min_v = flt(row.get("min_value"))
-        max_v = flt(row.get("max_value"))
-        # If both are 0, the template has no constraint set → accept
-        if min_v == 0 and max_v == 0:
+        min_raw = row.get("min_value")
+        max_raw = row.get("max_value")
+        # Distinguish "no range configured" (both left blank) from a
+        # legitimate "must equal exactly 0" constraint (both explicitly 0).
+        if min_raw in (None, "") and max_raw in (None, ""):
             return "Accepted"
+        min_v = flt(min_raw)
+        max_v = flt(max_raw)
         if min_v <= val <= max_v:
             return "Accepted"
         return "Rejected"
@@ -174,9 +189,113 @@ def _evaluate_reading_row(row) -> str:
         if not formula:
             return "Pending"
         try:
-            result = eval(formula, {"__builtins__": {}}, {"reading": float(reading), "flt": flt})  # noqa: S307
+            result = _safe_eval_formula(formula, {"reading": float(reading)})
             return "Accepted" if result else "Rejected"
         except Exception:
             return "Rejected"
 
     return "Pending"
+
+
+# ─── Safe formula evaluator (replaces restricted-builtins eval()) ─────────────
+#
+# The "Formula" parameter type lets a template author supply an arbitrary
+# boolean expression over `reading` (e.g. "reading > 0 and reading <= 5",
+# or "flt(reading) == 7"). A raw eval() — even with __builtins__ stripped —
+# is still a code-execution risk (attribute access, dunder tricks, etc. can
+# often escape a naive restricted-builtins sandbox). Instead we walk a
+# whitelisted AST: only literals, the `reading` name, arithmetic, comparison,
+# boolean operators, and a single allowed `flt(...)` call are permitted.
+# Anything else (attribute access, subscripting, function defs, imports,
+# comprehensions, etc.) raises before any code can run.
+
+_ALLOWED_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_ALLOWED_UNARYOPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+    ast.Not: operator.not_,
+}
+_ALLOWED_COMPARE = {
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+}
+_ALLOWED_BOOLOPS = {ast.And: all, ast.Or: any}
+_ALLOWED_FUNCS = {"flt": flt}
+
+
+def _safe_eval_formula(formula: str, variables: dict):
+    """Parse and evaluate a restricted boolean/arithmetic expression."""
+    try:
+        tree = ast.parse(formula, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Invalid formula syntax: {e}")
+    return _eval_ast_node(tree.body, variables)
+
+
+def _eval_ast_node(node, variables: dict):
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float, bool)):
+            return node.value
+        raise ValueError("Only numeric/boolean literals are allowed in formulas")
+
+    if isinstance(node, ast.Name):
+        if node.id in variables:
+            return variables[node.id]
+        raise ValueError(f"Unknown identifier in formula: {node.id!r}")
+
+    if isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type not in _ALLOWED_BINOPS:
+            raise ValueError(f"Operator not allowed in formula: {op_type.__name__}")
+        left = _eval_ast_node(node.left, variables)
+        right = _eval_ast_node(node.right, variables)
+        return _ALLOWED_BINOPS[op_type](left, right)
+
+    if isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type not in _ALLOWED_UNARYOPS:
+            raise ValueError(f"Unary operator not allowed in formula: {op_type.__name__}")
+        return _ALLOWED_UNARYOPS[op_type](_eval_ast_node(node.operand, variables))
+
+    if isinstance(node, ast.Compare):
+        left = _eval_ast_node(node.left, variables)
+        result = True
+        for op, comparator in zip(node.ops, node.comparators):
+            op_type = type(op)
+            if op_type not in _ALLOWED_COMPARE:
+                raise ValueError(f"Comparison not allowed in formula: {op_type.__name__}")
+            right = _eval_ast_node(comparator, variables)
+            if not _ALLOWED_COMPARE[op_type](left, right):
+                result = False
+                break
+            left = right
+        return result
+
+    if isinstance(node, ast.BoolOp):
+        op_type = type(node.op)
+        if op_type not in _ALLOWED_BOOLOPS:
+            raise ValueError(f"Boolean operator not allowed in formula: {op_type.__name__}")
+        values = [_eval_ast_node(v, variables) for v in node.values]
+        return _ALLOWED_BOOLOPS[op_type](values)
+
+    if isinstance(node, ast.Call):
+        if (isinstance(node.func, ast.Name)
+                and node.func.id in _ALLOWED_FUNCS
+                and not node.keywords
+                and len(node.args) == 1):
+            arg = _eval_ast_node(node.args[0], variables)
+            return _ALLOWED_FUNCS[node.func.id](arg)
+        raise ValueError("Only flt(...) calls are allowed in formulas")
+
+    raise ValueError(f"Disallowed expression in formula: {type(node).__name__}")

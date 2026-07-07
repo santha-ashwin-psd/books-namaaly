@@ -871,12 +871,19 @@
           <div class="po-inv-head">
             <span>Item</span><span class="ta-r">Recv'd</span><span class="ta-r">Remaining</span><span class="ta-r">Bill</span>
           </div>
-          <div v-for="l in billModal.lines" :key="l.name" class="po-inv-row" :class="{warn:l.toBill > (l.received_qty - l.billed_qty)}">
-            <span>{{ l.item_name||l.item_code }}</span>
-            <span class="ta-r mono-sm text-muted">{{ l.received_qty }}</span>
-            <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
-            <input v-model.number="l.toBill" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
-              class="inv-fi ta-r" style="width:90px" />
+          <div v-for="l in billModal.lines" :key="l.name">
+            <div class="po-inv-row" :class="{warn:l.toBill > (l.received_qty - l.billed_qty)}">
+              <span>{{ l.item_name||l.item_code }}</span>
+              <span class="ta-r mono-sm text-muted">{{ l.received_qty }}</span>
+              <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
+              <input v-model.number="l.toBill" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
+                class="inv-fi ta-r" style="width:90px" />
+            </div>
+            <div v-if="l.has_batch_no" style="display:grid;grid-template-columns:2fr 1fr;gap:6px;margin:4px 0 8px">
+              <SearchableSelect v-model="l.batch_no" :options="l.batchOptions" placeholder="Batch No — select existing or type to create new"
+                createable @search="q => fetchBillBatches(l, q)" @select="opt => onBillBatchSelect(l, opt)" @create="val => onBillBatchCreate(l, val)" style="font-size:12px"/>
+              <span style="font-size:11px;color:#9ca3af;align-self:center">{{ l.batchOptions.length ? 'Batch-tracked — required' : 'No batches yet — type a new code' }}</span>
+            </div>
           </div>
         </div>
         <div v-if="threeWayMismatch" class="po-warn">
@@ -1529,24 +1536,89 @@ async function emailPO(o) {
 
 function openBillModal(o) {
   apiGET("zoho_books_clone.api.docs.get_purchase_order_fulfillment", { purchase_order: o.name })
-    .then(r => {
+    .then(async r => {
       const ful = r?.lines || [];
+      const lines = ful.filter(l => l.remaining_to_bill > 0)
+                  .map(l => ({ ...l, toBill: Math.min(l.remaining_to_bill, Math.max(0, l.received_qty - l.billed_qty)) || l.remaining_to_bill,
+                               has_batch_no: 0, batch_no: "", batchOptions: [] }));
+      // Resolve has_batch_no per item so the Batch No field shows up for
+      // batch-tracked items when converting a PO to a Bill (the Bill's
+      // update_stock=1 is what actually creates the incoming Stock Entry).
+      const codes = [...new Set(lines.map(l => l.item_code).filter(Boolean))];
+      if (codes.length) {
+        try {
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+          const flagMap = Object.fromEntries(itemRows.map(r => [r.name, r.has_batch_no ? 1 : 0]));
+          lines.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBillBatches(l, ""); });
+        } catch {}
+      }
       Object.assign(billModal, {
         open: true, saving: false, poName: o.name,
-        lines: ful.filter(l => l.remaining_to_bill > 0)
-                  .map(l => ({ ...l, toBill: Math.min(l.remaining_to_bill, Math.max(0, l.received_qty - l.billed_qty)) || l.remaining_to_bill })),
+        lines,
         billNo: "", billDate: todayStr(), dueDate: o.expected_delivery_date || todayStr(),
       });
       if (!billModal.lines.length) { billModal.open = false; toast.info("Nothing left to bill"); }
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }
+
+// ── Batch helpers for Convert-to-Bill modal (mirrors PurchaseReceipts.vue) ──
+async function fetchBillBatches(line, q = "") {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  const itemCode = line.item_code;
+  try {
+    let rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: itemCode, search: q || "" }) || [];
+    if (!rows.length && !q) {
+      // Fallback: the batch may be linked to a different Item record that
+      // shares this item's display name (e.g. after a rename, or a
+      // duplicate Item was created). Look up by item_name instead of code.
+      try {
+        const itemRows = await apiList("Item", { fields: ["name", "item_name"], filters: [["name", "=", itemCode]], limit: 1 });
+        const itemName = itemRows[0]?.item_name;
+        if (itemName) {
+          const altItems = await apiList("Item", { fields: ["name"], filters: [["item_name", "=", itemName], ["name", "!=", itemCode]], limit: 5 });
+          for (const alt of altItems) {
+            const altRows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: alt.name, search: "" }) || [];
+            if (altRows.length) { rows = altRows; break; }
+          }
+        }
+      } catch {}
+    }
+    if (line.item_code !== itemCode) return; // item changed while awaiting
+    line.batchOptions = rows.map(b => ({
+      value: b.batch_no,
+      label: (b.qty !== undefined && b.qty !== null) ? `${b.batch_no} (Qty: ${b.qty})` : b.batch_no,
+    }));
+  } catch { if (line.item_code === itemCode) line.batchOptions = []; }
+}
+function onBillBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+}
+function onBillBatchCreate(line, val) { line.batch_no = val; }
 async function submitBill() {
   const lineMap = {};
   for (const l of billModal.lines) {
     if (flt(l.toBill) > 0) lineMap[l.name] = flt(l.toBill);
   }
   if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to bill"); return; }
+
+  // Batch-tracked items must carry a Batch No before we let this go to the
+  // backend — the Bill's update_stock=1 creates the incoming Stock Entry,
+  // which fails its own "Batch No is required" check on submit otherwise.
+  const batchNos = {};
+  for (const l of billModal.lines) {
+    if (!(flt(l.toBill) > 0)) continue;
+    if (l.has_batch_no) {
+      if (!l.batch_no) { toast.error(`${l.item_name || l.item_code} is batch-tracked — Batch No is required`); return; }
+      const existing = await apiList("Batch", { fields: ["name", "disabled", "item"], filters: [["name", "=", l.batch_no]], limit: 1 }).catch(() => []);
+      if (existing.length && existing[0].disabled) { toast.error(`Batch "${l.batch_no}" is disabled and can't be used.`); return; }
+      if (existing.length && existing[0].item && existing[0].item !== l.item_code) {
+        toast.error(`Batch "${l.batch_no}" already exists for item "${existing[0].item}", not "${l.item_code}".`); return;
+      }
+      batchNos[l.name] = l.batch_no;
+    }
+  }
+
   billModal.saving = true;
   try {
     const r = await apiPOST("zoho_books_clone.api.docs.convert_purchase_order_to_bill", {
@@ -1555,6 +1627,7 @@ async function submitBill() {
       bill_no: billModal.billNo || "",
       bill_date: billModal.billDate || "",
       due_date: billModal.dueDate || "",
+      batch_nos: JSON.stringify(batchNos),
     });
     toast.success(`Bill created: ${r?.bill}`);
     if (r?.three_way_warnings?.length) {

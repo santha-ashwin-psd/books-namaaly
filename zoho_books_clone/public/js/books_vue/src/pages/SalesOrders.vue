@@ -187,6 +187,7 @@
                 <div style="display:flex;gap:4px;justify-content:center">
                   <button class="inv-act-btn" @click="openView(o)" title="View"><span v-html="icon('eye',13)"></span></button>
                   <button v-if="isDraft(o)" class="inv-act-btn" @click="openEdit(o)" title="Edit"><span v-html="icon('edit',13)"></span></button>
+                  <button v-if="canDeliver(o)" class="inv-act-btn" style="color:#d97706" @click="openDeliverModal(o)" title="Create Delivery Note"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></button>
                   <button v-if="canInvoice(o)" class="inv-act-btn inv-act-pay" @click="openInvoiceModal(o)" title="Invoice"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
                   <button v-if="canDelete(o)" class="inv-act-btn" style="color:#dc2626" @click.stop="deleteSO(o)" title="Delete"><span v-html="icon('trash',13)"></span></button>
                 </div>
@@ -583,6 +584,9 @@
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <button v-if="canDeliver(viewDoc)" class="inv-view-cta" style="background:#d97706" @click="openDeliverModal(viewDoc)">
+                <span v-html="icon('truck',14)"></span> Create Delivery Note
+              </button>
               <button v-if="canInvoice(viewDoc)" class="inv-view-cta" @click="openInvoiceModal(viewDoc)">
                 <span v-html="icon('repeat',14)"></span> Invoice
               </button>
@@ -647,6 +651,9 @@
                   </button>
                 </div>
               </div>
+              <button v-if="canDeliver(viewDoc)" class="inv-ab-btn" style="color:#d97706;border-color:rgba(217,119,6,.3)" @click="openDeliverModal(viewDoc)">
+                <span v-html="icon('truck',13)"></span> <span class="ab-label">Delivery Note</span>
+              </button>
               <button v-if="canInvoice(viewDoc)" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="openInvoiceModal(viewDoc)">
                 <span v-html="icon('repeat',13)"></span> <span class="ab-label">Invoice</span>
               </button>
@@ -849,8 +856,8 @@
                     </table>
                   </div>
                   <div v-if="hasUndelivered && !isDraft(viewDoc) && (viewDoc?.status||'').toLowerCase() !== 'cancelled'" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-                    <button class="inv-ab-btn" @click="markAllDelivered" :disabled="actionRunning">
-                      <span v-html="icon('truck',13)"></span> <span class="ab-label">Mark All Delivered</span>
+                    <button class="inv-ab-btn" style="color:#d97706;border-color:rgba(217,119,6,.3)" @click="openDeliverModal(viewDoc)" :disabled="actionRunning">
+                      <span v-html="icon('truck',13)"></span> <span class="ab-label">Create Delivery Note</span>
                     </button>
                   </div>
                 </template>
@@ -868,6 +875,29 @@
                     <div style="padding:10px 14px;border:1px solid #e8ecf0;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:space-between">
                       <span class="inv-link">{{ viewDoc.ref_quote }}</span>
                       <span class="text-muted">Quotation</span>
+                    </div>
+                  </div>
+                  <div v-if="links.delivery_challans.length" style="margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Delivery Notes</div>
+                    <div class="inv-items-wrap">
+                      <table class="inv-items-table">
+                        <thead>
+                          <tr>
+                            <th>Delivery Note #</th>
+                            <th>Date</th>
+                            <th class="th-r">Qty</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="dn in links.delivery_challans" :key="dn.name">
+                            <td><span class="inv-link">{{ dn.name }}</span></td>
+                            <td class="mono-sm text-muted">{{ fmtDate(dn.posting_date) }}</td>
+                            <td class="td-r mono-sm">{{ dn.total_qty }}</td>
+                            <td class="mono-sm">{{ dn.status }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                   <div v-if="links.sales_invoices.length">
@@ -893,7 +923,7 @@
                       </table>
                     </div>
                   </div>
-                  <div v-if="!viewDoc.ref_quote && !links.sales_invoices.length"
+                  <div v-if="!viewDoc.ref_quote && !links.sales_invoices.length && !links.delivery_challans.length"
                     style="text-align:center;padding:48px;color:#9ca3af;font-size:13px">
                     No linked documents yet.
                   </div>
@@ -1014,6 +1044,59 @@
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
               </svg>
               {{ invModal.saving ? 'Creating Invoice…' : `Create Invoice ${fmtCur(invModalTotal)}` }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Create Delivery Note modal ── -->
+      <div v-if="deliverModal.open" class="rp-backdrop" @click.self="deliverModal.open=false">
+        <div class="rp-dialog" style="max-width:640px">
+          <div class="rp-dialog-header">
+            <span class="rp-dialog-title">Create Delivery Note — {{ deliverModal.soName }}</span>
+            <button class="rp-close-btn" @click="deliverModal.open=false">✕</button>
+          </div>
+          <div class="rp-body">
+            <div style="font-size:12.5px;color:#374151;margin-bottom:12px">Enter the quantity to deliver for each line:</div>
+            <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
+              <div class="inv-ci-grid inv-ci-header">
+                <span>Item Code</span>
+                <span>Item Name</span>
+                <span class="ta-r">Remaining</span>
+                <span class="ta-r">Deliver Qty</span>
+              </div>
+              <div v-for="l in deliverModal.allLines.filter(l => l.remaining_to_deliver <= 0)" :key="'done-'+l.name"
+                class="inv-ci-grid inv-ci-row inv-ci-done">
+                <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
+                <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
+                <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
+              </div>
+              <div v-for="l in deliverModal.lines" :key="l.name" class="inv-ci-grid inv-ci-row">
+                <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
+                <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                <span class="ta-r mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
+                <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
+                  class="inv-ci" style="width:100%;text-align:right"/>
+              </div>
+            </div>
+            <div class="inv-fg inv-fg2">
+              <div>
+                <label class="inv-lbl">LR No.</label>
+                <input v-model="deliverModal.lrNo" type="text" class="inv-fi" placeholder="Transporter LR / AWB no." />
+              </div>
+              <div>
+                <label class="inv-lbl">Transporter</label>
+                <input v-model="deliverModal.transporterName" type="text" class="inv-fi" placeholder="Transporter name" />
+              </div>
+            </div>
+          </div>
+          <div class="rp-footer">
+            <button class="rp-btn rp-btn-outline" @click="deliverModal.open=false" :disabled="deliverModal.saving">Cancel</button>
+            <button class="rp-btn inv-create-btn" :disabled="deliverModal.saving||deliverModalQty<=0" @click="submitDeliver">
+              <span v-if="deliverModal.saving" class="inv-create-spinner"></span>
+              <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              {{ deliverModal.saving ? 'Creating…' : 'Create Delivery Note' }}
             </button>
           </div>
         </div>
@@ -1142,6 +1225,7 @@ async function fetchWarehouses(q = "") {
 }
 
 const invModal = reactive({ open: false, saving: false, soName: "", lines: [], allLines: [], dueDate: "" });
+const deliverModal = reactive({ open: false, saving: false, soName: "", lines: [], allLines: [], lrNo: "", transporterName: "" });
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function deliveryDefault() { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().slice(0, 10); }
@@ -1183,6 +1267,11 @@ function canInvoice(o) {
   if (o?.docstatus !== 1) return false;
   const s = (o?.status||"").toLowerCase();
   return s !== "cancelled" && s !== "closed" && s !== "invoiced";
+}
+function canDeliver(o) {
+  if (o?.docstatus !== 1) return false;
+  const s = (o?.status||"").toLowerCase();
+  return s !== "cancelled" && s !== "closed" && s !== "delivered";
 }
 function canCancel(o) {
   if (o?.docstatus !== 1) return false;
@@ -1351,6 +1440,9 @@ const tlProgressWidth = computed(() => {
 
 const invModalTotal = computed(() =>
   (invModal.lines || []).reduce((s, l) => s + flt(l.toInvoice) * flt(l.rate), 0)
+);
+const deliverModalQty = computed(() =>
+  (deliverModal.lines || []).reduce((s, l) => s + flt(l.toDeliver), 0)
 );
 
 // ── Create / Edit ─────────────────────────────────────────────────────────
@@ -1694,16 +1786,42 @@ async function submitInvoice() {
   invModal.saving = false;
 }
 
-async function markAllDelivered() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
-  actionRunning.value = true;
+function openDeliverModal(o) {
+  apiGET("zoho_books_clone.api.docs.get_sales_order_fulfillment", { sales_order: o.name })
+    .then(r => {
+      const ful = r?.lines || [];
+      const pending = ful.filter(l => l.remaining_to_deliver > 0)
+                        .map(l => ({ ...l, toDeliver: l.remaining_to_deliver }));
+      Object.assign(deliverModal, {
+        open: true, saving: false, soName: o.name,
+        allLines: ful,
+        lines: pending,
+        lrNo: "", transporterName: "",
+      });
+      if (!deliverModal.lines.length) { deliverModal.open = false; toast.info("Nothing left to deliver"); }
+    })
+    .catch(e => toast.error(e.message || "Failed to load fulfillment"));
+}
+async function submitDeliver() {
+  const lineMap = {};
+  for (const l of deliverModal.lines) {
+    if (flt(l.toDeliver) > 0) lineMap[l.name] = flt(l.toDeliver);
+  }
+  if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to deliver"); return; }
+  deliverModal.saving = true;
   try {
-    const r = await apiPOST("zoho_books_clone.api.docs.mark_so_delivered", { sales_order: viewDoc.value.name });
-    toast.success(`Marked ${r?.lines_updated || 0} line(s) delivered`);
+    const r = await apiPOST("zoho_books_clone.api.docs.create_delivery_note_from_so", {
+      sales_order: deliverModal.soName,
+      line_qtys: JSON.stringify(lineMap),
+      lr_no: deliverModal.lrNo || "",
+      transporter_name: deliverModal.transporterName || "",
+    });
+    toast.success(`Delivery Note created: ${r?.delivery_note}`);
+    deliverModal.open = false;
     await load();
-    if (viewDoc.value) await openView(viewDoc.value);
-  } catch (e) { toast.error(e.message || "Mark delivered failed"); }
-  actionRunning.value = false;
+    if (viewDoc.value?.name === deliverModal.soName) await openView(viewDoc.value);
+  } catch (e) { toast.error(e.message || "Create Delivery Note failed"); }
+  deliverModal.saving = false;
 }
 
 async function submitSO(o) {

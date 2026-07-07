@@ -472,7 +472,7 @@
                           <td class="wh-batch-no">{{ b.batch_no }}</td>
                           <td class="wh-batch-date">{{ fmtBatchDate(b.manufacturing_date) }}</td>
                           <td class="wh-batch-date">{{ fmtBatchDate(b.expiry_date) }}</td>
-                          <td class="ta-r wh-batch-qty">{{ flt(b.qty).toFixed(2) }}</td>
+                          <td class="wh-batch-qty">{{ flt(b.qty).toFixed(2) }}</td>
                           <td>
                             <span v-if="b.is_expired" class="wh-batch-flag wh-batch-flag--expired">Expired</span>
                             <span v-else-if="b.expires_soon" class="wh-batch-flag wh-batch-flag--soon">Expires soon</span>

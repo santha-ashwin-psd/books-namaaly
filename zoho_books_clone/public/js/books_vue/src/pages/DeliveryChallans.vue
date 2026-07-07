@@ -751,10 +751,11 @@ const form = reactive({
 });
 
 // ── Counts ────────────────────────────────────────────────────────────────────
+const isDelivered = (r) => r.status === "Delivered" || r.status === "Fully Delivered" || (r._source === "dn" && r.docstatus === 1);
 const counts = computed(() => ({
   draft:     list.value.filter(r => r.docstatus === 0).length,
-  toDeliver: list.value.filter(r => r.docstatus === 1 && r.status !== "Delivered" && r.status !== "Fully Delivered").length,
-  delivered: list.value.filter(r => r.status === "Delivered" || r.status === "Fully Delivered").length,
+  toDeliver: list.value.filter(r => r.docstatus === 1 && !isDelivered(r)).length,
+  delivered: list.value.filter(r => isDelivered(r)).length,
   cancelled: list.value.filter(r => r.docstatus === 2 || r.status === "Cancelled").length,
 }));
 const _dcYM  = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
@@ -763,8 +764,8 @@ const _dcTr  = (a,b) => { if(!b&&!a) return {pct:0,up:true}; if(!b) return {pct:
 const dcThisMonth = computed(()=>list.value.filter(r=>(r.posting_date||'').startsWith(_dcYM())).length);
 const dcTrends = computed(()=>({
   total:     _dcTr(dcThisMonth.value, list.value.filter(r=>(r.posting_date||'').startsWith(_dcLYM())).length),
-  deliver:   _dcTr(counts.value.toDeliver, list.value.filter(r=>(r.posting_date||'').startsWith(_dcLYM())&&r.docstatus===1&&r.status!=="Delivered"&&r.status!=="Fully Delivered").length),
-  delivered: _dcTr(counts.value.delivered, list.value.filter(r=>(r.posting_date||'').startsWith(_dcLYM())&&(r.status==="Delivered"||r.status==="Fully Delivered")).length),
+  deliver:   _dcTr(counts.value.toDeliver, list.value.filter(r=>(r.posting_date||'').startsWith(_dcLYM())&&r.docstatus===1&&!isDelivered(r)).length),
+  delivered: _dcTr(counts.value.delivered, list.value.filter(r=>(r.posting_date||'').startsWith(_dcLYM())&&isDelivered(r)).length),
 }));
 
 const tabCounts = computed(() => ({
@@ -779,6 +780,11 @@ function statusLabel(r) {
   if (r.docstatus === 2 || r.status === "Cancelled") return "Cancelled";
   if (r.status === "Delivered" || r.status === "Fully Delivered") return "Delivered";
   if (r.status === "Partially Delivered") return "Partial";
+  // A real Delivery Note (_source==='dn') that is submitted IS the delivery —
+  // its own status field is a lifecycle state ("Submitted"), not a delivery-
+  // progress state, so treat submitted real DNs as Delivered rather than
+  // falling through to the derived-SO "To Deliver" label.
+  if (r._source === "dn" && r.docstatus === 1) return "Delivered";
   if (r.docstatus === 1) return "To Deliver";
   return "Draft";
 }
@@ -786,12 +792,14 @@ function statusClass(r) {
   if (r.docstatus === 2 || r.status === "Cancelled") return "b-badge-muted";
   if (r.status === "Delivered" || r.status === "Fully Delivered") return "b-badge-green";
   if (r.status === "Partially Delivered") return "b-badge-yellow";
+  if (r._source === "dn" && r.docstatus === 1) return "b-badge-green";
   if (r.docstatus === 1) return "b-badge-blue";
   return "b-badge-orange";
 }
 function dcHeadClass(r) {
   if (r.docstatus === 2 || r.status === "Cancelled") return "cancelled";
   if (r.status === "Delivered" || r.status === "Fully Delivered") return "delivered";
+  if (r._source === "dn" && r.docstatus === 1) return "delivered";
   return "";
 }
 function canEdit(r) {
@@ -872,8 +880,8 @@ async function load() {
 const filtered = computed(() => {
   let r = list.value;
   if (tab.value === "draft")     r = r.filter(x => x.docstatus === 0);
-  else if (tab.value === "toDeliver") r = r.filter(x => x.docstatus === 1 && x.status !== "Delivered" && x.status !== "Fully Delivered");
-  else if (tab.value === "delivered") r = r.filter(x => x.status === "Delivered" || x.status === "Fully Delivered");
+  else if (tab.value === "toDeliver") r = r.filter(x => x.docstatus === 1 && !isDelivered(x));
+  else if (tab.value === "delivered") r = r.filter(x => isDelivered(x));
   else if (tab.value === "cancelled") r = r.filter(x => x.docstatus === 2 || x.status === "Cancelled");
   if (search.value.trim()) {
     const q = search.value.toLowerCase();
@@ -1181,7 +1189,14 @@ async function fetchItems(q = "") {
 
 async function fetchSalesOrders(q = "") {
   try {
-    const f = [];
+    const company = await resolveCompany();
+    const f = [
+      ["company", "=", company],
+      ["docstatus", "=", 1],
+      // Only SOs that still have something left to deliver — excludes
+      // Delivered / Invoiced / Closed / Cancelled / draft Sales Orders.
+      ["status", "in", ["To Deliver", "Partially Delivered", "Submitted"]],
+    ];
     if (form.customer) f.push(["customer", "=", form.customer]);
     if (q) f.push(["name", "like", "%" + q + "%"]);
     const r = await apiList("Sales Order", {

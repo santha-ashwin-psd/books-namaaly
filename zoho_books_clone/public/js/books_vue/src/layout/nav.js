@@ -28,7 +28,7 @@ export const NAV = [
   { path: "/purchase-orders",               label: "Purchase Orders",  icon: "purchase",   module: "bills"      },
   { path: "/purchases",                     label: "Bills",            icon: "fileplus",   module: "bills"      },
   { path: "/recurring-bills",               label: "Recurring Bills",  icon: "recurring",  module: "bills"      },
-  // { path: "/purchase-receipts",             label: "Purchase Receipts",icon: "purchase",   module: "bills"      },
+  { path: "/purchase-receipts",             label: "Purchase Receipts",icon: "purchase",   module: "bills"      },
   { path: "/payments",                      label: "Payments Made",    icon: "payment",    module: "payments"   },
   { path: "/debit-notes",                   label: "Debit Notes",      icon: "creditnote", module: "bills"      },
 
@@ -68,6 +68,7 @@ export const NAV = [
   // { section: "Quality" },
   // { path: "/quality/inspections",           label: "Inspections",      icon: "shield",     module: "inventory"  },
   // { path: "/quality/templates",             label: "QC Templates",     icon: "file",       module: "inventory"  },
+  // { path: "/quality/approvals",             label: "QC Approvals",     icon: "check",      module: "inventory"  },
 
   { section: "GST/Taxes" },
   { path: "/gst/tax-templates",             label: "Tax Templates",    icon: "percent",    module: "taxes"      },

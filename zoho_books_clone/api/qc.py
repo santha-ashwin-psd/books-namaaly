@@ -17,6 +17,7 @@ Endpoints:
   GET  get_items_requiring_qc(reference_type, reference_name)
   GET  list_inspections(filters_json)
   GET  get_qc_dashboard_stats(company)
+  GET  generate_coa(inspection_name)         -- render Certificate of Analysis HTML
 """
 
 import json
@@ -129,13 +130,30 @@ def get_templates(inspection_type: str = None, item_code: str = None) -> list:
         filters["inspection_type"] = ["in", [inspection_type, "All", ""]]
     if item_code:
         filters["item"] = item_code
-    return frappe.get_all(
+    templates = frappe.get_all(
         "QC Inspection Template",
         filters=filters,
         fields=["name", "template_name", "item", "item_group", "inspection_type", "description"],
         order_by="template_name asc",
         ignore_permissions=True,
     )
+    # Attach parameter count for each template
+    if templates:
+        names = [t["name"] for t in templates]
+        counts = frappe.db.sql(
+            """
+            SELECT parent, COUNT(*) AS cnt
+            FROM `tabQC Inspection Template Parameter`
+            WHERE parent IN %(names)s
+            GROUP BY parent
+            """,
+            {"names": names},
+            as_dict=True,
+        )
+        count_map = {row["parent"]: row["cnt"] for row in counts}
+        for t in templates:
+            t["parameter_count"] = count_map.get(t["name"], 0)
+    return templates
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -394,4 +412,135 @@ def get_qc_dashboard_stats(company: str = None) -> dict:
         "trend":        trend,
         "top_failed":   top_failed,
         "breakdown":    breakdown,
+    }
+
+
+# ─── Certificate of Analysis (COA) ────────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def generate_coa(inspection_name: str) -> dict:
+    """
+    Render the Certificate of Analysis HTML for a submitted QC Inspection.
+    Returns dict: {"html": "<html>...", "inspection_name": ..., "status": ...}
+
+    QC Inspection field → COA section mapping
+    ------------------------------------------
+    name                → coa_number (document identifier)
+    status              → status banner + watermark
+    item                → Product/Item Details → item_code
+    item_name           → Product/Item Details → item_name
+    reference_type      → Reference Document → reference_type
+    reference_name      → Reference Document → reference_name
+    inspection_type     → Reference Document → inspection_type
+    qc_inspection_template → Reference Document → template_used
+    batch_no            → Product/Item Details → batch_no
+    work_order          → Product/Item Details → work_order
+    inspection_date     → Inspection Details → inspection_date
+    inspected_by        → Inspection Details → inspected_by
+    verified_by         → Inspection Details → verified_by (optional 2nd sign-off)
+    readings[].template_parameter → Test Parameters table → parameter
+    readings[].parameter_type     → type column
+    readings[].min_value / max_value / acceptance_criteria_value → specification
+    readings[].reading_value      → actual_value
+    readings[].status             → result (Accepted/Rejected/Pending)
+    readings[].remarks            → remarks column
+    total_readings, accepted_readings, rejected_readings → Summary strip
+    QC Approval Request.approval_status → Inspection Details → QC Approval
+    QC Approval Request.approved_by     → Signature block → QA Manager
+    QC Approval Request.approval_date   → Signature block → Date
+    remarks             → Remarks / Observations section
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("QC Inspection", inspection_name):
+        frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
+
+    doc = frappe.get_doc("QC Inspection", inspection_name)
+
+    # Company name
+    company_name = ""
+    try:
+        company_name = frappe.db.get_single_value("Global Defaults", "default_company") or ""
+    except Exception:
+        pass
+
+    # Approval info from QC Approval Request
+    from zoho_books_clone.api.qc_approval import get_approval_status_for_inspection
+    appr = get_approval_status_for_inspection(inspection_name)
+
+    # Item enrichment
+    dosage_form = ""
+    item_group  = ""
+    try:
+        dosage_form = frappe.db.get_value("Item", doc.item, "dosage_form") or ""
+        item_group  = frappe.db.get_value("Item", doc.item, "item_group") or ""
+    except Exception:
+        pass
+
+    # Build parameters list
+    parameters = []
+    for rd in (doc.readings or []):
+        if rd.parameter_type == "Numeric":
+            spec = f"{rd.min_value or ''} – {rd.max_value or ''}"
+        elif rd.parameter_type == "Non-Numeric":
+            spec = rd.acceptance_criteria_value or ""
+        else:
+            spec = rd.formula or ""
+
+        result = "Accepted" if rd.status == "Accepted" else ("Rejected" if rd.status == "Rejected" else "Pending")
+        parameters.append({
+            "parameter":    rd.template_parameter or "",
+            "type":         rd.parameter_type or "",
+            "specification": spec,
+            "actual_value": rd.reading_value or "",
+            "result":       result,
+            "remarks":      rd.remarks or "",
+        })
+
+    # Template context — must match every {{ variable }} in certificate_of_analysis.html
+    context = {
+        "coa_number":        doc.name,
+        "status":            doc.status,
+        "company_name":      company_name,
+        "generated_on":      frappe.utils.nowdate(),
+        "generated_by":      frappe.session.user,
+        # Product
+        "item_code":         doc.item,
+        "item_name":         doc.item_name or doc.item,
+        "dosage_form":       dosage_form,
+        "item_group":        item_group,
+        "batch_no":          getattr(doc, "batch_no", "") or "",
+        "work_order":        getattr(doc, "work_order", "") or "",
+        # Reference
+        "reference_type":    doc.reference_type,
+        "reference_name":    doc.reference_name,
+        "inspection_type":   doc.inspection_type,
+        "template_used":     doc.qc_inspection_template or "",
+        # Inspection
+        "inspection_date":   str(doc.inspection_date) if doc.inspection_date else "",
+        "inspected_by":      doc.inspected_by or "",
+        "verified_by":       doc.verified_by or "",
+        # Summary
+        "total_readings":    doc.total_readings or 0,
+        "accepted_readings": doc.accepted_readings or 0,
+        "rejected_readings": doc.rejected_readings or 0,
+        # Test parameters
+        "parameters":        parameters,
+        # Remarks
+        "remarks":           doc.remarks or "",
+        # Approval
+        "approval_status":   appr["approval_status"] or "N/A",
+        "approved_by":       appr["approved_by"] or "",
+        "approval_date":     appr["approval_date"] or "",
+    }
+
+    template_path = "zoho_books_clone/templates/print_formats/certificate_of_analysis.html"
+    html = frappe.render_template(template_path, context)
+
+    return {
+        "html":             html,
+        "inspection_name": inspection_name,
+        "status":          doc.status,
+        "coa_number":      doc.name,
     }

@@ -112,7 +112,14 @@
               <td>
                 <span class="qc-status-badge" :class="statusClass(r)">{{ r.status }}</span>
               </td>
-              <td @click.stop><button class="qc-act-btn" @click="openView(r)"><span v-html="icon('eye',13)"></span></button></td>
+              <td @click.stop style="white-space:nowrap">
+                <button class="qc-act-btn" @click="openEdit(r)" title="Edit" style="margin-right:2px">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="qc-act-btn" @click="openView(r)" title="View">
+                  <span v-html="icon('eye',13)"></span>
+                </button>
+              </td>
             </tr>
             <tr v-if="!sorted.length">
               <td colspan="9" class="qc-empty">
@@ -211,20 +218,32 @@
             <label class="qc-label">Reference Doc Type <span class="req">*</span></label>
             <select v-model="form.reference_type" class="qc-select-full">
               <option value="">Select…</option>
-              <option value="Purchase Receipt">Purchase Receipt</option>
-              <option value="Purchase Invoice">Purchase Invoice</option>
-              <option value="Delivery Note">Delivery Note</option>
-              <option value="Sales Invoice">Sales Invoice</option>
-              <option value="Stock Entry">Stock Entry</option>
+              <option v-for="rt in refTypeOptions" :key="rt" :value="rt">{{ rt }}</option>
             </select>
+            <span v-if="form.reference_type" style="font-size:11px;color:#6b7280;margin-top:2px">
+              Documents from <strong>{{ form.reference_type }}</strong> will be listed
+            </span>
           </div>
           <div class="qc-field">
             <label class="qc-label">Reference Document <span class="req">*</span></label>
-            <input v-model="form.reference_name" class="qc-input" placeholder="e.g. PREC-2026-00001" />
+            <SearchableSelect
+              v-model="form.reference_name"
+              :options="refDocs"
+              :placeholder="form.reference_type ? (refDocsLoading ? 'Loading…' : 'Search ' + form.reference_type + '…') : 'Select a Doc Type first…'"
+              :disabled="!form.reference_type"
+              value-key="value"
+              label-key="label"
+            />
           </div>
           <div class="qc-field">
             <label class="qc-label">Item <span class="req">*</span></label>
-            <input v-model="form.item" class="qc-input" placeholder="Item code…" />
+            <SearchableSelect
+              v-model="form.item"
+              :options="items"
+              :placeholder="itemsLoading ? 'Loading…' : 'Search item code…'"
+              value-key="value"
+              label-key="label"
+            />
           </div>
           <div class="qc-field">
             <label class="qc-label">Sample Size</label>
@@ -361,6 +380,20 @@
         </div>
         <div class="qc-dfooter">
           <button class="qc-btn-ghost" @click="viewOpen=false">Close</button>
+          <!-- Request Approval button: shown for any non-cancelled inspection -->
+          <button
+            v-if="viewDoc.docstatus !== 2"
+            class="qc-btn-approval"
+            :disabled="approvalSending"
+            @click="requestApproval(viewDoc.name)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+            {{ approvalSending ? 'Requesting…' : 'Request Approval' }}
+          </button>
+          <button v-if="viewDoc.docstatus===0" class="qc-btn-edit" @click="openEdit(viewDoc);viewOpen=false">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
           <button v-if="viewDoc.docstatus===0" class="qc-btn-save" :disabled="saving" @click="saveReadings">
             <span v-html="icon('save',13)"></span>{{ saving?'Saving…':'Save' }}
           </button>
@@ -371,15 +404,92 @@
       </template>
     </div>
 
+    <!-- ── Edit Drawer ── -->
+    <div v-if="editOpen" class="qc-overlay" @click.self="editOpen=false"></div>
+    <div class="qc-drawer" :class="{open:editOpen}">
+      <div class="qc-dheader" style="background:linear-gradient(135deg,#1e3a5f,#2563eb)">
+        <button class="qc-dclose" @click="editOpen=false"><span v-html="icon('x',16)"></span></button>
+        <div class="qc-dh-top">
+          <div class="qc-dh-ico">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <div>
+            <div class="qc-dh-title">Edit QC Inspection</div>
+            <div class="qc-dh-sub">{{ editForm._name }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="qc-dbody">
+        <div class="qc-fields-grid">
+          <div class="qc-field">
+            <label class="qc-label">Inspection Type <span class="req">*</span></label>
+            <select v-model="editForm.inspection_type" class="qc-select-full">
+              <option value="Incoming">Incoming — Purchasing goods</option>
+              <option value="Outgoing">Outgoing — Dispatching goods</option>
+              <option value="In Process">In Process — Manufacturing</option>
+            </select>
+          </div>
+          <div class="qc-field">
+            <label class="qc-label">Reference Doc Type <span class="req">*</span></label>
+            <select v-model="editForm.reference_type" class="qc-select-full">
+              <option value="">Select…</option>
+              <option v-for="rt in REF_TYPE_MAP[editForm.inspection_type] || refTypes" :key="rt" :value="rt">{{ rt }}</option>
+            </select>
+          </div>
+          <div class="qc-field">
+            <label class="qc-label">Reference Document <span class="req">*</span></label>
+            <SearchableSelect
+              v-model="editForm.reference_name"
+              :options="editRefDocs"
+              :placeholder="editForm.reference_type ? (editRefLoading ? 'Loading…' : 'Search ' + editForm.reference_type + '…') : 'Select a Doc Type first…'"
+              :disabled="!editForm.reference_type"
+              value-key="value"
+              label-key="label"
+            />
+          </div>
+          <div class="qc-field">
+            <label class="qc-label">Item <span class="req">*</span></label>
+            <SearchableSelect
+              v-model="editForm.item"
+              :options="items"
+              :placeholder="itemsLoading ? 'Loading…' : 'Search item code…'"
+              value-key="value"
+              label-key="label"
+            />
+          </div>
+          <div class="qc-field">
+            <label class="qc-label">Sample Size</label>
+            <input v-model.number="editForm.sample_size" type="number" min="0" step="0.001" class="qc-input" />
+          </div>
+          <div class="qc-field">
+            <label class="qc-label">Inspection Date <span class="req">*</span></label>
+            <input v-model="editForm.inspection_date" type="date" class="qc-input" />
+          </div>
+          <div class="qc-field" style="grid-column:1/-1">
+            <label class="qc-label">Remarks</label>
+            <textarea v-model="editForm.remarks" rows="2" class="qc-input" placeholder="Optional observations…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="qc-dfooter">
+        <button class="qc-btn-ghost" @click="editOpen=false">Cancel</button>
+        <button class="qc-btn-primary" :disabled="editSaving" @click="updateInspection">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          {{ editSaving ? 'Saving…' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
-import { apiCall } from "../api/client.js";
+import { ref, reactive, computed, watch, onMounted } from "vue";
+import { apiCall, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { fmtDate } from "../utils/format.js";
+import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
 
@@ -388,9 +498,12 @@ const list        = ref([]);
 const loading     = ref(false);
 const drawerOpen  = ref(false);
 const drawerSaving = ref(false);
+const editOpen    = ref(false);
+const editSaving  = ref(false);
 const viewOpen    = ref(false);
 const viewDoc     = ref(null);
 const viewLoading = ref(false);
+const approvalSending = ref(false);
 const saving      = ref(false);
 const isDirty     = ref(false);
 const search      = ref("");
@@ -404,7 +517,27 @@ const pageSize    = 40;
 const sortCol     = ref("inspection_date");
 const sortDir     = ref("desc");
 
-const refTypes = ["Purchase Receipt", "Purchase Invoice", "Delivery Note", "Sales Invoice", "Stock Entry"];
+// Edit form
+const editForm = reactive({
+  _name:          "",
+  inspection_type: "Incoming",
+  reference_type:  "",
+  reference_name:  "",
+  item:            "",
+  sample_size:     1,
+  inspection_date: "",
+  remarks:         "",
+});
+const editRefDocs  = ref([]);
+const editRefLoading = ref(false);
+
+const refTypes = ["Purchase Invoice", "Sales Invoice", "Stock Entry"];
+
+// ── Dropdown data ──────────────────────────────────────────────────
+const refDocs       = ref([]);   // Reference Document options
+const refDocsLoading = ref(false);
+const items         = ref([]);   // Item options
+const itemsLoading  = ref(false);
 
 const form = reactive({
   inspection_type: "Incoming",
@@ -414,6 +547,31 @@ const form = reactive({
   sample_size: 1,
   inspection_date: new Date().toISOString().slice(0, 10),
   remarks: "",
+});
+
+// ── Reference Doc Type options driven by Inspection Type ───────────────────────
+const REF_TYPE_MAP = {
+  "Incoming":   ["Purchase Invoice", "Sales Invoice"],
+  "Outgoing":   ["Sales Invoice", "Purchase Invoice"],
+  "In Process": ["Stock Entry", "Purchase Invoice", "Sales Invoice"],
+};
+
+const refTypeOptions = computed(() => {
+  return REF_TYPE_MAP[form.inspection_type] || ["Purchase Invoice", "Sales Invoice", "Stock Entry"];
+});
+
+// Reset ref type + docs when inspection_type changes
+watch(() => form.inspection_type, () => {
+  form.reference_type  = "";
+  form.reference_name  = "";
+  refDocs.value        = [];
+}, { immediate: true });
+
+// Fetch reference docs whenever reference_type changes
+watch(() => form.reference_type, (newType) => {
+  form.reference_name = "";
+  if (newType) fetchRefDocs("");
+  else refDocs.value = [];
 });
 
 // ── Type config ────────────────────────────────────────────────────────────────
@@ -588,6 +746,23 @@ async function submitInspection(name) {
   } finally { saving.value = false; }
 }
 
+async function requestApproval(inspectionName) {
+  if (!inspectionName) return;
+  approvalSending.value = true;
+  try {
+    await apiCall("zoho_books_clone.api.qc_approval.create_qc_approval_request", {
+      inspection_name: inspectionName,
+      reason: "",
+    });
+    toast.success(`Approval request created for ${inspectionName} — check Pending Approvals`);
+    viewOpen.value = false;
+  } catch (e) {
+    toast.error(e.message || "Failed to create approval request");
+  } finally {
+    approvalSending.value = false;
+  }
+}
+
 function openNew() {
   Object.assign(form, {
     inspection_type: "Incoming",
@@ -598,7 +773,86 @@ function openNew() {
     inspection_date: new Date().toISOString().slice(0, 10),
     remarks: "",
   });
+  refDocs.value = [];
+  // Pre-fetch items when drawer opens
+  fetchItems("");
   drawerOpen.value = true;
+}
+
+// ── Edit Inspection ────────────────────────────────────────────────────────────
+async function fetchEditRefDocs(q = "") {
+  if (!editForm.reference_type) { editRefDocs.value = []; return; }
+  editRefLoading.value = true;
+  try {
+    const LABEL_FIELD = {
+      "Purchase Invoice": "supplier",
+      "Sales Invoice":    "customer",
+      "Stock Entry":      "stock_entry_type",
+    };
+    const labelField = LABEL_FIELD[editForm.reference_type] || null;
+    const fields = labelField ? ["name", labelField] : ["name"];
+    const rows = await apiList(editForm.reference_type, {
+      fields,
+      filters: [["docstatus", "!=", 2], ...(q ? [["name", "like", `%${q}%`]] : [])],
+      limit: 50,
+      order: "modified desc",
+    });
+    editRefDocs.value = rows.map(r => ({
+      value: r.name,
+      label: labelField && r[labelField] ? `${r.name}  —  ${r[labelField]}` : r.name,
+    }));
+  } catch { editRefDocs.value = []; }
+  finally { editRefLoading.value = false; }
+}
+
+watch(() => editForm.reference_type, (newType) => {
+  editForm.reference_name = "";
+  if (newType) fetchEditRefDocs("");
+  else editRefDocs.value = [];
+});
+
+function openEdit(r) {
+  Object.assign(editForm, {
+    _name:           r.name || "",
+    inspection_type: r.inspection_type || "Incoming",
+    reference_type:  r.reference_type  || "",
+    reference_name:  r.reference_name  || "",
+    item:            r.item            || "",
+    sample_size:     r.sample_size     || 1,
+    inspection_date: r.inspection_date || new Date().toISOString().slice(0, 10),
+    remarks:         r.remarks         || "",
+  });
+  // Load current ref docs and items for dropdowns
+  fetchItems("");
+  if (r.reference_type) fetchEditRefDocs("");
+  editOpen.value = true;
+}
+
+async function updateInspection() {
+  const refName  = (editForm.reference_name || "").trim();
+  const itemCode = (editForm.item || "").trim();
+  if (!editForm.reference_type) return toast.error("Please select a Reference Doc Type.");
+  if (!refName)                 return toast.error("Reference Document is required.");
+  if (!itemCode)                return toast.error("Item is required.");
+
+  editSaving.value = true;
+  try {
+    await apiCall("zoho_books_clone.api.qc.update_qc_inspection", {
+      inspection_name:  editForm._name,
+      inspection_type:  editForm.inspection_type,
+      reference_type:   editForm.reference_type,
+      reference_name:   refName,
+      item_code:        itemCode,
+      sample_size:      editForm.sample_size || 1,
+      inspection_date:  editForm.inspection_date,
+      remarks:          editForm.remarks || "",
+    });
+    toast.success(`Inspection ${editForm._name} updated`);
+    editOpen.value = false;
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Failed to update inspection");
+  } finally { editSaving.value = false; }
 }
 
 async function saveInspection() {
@@ -641,6 +895,55 @@ async function saveInspection() {
   } catch (e) {
     toast.error(e.message || "Failed to create inspection");
   } finally { drawerSaving.value = false; }
+}
+
+// ── Dropdown fetchers ──────────────────────────────────────────────────
+// Fetch documents of the chosen Reference DocType (Purchase Invoice, etc.)
+async function fetchRefDocs(q = "") {
+  if (!form.reference_type) { refDocs.value = []; return; }
+  refDocsLoading.value = true;
+  try {
+    // Doctype-specific field mapping for a meaningful label
+    const LABEL_FIELD = {
+      "Purchase Invoice": "supplier",
+      "Sales Invoice":    "customer",
+      "Stock Entry":      "stock_entry_type",
+    };
+    const labelField = LABEL_FIELD[form.reference_type] || null;
+    const fields = labelField ? ["name", labelField] : ["name"];
+    const qFilter = q ? [["name", "like", `%${q}%`]] : [];
+    const rows = await apiList(form.reference_type, {
+      fields,
+      filters: [["docstatus", "!=", 2], ...qFilter],
+      limit: 50,
+      order: "modified desc",
+    });
+    refDocs.value = rows.map(r => ({
+      value: r.name,
+      label: labelField && r[labelField]
+        ? `${r.name}  —  ${r[labelField]}`
+        : r.name,
+    }));
+  } catch { refDocs.value = []; }
+  finally { refDocsLoading.value = false; }
+}
+
+// Fetch Items
+async function fetchItems(q = "") {
+  itemsLoading.value = true;
+  try {
+    const rows = await apiList("Item", {
+      fields:  ["name", "item_name"],
+      filters: [["disabled", "=", 0], ...(q ? [["name", "like", `%${q}%`]] : [])],
+      limit:   50,
+      order:   "item_name asc",
+    });
+    items.value = rows.map(r => ({
+      value: r.name,
+      label: r.item_name && r.item_name !== r.name ? `${r.name} — ${r.item_name}` : r.name,
+    }));
+  } catch { items.value = []; }
+  finally { itemsLoading.value = false; }
 }
 
 function exportCSV() {
@@ -698,6 +1001,10 @@ onMounted(load);
 .qc-btn-ghost:hover { background:#f9fafb; }
 .qc-btn-save { display:inline-flex; align-items:center; gap:6px; background:#f0fdf4; border:1px solid #16a34a; color:#16a34a; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
 .qc-btn-save:hover { background:#dcfce7; } .qc-btn-save:disabled { opacity:.5; cursor:not-allowed; }
+.qc-btn-edit { display:inline-flex; align-items:center; gap:6px; background:#fffbeb; border:1px solid #f59e0b; color:#b45309; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.qc-btn-edit:hover { background:#fef3c7; }
+.qc-btn-approval { display:inline-flex; align-items:center; gap:6px; background:#faf5ff; border:1px solid #7c3aed; color:#7c3aed; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.qc-btn-approval:hover { background:#ede9fe; } .qc-btn-approval:disabled { opacity:.5; cursor:not-allowed; }
 
 /* Table */
 .qc-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; overflow-x:auto; }

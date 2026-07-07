@@ -15,7 +15,6 @@ import InventoryVariants    from "./pages/InventoryVariants.vue";
 import InventoryItemGroups  from "./pages/InventoryItemGroups.vue";
 import InventoryWarehouses  from "./pages/InventoryWarehouses.vue";
 import InventoryBatches     from "./pages/InventoryBatches.vue";
-import InventoryVariants    from "./pages/InventoryVariants.vue";
 import InventorySettings    from "./pages/InventorySettings.vue";
 import OpeningStockBatchEntry from "./pages/OpeningStockBatchEntry.vue";
 import SettingsProfile       from "./pages/SettingsProfile.vue";
@@ -73,6 +72,7 @@ import ProformaInvoices       from "./pages/ProformaInvoices.vue";
 import PurchaseReceipts       from "./pages/PurchaseReceipts.vue";
 import QualityInspections     from "./pages/QualityInspections.vue";
 import QCTemplates            from "./pages/QCTemplates.vue";
+import QCApprovals            from "./pages/QCApprovals.vue";
 
 import { useToast } from "./composables/useToast.js";
 import { usePermissions } from "./composables/usePermissions.js";
@@ -234,12 +234,6 @@ const routes = [
   { path: "/inventory/reorder-alerts", name: "reorder-alerts",  component: ReorderAlerts,  meta: { module: "inventory" } },
   { path: "/inventory/price-lists",    name: "price-lists",     component: PriceLists,     meta: { module: "inventory" } },
   { path: "/inventory/batches",        name: "inventory-batches", component: InventoryBatches, meta: { module: "inventory" } },
-  {
-    path: "/inventory/items/:template/variants",
-    name: "inventory-variants",
-    component: InventoryVariants,
-    meta: { module: "inventory" },
-  },
   { path: "/gst/gstr1",    name: "gstr1",    component: GSTReturn1,  meta: { module: "accounts" } },
   { path: "/gst/gstr3b",   name: "gstr3b",   component: GSTReturn3B, meta: { module: "accounts" } },
   { path: "/gst/einvoice", name: "einvoice", component: EInvoice,    meta: { module: "invoices" } },
@@ -253,6 +247,7 @@ const routes = [
   // Quality
   { path: "/quality/inspections", name: "quality-inspections", component: QualityInspections, meta: { module: "inventory" } },
   { path: "/quality/templates",   name: "quality-templates",   component: QCTemplates,         meta: { module: "inventory" } },
+  { path: "/quality/approvals",   name: "quality-approvals",   component: QCApprovals,         meta: { module: "inventory" } },
   // Future phases append entries here.
   // Any unknown / wrong URL falls through to the dashboard instead of a 404.
   {

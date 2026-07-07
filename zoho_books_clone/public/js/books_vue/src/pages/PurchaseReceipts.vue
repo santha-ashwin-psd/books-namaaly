@@ -52,6 +52,9 @@
           </td>
           <td style="text-align:center">
             <button class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px" @click.stop="openView(r)"><span v-html="icon('eye',12)"></span></button>
+            <button v-if="canEdit(r)" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px" title="Edit draft" @click.stop="openEdit(r)"><span v-html="icon('edit',12)"></span></button>
+            <button v-if="r.source==='real' && r.docstatus===1" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px;color:#C92A2A" title="Cancel GRN" @click.stop="confirmCancel(r)"><span v-html="icon('x',12)"></span></button>
+            <button v-if="r.source==='real' && r.docstatus===0" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px;color:#C92A2A" title="Delete draft" @click.stop="confirmDelete(r)"><span v-html="icon('trash',12)"></span></button>
           </td>
         </tr>
       </tbody>
@@ -89,7 +92,7 @@
           <div v-if="(viewDoc.items||[]).length">
             <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Items Received</div>
             <table class="b-table" style="font-size:12px">
-              <thead><tr><th>Item</th><th class="ta-r">Qty</th><th class="ta-r">Accepted</th><th class="ta-r">Rejected</th><th>UOM</th></tr></thead>
+              <thead><tr><th>Item</th><th class="ta-r">Qty</th><th class="ta-r">Accepted</th><th class="ta-r">Rejected</th><th>UOM</th><th>Batch No</th></tr></thead>
               <tbody>
                 <tr v-for="it in viewDoc.items" :key="it.name||it.item_code">
                   <td>{{it.item_name||it.item_code}}</td>
@@ -97,6 +100,7 @@
                   <td class="ta-r mono" style="color:#2F9E44">{{it.accepted_qty||it.qty}}</td>
                   <td class="ta-r mono" style="color:#C92A2A">{{it.rejected_qty||0}}</td>
                   <td class="c-muted">{{it.uom||'Nos'}}</td>
+                  <td class="mono" style="font-size:11.5px;color:#2563eb">{{it.batch_no||'—'}}</td>
                 </tr>
               </tbody>
             </table>
@@ -104,6 +108,13 @@
         </div>
         <div style="padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end">
           <button class="b-btn b-btn-ghost" @click="viewOpen=false">Close</button>
+          <button v-if="canEdit(viewDoc)" class="b-btn b-btn-ghost" @click="openEdit(viewDoc); viewOpen=false">Edit</button>
+          <button v-if="viewDoc.docstatus===0 && viewDoc.source==='real'" class="b-btn b-btn-ghost" style="color:#C92A2A;border-color:#ffc9c9" @click="confirmDelete(viewDoc)" :disabled="deleting">
+            {{deleting ? 'Deleting…' : 'Delete Draft'}}
+          </button>
+          <button v-if="viewDoc.docstatus===1 && viewDoc.source==='real'" class="b-btn b-btn-ghost" style="color:#C92A2A;border-color:#ffc9c9" @click="confirmCancel(viewDoc)" :disabled="cancelling">
+            {{cancelling ? 'Cancelling…' : 'Cancel GRN'}}
+          </button>
           <button v-if="viewDoc.docstatus===0" class="b-btn b-btn-primary" @click="submitGRN" :disabled="submitting">
             {{submitting ? 'Submitting…' : 'Submit GRN'}}
           </button>
@@ -115,7 +126,7 @@
     <div v-if="newOpen" style="position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:40" @click.self="newOpen=false"></div>
     <div :style="'position:fixed;top:0;right:0;bottom:0;width:560px;background:#fff;border-left:1px solid #e5e7eb;z-index:50;display:flex;flex-direction:column;transition:transform .22s;transform:'+(newOpen?'translateX(0)':'translateX(100%)')">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:60px;border-bottom:1px solid #e5e7eb;flex-shrink:0">
-        <span style="font-size:15px;font-weight:700">New Purchase Receipt (GRN)</span>
+        <span style="font-size:15px;font-weight:700">{{editingName ? 'Edit Purchase Receipt (GRN)' : 'New Purchase Receipt (GRN)'}}</span>
         <button @click="newOpen=false" style="background:none;border:none;cursor:pointer;padding:4px" v-html="icon('x',16)"></button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:20px;display:grid;gap:14px;align-content:start">
@@ -133,7 +144,7 @@
             <label class="nim-label">Purchase Order #</label>
             <SearchableSelect v-model="form.purchase_order" :options="poOptions"
               placeholder="Select PO (filtered by supplier)…"
-              @search="fetchPOs" @open="fetchPOs('')" />
+              @search="fetchPOs" @open="fetchPOs('')" @select="onPOSelect" />
           </div>
           <div class="nim-field" style="grid-column:1/-1">
             <label class="nim-label">Warehouse</label>
@@ -153,12 +164,20 @@
               <span v-html="icon('plus',11)" style="vertical-align:-1px;margin-right:3px"></span> Add Item
             </button>
           </div>
-          <div v-for="(it,i) in form.items" :key="i" style="display:grid;grid-template-columns:2fr 70px 70px 60px 28px;gap:6px;margin-bottom:8px;align-items:center">
-            <SearchableSelect v-model="it.item_code" :options="itemOptions" placeholder="Search item…" @search="fetchItems" @select="opt => onItemSelect(it, opt)" style="font-size:12px"/>
-            <input class="nim-input" type="number" v-model="it.qty" placeholder="Qty" min="0.01" style="font-size:12px"/>
-            <input class="nim-input" type="number" v-model="it.accepted_qty" placeholder="Accept" min="0" style="font-size:12px"/>
-            <input class="nim-input" v-model="it.uom" placeholder="UOM" style="font-size:12px"/>
-            <button @click="removeItem(i)" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:2px" v-html="icon('trash',12)"></button>
+          <div v-for="(it,i) in form.items" :key="i" style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #F1F3F5">
+            <div style="display:grid;grid-template-columns:2fr 70px 70px 60px 28px;gap:6px;align-items:center">
+              <SearchableSelect v-model="it.item_code" :options="itemOptions" placeholder="Search item…" @search="fetchItems" @select="opt => onItemSelect(it, opt)" style="font-size:12px"/>
+              <input class="nim-input" type="number" v-model="it.qty" placeholder="Qty" min="0.01" style="font-size:12px"/>
+              <input class="nim-input" type="number" v-model="it.accepted_qty" placeholder="Accept" min="0" style="font-size:12px"/>
+              <input class="nim-input" v-model="it.uom" placeholder="UOM" style="font-size:12px"/>
+              <button @click="removeItem(i)" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:2px" v-html="icon('trash',12)"></button>
+            </div>
+            <div v-if="it.has_batch_no" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin-top:6px">
+              <SearchableSelect v-model="it.batch_no" :options="it.batchOptions" placeholder="Batch No — select existing or type to create new"
+                createable @search="q => fetchBatches(it, q)" @select="opt => onBatchSelect(it, opt)" @create="val => onBatchCreate(it, val)" style="font-size:12px"/>
+              <input class="nim-input" type="date" v-model="it.manufacturing_date" title="Manufacturing date" style="font-size:12px"/>
+              <input class="nim-input" type="date" v-model="it.expiry_date" title="Expiry date" style="font-size:12px"/>
+            </div>
           </div>
           <div v-if="!form.items.length" style="font-size:12px;color:#868E96;text-align:center;padding:10px;background:#F8F9FA;border-radius:6px">
             No items yet — click Add Item
@@ -167,7 +186,8 @@
       </div>
       <div style="padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end">
         <button class="b-btn b-btn-ghost" @click="newOpen=false">Cancel</button>
-        <button class="b-btn b-btn-primary" @click="saveGRN" :disabled="saving">{{saving?'Saving…':'Save GRN'}}</button>
+        <button class="b-btn b-btn-ghost" @click="saveGRN(false)" :disabled="saving">{{saving?'Saving…':(editingName?'Save Changes':'Save Draft')}}</button>
+        <button class="b-btn b-btn-primary" @click="saveGRN(true)" :disabled="saving">{{saving?'Saving…':'Save & Submit'}}</button>
       </div>
     </div>
   </Teleport>
@@ -176,15 +196,18 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
-import { apiList, apiGET, apiSave, apiSubmit, resolveCompany } from "../api/client.js";
+import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiDelete, apiCancel, resolveCompany } from "../api/client.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
+import { flt } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
+const { confirm } = useConfirm();
 
 const TABS = [{k:"all",l:"All"},{k:"0",l:"Draft"},{k:"1",l:"Submitted"},{k:"2",l:"Cancelled"}];
 const list      = ref([]);
@@ -196,6 +219,9 @@ const viewDoc   = ref(null);
 const newOpen   = ref(false);
 const saving    = ref(false);
 const submitting = ref(false);
+const deleting = ref(false);
+const cancelling = ref(false);
+const editingName = ref("");
 const supSugg   = ref([]);
 let supTimer    = null;
 const vendorOptions = ref([]);
@@ -215,13 +241,20 @@ const counts = computed(() => ({
 
 function statusLabel(r) {
   if (r.docstatus===2) return "Cancelled";
-  if (r.docstatus===1) return "Received";
-  return "Draft";
+  if (r.docstatus===0) return "Draft";
+  // docstatus===1: real submitted receipts read "Submitted"; legacy
+  // PO-derived rows carry their own Partially/Fully Received label.
+  if (r.status === "Partially Received" || r.status === "Fully Received") return r.status;
+  return "Received";
 }
 function statusClass(r) {
   if (r.docstatus===2) return "b-badge-muted";
-  if (r.docstatus===1) return "b-badge-green";
-  return "b-badge-orange";
+  if (r.docstatus===0) return "b-badge-orange";
+  if (r.status === "Partially Received") return "b-badge-orange";
+  return "b-badge-green";
+}
+function canEdit(r) {
+  return !!r && r.source === "real" && r.docstatus === 0;
 }
 
 async function load() {
@@ -231,10 +264,13 @@ async function load() {
     // from Purchase Order lines with received_qty > 0.
     const rows = await apiGET("zoho_books_clone.api.docs.get_purchase_receipt_list", { limit: 500 }) || [];
     const rawList = rows.map(r => ({
-      name: r.purchase_order,
+      // Real Purchase Receipts already have their own name from the backend —
+      // don't overwrite it with the linked PO's name, or multiple GRNs against
+      // the same PO collapse into one row / the wrong document gets opened.
+      name: r.name || r.purchase_order,
       supplier: r.supplier,
       supplier_name: r.supplier_name,
-      posting_date: r.expected_delivery_date || r.transaction_date,
+      posting_date: r.posting_date || r.expected_delivery_date || r.transaction_date,
       purchase_order: r.purchase_order,
       total_qty: r.qty_received,
       qty_ordered: r.qty_ordered,
@@ -242,8 +278,9 @@ async function load() {
       qty_billed: r.qty_billed,
       pct_received: r.pct_received,
       status: r.receipt_status,
-      docstatus: r.status === "Cancelled" ? 2 : 1,
+      docstatus: r.docstatus,
       grand_total: r.grand_total,
+      source: r.source || "derived",
     }));
     list.value = rawList;
     // Resolve missing supplier_name — backend may omit it
@@ -259,8 +296,8 @@ async function load() {
 
 const filtered = computed(() => {
   let r = list.value;
-  if (tab.value === "1")      r = r.filter(x => x.status === "Fully Received");
-  else if (tab.value === "0") r = r.filter(x => x.status === "Partially Received");
+  if (tab.value === "0")      r = r.filter(x => x.docstatus === 0);
+  else if (tab.value === "1") r = r.filter(x => x.docstatus === 1);
   else if (tab.value === "2") r = r.filter(x => x.docstatus === 2);
   if (search.value.trim()) {
     const q = search.value.toLowerCase();
@@ -277,8 +314,15 @@ const { page, pageSize, paged } = usePagination(sorted, { storageKey: "purchase-
 async function openView(r) {
   viewOpen.value = true;
   try {
-    const lines = await apiGET("zoho_books_clone.api.docs.get_purchase_receipt_lines", { purchase_order: r.name }) || [];
-    viewDoc.value = { ...r, items: lines };
+    if (r.source === "real") {
+      // Real Purchase Receipt document — show its own item rows directly.
+      const doc = await apiGet("Purchase Receipt", r.name);
+      viewDoc.value = { ...r, ...doc, items: doc?.items || [] };
+    } else {
+      // Legacy row derived from Purchase Order lines with no PR document.
+      const lines = await apiGET("zoho_books_clone.api.docs.get_purchase_receipt_lines", { purchase_order: r.purchase_order || r.name }) || [];
+      viewDoc.value = { ...r, items: lines };
+    }
   } catch (e) {
     console.warn("PR lines load failed:", e.message);
     viewDoc.value = r;
@@ -286,12 +330,13 @@ async function openView(r) {
 }
 
 async function submitGRN() {
-  // No standalone Purchase Receipt doctype in this build; receipts are tracked
-  // as `received_qty` on the Purchase Order lines. Point the user there.
   if (!viewDoc.value) return;
-  toast.info("Receipt status is managed on the Purchase Order — open " + viewDoc.value.name + " in Purchase Orders to mark additional qty received.");
-  return;
-  // eslint-disable-next-line no-unreachable
+  if (viewDoc.value.source !== "real") {
+    // Legacy rows are just a computed view of Purchase Order lines and have
+    // no Purchase Receipt document behind them to submit.
+    toast.info("This is a legacy record derived from Purchase Order lines — there's no receipt document to submit. Use New GRN to create one.");
+    return;
+  }
   submitting.value = true;
   try {
     await apiSubmit("Purchase Receipt", viewDoc.value.name);
@@ -302,14 +347,115 @@ async function submitGRN() {
   finally { submitting.value = false; }
 }
 
+async function confirmDelete(r) {
+  if (r.source !== "real" || r.docstatus !== 0) return; // safety: only real drafts are deletable
+  if (!(await confirm({
+    title: "Delete draft GRN?",
+    body: `Delete "${r.name}"? This cannot be undone.`,
+    okLabel: "Delete",
+  }))) return;
+  deleting.value = true;
+  try {
+    await apiDelete("Purchase Receipt", r.name);
+    toast.success("Draft GRN deleted");
+    viewOpen.value = false;
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Delete failed");
+  } finally {
+    deleting.value = false;
+  }
+}
+
+async function confirmCancel(r) {
+  if (r.source !== "real" || r.docstatus !== 1) return; // safety: only real submitted docs are cancellable
+  if (!(await confirm({
+    title: "Cancel GRN?",
+    body: `Cancel "${r.name}"? This reverses the stock receipt and PO received quantities.`,
+    okLabel: "Cancel GRN",
+  }))) return;
+  cancelling.value = true;
+  try {
+    await apiCancel("Purchase Receipt", r.name);
+    toast.success(`GRN ${r.name} cancelled`);
+    viewOpen.value = false;
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Cancel failed");
+  } finally {
+    cancelling.value = false;
+  }
+}
+
 function openNew() {
+  editingName.value = "";
   Object.assign(form, { supplier:"", posting_date: new Date().toISOString().slice(0,10), purchase_order:"", set_warehouse:"", remarks:"", items:[] });
   supSugg.value = [];
   addItem();
+  fetchVendors("");
+  fetchItems("");
+  fetchPOs("");
   newOpen.value = true;
 }
 
-function addItem() { form.items.push({ item_code:"", qty:1, accepted_qty:1, uom:"Nos" }); }
+async function openEdit(r) {
+  if (!canEdit(r)) return;
+  editingName.value = r.name;
+  Object.assign(form, { supplier:"", posting_date: new Date().toISOString().slice(0,10), purchase_order:"", set_warehouse:"", remarks:"", items:[] });
+  supSugg.value = [];
+  fetchVendors("");
+  fetchItems("");
+  fetchPOs("");
+  newOpen.value = true;
+  try {
+    const doc = await apiGet("Purchase Receipt", r.name);
+    if (!doc) return;
+    Object.assign(form, {
+      supplier:       doc.supplier || "",
+      supplier_name:  doc.supplier_name || "",
+      posting_date:   doc.posting_date || new Date().toISOString().slice(0,10),
+      purchase_order: doc.purchase_order || "",
+      set_warehouse:  doc.set_warehouse || "",
+      remarks:        doc.remarks || "",
+      items: [],
+    });
+    if (doc.purchase_order) fetchPOs("");
+    const items = doc.items || [];
+    const codes = [...new Set(items.map(it => it.item_code).filter(Boolean))];
+    let flagMap = {};
+    if (codes.length) {
+      try {
+        const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+        flagMap = Object.fromEntries(itemRows.map(x => [x.name, x.has_batch_no ? 1 : 0]));
+      } catch {}
+    }
+    form.items = items.map(it => ({
+      po_item:            it.po_item || null,
+      item_code:          it.item_code || "",
+      item_name:          it.item_name || it.item_code || "",
+      qty:                it.qty ?? 1,
+      accepted_qty:       it.accepted_qty ?? it.qty ?? 1,
+      uom:                it.uom || "Nos",
+      has_batch_no:       flagMap[it.item_code] || 0,
+      batch_no:           it.batch_no || "",
+      manufacturing_date: it.manufacturing_date || "",
+      expiry_date:        it.expiry_date || "",
+      batchOptions:       [],
+    }));
+    form.items.forEach(l => { if (l.has_batch_no) fetchBatches(l, ""); });
+    if (!form.items.length) addItem();
+  } catch (e) {
+    toast.error(e.message || "Failed to load GRN for editing");
+    newOpen.value = false;
+  }
+}
+
+function addItem() {
+  form.items.push({
+    item_code:"", qty:1, accepted_qty:1, uom:"Nos", po_item: null,
+    has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
+  });
+}
 function removeItem(i) { form.items.splice(i, 1); }
 
 async function fetchVendors(q = "") {
@@ -330,7 +476,14 @@ function onSupSelect(opt) {
 }
 async function fetchPOs(q = "") {
   try {
-    const filters = [["docstatus", "=", "[To Receive,Billed]"]]; // submitted POs only
+    const company = await resolveCompany();
+    const filters = [
+      ["company", "=", company],
+      ["docstatus", "=", 1],
+      // Only POs that still have something left to receive — excludes
+      // Received / Billed / Closed / Cancelled / draft Purchase Orders.
+      ["status", "in", ["To Receive", "Partially Received", "Submitted"]],
+    ];
     if (form.supplier) filters.push(["supplier", "=", form.supplier]);
     if (q) filters.push(["name", "like", `%${q}%`]);
     const rows = await apiList("Purchase Order", {
@@ -343,12 +496,47 @@ async function fetchPOs(q = "") {
     }));
   } catch { poOptions.value = []; }
 }
+
+// ── PO select: pull remaining-to-receive lines from the Purchase Order ───────
+async function onPOSelect(opt) {
+  const poName = opt?.value ?? opt;
+  form.purchase_order = poName;
+  if (!poName) return;
+  try {
+    const res = await apiGET("zoho_books_clone.api.docs.get_purchase_order_fulfillment", { purchase_order: poName });
+    const lines = (res?.lines || []).filter(it => flt(it.remaining_to_receive) > 0);
+    if (lines.length) {
+      form.items = lines.map(it => ({
+        po_item:      it.name,
+        item_code:    it.item_code,
+        item_name:    it.item_name || it.item_code,
+        qty:          flt(it.remaining_to_receive) || flt(it.qty) || 1,
+        accepted_qty: flt(it.remaining_to_receive) || flt(it.qty) || 1,
+        uom:          it.uom || "Nos",
+        has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
+      }));
+      // Resolve has_batch_no per item so the Batch No field shows up for
+      // batch-tracked items pulled in from the Purchase Order.
+      const codes = [...new Set(form.items.map(l => l.item_code).filter(Boolean))];
+      if (codes.length) {
+        try {
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+          const flagMap = Object.fromEntries(itemRows.map(r => [r.name, r.has_batch_no ? 1 : 0]));
+          form.items.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBatches(l, ""); });
+        } catch {}
+      }
+      toast.success(`Loaded ${lines.length} item(s) from ${poName}`);
+    } else {
+      toast.info(`${poName} has nothing left to receive`);
+    }
+  } catch {}
+}
 async function fetchItems(q = "") {
   try {
     const filters = [["disabled", "=", 0], ["has_variants", "=", 0]];
     if (q) filters.push(["item_name", "like", `%${q}%`]);
-    const rows = await apiList("Item", { fields: ["name", "item_name", "description", "stock_uom", "standard_rate", "standard_buying_rate"], filters, limit: 30, order: "item_name asc" });
-    itemOptions.value = rows.map(r => ({ label: r.item_name || r.name, value: r.name, description: r.description || "", uom: r.stock_uom || "Nos", rate: r.standard_buying_rate || r.standard_rate || 0 }));
+    const rows = await apiList("Item", { fields: ["name", "item_name", "description", "stock_uom", "standard_rate", "standard_buying_rate", "has_batch_no"], filters, limit: 30, order: "item_name asc" });
+    itemOptions.value = rows.map(r => ({ label: r.item_name || r.name, value: r.name, description: r.description || "", uom: r.stock_uom || "Nos", rate: r.standard_buying_rate || r.standard_rate || 0, has_batch_no: r.has_batch_no ? 1 : 0 }));
   } catch { itemOptions.value = []; }
 }
 function onItemSelect(line, opt) {
@@ -356,14 +544,94 @@ function onItemSelect(line, opt) {
   line.item_name    = opt?.label  || opt?.value || "";
   line.description  = opt?.description || "";
   line.uom          = opt?.uom   || line.uom || "Nos";
+  line.po_item      = null; // manually changing the item breaks the PO-line link
+  line.has_batch_no = opt?.has_batch_no ? 1 : 0;
+  line.batch_no     = "";
+  line.manufacturing_date = "";
+  line.expiry_date  = "";
+  line.batchOptions = [];
+  if (line.has_batch_no) fetchBatches(line, "");
 }
 
-async function saveGRN() {
+// ── Batch helpers (mirrors OpeningStockBatchEntry.vue) ────────────────────────
+async function fetchBatches(line, q = "") {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  const itemCode = line.item_code;
+  try {
+    const filters = [["item", "=", itemCode], ["disabled", "=", 0]];
+    if (q) filters.push(["name", "like", `%${q}%`]);
+    const rows = await apiList("Batch", { fields: ["name", "manufacturing_date", "expiry_date", "batch_qty"], filters, limit: 20 });
+    if (line.item_code !== itemCode) return; // item changed while awaiting
+    line.batchOptions = rows.map(b => ({
+      value: b.name,
+      label: (b.batch_qty !== undefined && b.batch_qty !== null) ? `${b.name} (Qty: ${b.batch_qty})` : b.name,
+      manufacturing_date: b.manufacturing_date || "",
+      expiry_date: b.expiry_date || "",
+    }));
+  } catch { if (line.item_code === itemCode) line.batchOptions = []; }
+}
+function onBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+  line.manufacturing_date = (opt && opt.manufacturing_date) || "";
+  line.expiry_date = (opt && opt.expiry_date) || "";
+}
+function onBatchCreate(line, val) { line.batch_no = val; }
+
+async function saveGRN(submit) {
   if (!form.supplier.trim()) { toast.error("Supplier is required"); return; }
-  if (!form.items.length || !form.items[0].item_code) { toast.error("Add at least one item"); return; }
+  const usable = form.items.filter(it => it.item_code.trim());
+  if (!usable.length) { toast.error("Add at least one item"); return; }
+
+  // Batch-tracked items must carry a Batch No before we let this go to the
+  // backend — otherwise the auto-generated Stock Entry (Material Receipt)
+  // fails its own "Batch No is required" check on submit.
+  for (const [idx, it] of usable.entries()) {
+    if (it.has_batch_no && !it.batch_no) {
+      toast.error(`Row ${idx + 1}: ${it.item_name || it.item_code} is batch-tracked — Batch No is required`);
+      return;
+    }
+  }
+  const batchOwners = new Map();
+  for (const [idx, it] of usable.entries()) {
+    if (!it.has_batch_no || !it.batch_no) continue;
+    if (batchOwners.has(it.batch_no) && batchOwners.get(it.batch_no) !== it.item_code) {
+      toast.error(`Row ${idx + 1}: Batch "${it.batch_no}" is already used for a different item in this GRN.`);
+      return;
+    }
+    batchOwners.set(it.batch_no, it.item_code);
+    const existing = await apiList("Batch", { fields: ["name", "disabled", "item"], filters: [["name", "=", it.batch_no]], limit: 1 }).catch(() => []);
+    if (existing.length && existing[0].disabled) {
+      toast.error(`Row ${idx + 1}: Batch "${it.batch_no}" is disabled and can't be used.`);
+      return;
+    }
+    if (existing.length && existing[0].item && existing[0].item !== it.item_code) {
+      toast.error(`Row ${idx + 1}: Batch "${it.batch_no}" already exists for item "${existing[0].item}", not "${it.item_code}".`);
+      return;
+    }
+  }
+
   saving.value = true;
   try {
     const company = await resolveCompany();
+
+    // Pre-create Batch records for batch-tracked lines so the auto-generated
+    // Stock Entry can resolve batch_no as a valid Link on submit.
+    for (const it of usable) {
+      if (!it.has_batch_no || !it.batch_no) continue;
+      const exists = await apiList("Batch", { fields: ["name"], filters: [["name", "=", it.batch_no]], limit: 1 });
+      if (!exists.length) {
+        await apiSave({
+          doctype: "Batch",
+          batch_no: it.batch_no,
+          item: it.item_code,
+          warehouse: form.set_warehouse || null,
+          manufacturing_date: it.manufacturing_date || null,
+          expiry_date: it.expiry_date || null,
+          batch_qty: 0,
+        });
+      }
+    }
+
     const doc = {
       doctype: "Purchase Receipt",
       supplier: form.supplier,
@@ -372,7 +640,7 @@ async function saveGRN() {
       purchase_order: form.purchase_order || null,
       set_warehouse: form.set_warehouse || null,
       remarks: form.remarks || "",
-      items: form.items.filter(it => it.item_code.trim()).map(it => ({
+      items: usable.map(it => ({
         doctype: "Purchase Receipt Item",
         item_code: it.item_code,
         item_name: it.item_name || it.item_code,
@@ -384,10 +652,16 @@ async function saveGRN() {
         conversion_factor: 1,
         received_qty: parseFloat(it.qty) || 1,
         rate: 0,
+        po_item: it.po_item || undefined,
+        batch_no: it.has_batch_no ? (it.batch_no || null) : null,
+        manufacturing_date: it.has_batch_no ? (it.manufacturing_date || null) : null,
+        expiry_date: it.has_batch_no ? (it.expiry_date || null) : null,
       })),
     };
+    if (editingName.value) doc.name = editingName.value;
     const saved = await apiSave(doc);
-    toast.success(`GRN ${saved.name} saved`);
+    if (submit && saved?.name) await apiSubmit("Purchase Receipt", saved.name);
+    toast.success(`GRN ${saved?.name || ""} ${submit ? "submitted" : "saved"}`);
     newOpen.value = false;
     await load();
   } catch (e) { toast.error(e.message || "Failed to save GRN"); }

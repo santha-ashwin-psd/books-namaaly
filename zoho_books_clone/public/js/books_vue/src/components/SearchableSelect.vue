@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
 import IconSvg from "./IconSvg.vue";
 import { useQuickCreate } from "../composables/useQuickCreate.js";
 
@@ -71,7 +71,7 @@ const props = defineProps({
   createDoctype: { type: String,  default: "" },
   createLabel:   { type: String,  default: "" },
 });
-const emit = defineEmits(["update:modelValue", "select", "create"]);
+const emit = defineEmits(["update:modelValue", "select", "create", "search"]);
 
 // Field configs for built-in quick-create. Mirrors books.js:389-409.
 const SS_CREATE_FIELDS = {
@@ -168,11 +168,18 @@ function calcDropStyle() {
   };
 }
 
+let _searchDebounce = null;
+watch(q, (val) => {
+  clearTimeout(_searchDebounce);
+  _searchDebounce = setTimeout(() => emit("search", val), 200);
+});
+
 function openDD() {
   if (props.disabled) return;
   calcDropStyle();
   open.value = true;
   q.value = "";
+  emit("search", "");
   nextTick(() => inputEl.value && inputEl.value.focus());
 }
 

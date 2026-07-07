@@ -95,7 +95,7 @@
           <th @click="sort('item')" class="sortable">Item <span v-html="sortArrow('item')"></span></th>
           <th>Item Group</th>
           <th @click="sort('inspection_type')" class="sortable">Inspection Type <span v-html="sortArrow('inspection_type')"></span></th>
-          <th class="ta-r">Parameters</th>
+          <th class="ta-c" style="width:110px">Parameters</th>
           <th>Description</th>
           <th style="width:80px"></th>
         </tr></thead>
@@ -122,13 +122,16 @@
               </td>
               <td style="font-size:12px;color:#6b7280">{{ t.item_group || '—' }}</td>
               <td><span class="qct-type-badge" :style="typeStyle(t.inspection_type)">{{ t.inspection_type || 'All' }}</span></td>
-              <td class="ta-r">
-                <span class="qct-param-count">{{ t.parameter_count || '—' }}</span>
+              <td class="ta-c">
+                <span class="qct-param-count">{{ t.parameter_count ?? '—' }}</span>
               </td>
               <td style="font-size:12px;color:#6b7280;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 {{ t.description || '—' }}
               </td>
               <td @click.stop style="display:flex;gap:6px;padding:10px 8px">
+                <button class="qct-act-btn" @click="openEdit(t)" title="Edit">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
                 <button class="qct-act-btn" @click="openView(t)" title="View">
                   <span v-html="icon('eye', 13)"></span>
                 </button>
@@ -189,12 +192,20 @@
           <span v-else class="qct-generic-badge">Generic</span>
           <span v-if="t.item_group" class="qct-mob-group">{{ t.item_group }}</span>
         </div>
+        <!-- parameters count row -->
+        <div class="qct-mob-params-row">
+          <span class="qct-mob-params-lbl">Parameters</span>
+          <span class="qct-param-count">{{ t.parameter_count ?? 0 }}</span>
+        </div>
         <!-- description -->
         <div v-if="t.description" class="qct-mob-desc">{{ t.description }}</div>
         <!-- footer actions -->
         <div class="qct-mob-footer" @click.stop>
           <span class="qct-mob-footer-hint">Tap to view details</span>
           <div style="display:flex;gap:6px">
+            <button class="qct-act-btn" @click.stop="openEdit(t)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <button class="qct-act-btn" @click.stop="openView(t)"><span v-html="icon('eye', 13)"></span></button>
             <button class="qct-act-btn qct-act-del" @click.stop="deleteTemplate(t)"><span v-html="icon('trash', 13)"></span></button>
           </div>
@@ -239,12 +250,30 @@
             <input v-model="form.template_name" class="qct-input" placeholder="e.g. Incoming Raw Material Check" />
           </div>
           <div class="qct-field">
-            <label class="qct-label">Item (Optional)</label>
-            <input v-model="form.item" class="qct-input" placeholder="Item code — leave blank for generic" />
+            <label class="qct-label">Item <span style="font-weight:400;color:#9ca3af">(Optional)</span></label>
+            <SearchableSelect
+              v-model="form.item"
+              :options="items"
+              placeholder="Search item code…"
+              value-key="value"
+              label-key="label"
+            />
+            <span v-if="form.item" style="font-size:11px;color:#6b7280;margin-top:2px">
+              Template will apply only to this item
+            </span>
           </div>
           <div class="qct-field">
-            <label class="qct-label">Item Group (Optional)</label>
-            <input v-model="form.item_group" class="qct-input" placeholder="e.g. Raw Materials" />
+            <label class="qct-label">Item Group <span style="font-weight:400;color:#9ca3af">(Optional)</span></label>
+            <SearchableSelect
+              v-model="form.item_group"
+              :options="itemGroups"
+              placeholder="Search item group…"
+              value-key="value"
+              label-key="label"
+            />
+            <span v-if="form.item_group" style="font-size:11px;color:#6b7280;margin-top:2px">
+              Template will apply to all items in this group
+            </span>
           </div>
           <div class="qct-field" style="grid-column:1/-1">
             <label class="qct-label">Applicable Inspection Type</label>
@@ -276,14 +305,14 @@
           <div class="qct-param-header">
             <span class="qct-param-num">{{ i + 1 }}</span>
             <span style="font-size:12.5px;font-weight:600;color:#374151;flex:1">
-              {{ p.parameter_name || 'New Parameter' }}
+              {{ p.parameter || 'New Parameter' }}
             </span>
             <button class="qct-param-del" @click="removeParam(i)"><span v-html="icon('x', 12)"></span></button>
           </div>
           <div class="qct-param-fields">
             <div class="qct-field">
               <label class="qct-label">Parameter Name <span class="req">*</span></label>
-              <input v-model="p.parameter_name" class="qct-input qct-input-sm" placeholder="e.g. Moisture Content" />
+              <input v-model="p.parameter" class="qct-input qct-input-sm" placeholder="e.g. Moisture Content" />
             </div>
             <div class="qct-field">
               <label class="qct-label">Type</label>
@@ -390,7 +419,7 @@
               <tbody>
                 <tr v-for="(p, i) in viewDoc.parameters" :key="p.name || i">
                   <td style="color:#9ca3af;font-size:11px;font-weight:700;width:28px">{{ i + 1 }}</td>
-                  <td style="font-weight:600;font-size:13px">{{ p.parameter_name }}</td>
+                  <td style="font-weight:600;font-size:13px">{{ p.parameter }}</td>
                   <td><span class="qct-type-mini" :style="paramTypeStyle(p.parameter_type)">{{ p.parameter_type }}</span></td>
                   <td style="font-size:12px;color:#374151">
                     <template v-if="p.parameter_type === 'Numeric'">
@@ -412,6 +441,10 @@
         </div>
         <div class="qct-dfooter">
           <button class="qct-btn-ghost" @click="viewOpen=false">Close</button>
+          <button class="qct-btn-edit" @click="openEdit(viewDoc); viewOpen=false">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
           <button class="qct-act-btn qct-act-del" style="padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px" @click="deleteTemplate(viewDoc)">
             <span v-html="icon('trash', 13)"></span> Delete
           </button>
@@ -419,14 +452,138 @@
       </template>
     </div>
 
+    <!-- ── Edit Drawer ── -->
+    <div v-if="editOpen" class="qct-overlay" @click.self="editOpen=false"></div>
+    <div class="qct-drawer" :class="{open: editOpen}">
+      <div class="qct-dheader" style="background:linear-gradient(135deg,#1e3a5f,#2563eb)">
+        <button class="qct-dclose" @click="editOpen=false"><span v-html="icon('x', 16)"></span></button>
+        <div class="qct-dh-top">
+          <div class="qct-dh-ico">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <div>
+            <div class="qct-dh-title">Edit QC Template</div>
+            <div class="qct-dh-sub">{{ editForm._name }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="qct-dbody">
+        <div class="qct-section-lbl">Basic Information</div>
+        <div class="qct-fields-grid">
+          <div class="qct-field" style="grid-column:1/-1">
+            <label class="qct-label">Template Name <span class="req">*</span></label>
+            <input v-model="editForm.template_name" class="qct-input" placeholder="e.g. Incoming Raw Material Check" />
+          </div>
+          <div class="qct-field">
+            <label class="qct-label">Item <span style="font-weight:400;color:#9ca3af">(Optional)</span></label>
+            <SearchableSelect
+              v-model="editForm.item"
+              :options="items"
+              placeholder="Search item code…"
+              value-key="value"
+              label-key="label"
+            />
+          </div>
+          <div class="qct-field">
+            <label class="qct-label">Item Group <span style="font-weight:400;color:#9ca3af">(Optional)</span></label>
+            <SearchableSelect
+              v-model="editForm.item_group"
+              :options="itemGroups"
+              placeholder="Search item group…"
+              value-key="value"
+              label-key="label"
+            />
+          </div>
+          <div class="qct-field" style="grid-column:1/-1">
+            <label class="qct-label">Applicable Inspection Type</label>
+            <select v-model="editForm.inspection_type" class="qct-select-full">
+              <option value="All">All — applicable for any inspection</option>
+              <option value="Incoming">Incoming — purchasing goods</option>
+              <option value="Outgoing">Outgoing — dispatching goods</option>
+              <option value="In Process">In Process — manufacturing</option>
+            </select>
+          </div>
+          <div class="qct-field" style="grid-column:1/-1">
+            <label class="qct-label">Description</label>
+            <textarea v-model="editForm.description" rows="2" class="qct-input" placeholder="Optional notes about this template…"></textarea>
+          </div>
+        </div>
+
+        <div class="qct-section-lbl" style="margin-top:4px">
+          Inspection Parameters
+          <button class="qct-add-param-btn" @click="addEditParam">
+            <span v-html="icon('plus', 11)"></span> Add Parameter
+          </button>
+        </div>
+
+        <div v-if="editForm.parameters.length === 0" class="qct-param-empty">
+          No parameters yet — click "Add Parameter" to define what inspectors should check
+        </div>
+
+        <div v-for="(p, i) in editForm.parameters" :key="i" class="qct-param-card">
+          <div class="qct-param-header">
+            <span class="qct-param-num">{{ i + 1 }}</span>
+            <span style="font-size:12.5px;font-weight:600;color:#374151;flex:1">
+              {{ p.parameter || 'New Parameter' }}
+            </span>
+            <button class="qct-param-del" @click="removeEditParam(i)"><span v-html="icon('x', 12)"></span></button>
+          </div>
+          <div class="qct-param-fields">
+            <div class="qct-field">
+              <label class="qct-label">Parameter Name <span class="req">*</span></label>
+              <input v-model="p.parameter" class="qct-input qct-input-sm" placeholder="e.g. Moisture Content" />
+            </div>
+            <div class="qct-field">
+              <label class="qct-label">Type</label>
+              <select v-model="p.parameter_type" class="qct-select-full qct-input-sm">
+                <option value="Numeric">Numeric (min/max range)</option>
+                <option value="Non-Numeric">Non-Numeric (expected value)</option>
+                <option value="Formula">Formula</option>
+              </select>
+            </div>
+            <template v-if="p.parameter_type === 'Numeric'">
+              <div class="qct-field">
+                <label class="qct-label">Min Value</label>
+                <input v-model.number="p.min_value" type="number" step="any" class="qct-input qct-input-sm" placeholder="0" />
+              </div>
+              <div class="qct-field">
+                <label class="qct-label">Max Value</label>
+                <input v-model.number="p.max_value" type="number" step="any" class="qct-input qct-input-sm" placeholder="100" />
+              </div>
+            </template>
+            <template v-else-if="p.parameter_type === 'Non-Numeric'">
+              <div class="qct-field" style="grid-column:1/-1">
+                <label class="qct-label">Acceptance Criteria Value</label>
+                <input v-model="p.acceptance_criteria_value" class="qct-input qct-input-sm" placeholder="e.g. No visible defects" />
+              </div>
+            </template>
+            <template v-else>
+              <div class="qct-field" style="grid-column:1/-1">
+                <label class="qct-label">Formula</label>
+                <input v-model="p.formula" class="qct-input qct-input-sm" placeholder="e.g. (reading_1 + reading_2) / 2 < 5" />
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="qct-dfooter">
+        <button class="qct-btn-ghost" @click="editOpen=false">Cancel</button>
+        <button class="qct-btn-primary" :disabled="editSaving" @click="updateTemplate">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          {{ editSaving ? 'Saving…' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
-import { apiCall } from "../api/client.js";
+import { apiCall, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
+import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
 
@@ -437,6 +594,8 @@ const createOpen  = ref(false);
 const viewOpen    = ref(false);
 const viewDoc     = ref(null);
 const viewLoading = ref(false);
+const editOpen    = ref(false);
+const editSaving  = ref(false);
 const saving      = ref(false);
 const search      = ref("");
 const filterType  = ref("");
@@ -446,7 +605,21 @@ const pageSize    = 40;
 const sortCol     = ref("template_name");
 const sortDir     = ref("asc");
 
+// ── Dropdown data ──────────────────────────────────────────────────────────────
+const items      = ref([]);
+const itemGroups = ref([]);
+
 const form = reactive({
+  template_name:  "",
+  item:           "",
+  item_group:     "",
+  inspection_type: "All",
+  description:    "",
+  parameters:     [],
+});
+
+const editForm = reactive({
+  _name:          "",
   template_name:  "",
   item:           "",
   item_group:     "",
@@ -555,18 +728,46 @@ function openCreate() {
     description:    "",
     parameters:     [],
   });
+  // Load dropdowns when drawer opens
+  fetchItems("");
+  fetchItemGroups("");
   createOpen.value = true;
 }
 
 function addParam() {
   form.parameters.push({
-    parameter_name:           "",
+    parameter:                 "",
     parameter_type:           "Numeric",
     min_value:                null,
     max_value:                null,
     acceptance_criteria_value: "",
     formula:                  "",
   });
+}
+
+// ── Dropdown fetchers ──────────────────────────────────────────────────────────
+async function fetchItems(q = "") {
+  try {
+    const rows = await apiList("Item", {
+      fields:  ["name", "item_name"],
+      filters: [["disabled", "=", 0], ...(q ? [["name", "like", `%${q}%`]] : [])],
+      limit:   50,
+      order:   "item_name asc",
+    });
+    items.value = rows.map(r => ({ value: r.name, label: r.item_name ? `${r.name} — ${r.item_name}` : r.name }));
+  } catch { items.value = []; }
+}
+
+async function fetchItemGroups(q = "") {
+  try {
+    const rows = await apiList("Item Group", {
+      fields:  ["name"],
+      filters: [["is_group", "=", 0], ...(q ? [["name", "like", `%${q}%`]] : [])],
+      limit:   50,
+      order:   "name asc",
+    });
+    itemGroups.value = rows.map(r => ({ value: r.name, label: r.name }));
+  } catch { itemGroups.value = []; }
 }
 
 function removeParam(i) {
@@ -590,7 +791,7 @@ async function saveTemplate() {
         parameters: form.parameters.map((p, i) => ({
           doctype:                  "QC Inspection Template Parameter",
           idx:                      i + 1,
-          parameter_name:           p.parameter_name,
+          parameter:                 p.parameter,
           parameter_type:           p.parameter_type,
           min_value:                p.parameter_type === "Numeric"     ? (p.min_value ?? null) : null,
           max_value:                p.parameter_type === "Numeric"     ? (p.max_value ?? null) : null,
@@ -619,6 +820,107 @@ async function deleteTemplate(t) {
     await load();
   } catch (e) {
     toast.error(e.message || "Failed to delete template");
+  }
+}
+
+// ── Edit Template ──────────────────────────────────────────────────────────────
+async function openEdit(t) {
+  // Fetch full detail first so we have all parameters
+  let detail = { ...t };
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.get_template_detail", { template_name: t.name || t.template_name });
+    if (res?.message) detail = res.message;
+    else if (res)     detail = res;
+  } catch { /* fall back to list row */ }
+
+  Object.assign(editForm, {
+    _name:           detail.name || detail.template_name || "",
+    template_name:   detail.template_name || "",
+    item:            detail.item            || "",
+    item_group:      detail.item_group      || "",
+    inspection_type: detail.inspection_type || "All",
+    description:     detail.description     || "",
+    parameters: (detail.parameters || []).map(p => ({
+      name:                      p.name || "",
+      parameter:                 p.parameter || "",
+      parameter_type:            p.parameter_type || "Numeric",
+      min_value:                 p.min_value ?? null,
+      max_value:                 p.max_value ?? null,
+      acceptance_criteria_value: p.acceptance_criteria_value || "",
+      formula:                   p.formula || "",
+    })),
+  });
+  // Load dropdowns
+  fetchItems("");
+  fetchItemGroups("");
+  editOpen.value = true;
+}
+
+function addEditParam() {
+  editForm.parameters.push({
+    name: "",
+    parameter:                 "",
+    parameter_type:           "Numeric",
+    min_value:                null,
+    max_value:                null,
+    acceptance_criteria_value: "",
+    formula:                  "",
+  });
+}
+
+function removeEditParam(i) {
+  editForm.parameters.splice(i, 1);
+}
+
+async function updateTemplate() {
+  if (!editForm.template_name.trim()) {
+    return toast.error("Template Name is required.");
+  }
+  editSaving.value = true;
+  try {
+    const docName = editForm._name;
+    // Update the parent doc fields
+    await apiCall("frappe.client.set_value", {
+      doctype: "QC Inspection Template",
+      name: docName,
+      fieldname: JSON.stringify({
+        template_name:  editForm.template_name.trim(),
+        item:           editForm.item.trim()        || null,
+        item_group:     editForm.item_group.trim()  || null,
+        inspection_type: editForm.inspection_type,
+        description:    editForm.description.trim() || null,
+      }),
+    });
+    // Replace all parameters by saving full doc
+    await apiCall("frappe.client.save", {
+      doc: {
+        doctype:        "QC Inspection Template",
+        name:           docName,
+        template_name:  editForm.template_name.trim(),
+        item:           editForm.item.trim()        || null,
+        item_group:     editForm.item_group.trim()  || null,
+        inspection_type: editForm.inspection_type,
+        description:    editForm.description.trim() || null,
+        parameters: editForm.parameters.map((p, i) => ({
+          doctype:                  "QC Inspection Template Parameter",
+          name:                     p.name || undefined,
+          idx:                      i + 1,
+          parameter:                p.parameter,
+          parameter_type:           p.parameter_type,
+          min_value:                p.parameter_type === "Numeric"     ? (p.min_value ?? null) : null,
+          max_value:                p.parameter_type === "Numeric"     ? (p.max_value ?? null) : null,
+          acceptance_criteria_value: p.parameter_type === "Non-Numeric" ? p.acceptance_criteria_value : null,
+          formula:                  p.parameter_type === "Formula"     ? p.formula : null,
+        })),
+      },
+    });
+    toast.success(`Template "${editForm.template_name}" updated`);
+    editOpen.value = false;
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Failed to update template");
+  } finally {
+    editSaving.value = false;
   }
 }
 
@@ -673,6 +975,8 @@ onMounted(load);
 .qct-btn-primary:hover { background:#1d4ed8; } .qct-btn-primary:disabled { opacity:.5; cursor:not-allowed; }
 .qct-btn-ghost { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:8px 12px; font-size:13px; color:#374151; cursor:pointer; font-family:inherit; }
 .qct-btn-ghost:hover { background:#f9fafb; }
+.qct-btn-edit { display:inline-flex; align-items:center; gap:6px; background:#fffbeb; border:1px solid #f59e0b; color:#b45309; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.qct-btn-edit:hover { background:#fef3c7; }
 
 /* Table */
 .qct-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; overflow-x:auto; }
@@ -690,6 +994,7 @@ onMounted(load);
 .qct-param-count { font-size:13px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 8px; border-radius:8px; }
 .sortable { cursor:pointer; }
 .ta-r { text-align:right; }
+.ta-c { text-align:center; }
 .qct-act-btn { background:none; border:1px solid #e5e7eb; border-radius:6px; padding:5px 7px; cursor:pointer; color:#6b7280; display:inline-flex; align-items:center; }
 .qct-act-btn:hover { background:#f3f4f6; }
 .qct-act-del { color:#dc2626; border-color:#fca5a5; }
@@ -714,31 +1019,32 @@ onMounted(load);
 .qct-dh-sub { font-size:12px; color:rgba(255,255,255,.75); margin-top:2px; }
 .qct-dclose { position:absolute; top:14px; right:14px; background:rgba(255,255,255,.15); border:none; border-radius:8px; padding:6px; cursor:pointer; color:#fff; display:flex; align-items:center; }
 .qct-dclose:hover { background:rgba(255,255,255,.25); }
-.qct-dbody { flex:1; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+.qct-dbody { flex:1; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:14px; width:100%; box-sizing:border-box; }
 .qct-dfooter { padding:14px 20px; border-top:1px solid #e5e7eb; display:flex; gap:8px; justify-content:flex-end; flex-shrink:0; }
 
 /* Create form */
 .qct-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#9ca3af; display:flex; align-items:center; gap:8px; }
-.qct-fields-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.qct-field { display:flex; flex-direction:column; gap:4px; }
+.qct-fields-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; min-width:0; }
+.qct-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .qct-label { font-size:12px; font-weight:600; color:#374151; }
 .req { color:#ef4444; }
-.qct-input { border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; outline:none; color:#111827; transition:border-color .15s; }
+.qct-input { border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; outline:none; color:#111827; transition:border-color .15s; width:100%; box-sizing:border-box; }
 .qct-input:focus { border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.08); }
 .qct-input-sm { padding:6px 8px; font-size:12.5px; }
-.qct-select-full { border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; outline:none; color:#111827; background:#fff; width:100%; }
+.qct-select-full { border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; outline:none; color:#111827; background:#fff; width:100%; box-sizing:border-box; }
 .qct-select-full:focus { border-color:#2563eb; }
 
 /* Parameter cards */
 .qct-add-param-btn { margin-left:auto; display:inline-flex; align-items:center; gap:4px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:6px; padding:3px 9px; font-size:11.5px; font-weight:600; cursor:pointer; font-family:inherit; }
 .qct-add-param-btn:hover { background:#dbeafe; }
 .qct-param-empty { text-align:center; padding:20px; color:#9ca3af; font-size:12.5px; background:#f9fafb; border-radius:8px; border:1px dashed #e5e7eb; }
-.qct-param-card { border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
-.qct-param-header { background:#f9fafb; padding:8px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #e5e7eb; }
-.qct-param-num { width:20px; height:20px; border-radius:50%; background:#2563eb; color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.qct-param-del { margin-left:4px; background:none; border:none; cursor:pointer; color:#9ca3af; padding:2px; display:flex; align-items:center; }
-.qct-param-del:hover { color:#dc2626; }
-.qct-param-fields { padding:10px 12px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+/* NOTE: NO overflow:hidden on param-card — that clips the inputs! */
+.qct-param-card { border:1px solid #e5e7eb; border-radius:10px; width:100%; box-sizing:border-box; background:#fff; }
+.qct-param-header { background:#f9fafb; padding:10px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #e5e7eb; border-top-left-radius:9px; border-top-right-radius:9px; }
+.qct-param-num { width:22px; height:22px; border-radius:50%; background:#2563eb; color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.qct-param-del { margin-left:auto; flex-shrink:0; background:none; border:none; cursor:pointer; color:#9ca3af; padding:4px; display:flex; align-items:center; border-radius:4px; }
+.qct-param-del:hover { color:#dc2626; background:#fee2e2; }
+.qct-param-fields { padding:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; box-sizing:border-box; }
 
 /* View sections */
 .qct-summary-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; background:#f8fafc; border-radius:8px; padding:12px 14px; border:1px solid #e5e7eb; }
@@ -758,7 +1064,8 @@ onMounted(load);
 @media (max-width: 768px) {
   .qct-stats-strip { grid-template-columns:repeat(2,1fr); }
   .qct-drawer,.qct-view-drawer { width:100%; }
-  .qct-fields-grid,.qct-param-fields { grid-template-columns:1fr; }
+  /* Only collapse the basic form fields grid, NOT param-fields (drawer is fixed 560px) */
+  .qct-fields-grid { grid-template-columns:1fr; }
   .qct-page { padding:12px; }
   .qct-filter-bar { flex-direction:column; align-items:stretch; }
   .qct-header-bar { gap:8px; }
@@ -790,6 +1097,10 @@ onMounted(load);
   /* badges row */
   .qct-mob-badges { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
   .qct-mob-group { font-size:11px; font-weight:600; background:#f3f4f6; color:#6b7280; padding:2px 7px; border-radius:10px; }
+
+  /* parameters count row */
+  .qct-mob-params-row { display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border:1px solid #e5e7eb; border-radius:7px; padding:6px 10px; }
+  .qct-mob-params-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#9ca3af; }
 
   /* description */
   .qct-mob-desc { font-size:12px; color:#6b7280; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -827,7 +1138,9 @@ onMounted(load);
   .qct-dh-sub { font-size:11px; }
   .qct-dbody { padding:14px; gap:12px; }
   .qct-dfooter { padding:12px 14px; }
-  .qct-fields-grid,.qct-param-fields { grid-template-columns:1fr; gap:10px; }
+  .qct-dbody { padding:12px 14px; gap:10px; }
+  /* On mobile, collapse both grids to single column */
+  .qct-fields-grid,.qct-param-fields { grid-template-columns:1fr; gap:8px; }
   .qct-summary-grid { grid-template-columns:1fr 1fr; }
   .qct-params-tbl { font-size:12px; }
   .qct-params-tbl th { padding:7px 8px; font-size:10px; }

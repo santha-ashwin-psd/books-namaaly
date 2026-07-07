@@ -24,13 +24,30 @@ class DeliveryNote(Document):
 
     def on_submit(self):
         self._adjust_so_delivered(direction=+1)
-        self._release_reserved_qty(direction=-1)   # goods shipped → release reservation
+        if not self._stock_owned_by_invoice():
+            self._release_reserved_qty(direction=-1)   # goods shipped → release reservation
         self.db_set("status", "Submitted", update_modified=False)
 
     def on_cancel(self):
         self._adjust_so_delivered(direction=-1)
-        self._release_reserved_qty(direction=+1)   # shipment reversed → restore reservation
+        if not self._stock_owned_by_invoice():
+            self._release_reserved_qty(direction=+1)   # shipment reversed → restore reservation
         self.db_set("status", "Cancelled", update_modified=False)
+
+    def _stock_owned_by_invoice(self):
+        """
+        True if this DN's Sales Order was already invoiced directly with
+        Update Inventory on (update_stock=1). In that case the Sales Invoice
+        already owns the stock deduction and reserved_qty release — this DN
+        must not touch either. Re-derived from the DB (not a transient flag)
+        so it stays correct through submit AND later cancel/reload.
+        """
+        if not self.sales_order:
+            return False
+        return bool(frappe.db.exists(
+            "Sales Invoice",
+            {"sales_order": self.sales_order, "docstatus": 1, "update_stock": 1},
+        ))
 
     def _release_reserved_qty(self, direction: int):
         """
