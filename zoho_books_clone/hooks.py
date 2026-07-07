@@ -217,6 +217,7 @@ website_route_rules = [
     {"from_route": "/proforma-invoices", "to_route": "books"},
     {"from_route": "/purchase-receipts", "to_route": "books"},
     {"from_route": "/quality", "to_route": "books"},
+    {"from_route": "/sales-persons", "to_route": "books"},
     {"from_route": "/quality/<path:path>", "to_route": "books"},
 ]
 
