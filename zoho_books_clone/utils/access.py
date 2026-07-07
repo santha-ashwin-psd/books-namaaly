@@ -47,6 +47,7 @@ DOCTYPE_MODULE = {
     "Fiscal Year": "accounts", "General Ledger Entry": "accounts",
     # Contacts
     "Customer": "customers", "Supplier": "customers", "Contact": "customers", "Address": "customers",
+    "Sales Person": "customers",
     # Taxes / GST
     "Tax Template": "taxes",
     "Tax Template Detail": "taxes",

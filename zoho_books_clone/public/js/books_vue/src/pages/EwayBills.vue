@@ -313,8 +313,8 @@
           <button class="ew-va-btn" @click="openVehicleEdit(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated'">
             <span v-html="icon('edit',13)"></span> <div class="ew-va-btn-text">Update Vehicle</div>
           </button>
-          <button class="ew-va-btn" @click="openExtend(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated'">
-            <span v-html="icon('refresh',13)"></span> <div class="ew-va-btn-text">Extend</div>
+          <button class="ew-va-btn" @click="openExtend(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated' || viewDoc.extended" :title="viewDoc.extended?'Already extended once — NIC permits only one extension':''">
+            <span v-html="icon('refresh',13)"></span> <div class="ew-va-btn-text">{{ viewDoc.extended?'Extended':'Extend' }}</div>
           </button>
           <button class="ew-va-btn ew-va-danger" @click="doCancel(viewDoc)" :disabled="actionLoading || viewDoc.ui_status==='Cancelled' || viewDoc.ui_status==='Expired'">
             <span v-html="icon('x',13)"></span> <div class="ew-va-btn-text">Cancel EWB</div>
@@ -385,6 +385,10 @@
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">To GSTIN</span>
                 <span class="ew-kv-val mono-sm">{{ viewDoc.to_gstin || 'Unregistered' }}</span>
+              </div>
+              <div class="ew-kv-row" v-if="viewDoc.cancellation_reason">
+                <span class="ew-kv-lbl">Cancellation Reason</span>
+                <span class="ew-kv-val">{{ viewDoc.cancellation_reason }}</span>
               </div>
             </div>
           </div>
@@ -812,8 +816,8 @@ async function bulkCancelEwb() {
 }
 
 async function bulkExtend() {
-  const rows = _selectedRows().filter(r => r.ui_status === "Generated");
-  if (!rows.length) { toast.error("No Generated EWBs selected"); return; }
+  const rows = _selectedRows().filter(r => r.ui_status === "Generated" && !r.extended);
+  if (!rows.length) { toast.error("No eligible EWBs selected (already extended or not Generated)"); return; }
   if (!(await confirm({ title: `Extend ${rows.length} E-Way Bill(s)?`, body: "Each EWB will be extended by 1 day. This action cannot be undone.", okLabel: "Extend All", okStyle: "primary" }))) return;
   bulkBusy.value = true;
   let ok = 0, fail = 0;

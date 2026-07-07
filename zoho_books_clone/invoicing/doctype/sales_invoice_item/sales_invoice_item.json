@@ -15,7 +15,8 @@
   "income_account",
   "tax_code",
   "hsn_code",
-  "discount_percentage"
+  "discount_percentage",
+  "discount_amount"
  ],
  "fields": [
   {
@@ -86,8 +87,14 @@
   },
   {
    "fieldname": "discount_percentage",
-   "fieldtype": "Data",
+   "fieldtype": "Float",
    "label": "Discount Percentage"
+  },
+  {
+   "fieldname": "discount_amount",
+   "fieldtype": "Currency",
+   "label": "Discount Amount",
+   "read_only": 1
   }
  ],
  "istable": 1,

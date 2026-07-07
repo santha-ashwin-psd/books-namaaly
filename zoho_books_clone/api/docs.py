@@ -484,7 +484,7 @@ def save_doc(doc):
                         row.pop(mk, None)
 
     # Auto-stamp books_company for master types that have no native company field
-    _MASTER_TYPES = {"Customer", "Supplier", "Item", "Contact"}
+    _MASTER_TYPES = {"Customer", "Supplier", "Item", "Contact", "Sales Person"}
     if doctype in _MASTER_TYPES and not doc.get("books_company"):
         from zoho_books_clone.utils.tenancy import get_user_company, _is_bypass
         if not _is_bypass(frappe.session.user):

@@ -1,28 +1,66 @@
 <template>
-<div class="b-page">
-  <div class="b-action-bar">
-    <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E2E8F0;border-radius:20px;padding:5px 14px;flex:1;max-width:280px">
-      <span v-html="icon('search',13)" style="color:#868E96;flex-shrink:0"></span>
-      <input v-model="search" placeholder="Search receipts…" style="border:none;outline:none;font-size:13px;width:100%;background:transparent;font-family:inherit"/>
+<div class="list-page">
+  <!-- Toolbar -->
+  <div class="sales-toolbar">
+    <div class="sales-search">
+      <span v-html="icon('search',13)" style="color:#9ca3af;flex-shrink:0"></span>
+      <input v-model="search" placeholder="Search GRNs, suppliers…" class="sales-search-input"/>
     </div>
-    <div style="display:flex;gap:6px">
-      <button v-for="t in TABS" :key="t.k" class="b-pill" :class="{active:tab===t.k}" @click="tab=t.k">{{t.l}}</button>
+    <div class="sales-pills">
+      <button v-for="t in TABS" :key="t.k" class="sales-pill" :class="{active:tab===t.k}" @click="tab=t.k">
+        {{t.l}}
+        <span v-if="t.k!=='all'" class="sales-pill-count">{{tabCounts[t.k]}}</span>
+      </button>
     </div>
     <div style="margin-left:auto;display:flex;gap:6px">
-      <button class="b-btn b-btn-ghost" @click="load"><span v-html="icon('refresh',13)"></span></button>
-      <button class="b-btn b-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New GRN</button>
+      <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',13)"></span></button>
+      <button class="sales-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New GRN</button>
     </div>
   </div>
 
-  <SummaryStrip v-if="!loading" :cards="[
-    { label: 'Total',     tone: 'accent',                                       value: list.length },
-    { label: 'Draft',     tone: counts.draft>0 ? 'warn' : 'default',            value: counts.draft,     valueClass: counts.draft>0 ? 'orange' : '' },
-    { label: 'Received',  tone: 'success',                                      value: counts.received,  valueClass: 'green' },
-    { label: 'Cancelled', tone: counts.cancelled>0 ? 'danger' : 'default',      value: counts.cancelled, valueClass: counts.cancelled>0 ? 'red' : '' },
-  ]" />
+  <!-- KPI Cards -->
+  <div class="bk-kpi-grid bk-kpi-grid-4">
+    <div class="bk-kpi-card clickable" @click="tab='all'">
+      <div class="bk-kpi-inner">
+        <div class="bk-kpi-icon" style="background:#dbeafe"><span v-html="icon('file',18)" style="color:#2563eb"></span></div>
+        <div class="bk-kpi-body">
+          <div class="bk-kpi-label">Total GRNs</div>
+          <div class="bk-kpi-value">{{ list.length }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="bk-kpi-card clickable" @click="tab='0'">
+      <div class="bk-kpi-inner">
+        <div class="bk-kpi-icon" style="background:#f1f5f9"><span v-html="icon('edit',18)" style="color:#6b7280"></span></div>
+        <div class="bk-kpi-body">
+          <div class="bk-kpi-label">Draft</div>
+          <div class="bk-kpi-value bk-kpi-amber">{{ counts.draft }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="bk-kpi-card clickable" @click="tab='1'">
+      <div class="bk-kpi-inner">
+        <div class="bk-kpi-icon" style="background:#dcfce7"><span v-html="icon('check',18)" style="color:#16a34a"></span></div>
+        <div class="bk-kpi-body">
+          <div class="bk-kpi-label">Received</div>
+          <div class="bk-kpi-value bk-kpi-green">{{ counts.received }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="bk-kpi-card clickable" @click="tab='2'">
+      <div class="bk-kpi-inner">
+        <div class="bk-kpi-icon" style="background:#f1f5f9"><span v-html="icon('cancel',18)" style="color:#6b7280"></span></div>
+        <div class="bk-kpi-body">
+          <div class="bk-kpi-label">Cancelled</div>
+          <div class="bk-kpi-value" :class="counts.cancelled>0?'bk-kpi-red':''">{{ counts.cancelled }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <div class="b-card" style="padding:0;overflow:hidden">
-    <table class="b-table">
+  <!-- Table -->
+  <div class="inv-table-wrap">
+    <table class="inv-table">
       <thead>
         <tr>
           <th>GRN #</th>
@@ -31,165 +69,368 @@
           <th>Purchase Order</th>
           <th class="ta-r">Items</th>
           <th>Status</th>
-          <th></th>
+          <th style="width:120px;text-align:center">Actions</th>
         </tr>
       </thead>
       <tbody>
         <template v-if="loading">
-          <tr v-for="n in 5" :key="n"><td colspan="7" style="padding:14px"><div class="b-shimmer" style="height:12px"></div></td></tr>
+          <tr v-for="n in 5" :key="n"><td colspan="7" style="padding:14px"><div class="shimmer" style="height:12px"></div></td></tr>
         </template>
         <tr v-else-if="!sorted.length">
           <td colspan="7" class="b-empty">{{search ? 'No results' : 'No purchase receipts yet'}}</td>
         </tr>
-        <tr v-else v-for="r in paged" :key="r.name" class="clickable" @click="openView(r)">
-          <td><span class="mono" style="font-size:12px;color:#3B5BDB">{{r.name}}</span></td>
+        <tr v-else v-for="r in paged" :key="r.name" class="inv-row" @click="openView(r)">
+          <td><span class="inv-link">{{r.name}}</span></td>
           <td class="fw-600">{{r.supplier_name||r.supplier||'—'}}</td>
-          <td class="c-muted" style="font-size:12.5px">{{r.posting_date||'—'}}</td>
-          <td class="c-muted mono" style="font-size:12px">{{r.purchase_order||'—'}}</td>
-          <td class="ta-r c-muted" style="font-size:12.5px">{{r.total_qty||'—'}}</td>
-          <td>
-            <span class="b-badge" :class="statusClass(r)">{{statusLabel(r)}}</span>
-          </td>
-          <td style="text-align:center">
-            <button class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px" @click.stop="openView(r)"><span v-html="icon('eye',12)"></span></button>
-            <button v-if="canEdit(r)" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px" title="Edit draft" @click.stop="openEdit(r)"><span v-html="icon('edit',12)"></span></button>
-            <button v-if="r.source==='real' && r.docstatus===1" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px;color:#C92A2A" title="Cancel GRN" @click.stop="confirmCancel(r)"><span v-html="icon('x',12)"></span></button>
-            <button v-if="r.source==='real' && r.docstatus===0" class="b-btn b-btn-ghost" style="padding:4px 8px;font-size:11.5px;color:#C92A2A" title="Delete draft" @click.stop="confirmDelete(r)"><span v-html="icon('trash',12)"></span></button>
+          <td class="c-muted" style="font-size:13px">{{r.posting_date||'—'}}</td>
+          <td class="c-muted mono" style="font-size:13px">{{r.purchase_order||'—'}}</td>
+          <td class="ta-r c-muted" style="font-size:13px">{{r.total_qty||'—'}}</td>
+          <td><span class="inv-status-badge" :class="statusClass(r)">{{statusLabel(r)}}</span></td>
+          <td @click.stop>
+            <div class="pr-actions-row">
+              <button class="inv-act-btn" @click.stop="openView(r)" title="View"><span v-html="icon('eye',12)"></span></button>
+              <button v-if="canEdit(r)" class="inv-act-btn" @click.stop="openEdit(r)" title="Edit"><span v-html="icon('edit',12)"></span></button>
+              <button v-if="r.source==='real' && r.docstatus===1" class="inv-act-btn pr-act-cancel" @click.stop="confirmTarget={row:r,mode:'cancel'}" title="Cancel"><span v-html="icon('x',12)"></span></button>
+              <button v-if="r.source==='real' && r.docstatus===0" class="inv-act-btn pr-act-del" @click.stop="confirmTarget={row:r,mode:'delete'}" title="Delete"><span v-html="icon('trash',12)"></span></button>
+            </div>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <!-- ── Pagination ── -->
-  <div v-if="!loading && sorted.length" style="padding:12px 4px 4px">
+  <div v-if="!loading && sorted.length">
     <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="sorted.length" />
   </div>
 
+  <!-- ===== Drawers ===== -->
   <Teleport to="body">
-    <!-- View drawer -->
-    <div v-if="viewOpen" style="position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:40" @click.self="viewOpen=false"></div>
-    <div :style="'position:fixed;top:0;right:0;bottom:0;width:520px;background:#fff;border-left:1px solid #e5e7eb;z-index:50;display:flex;flex-direction:column;transition:transform .22s;transform:'+(viewOpen?'translateX(0)':'translateX(100%)')">
-      <template v-if="viewDoc">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:60px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#EDF2FF">
-          <div>
-            <div style="font-size:15px;font-weight:700;">{{viewDoc.name}}</div>
-            <div style="font-size:12px;color:#6b7280;margin-top:1px">GRN · {{viewDoc.posting_date}}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="b-badge" :class="statusClass(viewDoc)">{{statusLabel(viewDoc)}}</span>
-            <button @click="viewOpen=false" style="background:none;border:none;cursor:pointer;padding:4px" v-html="icon('x',16)"></button>
-          </div>
-        </div>
-        <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Supplier</div><div style="font-weight:600">{{viewDoc.supplier_name||viewDoc.supplier}}</div></div>
-            <div><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Date</div><div>{{viewDoc.posting_date}}</div></div>
-            <div><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Purchase Order</div><div class="mono" style="font-size:12.5px">{{viewDoc.purchase_order||'—'}}</div></div>
-            <div><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Warehouse</div><div style="font-size:12.5px">{{viewDoc.set_warehouse||'—'}}</div></div>
-            <div style="grid-column:1/-1"><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Remarks</div><div style="font-size:12.5px">{{viewDoc.remarks||'—'}}</div></div>
-          </div>
-          <div v-if="(viewDoc.items||[]).length">
-            <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Items Received</div>
-            <table class="b-table" style="font-size:12px">
-              <thead><tr><th>Item</th><th class="ta-r">Qty</th><th class="ta-r">Accepted</th><th class="ta-r">Rejected</th><th>UOM</th><th>Batch No</th></tr></thead>
-              <tbody>
-                <tr v-for="it in viewDoc.items" :key="it.name||it.item_code">
-                  <td>{{it.item_name||it.item_code}}</td>
-                  <td class="ta-r mono">{{it.qty}}</td>
-                  <td class="ta-r mono" style="color:#2F9E44">{{it.accepted_qty||it.qty}}</td>
-                  <td class="ta-r mono" style="color:#C92A2A">{{it.rejected_qty||0}}</td>
-                  <td class="c-muted">{{it.uom||'Nos'}}</td>
-                  <td class="mono" style="font-size:11.5px;color:#2563eb">{{it.batch_no||'—'}}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div style="padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end">
-          <button class="b-btn b-btn-ghost" @click="viewOpen=false">Close</button>
-          <button v-if="canEdit(viewDoc)" class="b-btn b-btn-ghost" @click="openEdit(viewDoc); viewOpen=false">Edit</button>
-          <button v-if="viewDoc.docstatus===0 && viewDoc.source==='real'" class="b-btn b-btn-ghost" style="color:#C92A2A;border-color:#ffc9c9" @click="confirmDelete(viewDoc)" :disabled="deleting">
-            {{deleting ? 'Deleting…' : 'Delete Draft'}}
-          </button>
-          <button v-if="viewDoc.docstatus===1 && viewDoc.source==='real'" class="b-btn b-btn-ghost" style="color:#C92A2A;border-color:#ffc9c9" @click="confirmCancel(viewDoc)" :disabled="cancelling">
-            {{cancelling ? 'Cancelling…' : 'Cancel GRN'}}
-          </button>
-          <button v-if="viewDoc.docstatus===0" class="b-btn b-btn-primary" @click="submitGRN" :disabled="submitting">
-            {{submitting ? 'Submitting…' : 'Submit GRN'}}
-          </button>
-        </div>
-      </template>
-    </div>
 
-    <!-- New GRN drawer -->
-    <div v-if="newOpen" style="position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:40" @click.self="newOpen=false"></div>
-    <div :style="'position:fixed;top:0;right:0;bottom:0;width:560px;background:#fff;border-left:1px solid #e5e7eb;z-index:50;display:flex;flex-direction:column;transition:transform .22s;transform:'+(newOpen?'translateX(0)':'translateX(100%)')">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:60px;border-bottom:1px solid #e5e7eb;flex-shrink:0">
-        <span style="font-size:15px;font-weight:700">{{editingName ? 'Edit Purchase Receipt (GRN)' : 'New Purchase Receipt (GRN)'}}</span>
-        <button @click="newOpen=false" style="background:none;border:none;cursor:pointer;padding:4px" v-html="icon('x',16)"></button>
-      </div>
-      <div style="flex:1;overflow-y:auto;padding:20px;display:grid;gap:14px;align-content:start">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="nim-field" style="grid-column:1/-1">
-            <label class="nim-label">Supplier <span style="color:#c92a2a">*</span></label>
-            <SearchableSelect v-model="form.supplier" :options="vendorOptions"
-              placeholder="Search supplier…" @search="fetchVendors" @select="onSupSelect" />
-          </div>
-          <div class="nim-field">
-            <label class="nim-label">Date <span style="color:#c92a2a">*</span></label>
-            <input class="nim-input" type="date" v-model="form.posting_date"/>
-          </div>
-          <div class="nim-field">
-            <label class="nim-label">Purchase Order #</label>
-            <SearchableSelect v-model="form.purchase_order" :options="poOptions"
-              placeholder="Select PO (filtered by supplier)…"
-              @search="fetchPOs" @open="fetchPOs('')" @select="onPOSelect" />
-          </div>
-          <div class="nim-field" style="grid-column:1/-1">
-            <label class="nim-label">Warehouse</label>
-            <input class="nim-input" v-model="form.set_warehouse" placeholder="e.g. Stores - ABC"/>
-          </div>
-          <div class="nim-field" style="grid-column:1/-1">
-            <label class="nim-label">Remarks</label>
-            <input class="nim-input" v-model="form.remarks" placeholder="Optional remarks"/>
-          </div>
-        </div>
+    <!-- VIEW DRAWER -->
+    <div v-if="viewOpen" class="inv-drawer-bg" @click.self="viewOpen=false">
+      <div class="inv-drawer-panel inv-view-page pr-view-drawer">
+        <template v-if="viewDoc">
 
-        <!-- Items -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <label class="nim-label" style="margin:0">Items Received <span style="color:#c92a2a">*</span></label>
-            <button class="b-btn b-btn-ghost" style="padding:4px 10px;font-size:12px" @click="addItem">
-              <span v-html="icon('plus',11)" style="vertical-align:-1px;margin-right:3px"></span> Add Item
+          <!-- Header -->
+          <div class="inv-view-header">
+            <div>
+              <div class="inv-view-number">{{ viewDoc.name }}</div>
+              <div class="inv-view-subtitle">Purchase Receipt (GRN) · {{ viewDoc.posting_date }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="inv-hdr-badge" :class="statusClass(viewDoc)">{{ statusLabel(viewDoc) }}</span>
+              <button class="inv-dclose" @click="viewOpen=false"><span v-html="icon('x',16)"></span></button>
+            </div>
+          </div>
+
+          <!-- Action bar -->
+          <div class="inv-action-bar">
+            <button v-if="canEdit(viewDoc)" class="inv-ab-btn" @click="openEdit(viewDoc); viewOpen=false">
+              <span v-html="icon('edit',13)"></span> Edit
+            </button>
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-primary" @click="submitGRN" :disabled="submitting">
+              <span v-html="icon('send',13)"></span> {{ submitting ? 'Submitting…' : 'Submit GRN' }}
+            </button>
+            <button v-if="viewDoc.docstatus===1 && viewDoc.source==='real'" class="inv-ab-btn pr-act-cancel" @click="confirmTarget={row:viewDoc,mode:'cancel'}">
+              <span v-html="icon('x',13)"></span> Cancel
+            </button>
+            <button v-if="viewDoc.docstatus===0 && viewDoc.source==='real'" class="inv-ab-btn pr-act-del" @click="confirmTarget={row:viewDoc,mode:'delete'}">
+              <span v-html="icon('trash',13)"></span> Delete
             </button>
           </div>
-          <div v-for="(it,i) in form.items" :key="i" style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #F1F3F5">
-            <div style="display:grid;grid-template-columns:2fr 70px 70px 60px 28px;gap:6px;align-items:center">
-              <SearchableSelect v-model="it.item_code" :options="itemOptions" placeholder="Search item…" @search="fetchItems" @select="opt => onItemSelect(it, opt)" style="font-size:12px"/>
-              <input class="nim-input" type="number" v-model="it.qty" placeholder="Qty" min="0.01" style="font-size:12px"/>
-              <input class="nim-input" type="number" v-model="it.accepted_qty" placeholder="Accept" min="0" style="font-size:12px"/>
-              <input class="nim-input" v-model="it.uom" placeholder="UOM" style="font-size:12px"/>
-              <button @click="removeItem(i)" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:2px" v-html="icon('trash',12)"></button>
+
+          <!-- Body -->
+          <div class="inv-dbody">
+
+            <!-- Supplier & receipt details -->
+            <div class="pr-view-card">
+              <div class="pr-view-card-hdr">Supplier & Receipt Details</div>
+              <div class="pr-info-grid">
+                <div class="pr-info-item">
+                  <div class="pr-info-lbl">Supplier</div>
+                  <div class="pr-info-val pr-info-link">
+                    <DocLink doctype="Supplier" :name="viewDoc.supplier" :mono-style="false">{{ viewDoc.supplier_name||viewDoc.supplier||'—' }}</DocLink>
+                  </div>
+                </div>
+                <div class="pr-info-item">
+                  <div class="pr-info-lbl">Date</div>
+                  <div class="pr-info-val">{{ viewDoc.posting_date||'—' }}</div>
+                </div>
+                <div class="pr-info-item">
+                  <div class="pr-info-lbl">Receiving Warehouse</div>
+                  <div class="pr-info-val" :class="viewDoc.set_warehouse?'':'pr-info-empty'">{{ viewDoc.set_warehouse||'—' }}</div>
+                </div>
+                <div class="pr-info-item">
+                  <div class="pr-info-lbl">Total Qty</div>
+                  <div class="pr-info-val" style="font-weight:600">{{ (viewDoc.items||[]).reduce((s,i)=>s+flt(i.qty),0)||'—' }}</div>
+                </div>
+                <div v-if="viewDoc.purchase_order" class="pr-info-item pr-info-full">
+                  <div class="pr-info-lbl">Purchase Order</div>
+                  <div class="pr-info-val pr-info-link"><DocLink doctype="Purchase Order" :name="viewDoc.purchase_order" /></div>
+                </div>
+                <div v-if="viewDoc.remarks" class="pr-info-item pr-info-full">
+                  <div class="pr-info-lbl">Remarks</div>
+                  <div class="pr-info-val" style="color:#6b7280">{{ viewDoc.remarks }}</div>
+                </div>
+              </div>
             </div>
-            <div v-if="it.has_batch_no" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin-top:6px">
-              <SearchableSelect v-model="it.batch_no" :options="it.batchOptions" placeholder="Batch No — select existing or type to create new"
-                createable @search="q => fetchBatches(it, q)" @select="opt => onBatchSelect(it, opt)" @create="val => onBatchCreate(it, val)" style="font-size:12px"/>
-              <input class="nim-input" type="date" v-model="it.manufacturing_date" title="Manufacturing date" style="font-size:12px"/>
-              <input class="nim-input" type="date" v-model="it.expiry_date" title="Expiry date" style="font-size:12px"/>
+
+            <!-- Items -->
+            <div class="pr-view-card">
+              <div class="pr-view-card-hdr">
+                Items Received
+                <span class="pr-item-count">{{ (viewDoc.items||[]).length }} line{{ (viewDoc.items||[]).length!==1?'s':'' }}</span>
+              </div>
+              <table class="inv-table pr-items-tbl">
+                <thead>
+                  <tr>
+                    <th style="width:32px">#</th>
+                    <th>Item</th>
+                    <th class="ta-r" style="width:64px">Qty</th>
+                    <th class="ta-r" style="width:76px">Accepted</th>
+                    <th class="ta-r" style="width:76px">Rejected</th>
+                    <th style="width:56px">UOM</th>
+                    <th style="width:120px">Batch No</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(it,i) in viewDoc.items||[]" :key="it.name||it.item_code" class="inv-row">
+                    <td class="pr-row-num">{{ i+1 }}</td>
+                    <td style="font-weight:500;color:#111827">{{ it.item_name||it.item_code }}</td>
+                    <td class="ta-r mono">{{ it.qty }}</td>
+                    <td class="ta-r mono" style="color:#2F9E44">{{ it.accepted_qty||it.qty }}</td>
+                    <td class="ta-r mono" style="color:#C92A2A">{{ it.rejected_qty||0 }}</td>
+                    <td class="c-muted">{{ it.uom||'Nos' }}</td>
+                    <td class="mono" style="font-size:11.5px;color:#2563eb">{{ it.batch_no||'—' }}</td>
+                  </tr>
+                  <tr v-if="!(viewDoc.items||[]).length">
+                    <td colspan="7" style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No items</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+
           </div>
-          <div v-if="!form.items.length" style="font-size:12px;color:#868E96;text-align:center;padding:10px;background:#F8F9FA;border-radius:6px">
-            No items yet — click Add Item
+
+          <!-- Footer -->
+          <div class="inv-dfooter">
+            <span class="inv-hdr-badge" :class="statusClass(viewDoc)" style="margin-right:auto">{{ statusLabel(viewDoc) }}</span>
+            <button class="form-btn form-btn-outline" @click="viewOpen=false">Close</button>
+            <button v-if="canEdit(viewDoc)" class="form-btn form-btn-outline" @click="openEdit(viewDoc); viewOpen=false">
+              <span v-html="icon('edit',13)"></span> Edit
+            </button>
+            <button v-if="viewDoc.docstatus===0" class="form-btn form-btn-primary" @click="submitGRN" :disabled="submitting">
+              {{ submitting ? 'Submitting…' : 'Submit GRN' }}
+            </button>
           </div>
-        </div>
-      </div>
-      <div style="padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end">
-        <button class="b-btn b-btn-ghost" @click="newOpen=false">Cancel</button>
-        <button class="b-btn b-btn-ghost" @click="saveGRN(false)" :disabled="saving">{{saving?'Saving…':(editingName?'Save Changes':'Save Draft')}}</button>
-        <button class="b-btn b-btn-primary" @click="saveGRN(true)" :disabled="saving">{{saving?'Saving…':'Save & Submit'}}</button>
+
+        </template>
       </div>
     </div>
+
+    <!-- CREATE / EDIT DRAWER -->
+    <div v-if="formOpen" class="inv-drawer-bg" @click.self="formOpen=false">
+      <div class="inv-drawer-panel" :class="{'is-add':!editingName}">
+
+        <!-- Header -->
+        <div class="inv-dh">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="inv-dh-title">{{ editingName ? 'Edit Purchase Receipt (GRN)' : 'New Purchase Receipt (GRN)' }}</div>
+            <span v-if="!editingName" class="add-status-badge">Draft</span>
+            <span v-if="editingName" class="inv-dh-sub" style="margin-left:4px">{{ editingName }}</span>
+          </div>
+          <button class="inv-dclose" @click="formOpen=false"><span v-html="icon('x',16)"></span></button>
+        </div>
+
+        <!-- Body -->
+        <div class="inv-content-row">
+        <div class="inv-dbody">
+
+          <!-- Supplier & Date Card -->
+          <div class="add-card">
+            <div class="add-card-header" @click="collapsed.details=!collapsed.details">
+              <div class="add-card-title">
+                <span class="add-card-title-icon"><span v-html="icon('truck',16)"></span></span>
+                Supplier & Date
+              </div>
+              <span class="add-card-chevron" :class="{collapsed:collapsed.details}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </span>
+            </div>
+            <div class="add-card-body" :class="{collapsed:collapsed.details}">
+              <div class="inv-fg inv-fg2">
+                <div style="grid-column:1/-1">
+                  <label class="inv-lbl">Supplier <span class="inv-req">*</span></label>
+                  <SearchableSelect v-model="form.supplier" :options="vendorOptions" placeholder="Search supplier…" @search="fetchVendors" @select="onSupSelect" />
+                </div>
+                <div>
+                  <label class="inv-lbl">Date <span class="inv-req">*</span></label>
+                  <input class="inv-fi" type="date" v-model="form.posting_date"/>
+                </div>
+                <div>
+                  <label class="inv-lbl">Purchase Order (optional)</label>
+                  <SearchableSelect v-model="form.purchase_order" :options="poOptions" placeholder="Select PO (filtered by supplier)…" @search="fetchPOs" @open="fetchPOs('')" @select="onPOSelect" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Receiving Details Card -->
+          <div class="add-card">
+            <div class="add-card-header" @click="collapsed.receiving=!collapsed.receiving">
+              <div class="add-card-title">
+                <span class="add-card-title-icon"><span v-html="icon('warehouse',16)"></span></span>
+                Receiving Details
+              </div>
+              <span class="add-card-chevron" :class="{collapsed:collapsed.receiving}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </span>
+            </div>
+            <div class="add-card-body" :class="{collapsed:collapsed.receiving}">
+              <div class="inv-fg inv-fg2">
+                <div style="grid-column:1/-1">
+                  <label class="inv-lbl">Warehouse</label>
+                  <input class="inv-fi" v-model="form.set_warehouse" placeholder="e.g. Stores - ABC"/>
+                </div>
+                <div style="grid-column:1/-1">
+                  <label class="inv-lbl">Remarks</label>
+                  <textarea class="inv-fi" v-model="form.remarks" rows="2" maxlength="500" placeholder="Optional remarks" style="resize:vertical"></textarea>
+                  <div class="exp-field-hint" :class="{'exp-field-hint-err': (form.remarks||'').length >= 500}">{{ (form.remarks||'').length }}/500 characters</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Items Card -->
+          <div class="add-card">
+            <div class="add-card-header" @click="collapsed.items=!collapsed.items">
+              <div class="add-card-title">
+                <span class="add-card-title-icon"><span v-html="icon('box',16)"></span></span>
+                Items Received <span class="inv-req">*</span>
+                <span style="font-size:11.5px;color:#6b7280;font-weight:400;letter-spacing:0;text-transform:none">
+                  &nbsp;· {{ form.items.length }} line{{ form.items.length!==1?'s':'' }}
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px" @click.stop>
+                <button class="add-lines-add-btn" @click="addItem">
+                  <span v-html="icon('plus',13)"></span> Add Item
+                </button>
+                <span class="add-card-chevron" :class="{collapsed:collapsed.items}" @click="collapsed.items=!collapsed.items">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </div>
+            </div>
+            <div class="add-card-body" :class="{collapsed:collapsed.items}" style="padding:16px 16px 8px">
+              <div class="po-item-cards">
+                <div v-for="(it,i) in form.items" :key="i" class="po-item-card">
+                  <!-- Card header -->
+                  <div class="po-item-card-header" @click="it.collapsedUI=!it.collapsedUI">
+                    <span class="po-item-card-num">#{{ i+1 }}</span>
+                    <span class="po-item-card-title">{{ it.item_name || it.item_code || 'Line Item' }}</span>
+                    <div class="po-item-card-subtotal">
+                      <span class="po-item-card-subtotal-label">QTY</span>
+                      <span class="po-item-card-amount">{{ it.qty || '—' }}</span>
+                    </div>
+                    <span class="po-item-card-chevron" :class="{collapsed:it.collapsedUI}">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </span>
+                    <button @click.stop="removeItem(i)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button>
+                  </div>
+                  <!-- Card body -->
+                  <div class="po-item-card-body" v-show="!it.collapsedUI">
+                    <div class="po-item-col po-item-col--left">
+                      <div class="po-item-field">
+                        <label>Item <span class="inv-req">*</span></label>
+                        <SearchableSelect v-model="it.item_code" :options="itemOptions" placeholder="Search item…" @search="fetchItems" @select="opt => onItemSelect(it, opt)" />
+                      </div>
+                      <div v-if="it.has_batch_no" class="po-item-field" style="margin-top:14px">
+                        <label>Batch No <span class="inv-req">*</span></label>
+                        <SearchableSelect v-model="it.batch_no" :options="it.batchOptions" placeholder="Select existing or type to create new"
+                          createable @search="q => fetchBatches(it, q)" @select="opt => onBatchSelect(it, opt)" @create="val => onBatchCreate(it, val)" />
+                        <div class="po-item-num-row" style="margin-top:10px">
+                          <div class="po-item-field">
+                            <label>Mfg. Date</label>
+                            <input class="inv-fi" type="date" v-model="it.manufacturing_date"/>
+                          </div>
+                          <div class="po-item-field">
+                            <label>Expiry Date</label>
+                            <input class="inv-fi" type="date" v-model="it.expiry_date"/>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="po-item-col po-item-col--right">
+                      <div class="po-item-num-row">
+                        <div class="po-item-field">
+                          <label>Qty <span class="inv-req">*</span></label>
+                          <input class="inv-fi" type="number" v-model.number="it.qty" placeholder="1" min="0.01" step="0.01"/>
+                        </div>
+                        <div class="po-item-field">
+                          <label>Accepted Qty</label>
+                          <input class="inv-fi" type="number" v-model.number="it.accepted_qty" placeholder="1" min="0" step="0.01"/>
+                        </div>
+                      </div>
+                      <div class="po-item-field" style="margin-top:14px">
+                        <label>UOM</label>
+                        <input class="inv-fi" v-model="it.uom" placeholder="Nos"/>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!form.items.length" class="pr-items-empty" style="padding:20px 0 8px">No items yet — click Add Item</div>
+
+              <button class="inv-add-line-btn" style="margin-top:12px" @click="addItem">
+                <span v-html="icon('plus',12)"></span> Add Item
+              </button>
+            </div>
+          </div>
+
+        </div><!-- /inv-dbody -->
+        </div><!-- /inv-content-row -->
+
+        <!-- Footer -->
+        <div class="inv-dfooter">
+          <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New GRN — unsaved changes' }}</div>
+          <div class="add-footer-actions">
+            <button class="add-btn-cancel" @click="formOpen=false" :disabled="saving">Cancel</button>
+            <button class="add-btn-draft" @click="saveGRN(false)" :disabled="saving">
+              <span v-html="icon('save',13)"></span> {{ saving?'Saving…':(editingName?'Save Changes':'Save Draft') }}
+            </button>
+            <button class="add-btn-more" @click="saveGRN(true)" :disabled="saving">
+              <span v-html="icon('check',13)"></span> {{ saving?'Saving…':'Save & Submit' }}
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CONFIRM DIALOG (delete draft / cancel submitted) -->
+    <div v-if="confirmTarget" class="inv-drawer-bg" style="z-index:60" @click.self="confirmTarget=null"></div>
+    <div v-if="confirmTarget" class="pr-confirm" style="z-index:61">
+      <div class="pr-confirm-icon" :class="confirmTarget.mode==='delete'?'danger':'warn'">
+        <span v-html="icon(confirmTarget.mode==='delete'?'trash':'x', 20)"></span>
+      </div>
+      <div class="pr-confirm-title">{{ confirmTarget.mode==='delete' ? 'Delete draft GRN?' : 'Cancel GRN?' }}</div>
+      <div class="pr-confirm-sub">
+        <template v-if="confirmTarget.mode==='delete'">
+          <strong>{{ confirmTarget.row.name }}</strong> will be permanently deleted. This cannot be undone.
+        </template>
+        <template v-else>
+          <strong>{{ confirmTarget.row.name }}</strong> will be cancelled — this reverses the stock receipt and PO received quantities.
+        </template>
+      </div>
+      <div class="pr-confirm-actions">
+        <button class="b-btn b-btn-ghost" @click="confirmTarget=null" :disabled="deleting||cancelling">Keep it</button>
+        <button class="b-btn" :class="confirmTarget.mode==='delete'?'pr-btn-danger':'pr-btn-warn'"
+          @click="confirmAction" :disabled="deleting||cancelling">
+          {{ (deleting||cancelling) ? (confirmTarget.mode==='delete'?'Deleting…':'Cancelling…') : (confirmTarget.mode==='delete'?'Yes, Delete':'Yes, Cancel') }}
+        </button>
+      </div>
+    </div>
+
   </Teleport>
 </div>
 </template>
@@ -198,38 +439,36 @@
 import { ref, reactive, computed, onMounted } from "vue";
 import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiDelete, apiCancel, resolveCompany } from "../api/client.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
-import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
-import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
-const { confirm } = useConfirm();
 
-const TABS = [{k:"all",l:"All"},{k:"0",l:"Draft"},{k:"1",l:"Submitted"},{k:"2",l:"Cancelled"}];
+const TABS = [{k:"all",l:"All"},{k:"0",l:"Draft"},{k:"1",l:"Received"},{k:"2",l:"Cancelled"}];
 const list      = ref([]);
 const loading   = ref(false);
 const search    = ref("");
 const tab       = ref("all");
 const viewOpen  = ref(false);
 const viewDoc   = ref(null);
-const newOpen   = ref(false);
+const formOpen  = ref(false);
 const saving    = ref(false);
 const submitting = ref(false);
-const deleting = ref(false);
+const deleting  = ref(false);
 const cancelling = ref(false);
 const editingName = ref("");
-const supSugg   = ref([]);
-let supTimer    = null;
+const confirmTarget = ref(null); // { row, mode: "delete"|"cancel" }
 const vendorOptions = ref([]);
 const itemOptions   = ref([]);
 const poOptions     = ref([]);
+const collapsed = reactive({ details: false, receiving: false, items: false });
 
 const form = reactive({
-  supplier: "", posting_date: new Date().toISOString().slice(0,10),
+  supplier: "", supplier_name: "", posting_date: new Date().toISOString().slice(0,10),
   purchase_order: "", set_warehouse: "", remarks: "", items: [],
 });
 
@@ -238,6 +477,7 @@ const counts = computed(() => ({
   received:  list.value.filter(r => r.docstatus === 1).length,
   cancelled: list.value.filter(r => r.docstatus === 2).length,
 }));
+const tabCounts = computed(() => ({ "0": counts.value.draft, "1": counts.value.received, "2": counts.value.cancelled }));
 
 function statusLabel(r) {
   if (r.docstatus===2) return "Cancelled";
@@ -347,66 +587,60 @@ async function submitGRN() {
   finally { submitting.value = false; }
 }
 
-async function confirmDelete(r) {
-  if (r.source !== "real" || r.docstatus !== 0) return; // safety: only real drafts are deletable
-  if (!(await confirm({
-    title: "Delete draft GRN?",
-    body: `Delete "${r.name}"? This cannot be undone.`,
-    okLabel: "Delete",
-  }))) return;
-  deleting.value = true;
-  try {
-    await apiDelete("Purchase Receipt", r.name);
-    toast.success("Draft GRN deleted");
-    viewOpen.value = false;
-    await load();
-  } catch (e) {
-    toast.error(e.message || "Delete failed");
-  } finally {
-    deleting.value = false;
+async function confirmAction() {
+  if (!confirmTarget.value) return;
+  const { row, mode } = confirmTarget.value;
+  if (row.source !== "real") { confirmTarget.value = null; return; } // safety: only real docs are actionable
+  if (mode === "delete") {
+    if (row.docstatus !== 0) { confirmTarget.value = null; return; }
+    deleting.value = true;
+    try {
+      await apiDelete("Purchase Receipt", row.name);
+      toast.success(`Draft GRN ${row.name} deleted`);
+      confirmTarget.value = null;
+      viewOpen.value = false;
+      await load();
+    } catch (e) { toast.error(e.message || "Delete failed"); }
+    finally { deleting.value = false; }
+  } else {
+    if (row.docstatus !== 1) { confirmTarget.value = null; return; }
+    cancelling.value = true;
+    try {
+      await apiCancel("Purchase Receipt", row.name);
+      toast.success(`GRN ${row.name} cancelled`);
+      confirmTarget.value = null;
+      viewOpen.value = false;
+      await load();
+    } catch (e) { toast.error(e.message || "Cancel failed"); }
+    finally { cancelling.value = false; }
   }
 }
 
-async function confirmCancel(r) {
-  if (r.source !== "real" || r.docstatus !== 1) return; // safety: only real submitted docs are cancellable
-  if (!(await confirm({
-    title: "Cancel GRN?",
-    body: `Cancel "${r.name}"? This reverses the stock receipt and PO received quantities.`,
-    okLabel: "Cancel GRN",
-  }))) return;
-  cancelling.value = true;
-  try {
-    await apiCancel("Purchase Receipt", r.name);
-    toast.success(`GRN ${r.name} cancelled`);
-    viewOpen.value = false;
-    await load();
-  } catch (e) {
-    toast.error(e.message || "Cancel failed");
-  } finally {
-    cancelling.value = false;
-  }
+function resetForm() {
+  Object.assign(form, {
+    supplier: "", supplier_name: "", posting_date: new Date().toISOString().slice(0,10),
+    purchase_order: "", set_warehouse: "", remarks: "", items: [],
+  });
 }
 
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { supplier:"", posting_date: new Date().toISOString().slice(0,10), purchase_order:"", set_warehouse:"", remarks:"", items:[] });
-  supSugg.value = [];
-  addItem();
+  resetForm();
   fetchVendors("");
   fetchItems("");
   fetchPOs("");
-  newOpen.value = true;
+  addItem();
+  formOpen.value = true;
 }
 
 async function openEdit(r) {
   if (!canEdit(r)) return;
   editingName.value = r.name;
-  Object.assign(form, { supplier:"", posting_date: new Date().toISOString().slice(0,10), purchase_order:"", set_warehouse:"", remarks:"", items:[] });
-  supSugg.value = [];
+  resetForm();
   fetchVendors("");
   fetchItems("");
   fetchPOs("");
-  newOpen.value = true;
+  formOpen.value = true;
   try {
     const doc = await apiGet("Purchase Receipt", r.name);
     if (!doc) return;
@@ -441,19 +675,20 @@ async function openEdit(r) {
       manufacturing_date: it.manufacturing_date || "",
       expiry_date:        it.expiry_date || "",
       batchOptions:       [],
+      collapsedUI:        false,
     }));
     form.items.forEach(l => { if (l.has_batch_no) fetchBatches(l, ""); });
     if (!form.items.length) addItem();
   } catch (e) {
     toast.error(e.message || "Failed to load GRN for editing");
-    newOpen.value = false;
+    formOpen.value = false;
   }
 }
 
 function addItem() {
   form.items.push({
-    item_code:"", qty:1, accepted_qty:1, uom:"Nos", po_item: null,
-    has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
+    item_code:"", item_name:"", qty:1, accepted_qty:1, uom:"Nos", po_item: null,
+    has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [], collapsedUI: false,
   });
 }
 function removeItem(i) { form.items.splice(i, 1); }
@@ -513,7 +748,7 @@ async function onPOSelect(opt) {
         qty:          flt(it.remaining_to_receive) || flt(it.qty) || 1,
         accepted_qty: flt(it.remaining_to_receive) || flt(it.qty) || 1,
         uom:          it.uom || "Nos",
-        has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
+        has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [], collapsedUI: false,
       }));
       // Resolve has_batch_no per item so the Batch No field shows up for
       // batch-tracked items pulled in from the Purchase Order.
@@ -542,7 +777,6 @@ async function fetchItems(q = "") {
 function onItemSelect(line, opt) {
   line.item_code    = opt?.value ?? opt;
   line.item_name    = opt?.label  || opt?.value || "";
-  line.description  = opt?.description || "";
   line.uom          = opt?.uom   || line.uom || "Nos";
   line.po_item      = null; // manually changing the item breaks the PO-line link
   line.has_batch_no = opt?.has_batch_no ? 1 : 0;
@@ -659,10 +893,11 @@ async function saveGRN(submit) {
       })),
     };
     if (editingName.value) doc.name = editingName.value;
+
     const saved = await apiSave(doc);
     if (submit && saved?.name) await apiSubmit("Purchase Receipt", saved.name);
     toast.success(`GRN ${saved?.name || ""} ${submit ? "submitted" : "saved"}`);
-    newOpen.value = false;
+    formOpen.value = false;
     await load();
   } catch (e) { toast.error(e.message || "Failed to save GRN"); }
   finally { saving.value = false; }
@@ -670,3 +905,62 @@ async function saveGRN(submit) {
 
 onMounted(() => { load(); fetchVendors(""); fetchItems(""); fetchPOs(""); });
 </script>
+
+<style scoped>
+@import '../styles/list.css';
+@import '../styles/view.css';
+@import '../styles/edit.css';
+@import '../styles/add.css';
+
+/* ── Action bar primary button ── */
+.inv-ab-primary { background:#2563eb;border-color:#2563eb;color:#fff; }
+.inv-ab-primary:hover { background:#1d4ed8;border-color:#1d4ed8; }
+
+/* ── View cards ── */
+.pr-view-card { background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:14px; }
+.pr-view-card-hdr { display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:700;color:#374151;letter-spacing:.02em; }
+.pr-item-count { font-size:11.5px;font-weight:500;color:#6b7280;letter-spacing:0; }
+
+/* ── Info grid ── */
+.pr-info-grid { display:grid;grid-template-columns:1fr 1fr;gap:0; }
+.pr-info-item { padding:10px 16px;border-bottom:1px solid #f1f5f9; }
+.pr-info-item:nth-child(odd) { border-right:1px solid #f1f5f9; }
+.pr-info-full { grid-column:1/-1; }
+.pr-info-lbl { font-size:10.5px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px; }
+.pr-info-val { font-size:13px;color:#111827;line-height:1.4; }
+.pr-info-empty { color:#9ca3af !important; }
+.pr-info-link a, .pr-info-link span { color:#2563eb;font-weight:500; }
+
+/* ── Items table ── */
+.pr-items-tbl { font-size:12.5px; }
+.pr-row-num { color:#9ca3af;font-size:11.5px;font-weight:600;text-align:center; }
+.pr-items-empty { font-size:12px;color:#868E96;text-align:center;padding:14px;background:#f9fafb;border:1px dashed #e5e7eb;border-radius:8px; }
+
+/* ── Confirm dialog ── */
+.pr-confirm { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;padding:28px 28px 22px;box-shadow:0 20px 60px rgba(15,23,42,.18);z-index:61;width:340px;max-width:92vw;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center; }
+.pr-confirm-icon { width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:4px; }
+.pr-confirm-icon.danger { background:#fee2e2;color:#dc2626; }
+.pr-confirm-icon.warn { background:#fffbeb;color:#d97706; }
+.pr-confirm-title { font-size:16px;font-weight:700;color:#111827; }
+.pr-confirm-sub { font-size:13px;color:#6b7280;line-height:1.5; }
+.pr-confirm-actions { display:flex;gap:8px;margin-top:6px;width:66%; }
+.pr-confirm-actions .form-btn { flex:1;justify-content:center; }
+.pr-btn-danger { background:#dc2626;border:1px solid #dc2626;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px; }
+.pr-btn-danger:hover { background:#b91c1c;border-color:#b91c1c; }
+.pr-btn-warn { background:#d97706;border:1px solid #d97706;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px; }
+.pr-btn-warn:hover { background:#b45309;border-color:#b45309; }
+.pr-btn-danger:disabled,.pr-btn-warn:disabled { opacity:.5;cursor:not-allowed; }
+
+/* ── Action button hover states ── */
+.pr-actions-row { display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:nowrap; }
+.pr-act-del:hover { background:#fef2f2 !important;border-color:#fecaca !important;color:#dc2626 !important; }
+.pr-act-cancel:hover { background:#fffbeb !important;border-color:#fde68a !important;color:#d97706 !important; }
+
+/* ── Misc ── */
+.b-empty { text-align:center;color:#9ca3af;padding:24px!important; }
+.ta-r { text-align:right; }
+.fw-600 { font-weight:600; }
+.c-muted { color:#6b7280; }
+.mono { font-size:13px; }
+.pr-view-drawer { width: 600px; right: -600px; }
+</style>

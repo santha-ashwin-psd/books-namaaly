@@ -74,6 +74,7 @@ def get_eway_bills(status=None, limit=500):
             "name", "ewb_no", "invoice_no", "invoice_date", "customer", "customer_name",
             "transporter", "vehicle_no", "vehicle_type", "supply_type", "transaction_type",
             "from_gstin", "to_gstin", "grand_total", "valid_upto", "status", "creation",
+            "extended", "cancellation_reason",
         ],
         order_by="creation desc",
         limit_page_length=int(limit or 500),
@@ -185,6 +186,8 @@ def get_eway_bill(name):
         "days_left": days_left,
         "company": doc.company,
         "creation": str(doc.creation),
+        "extended": bool(doc.extended),
+        "cancellation_reason": doc.cancellation_reason,
     }
 
 
@@ -205,6 +208,10 @@ def generate_eway_bill(invoice_no, transporter, vehicle_no, distance_km=0,
         frappe.throw(_("Invoice, transporter and vehicle number are required"))
     if not frappe.db.exists("Sales Invoice", invoice_no):
         frappe.throw(_("Invoice {0} does not exist").format(invoice_no))
+
+    inv_docstatus = frappe.db.get_value("Sales Invoice", invoice_no, "docstatus")
+    if inv_docstatus != 1:
+        frappe.throw(_("Cannot generate an E-Way Bill against an invoice that isn't submitted"))
 
     # Block double-generation against the same invoice
     existing = frappe.db.exists("E Way Bill",
@@ -269,6 +276,8 @@ def cancel_eway_bill(name, reason=""):
     if doc.status == "Cancelled":
         return {"ok": True, "message": "Already cancelled"}
     doc.status = "Cancelled"
+    if reason:
+        doc.cancellation_reason = reason
     doc.save(ignore_permissions=False)
     if doc.invoice_no:
         try:
@@ -303,11 +312,15 @@ def extend_validity(name, extra_days=1):
     doc = _get_ewb(name)
     if doc.status != "Generated":
         frappe.throw(_("Cannot extend — E-Way Bill is {0}").format(doc.status))
+    if doc.extended:
+        frappe.throw(_("E-Way Bill {0} has already been extended once — NIC rules "
+                       "permit only a single extension per EWB").format(name))
     n = max(1, int(extra_days or 1))
     base = getdate(doc.valid_upto) if doc.valid_upto else getdate(today())
     if base < getdate(today()):
         base = getdate(today())
     doc.valid_upto = add_days(base, n)
+    doc.extended = 1
     doc.save(ignore_permissions=False)
     frappe.db.commit()
     return {"ok": True, "valid_upto": str(doc.valid_upto)}

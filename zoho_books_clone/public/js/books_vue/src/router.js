@@ -9,6 +9,7 @@ import Dashboard            from "./pages/Dashboard.vue";
 import Customers            from "./pages/Customers.vue";
 import CustomerProfile      from "./pages/CustomerProfile.vue";
 import Vendors              from "./pages/Vendors.vue";
+import SalesPersons         from "./pages/SalesPersons.vue";
 import InventoryItems       from "./pages/InventoryItems.vue";
 import InventoryItemView    from "./pages/InventoryItemView.vue";
 import InventoryVariants    from "./pages/InventoryVariants.vue";
@@ -116,6 +117,12 @@ const routes = [
     name: "vendors",
     component: Vendors,
     meta: { module: "customers" },  // Vendors share the customers module flag in Books Company Member
+  },
+  {
+    path: "/sales-persons",
+    name: "sales-persons",
+    component: SalesPersons,
+    meta: { module: "customers" },  // Sales Persons share the customers module flag in Books Company Member
   },
   {
     path: "/inventory/items",
