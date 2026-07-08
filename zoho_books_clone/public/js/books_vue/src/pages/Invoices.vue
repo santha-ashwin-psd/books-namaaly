@@ -886,7 +886,7 @@
                       <td class="inv-dash">{{ it.hsn_code || '—' }}</td>
                       <td class="td-r" >{{ flt(it.qty) }}</td>
                       <td class="td-r" >{{ fmtN(it.rate) }}</td>
-                      <td class="td-r inv-dash">{{ it.discount_amount ? fmtN(it.discount_amount) : '—' }}</td>
+                      <td class="td-r inv-dash">{{ lineDiscount(it) ? fmtN(lineDiscount(it)) : '—' }}</td>
                       <td class="td-r" style="font-weight:600">{{ fmtN(it.amount) }}</td>
                     </tr>
                   </tbody>
@@ -897,11 +897,11 @@
                   <div class="inv-totals-inner">
                     <div class="inv-total-line">
                       <span class="t-lbl">Subtotal</span>
-                      <span class="t-amt">{{ fmtAmt(viewInv.net_total != null ? viewInv.net_total : (viewInv.grand_total||0)-(viewInv.total_tax||0), viewInv.currency) }}</span>
+                      <span class="t-amt">{{ fmtAmt(viewSubtotal, viewInv.currency) }}</span>
                     </div>
-                    <div class="inv-total-line">
+                    <div v-if="viewDiscountTotal" class="inv-total-line">
                       <span class="t-lbl">Discount</span>
-                      <span class="t-amt">{{ fmtAmt(viewInv.discount_amount||0, viewInv.currency) }}</span>
+                      <span class="t-amt">-{{ fmtAmt(viewDiscountTotal, viewInv.currency) }}</span>
                     </div>
                     <template v-if="viewInv.taxes&&viewInv.taxes.length">
                       <div v-for="(tx,i) in viewInv.taxes" :key="i" class="inv-total-line">
@@ -1697,6 +1697,32 @@ function _toPrintDoc(data) {
 function _invCfg(data) { return { ...INV_PRINT_CFG, companyName: data?.company || window.__booksCompany || "" }; }
 
 const previewHtml = computed(()=>renderDocument(_toPrintDoc(previewData.value), _invCfg(previewData.value)));
+
+// Sum of per-line discounts for the invoice being viewed, plus the
+// pre-discount subtotal (qty*rate before any line discount is applied).
+// viewInv.net_total from the backend is already POST-discount, so the
+// "Subtotal" line must add the discount back to show the correct gross figure.
+// Resilient per-line discount lookup: prefer the stored discount_amount, but
+// fall back to deriving it from qty*rate vs amount (or discount_percentage)
+// in case discount_amount was lost/never persisted for an older/edge-case row.
+function lineDiscount(it){
+  const stored = flt(it.discount_amount);
+  if (stored) return stored;
+  const base = Math.round(flt(it.qty)*flt(it.rate)*100)/100;
+  const fromAmount = Math.round((base - flt(it.amount))*100)/100;
+  if (fromAmount > 0.004) return fromAmount;
+  if (flt(it.discount_percentage)) return Math.round(base*flt(it.discount_percentage)/100*100)/100;
+  return 0;
+}
+const viewDiscountTotal = computed(()=>{
+  if (!viewInv.value?.items) return 0;
+  return Math.round(viewInv.value.items.reduce((s,it)=>s+lineDiscount(it),0)*100)/100;
+});
+const viewSubtotal = computed(()=>{
+  if (!viewInv.value) return 0;
+  const net = viewInv.value.net_total != null ? flt(viewInv.value.net_total) : flt(viewInv.value.grand_total)-flt(viewInv.value.total_tax);
+  return Math.round((net + viewDiscountTotal.value)*100)/100;
+});
 
 const timelineSteps = computed(()=>{
   if (!viewInv.value) return [];

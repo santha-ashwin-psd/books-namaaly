@@ -42,9 +42,11 @@ class SalesInvoice(Document):
             if not self.is_return and flt(item.qty) <= 0:
                 frappe.throw(_("Qty must be > 0 for {0}").format(item.item_name))
             base = round(flt(item.qty) * flt(item.rate), 2)
-            if flt(item.discount_percentage):
-                item.discount_amount = round(base * flt(item.discount_percentage) / 100, 2)
-            item.discount_amount = flt(item.discount_amount)
+            item.discount_percentage = flt(item.discount_percentage)
+            if item.discount_percentage:
+                item.discount_amount = round(base * item.discount_percentage / 100, 2)
+            else:
+                item.discount_amount = flt(item.discount_amount)
             item.amount = round(base - item.discount_amount, 2)
 
     def calculate_totals(self):
