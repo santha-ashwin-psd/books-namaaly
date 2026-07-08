@@ -57,7 +57,7 @@
             <tr v-for="n in 6" :key="n"><td colspan="8"><div class="ob-shimmer"></div></td></tr>
           </template>
           <template v-else>
-            <tr v-for="e in filtered" :key="e.name" class="ob-row" @click="openView(e)">
+            <tr v-for="e in paginated" :key="e.name" class="ob-row" @click="openView(e)">
               <td><span class="ob-num">{{ e.name }}</span></td>
               <td class="mono-sm text-muted">{{ fmtDate(e.posting_date) }}</td>
               <td><span class="ob-wh-tag" v-if="e.to_warehouse">{{ shortWH(e.to_warehouse) }}</span><span v-else class="text-muted">Multiple</span></td>
@@ -92,7 +92,7 @@
         </template>
         <div v-else-if="!filtered.length" class="ob-mc-empty">No opening stock entries yet</div>
         <template v-else>
-          <div v-for="e in filtered" :key="e.name" class="ob-mobile-card" @click="openView(e)">
+          <div v-for="e in paginated" :key="e.name" class="ob-mobile-card" @click="openView(e)">
             <div class="ob-mc-top">
               <span class="ob-mc-docno">{{ e.name }}</span>
               <span style="display:flex;gap:6px;align-items:center">
@@ -106,6 +106,24 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="!loading && filtered.length" class="ob-pagination">
+        <span class="ob-pg-info">{{ pageRangeLabel }}</span>
+        <div class="ob-pg-controls">
+          <select v-model.number="pageSize" class="ob-pg-size">
+            <option :value="10">10 / page</option>
+            <option :value="20">20 / page</option>
+            <option :value="50">50 / page</option>
+            <option :value="100">100 / page</option>
+          </select>
+          <button class="ob-pg-btn" :disabled="page===1" @click="goToPage(1)" title="First page">«</button>
+          <button class="ob-pg-btn" :disabled="page===1" @click="goToPage(page-1)" title="Previous page">‹</button>
+          <span class="ob-pg-current">Page {{ page }} of {{ totalPages }}</span>
+          <button class="ob-pg-btn" :disabled="page===totalPages" @click="goToPage(page+1)" title="Next page">›</button>
+          <button class="ob-pg-btn" :disabled="page===totalPages" @click="goToPage(totalPages)" title="Last page">»</button>
+        </div>
       </div>
     </div>
 
@@ -316,8 +334,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
-import { apiList, apiGet, apiSave, apiSubmit, resolveCompany, apiLinkValues } from "../api/client.js";
+import { ref, reactive, computed, onMounted, watch } from "vue";
+import { apiList, apiGet, apiPOST, apiSave, apiSubmit, resolveCompany, apiLinkValues } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
@@ -362,6 +380,28 @@ const filtered = computed(() => {
   );
 });
 
+// ── Pagination ──────────────────────────────────────────────────────────
+const page     = ref(1);
+const pageSize = ref(20);
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)));
+const paginated = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filtered.value.slice(start, start + pageSize.value);
+});
+const pageRangeLabel = computed(() => {
+  if (!filtered.value.length) return "0 of 0";
+  const start = (page.value - 1) * pageSize.value + 1;
+  const end = Math.min(filtered.value.length, page.value * pageSize.value);
+  return `${start}–${end} of ${filtered.value.length}`;
+});
+function goToPage(p) {
+  page.value = Math.min(Math.max(1, p), totalPages.value);
+}
+// Reset to page 1 whenever the search term changes, and clamp the current
+// page if the underlying list shrinks below it (e.g. after a reload).
+watch(search, () => { page.value = 1; });
+watch(totalPages, (tp) => { if (page.value > tp) page.value = tp; });
+
 const kpi = computed(() => {
   // Cancelled entries no longer represent real opening balances — exclude
   // them here the same way "value" already does, so the KPI strip can't show
@@ -401,13 +441,21 @@ async function load() {
       filters: [["company", "=", co], ["stock_entry_type", "=", "Opening Stock"]],
       limit: 500, order: "posting_date desc, creation desc",
     });
-    // Pull item/batch counts for each entry (best-effort; small N expected)
-    for (const e of rows) {
-      try {
-        const full = await apiGet("Stock Entry", e.name);
-        e._itemCount = (full?.items || []).length;
-        e._batchCount = (full?.items || []).filter(i => i.batch_no).length;
-      } catch { e._itemCount = null; e._batchCount = null; }
+    // Item/batch counts for every row in one grouped query instead of
+    // firing a full apiGet() per row (that N+1 pattern is what made this
+    // list slow to load once there were more than a handful of entries).
+    try {
+      const names = rows.map(r => r.name);
+      const counts = names.length
+        ? await apiPOST("zoho_books_clone.api.docs.get_stock_entry_line_counts", { names })
+        : {};
+      for (const e of rows) {
+        const c = counts[e.name];
+        e._itemCount = c ? c.item_count : 0;
+        e._batchCount = c ? c.batch_count : 0;
+      }
+    } catch {
+      for (const e of rows) { e._itemCount = null; e._batchCount = null; }
     }
     list.value = rows;
   } catch (e) {
@@ -762,6 +810,15 @@ onMounted(async () => {
 .ob-val-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; margin-bottom:4px; }
 .ob-val-num { font-weight:700; font-size:16px; color:#7c3aed; }
 
+.ob-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-top:1px solid #e5e7eb; background:#f9fafb; flex-wrap:wrap; }
+.ob-pg-info { font-size:12px; color:#6b7280; }
+.ob-pg-controls { display:flex; align-items:center; gap:6px; }
+.ob-pg-size { border:1px solid #e2e8f0; border-radius:6px; padding:5px 8px; font-size:12px; color:#374151; background:#fff; outline:none; }
+.ob-pg-btn { background:#fff; border:1px solid #e2e8f0; border-radius:6px; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:#374151; font-size:14px; }
+.ob-pg-btn:hover:not(:disabled) { background:#eff6ff; color:#2563eb; border-color:#bfdbfe; }
+.ob-pg-btn:disabled { opacity:.4; cursor:not-allowed; }
+.ob-pg-current { font-size:12px; color:#374151; padding:0 4px; white-space:nowrap; }
+
 .ob-mobile-cards { display:none; }
 .ob-desktop-table { display:table; }
 @media (max-width:768px) {
@@ -788,5 +845,7 @@ onMounted(async () => {
 @media (max-width:480px) {
   .ob-page { padding:12px; gap:10px; }
   .ob-fields-grid { grid-template-columns:1fr !important; }
+  .ob-pagination { justify-content:center; }
+  .ob-pg-info { width:100%; text-align:center; }
 }
 </style>

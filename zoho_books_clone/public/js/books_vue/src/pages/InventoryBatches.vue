@@ -66,7 +66,7 @@
             <tr v-for="n in 8" :key="n"><td colspan="9"><div class="b-shimmer" style="height:13px"></div></td></tr>
           </template>
           <template v-else>
-            <tr v-for="b in sorted" :key="b.name" class="bt-row" @click="openEdit(b)">
+            <tr v-for="b in paginated" :key="b.name" class="bt-row" @click="openEdit(b)">
               <td class="font-medium">{{ b.batch_no || b.name }}</td>
               <td class="text-muted">{{ b.item }}</td>
               <td class="text-muted">{{ b.warehouse || '—' }}</td>
@@ -103,7 +103,7 @@
           <div>{{ list.length ? 'No batches match' : 'No batches yet' }}</div>
         </div>
         <template v-else>
-          <div v-for="b in sorted" :key="b.name" class="bt-mobile-card" @click="openEdit(b)">
+          <div v-for="b in paginated" :key="b.name" class="bt-mobile-card" @click="openEdit(b)">
             <div class="bt-mc-top">
               <span class="bt-mc-batch">{{ b.batch_no || b.name }}</span>
               <span class="bt-badge" :class="'bt-badge--' + batchStatus(b)">{{ statusLabel(batchStatus(b)) }}</span>
@@ -119,6 +119,24 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="!loading && sorted.length" class="bt-pagination">
+        <span class="bt-pg-info">{{ pageRangeLabel }}</span>
+        <div class="bt-pg-controls">
+          <select v-model.number="pageSize" class="bt-pg-size">
+            <option :value="10">10 / page</option>
+            <option :value="20">20 / page</option>
+            <option :value="50">50 / page</option>
+            <option :value="100">100 / page</option>
+          </select>
+          <button class="bt-pg-btn" :disabled="page===1" @click="goToPage(1)" title="First page">«</button>
+          <button class="bt-pg-btn" :disabled="page===1" @click="goToPage(page-1)" title="Previous page">‹</button>
+          <span class="bt-pg-current">Page {{ page }} of {{ totalPages }}</span>
+          <button class="bt-pg-btn" :disabled="page===totalPages" @click="goToPage(page+1)" title="Next page">›</button>
+          <button class="bt-pg-btn" :disabled="page===totalPages" @click="goToPage(totalPages)" title="Last page">»</button>
+        </div>
       </div>
     </div>
 
@@ -200,7 +218,7 @@
   </div>
 </template>
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, watch } from "vue";
 import { apiList, apiSave, apiSubmit, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
@@ -308,6 +326,27 @@ function sortArrow(col) {
   if (sortCol.value !== col) return '<span style="color:#d1d5db">⇅</span>';
   return sortDir.value === "asc" ? "↑" : "↓";
 }
+
+// ── Pagination ──────────────────────────────────────────────────────────
+const page     = ref(1);
+const pageSize = ref(20);
+const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / pageSize.value)));
+const paginated = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return sorted.value.slice(start, start + pageSize.value);
+});
+const pageRangeLabel = computed(() => {
+  if (!sorted.value.length) return "0 of 0";
+  const start = (page.value - 1) * pageSize.value + 1;
+  const end = Math.min(sorted.value.length, page.value * pageSize.value);
+  return `${start}–${end} of ${sorted.value.length}`;
+});
+function goToPage(p) {
+  page.value = Math.min(Math.max(1, p), totalPages.value);
+}
+// Any change that reshuffles/refilters the result set should land back on page 1.
+watch([search, statusFilter, () => filters.item, () => filters.warehouse, sortCol, sortDir], () => { page.value = 1; });
+watch(totalPages, (tp) => { if (page.value > tp) page.value = tp; });
 
 const statusTabs = computed(() => [
   { key: "all", label: "All", count: filteredRowsForCount.value.length },
@@ -555,6 +594,15 @@ onMounted(() => {
 .bt-checkbox-lbl { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; }
 .bt-dfooter { display: flex; align-items: center; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid #e5e7eb; flex-shrink: 0; gap: 8px; }
 
+.bt-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid #e5e7eb; background: #f9fafb; flex-wrap: wrap; }
+.bt-pg-info { font-size: 12px; color: #6b7280; }
+.bt-pg-controls { display: flex; align-items: center; gap: 6px; }
+.bt-pg-size { border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-size: 12px; color: #374151; background: #fff; outline: none; }
+.bt-pg-btn { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #374151; font-size: 14px; }
+.bt-pg-btn:hover:not(:disabled) { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.bt-pg-btn:disabled { opacity: .4; cursor: not-allowed; }
+.bt-pg-current { font-size: 12px; color: #374151; padding: 0 4px; white-space: nowrap; }
+
 .bt-mobile-cards { display: none; }
 .bt-desktop-table { display: table; }
 
@@ -580,5 +628,7 @@ onMounted(() => {
   .bt-page { padding: 12px; gap: 12px; }
   .bt-toolbar { padding: 12px; gap: 8px; }
   .bt-form-row { grid-template-columns: 1fr; }
+  .bt-pagination { justify-content: center; }
+  .bt-pg-info { width: 100%; text-align: center; }
 }
 </style>

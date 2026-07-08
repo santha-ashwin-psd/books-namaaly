@@ -174,6 +174,41 @@ def get_doc(doctype, name):
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_stock_entry_line_counts(names=None):
+    """
+    Bulk item-count / batch-count lookup for a list of Stock Entry names, in a
+    single grouped query. Used by the Opening Stock list (and similar list
+    views) so it doesn't have to fire one full frappe.get_doc() per row just
+    to count child rows — that N+1 pattern is what made the list slow to load.
+    Returns {name: {"item_count": n, "batch_count": n}, ...}.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Stock Entry", "read")
+
+    if isinstance(names, str):
+        names = json.loads(names)
+    names = [n for n in (names or []) if n]
+    if not names:
+        return {}
+
+    rows = frappe.db.sql(
+        """
+        SELECT parent,
+               COUNT(*) AS item_count,
+               SUM(CASE WHEN IFNULL(batch_no, '') != '' THEN 1 ELSE 0 END) AS batch_count
+        FROM `tabStock Entry Detail`
+        WHERE parent IN %(names)s
+        GROUP BY parent
+        """,
+        {"names": names},
+        as_dict=True,
+    )
+    return {r.parent: {"item_count": int(r.item_count or 0), "batch_count": int(r.batch_count or 0)} for r in rows}
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_list(doctype, fields=None, filters=None, order_by="modified desc", limit_page_length=50, start=0):
     """
     Permission-free list endpoint that mirrors frappe.client.get_list.
