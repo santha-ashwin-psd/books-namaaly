@@ -355,6 +355,12 @@
                   <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
                 </select>
               </div>
+              <!-- Sales Person -->
+              <div style="margin-top:14px">
+                <label class="inv-lbl">Sales Person</label>
+                <SearchableSelect v-model="form.sales_person" :options="salesPersons"
+                  placeholder="Select sales person"/>
+              </div>
               <!-- Place of supply -->
               <div style="margin-top:14px">
                 <label class="inv-lbl">Place of Supply</label>
@@ -930,6 +936,10 @@
                 <span style="color:#6b7280;font-weight:600">Cost Center:</span>
                 <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:5px;padding:2px 10px;font-weight:600">{{ viewInv.cost_center }}</span>
               </div>
+              <div v-if="viewInv.sales_person" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
+                <span style="color:#6b7280;font-weight:600">Sales Person:</span>
+                <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;border-radius:5px;padding:2px 10px;font-weight:600">{{ salesPersonLabel(viewInv.sales_person) }}</span>
+              </div>
               <div v-if="viewInv.set_warehouse" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
                 <span style="color:#6b7280;font-weight:600">Dispatch Warehouse:</span>
                 <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:5px;padding:2px 10px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span v-html="icon('warehouse',12)"></span>{{ viewInv.set_warehouse }}</span>
@@ -1460,6 +1470,14 @@ const INDIAN_STATES = [
   "31-Lakshadweep","32-Kerala","33-Tamil Nadu","34-Puducherry","35-Andaman and Nicobar Islands",
   "36-Telangana","37-Andhra Pradesh","38-Ladakh","97-Other Territory",
 ];
+// Customer/Address "state" is usually stored as plain text ("Tamil Nadu")
+// while the Place of Supply dropdown uses GST-coded labels ("33-Tamil Nadu").
+// Match on the name portion so auto-fill lands on a real dropdown option.
+function matchIndianState(raw) {
+  const clean = String(raw || "").replace(/^\s*\d+\s*-\s*/, "").trim().toLowerCase();
+  if (!clean) return "";
+  return INDIAN_STATES.find(s => s.split("-").slice(1).join("-").toLowerCase() === clean) || "";
+}
 const CURRENCY_SYMBOLS = { INR: "₹" };
 const TEMPLATES = [
   { key:"classic", label:"Classic" },
@@ -1472,6 +1490,7 @@ const list         = ref([]);
 const loading      = ref(false);
 const viewMode     = ref("table"); // "table" | "grid"
 const customers    = ref([]);
+const salesPersons = ref([]);
 const items        = ref([]);
 const activeFilter = ref("all");
 const search       = ref("");
@@ -1507,7 +1526,7 @@ const form = reactive({
   currency:"INR", exchange_rate:1, gst_treatment:"",
   update_stock:1, set_warehouse:"",
   logo:"",
-  cost_center:"",
+  cost_center:"", sales_person:"",
 });
 const customerBillingAddrs  = ref([]);
 const customerShippingAddrs = ref([]);
@@ -1865,6 +1884,13 @@ async function load() {
 async function loadCustomers() {
   try { const r=await apiList("Customer",{fields:["name","customer_name"],filters:[["disabled","=",0]],limit:500,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
 }
+async function loadSalesPersons() {
+  try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:500,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
+}
+function salesPersonLabel(id) {
+  const sp = salesPersons.value.find(p => p.name === id);
+  return sp ? sp.label : id;
+}
 async function loadItems() {
   try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0],["has_variants","=",0]],limit:500,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
@@ -1973,6 +1999,12 @@ async function onCustomerChange() {
     if (firstBilling) { form.billing_address_name = firstBilling.name; form.billing_address = formatAddress(firstBilling); }
     const firstShipping = customerAddresses.value.find(a => a.address_type === "Shipping");
     if (firstShipping) { form.shipping_address_name = firstShipping.name; form.shipping_address = formatAddress(firstShipping); }
+    // Auto-fill Place of Supply so GST tax templates (which key off intra vs.
+    // inter-state) apply out of the box — previously this stayed blank unless
+    // picked manually, which silently zeroed CGST/SGST-only templates.
+    if (form.gst_treatment !== "Overseas" && !form.place_of_supply) {
+      form.place_of_supply = matchIndianState(firstBilling?.state) || matchIndianState(custDoc?.state) || "";
+    }
   } catch {}
   addressLoading.value=false;
 }
@@ -2056,7 +2088,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",update_stock:0,set_warehouse:"",logo:"",cost_center:""});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:""});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2064,7 +2096,7 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:""});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||""});
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
   fetchWarehouses("");
@@ -2082,7 +2114,7 @@ async function openEdit(inv) {
       terms:doc.terms||"",remarks:doc.remarks||"",docstatus:doc.docstatus||0,
       currency:doc.currency||"INR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
       update_stock:doc.update_stock||0,set_warehouse:doc.set_warehouse||"",
-      logo:doc.logo||"",cost_center:doc.cost_center||"",
+      logo:doc.logo||"",cost_center:doc.cost_center||"",sales_person:doc.sales_person||"",
     });
     lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
     if (!lines.value.length) addLine();
@@ -2152,7 +2184,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||""};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||""};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
 
@@ -2556,7 +2588,7 @@ function printViewInvoice() {
 
 onMounted(async () => {
   await load();
-  loadCustomers(); loadItems(); loadTaxAccount(); loadBranding();
+  loadCustomers(); loadSalesPersons(); loadItems(); loadTaxAccount(); loadBranding();
   try { setCompany(window.__booksCompany || await resolveCompany()); } catch {}
 
   // Cross-document deep link: /invoices?open=INV-...

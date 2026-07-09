@@ -502,7 +502,7 @@
               <div class="ad-field">
                 <label class="ad-label">Brand</label>
                 <select class="ad-input" v-model="form.brand">
-                  <option value="">— None —</option>
+                  <option value="">— Select —</option>
                   <option v-for="b in brandList" :key="b" :value="b">{{b}}</option>
                 </select>
               </div>

@@ -20,7 +20,7 @@
 
   <!-- KPI Cards -->
   <div class="bk-kpi-grid bk-kpi-grid-4">
-    <div class="bk-kpi-card clickable" @click="tab='all'">
+    <div class="bk-kpi-card bk-kpi-accent clickable" @click="tab='all'">
       <div class="bk-kpi-inner">
         <div class="bk-kpi-icon" style="background:#dbeafe"><span v-html="icon('file',18)" style="color:#2563eb"></span></div>
         <div class="bk-kpi-body">
@@ -58,34 +58,55 @@
     </div>
   </div>
 
+  <!-- Bulk action bar -->
+  <BulkActionBar :count="selectedRows.size" @clear="selectedRows=new Set()">
+    <button @click="bulkCancel">Cancel Submitted</button>
+    <button class="bab-danger" @click="bulkDelete">Delete Drafts</button>
+  </BulkActionBar>
+
   <!-- Table -->
   <div class="inv-table-wrap">
-    <table class="inv-table">
+    <table class="inv-table pr-desktop-table">
       <thead>
         <tr>
-          <th>GRN #</th>
-          <th>Supplier</th>
-          <th>Date</th>
-          <th>Purchase Order</th>
-          <th class="ta-r">Items</th>
+          <th style="width:32px" class="th-check"><input type="checkbox" @change="toggleAll" :checked="allChecked"/></th>
+          <th @click="sortBy('name')" class="sortable">GRN # <span v-html="sortArrow('name')"></span></th>
+          <th @click="sortBy('supplier_name')" class="sortable">Supplier <span v-html="sortArrow('supplier_name')"></span></th>
+          <th @click="sortBy('posting_date')" class="sortable">Date <span v-html="sortArrow('posting_date')"></span></th>
+          <th @click="sortBy('purchase_order')" class="sortable">Purchase Order <span v-html="sortArrow('purchase_order')"></span></th>
+          <th @click="sortBy('total_qty')" class="sortable ta-r">Items <span v-html="sortArrow('total_qty')"></span></th>
           <th>Status</th>
           <th style="width:120px;text-align:center">Actions</th>
         </tr>
       </thead>
       <tbody>
         <template v-if="loading">
-          <tr v-for="n in 5" :key="n"><td colspan="7" style="padding:14px"><div class="shimmer" style="height:12px"></div></td></tr>
+          <tr v-for="n in 5" :key="n"><td colspan="8" style="padding:14px"><div class="shimmer" style="height:12px"></div></td></tr>
         </template>
         <tr v-else-if="!sorted.length">
-          <td colspan="7" class="b-empty">{{search ? 'No results' : 'No purchase receipts yet'}}</td>
+          <td colspan="8" class="bk-empty-state">
+            <div class="bk-empty-inner">
+              <template v-if="search||tab!=='all'">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <p class="bk-empty-title">No results match your filters</p>
+              </template>
+              <template v-else>
+                <div class="bk-empty-illus"><svg width="80" height="96" viewBox="0 0 80 96" fill="none"><rect x="10" y="8" width="60" height="80" rx="6" fill="#e2e8f0"/><rect x="14" y="12" width="52" height="72" rx="4" fill="#fff"/><rect x="22" y="26" width="36" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="34" width="28" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="42" width="32" height="3" rx="2" fill="#e2e8f0"/><rect x="50" y="64" width="18" height="20" rx="3" fill="#16a34a" opacity=".7"/><rect x="36" y="70" width="12" height="14" rx="3" fill="#2563eb" opacity=".6"/></svg></div>
+                <p class="bk-empty-title">No purchase receipts yet</p>
+                <p class="bk-empty-sub">Create a GRN to record stock received from a supplier.</p>
+                <button class="bk-empty-btn" @click="openNew"><span v-html="icon('plus',13)"></span> New GRN</button>
+              </template>
+            </div>
+          </td>
         </tr>
-        <tr v-else v-for="r in paged" :key="r.name" class="inv-row" @click="openView(r)">
-          <td><span class="inv-link">{{r.name}}</span></td>
-          <td class="fw-600">{{r.supplier_name||r.supplier||'—'}}</td>
-          <td class="c-muted" style="font-size:13px">{{r.posting_date||'—'}}</td>
-          <td class="c-muted mono" style="font-size:13px">{{r.purchase_order||'—'}}</td>
-          <td class="ta-r c-muted" style="font-size:13px">{{r.total_qty||'—'}}</td>
-          <td><span class="inv-status-badge" :class="statusClass(r)">{{statusLabel(r)}}</span></td>
+        <tr v-else v-for="r in paged" :key="r.name" class="inv-row" :class="{selected:selectedRows.has(r.name)}">
+          <td class="td-check"><input type="checkbox" :disabled="r.source!=='real'" :checked="selectedRows.has(r.name)" @change="toggleRow(r.name)"/></td>
+          <td @click="openView(r)"><span class="inv-link">{{r.name}}</span></td>
+          <td class="fw-600" @click="openView(r)">{{r.supplier_name||r.supplier||'—'}}</td>
+          <td class="c-muted mono-sm" @click="openView(r)">{{r.posting_date||'—'}}</td>
+          <td class="c-muted mono-sm" @click="openView(r)">{{r.purchase_order||'—'}}</td>
+          <td class="ta-r c-muted mono-sm" @click="openView(r)">{{r.total_qty||'—'}}</td>
+          <td @click="openView(r)"><span class="inv-status-badge" :class="statusClass(r)">{{statusLabel(r)}}</span></td>
           <td @click.stop>
             <div class="pr-actions-row">
               <button class="inv-act-btn" @click.stop="openView(r)" title="View"><span v-html="icon('eye',12)"></span></button>
@@ -97,6 +118,43 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- Mobile cards (shown at ≤768px, hidden on desktop) -->
+    <div class="pr-mobile-cards">
+      <template v-if="loading">
+        <div v-for="n in 5" :key="n" class="pr-mobile-card pr-mc--skeleton">
+          <div class="pr-mc-shimmer" style="height:13px;width:55%;margin-bottom:8px"></div>
+          <div class="pr-mc-shimmer" style="height:11px;width:40%;margin-bottom:6px"></div>
+          <div class="pr-mc-shimmer" style="height:11px;width:65%"></div>
+        </div>
+      </template>
+      <div v-else-if="!sorted.length" class="pr-mc-empty">
+        <div style="font-size:32px;margin-bottom:8px">📦</div>
+        <div>{{search||tab!=='all' ? 'No results match your filters' : 'No purchase receipts yet'}}</div>
+      </div>
+      <template v-else>
+        <div v-for="r in paged" :key="r.name" class="pr-mobile-card" @click="openView(r)">
+          <div class="pr-mc-top">
+            <span class="pr-mc-docno">{{r.name}}</span>
+            <span class="inv-status-badge" :class="statusClass(r)">{{statusLabel(r)}}</span>
+          </div>
+          <div class="pr-mc-mid">{{r.supplier_name||r.supplier||'—'}}</div>
+          <div class="pr-mc-meta">
+            <span>{{r.posting_date||'—'}}</span>
+            <span class="pr-mc-po">{{r.purchase_order||'—'}}</span>
+          </div>
+          <div class="pr-mc-meta">
+            <span>Items: {{r.total_qty||'—'}}</span>
+          </div>
+          <div class="pr-mc-footer">
+            <button class="pr-mc-btn" @click.stop="openView(r)">View</button>
+            <button v-if="canEdit(r)" class="pr-mc-btn" @click.stop="openEdit(r)">Edit</button>
+            <button v-if="r.source==='real' && r.docstatus===1" class="pr-mc-btn pr-mc-warn" @click.stop="confirmTarget={row:r,mode:'cancel'}">Cancel</button>
+            <button v-if="r.source==='real' && r.docstatus===0" class="pr-mc-btn pr-mc-danger" @click.stop="confirmTarget={row:r,mode:'delete'}">Delete</button>
+          </div>
+        </div>
+      </template>
+    </div>
   </div>
 
   <div v-if="!loading && sorted.length">
@@ -444,6 +502,7 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
 import Pagination from "../components/Pagination.vue";
+import BulkActionBar from "../components/BulkActionBar.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
@@ -462,6 +521,9 @@ const deleting  = ref(false);
 const cancelling = ref(false);
 const editingName = ref("");
 const confirmTarget = ref(null); // { row, mode: "delete"|"cancel" }
+const selectedRows = ref(new Set());
+const sortKey = ref("posting_date");
+const sortDir = ref(-1);
 const vendorOptions = ref([]);
 const itemOptions   = ref([]);
 const poOptions     = ref([]);
@@ -546,10 +608,57 @@ const filtered = computed(() => {
   return r;
 });
 
-const sorted = computed(() => [...filtered.value].sort((a,b) =>
-  (b.posting_date||"").localeCompare(a.posting_date||"")
-));
+const sorted = computed(() => {
+  const key = sortKey.value, dir = sortDir.value;
+  return [...filtered.value].sort((a,b) => {
+    let av = a[key], bv = b[key];
+    if (key === "total_qty") { av = flt(av); bv = flt(bv); return dir * (av - bv); }
+    av = (av||"").toString().toLowerCase(); bv = (bv||"").toString().toLowerCase();
+    return dir * av.localeCompare(bv);
+  });
+});
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "purchase-receipts" });
+
+function sortBy(key) {
+  if (sortKey.value === key) sortDir.value = -sortDir.value;
+  else { sortKey.value = key; sortDir.value = key === "posting_date" ? -1 : 1; }
+}
+function sortArrow(key) {
+  if (sortKey.value !== key) return "";
+  return sortDir.value === 1 ? "↑" : "↓";
+}
+
+const selectableRows = computed(() => paged.value.filter(r => r.source === "real"));
+const allChecked = computed(() => selectableRows.value.length > 0 && selectableRows.value.every(r => selectedRows.value.has(r.name)));
+function toggleRow(name) {
+  const s = new Set(selectedRows.value);
+  if (s.has(name)) s.delete(name); else s.add(name);
+  selectedRows.value = s;
+}
+function toggleAll() {
+  if (allChecked.value) { selectedRows.value = new Set(); return; }
+  selectedRows.value = new Set(selectableRows.value.map(r => r.name));
+}
+async function bulkCancel() {
+  const targets = [...selectedRows.value].map(n => list.value.find(r => r.name === n)).filter(r => r && r.source==="real" && r.docstatus===1);
+  if (!targets.length) { toast.info("No submitted GRNs selected"); return; }
+  for (const r of targets) {
+    try { await apiCancel("Purchase Receipt", r.name); } catch (e) { toast.error(`${r.name}: ${e.message||"Cancel failed"}`); }
+  }
+  toast.success(`Cancelled ${targets.length} GRN(s)`);
+  selectedRows.value = new Set();
+  await load();
+}
+async function bulkDelete() {
+  const targets = [...selectedRows.value].map(n => list.value.find(r => r.name === n)).filter(r => r && r.source==="real" && r.docstatus===0);
+  if (!targets.length) { toast.info("No draft GRNs selected"); return; }
+  for (const r of targets) {
+    try { await apiDelete("Purchase Receipt", r.name); } catch (e) { toast.error(`${r.name}: ${e.message||"Delete failed"}`); }
+  }
+  toast.success(`Deleted ${targets.length} draft GRN(s)`);
+  selectedRows.value = new Set();
+  await load();
+}
 
 async function openView(r) {
   viewOpen.value = true;
@@ -963,4 +1072,26 @@ onMounted(() => { load(); fetchVendors(""); fetchItems(""); fetchPOs(""); });
 .c-muted { color:#6b7280; }
 .mono { font-size:13px; }
 .pr-view-drawer { width: 600px; right: -600px; }
+
+/* ── Mobile cards (hidden on desktop, base display:none must precede @media) ── */
+.pr-mobile-cards { display: none; }
+.pr-mc-shimmer { background: linear-gradient(90deg,#f1f5f9 25%,#e5e7eb 37%,#f1f5f9 63%); background-size:400% 100%; animation: pr-shimmer 1.4s ease infinite; border-radius:4px; }
+@keyframes pr-shimmer { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
+.pr-mc-empty { text-align:center;color:#9ca3af;padding:32px 16px;font-size:13px; }
+
+@media (max-width: 768px) {
+  .pr-desktop-table { display: none; }
+  .pr-mobile-cards { display: flex; flex-direction: column; gap: 0; background: #f8fafc; }
+  .pr-mobile-card { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 14px; cursor: pointer; transition: background .12s; }
+  .pr-mobile-card:active { background: #f8f9fc; }
+  .pr-mc-top { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px; }
+  .pr-mc-docno { font-weight:700;font-size:13.5px;color:#1a6ef7; }
+  .pr-mc-mid { font-weight:600;font-size:13px;color:#111827;margin-bottom:4px; }
+  .pr-mc-meta { display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:2px; }
+  .pr-mc-po { font-family:ui-monospace,monospace; }
+  .pr-mc-footer { display:flex;gap:6px;margin-top:8px;flex-wrap:wrap; }
+  .pr-mc-btn { background:#fff;border:1px solid #e2e8f0;color:#374151;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer; }
+  .pr-mc-btn.pr-mc-warn { border-color:#fde68a;color:#d97706; }
+  .pr-mc-btn.pr-mc-danger { border-color:#fecaca;color:#dc2626; }
+}
 </style>

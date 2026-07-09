@@ -390,6 +390,7 @@ def post_bank_transfer(
         "status": "Reconciled",
         "reference_number": xref,
         "custom_transfer_purpose": purpose,
+        "company": company,
     })
     bt_from.flags.ignore_permissions = True
     bt_from.flags.skip_gl_posting = True
@@ -408,6 +409,7 @@ def post_bank_transfer(
         "status": "Reconciled",
         "reference_number": xref,
         "custom_transfer_purpose": purpose,
+        "company": company,
     })
     bt_to.flags.ignore_permissions = True
     bt_to.flags.skip_gl_posting = True

@@ -69,7 +69,7 @@
             <tr v-for="n in 5" :key="n"><td colspan="8"><div class="br-shimmer"></div></td></tr>
           </template>
           <template v-else>
-            <template v-for="t in displayRows" :key="t.name">
+            <template v-for="t in pagedRows" :key="t.name">
               <tr class="br-row">
                 <td @click.stop><input type="checkbox" :checked="selected.has(t.name)" @change="toggleSelect(t.name)" /></td>
                 <td class="mono-sm">{{ fmtDate(t.date) }}</td>
@@ -122,8 +122,8 @@
         <div v-if="loading">
           <div v-for="n in 4" :key="n" class="br-card-shimmer"></div>
         </div>
-        <template v-else-if="displayRows.length">
-          <div v-for="t in displayRows" :key="t.name" class="br-card">
+        <template v-else-if="pagedRows.length">
+          <div v-for="t in pagedRows" :key="t.name" class="br-card">
             <div class="br-card-header">
               <input type="checkbox" :checked="selected.has(t.name)" @change="toggleSelect(t.name)" class="br-card-chk" />
               <span class="br-card-date mono-sm">{{ fmtDate(t.date) }}</span>
@@ -174,6 +174,10 @@
       </div>
     </div>
 
+    <div v-if="ran && !loading && displayRows.length" style="padding:4px 0 0">
+      <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="displayRows.length" />
+    </div>
+
     <div v-if="!ran" class="br-placeholder">
       <span v-html="icon('balance',40)" style="color:#d1d5db;display:block;margin:0 auto 16px"></span>
       <div style="font-weight:600;color:#374151;margin-bottom:6px">Bank Reconciliation</div>
@@ -190,6 +194,8 @@ import { useRoute } from "vue-router";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
+import Pagination from "../components/Pagination.vue";
+import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
 const route = useRoute();
@@ -219,8 +225,8 @@ async function load(){
     // Backend returns rows with debit/credit; alias for legacy template.
     transactions.value = (res?.bank_transactions || []).map(t => ({
       ...t,
-      deposit:    flt(t.debit  || 0),
-      withdrawal: flt(t.credit || 0),
+      deposit:    flt(t.credit  || 0),
+      withdrawal: flt(t.debit || 0),
     }));
     systemBalance.value = flt(res?.gl_balance || 0);
   }catch(e){toast.error(e.message||"Failed to load");}finally{loading.value=false;}
@@ -249,6 +255,9 @@ const displayRows=computed(()=>{
   if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(t=>(t.description||"").toLowerCase().includes(q)||(t.reference_number||"").toLowerCase().includes(q));}
   return r;
 });
+// Selection/export act on the full filtered set (all pages); only the table
+// rendering itself is paginated via `pagedRows`.
+const { page, pageSize, paged: pagedRows } = usePagination(displayRows, { storageKey: "bank-reconciliation" });
 // Selected rows that are still unreconciled — the only ones "Mark Reconciled" acts on.
 const selectedUnreconciled=computed(()=>displayRows.value.filter(t=>t.status!=="Reconciled"&&selected.value.has(t.name)));
 

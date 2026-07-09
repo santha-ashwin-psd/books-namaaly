@@ -35,7 +35,7 @@ export const NAV = [
   { section: "Contacts" },
   { path: "/customers",                     label: "Customers",        icon: "users",      module: "customers"  },
   { path: "/vendors",                       label: "Vendors",          icon: "vendors",    module: "customers"  },
-  // { path: "/sales-persons",                 label: "Sales Persons",    icon: "badge",      module: "customers"  },
+  { path: "/sales-persons",                 label: "Sales Persons",    icon: "badge",      module: "customers"  },
 
   { section: "Banking" },
   { path: "/banking/accounts",              label: "Bank Accounts",    icon: "bank",       module: "banking"    },

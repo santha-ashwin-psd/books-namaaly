@@ -62,7 +62,7 @@
             <tr v-for="n in 6" :key="n"><td colspan="8"><div class="btr-shimmer"></div></td></tr>
           </template>
           <template v-else>
-            <tr v-for="t in displayRows" :key="t.from_transaction" class="btr-row" @click="openView(t)">
+            <tr v-for="t in pagedRows" :key="t.from_transaction" class="btr-row" @click="openView(t)">
               <td @click.stop><input type="checkbox" :checked="selected.has(t.from_transaction)" @change="toggleSelect(t.from_transaction)" /></td>
               <td class="mono-sm text-muted">{{ fmtDate(t.date) }}</td>
               <td><span class="btr-num">{{ t.reference || t.from_transaction }}</span></td>
@@ -91,7 +91,7 @@
           <div>{{ list.length ? 'No transfers match' : 'No transfers found' }}</div>
         </div>
         <template v-else>
-          <div v-for="t in displayRows" :key="t.from_transaction" class="btr-mobile-card" @click="openView(t)">
+          <div v-for="t in pagedRows" :key="t.from_transaction" class="btr-mobile-card" @click="openView(t)">
             <div class="btr-mc-top">
               <span class="btr-mc-docno">{{ t.reference || t.from_transaction }}</span>
               <span class="btr-badge" :class="t.status==='Reconciled'?'badge-green':'badge-orange'">{{ t.status||'Unreconciled' }}</span>
@@ -104,6 +104,10 @@
           </div>
         </template>
       </div>
+    </div>
+
+    <div v-if="!loading && displayRows.length" style="padding:4px 0 0">
+      <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="displayRows.length" />
     </div>
 
     <!-- Create Drawer -->
@@ -218,6 +222,8 @@ import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
+import Pagination from "../components/Pagination.vue";
+import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -252,6 +258,9 @@ const filtered=computed(()=>{
 const displayRows=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
 function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"desc":"asc";else{sortCol.value=col;sortDir.value="asc";}}
 function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db">⇅</span>';return sortDir.value==="asc"?"↑":"↓";}
+// Selection/export act on the full filtered+sorted set (all pages); only the
+// table rendering itself is paginated via `pagedRows`.
+const { page, pageSize, paged: pagedRows } = usePagination(displayRows, { storageKey: "bank-transfers" });
 
 const statusTabs=computed(()=>[
   {key:"all",label:"All",count:list.value.length},

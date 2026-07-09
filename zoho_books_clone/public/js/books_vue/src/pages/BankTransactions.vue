@@ -13,10 +13,13 @@
           <option value="">All Accounts</option>
           <option v-for="a in bankAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
         </select>
-        <!-- <label class="bt-import-btn" :class="{disabled:!selectedAccount||importing}">
-          📥 Import CSV
-          <input type="file" accept=".csv,text/csv" style="display:none" :disabled="!selectedAccount||importing" @change="onCsvSelected"/>
-        </label> -->
+        <label class="bt-import-btn" :class="{disabled:!selectedAccount||importing}" :title="!selectedAccount?'Pick a Bank Account first':''">
+          {{ importing ? 'Importing…' : '📥 Import CSV/Excel' }}
+          <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" :disabled="!selectedAccount||importing" @change="onFileSelected"/>
+        </label>
+        <button class="bt-btn-ghost" @click="showFormatGuide=true" title="What format should my file be in?">
+          <span v-html="icon('info',14)"></span> Format Guide
+        </button>
         <button class="bt-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
       </div>
     </div>
@@ -30,7 +33,7 @@
     </div>
 
     <div v-if="importResult" class="bt-import-result" :class="importResult.ok?'ok':'err'">
-      <span v-if="importResult.ok">✓ Imported {{ importResult.count }} transaction(s). Skipped {{ importResult.skipped }}.</span>
+      <span v-if="importResult.ok">✓ Imported {{ importResult.count }} transaction(s), auto-reconciled {{ importResult.autoReconciled || 0 }} by date+amount match. Skipped {{ importResult.skipped }}.</span>
       <span v-else>✗ {{ importResult.error }}</span>
       <button class="bt-import-close" @click="importResult=null">×</button>
     </div>
@@ -61,7 +64,7 @@
             <tr v-for="n in 8" :key="n"><td colspan="8"><div class="bt-shimmer"></div></td></tr>
           </template>
           <template v-else>
-            <tr v-for="t in sorted" :key="t.name" class="bt-row" :class="{'bt-row--reconciled':t.status==='Reconciled'}" @click="openView(t)">
+            <tr v-for="t in paged" :key="t.name" class="bt-row" :class="{'bt-row--reconciled':t.status==='Reconciled'}" @click="openView(t)">
               <td class="bt-checkcol" @click.stop>
                 <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled'" @change="toggleSelect(t.name)" />
               </td>
@@ -92,7 +95,7 @@
           <div>No transactions found</div>
         </div>
         <template v-else>
-          <div v-for="t in sorted" :key="t.name" class="bt-mobile-card" @click="openView(t)">
+          <div v-for="t in paged" :key="t.name" class="bt-mobile-card" @click="openView(t)">
             <div class="bt-mc-top">
               <span style="display:flex;align-items:center;gap:8px">
                 <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled'" @click.stop @change="toggleSelect(t.name)" />
@@ -112,6 +115,10 @@
           </div>
         </template>
       </div>
+    </div>
+
+    <div v-if="!loading && sorted.length" style="padding:4px 0 0">
+      <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="sorted.length" />
     </div>
 
     <!-- View -->
@@ -156,6 +163,64 @@
         </div>
       </template>
     </div>
+
+    <!-- Import Format Guide modal -->
+    <div v-if="showFormatGuide" class="bt-overlay" @click.self="showFormatGuide=false">
+      <div class="bt-drawer bt-fmt-modal open">
+        <div class="bt-dheader">
+          <button class="bt-dclose" @click="showFormatGuide=false"><span v-html="icon('x',16)"></span></button>
+          <div class="bt-dh-top">
+            <div class="bt-dh-ico"><span v-html="icon('info',20)"></span></div>
+            <div>
+              <div class="bt-dh-title">Import File Format</div>
+              <div class="bt-dh-sub">Accepted: .csv, .xlsx, .xls</div>
+            </div>
+          </div>
+        </div>
+        <div class="bt-dbody">
+          <div class="bt-section-hdr"><span v-html="icon('file',13)"></span> Required / recognised columns</div>
+          <table class="bt-fmt-table">
+            <thead><tr><th>Column</th><th>Also accepted as</th><th>Required</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="mono-sm">Date</td><td class="text-muted">Transaction Date, Posting Date</td><td>Yes</td><td>YYYY-MM-DD, DD/MM/YYYY, or an Excel date cell</td></tr>
+              <tr><td class="mono-sm">Description</td><td class="text-muted">Narration, Particulars</td><td>No</td><td>Free text, truncated to 140 chars</td></tr>
+              <tr><td class="mono-sm">Debit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money received into the bank (deposit)</td></tr>
+              <tr><td class="mono-sm">Credit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money paid out of the bank (withdrawal)</td></tr>
+              <tr><td class="mono-sm">Amount + Type</td><td class="text-muted">Type / Dr/Cr column with D or C</td><td>Alternative to Debit/Credit</td><td>e.g. Amount=5000, Type=Credit</td></tr>
+              <tr><td class="mono-sm">Reference</td><td class="text-muted">Reference Number, Ref No</td><td>No</td><td>Cheque/UTR/transaction ref, truncated to 80 chars</td></tr>
+            </tbody>
+          </table>
+          <div class="bt-fmt-hint">
+            Column names are matched case-insensitively and the exact header order doesn't matter — extra columns are ignored.
+            Give either <strong>Debit</strong>/<strong>Credit</strong> columns, <em>or</em> an <strong>Amount</strong> column together with a <strong>Type</strong> (Debit/Credit or D/C).
+          </div>
+
+          <div class="bt-section-hdr" style="margin-top:18px"><span v-html="icon('eye',13)"></span> Example</div>
+          <table class="bt-fmt-table">
+            <thead><tr><th>Date</th><th>Description</th><th>Reference</th><th>Debit</th><th>Credit</th></tr></thead>
+            <tbody>
+              <tr><td class="mono-sm">2026-06-01</td><td>Customer payment received</td><td class="mono-sm">UTR12345</td><td class="mono-sm green">15000</td><td class="mono-sm"></td></tr>
+              <tr><td class="mono-sm">2026-06-03</td><td>Office rent</td><td class="mono-sm">CHQ0091</td><td class="mono-sm"></td><td class="mono-sm red">8000</td></tr>
+              <tr><td class="mono-sm">2026-06-05</td><td>Vendor payment</td><td class="mono-sm">NEFT7788</td><td class="mono-sm"></td><td class="mono-sm red">4200</td></tr>
+            </tbody>
+          </table>
+
+          <div class="bt-fmt-hint" style="margin-top:14px">
+            After import, each row is checked against existing Payment Entries for an exact <strong>date + amount</strong> match.
+            An unambiguous match is auto-marked <strong>Reconciled</strong>; anything else stays Unreconciled for manual matching via "🔍 Suggest".
+          </div>
+        </div>
+        <div class="bt-dfooter">
+          <button class="bt-btn-ghost" @click="downloadSampleTemplate('csv')">
+            <span v-html="icon('file',13)"></span> Download Sample CSV
+          </button>
+          <button class="bt-btn-ghost" @click="downloadSampleTemplate('xlsx')" :disabled="downloadingSample">
+            <span v-html="icon('file',13)"></span> {{ downloadingSample ? 'Preparing…' : 'Download Sample Excel' }}
+          </button>
+          <button class="bt-btn-primary" @click="showFormatGuide=false">Got it</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -163,41 +228,121 @@
 import { ref, computed, onMounted } from "vue";
 import { apiList, apiPOST, resolveCompany } from "../api/client.js";
 
-// CSV import
+// Import format guide + sample templates
+const showFormatGuide = ref(false);
+const downloadingSample = ref(false);
+const SAMPLE_ROWS = [
+  { Date: "2026-06-01", Description: "Customer payment received", Reference: "UTR12345", Debit: 15000, Credit: "" },
+  { Date: "2026-06-03", Description: "Office rent", Reference: "CHQ0091", Debit: "", Credit: 8000 },
+  { Date: "2026-06-05", Description: "Vendor payment", Reference: "NEFT7788", Debit: "", Credit: 4200 },
+];
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadSampleTemplate(kind) {
+  const headers = ["Date", "Description", "Reference", "Debit", "Credit"];
+  if (kind === "csv") {
+    const lines = [headers.join(",")];
+    for (const row of SAMPLE_ROWS) {
+      lines.push(headers.map(h => row[h] ?? "").join(","));
+    }
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    downloadBlob(blob, "bank_statement_sample.csv");
+    return;
+  }
+  // xlsx
+  downloadingSample.value = true;
+  loadXlsxLib().then(XLSX => {
+    const ws = XLSX.utils.json_to_sheet(SAMPLE_ROWS, { header: headers });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Statement");
+    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(new Blob([out], { type: "application/octet-stream" }), "bank_statement_sample.xlsx");
+  }).catch(() => {
+    importResult.value = { ok: false, error: "Could not prepare sample Excel file" };
+  }).finally(() => {
+    downloadingSample.value = false;
+  });
+}
+
+// CSV / Excel import
 const importing = ref(false);
 const importResult = ref(null);
-function onCsvSelected(e) {
+let _xlsxLib = null;
+async function loadXlsxLib() {
+  if (_xlsxLib) return _xlsxLib;
+  _xlsxLib = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+  return _xlsxLib;
+}
+
+function isExcelFile(f) {
+  const name = (f.name || "").toLowerCase();
+  return name.endsWith(".xlsx") || name.endsWith(".xls") ||
+    f.type === "application/vnd.ms-excel" ||
+    f.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+}
+
+async function fileToCsvText(f) {
+  if (!isExcelFile(f)) {
+    return await f.text();
+  }
+  // Excel: parse first sheet client-side and convert to CSV so the backend
+  // import endpoint (which understands CSV columns date/description/debit/credit)
+  // can be reused unchanged.
+  const XLSX = await loadXlsxLib();
+  const buf = await f.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const sheetName = wb.SheetNames[0];
+  const sheet = wb.Sheets[sheetName];
+  // dateNF ensures date cells convert to ISO text instead of Excel serials.
+  return XLSX.utils.sheet_to_csv(sheet, { dateNF: "yyyy-mm-dd" });
+}
+
+async function onFileSelected(e) {
   const f = e.target.files?.[0];
   if (!f) return;
   if (!selectedAccount.value) {
     importResult.value = { ok: false, error: "Pick a Bank Account first" };
+    e.target.value = "";
     return;
   }
-  const reader = new FileReader();
-  reader.onload = async (evt) => {
-    importing.value = true;
-    importResult.value = null;
-    try {
-      const r = await apiPOST("zoho_books_clone.api.docs.import_bank_statement_csv", {
-        bank_account: selectedAccount.value,
-        csv_data: evt.target.result,
-      });
-      importResult.value = { ok: true, count: r?.count || 0, skipped: r?.skipped || 0 };
-      await load();
-    } catch (err) {
-      importResult.value = { ok: false, error: err.message || "Import failed" };
-    } finally {
-      importing.value = false;
-      e.target.value = ""; // reset input so the same file can be re-selected
+  importing.value = true;
+  importResult.value = null;
+  try {
+    const csvText = await fileToCsvText(f);
+    const r = await apiPOST("zoho_books_clone.api.docs.import_bank_statement_csv", {
+      bank_account: selectedAccount.value,
+      csv_data: csvText,
+    });
+    importResult.value = {
+      ok: true,
+      count: r?.count || 0,
+      skipped: r?.skipped || 0,
+      autoReconciled: r?.auto_reconciled || 0,
+    };
+    if (r?.auto_reconciled) {
+      toast.success(`${r.auto_reconciled} transaction(s) auto-reconciled by date + amount match`);
     }
-  };
-  reader.readAsText(f);
+    await load();
+  } catch (err) {
+    importResult.value = { ok: false, error: err.message || "Import failed" };
+  } finally {
+    importing.value = false;
+    e.target.value = ""; // reset input so the same file can be re-selected
+  }
 }
 import { useToast } from "../composables/useToast.js";
 import { useRoute } from "vue-router";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
+import Pagination from "../components/Pagination.vue";
+import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
 const route = useRoute();
@@ -243,7 +388,9 @@ const counts=computed(()=>({unreconciled:list.value.filter(t=>t.status!=="Reconc
 function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
 function openView(t){viewDoc.value=t;viewOpen.value=true;}
 
-const reconcilableNames=computed(()=>sorted.value.filter(t=>t.status!=="Reconciled").map(t=>t.name));
+const { page, pageSize, paged } = usePagination(sorted, { storageKey: "bank-transactions" });
+
+const reconcilableNames=computed(()=>paged.value.filter(t=>t.status!=="Reconciled").map(t=>t.name));
 const allSelected=computed(()=>reconcilableNames.value.length>0 && reconcilableNames.value.every(n=>selected.value.has(n)));
 function toggleSelect(name){
   const s=new Set(selected.value);
@@ -381,5 +528,18 @@ onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.a
   .bt-pills { flex-wrap: wrap; gap: 4px; }
   .bt-meta-grid { grid-template-columns: 1fr !important; }
   .bt-dh-amt-val { font-size: 20px; }
+}
+
+/* Import format-guide modal (wider than the standard side drawer) */
+.bt-fmt-modal { width: 640px; right: -680px; }
+.bt-fmt-modal.open { right: 0; }
+.bt-fmt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.bt-fmt-table th { background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 8px 10px; font-size: 11px; font-weight: 700; color: #374151; text-align: left; text-transform: uppercase; }
+.bt-fmt-table td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+.bt-fmt-table tr:last-child td { border-bottom: none; }
+.bt-fmt-hint { font-size: 12.5px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; line-height: 1.55; }
+.bt-dfooter .bt-btn-ghost[disabled] { opacity: .5; cursor: not-allowed; }
+@media (max-width: 720px) {
+  .bt-fmt-modal { width: 96vw; right: -100vw; }
 }
 </style>

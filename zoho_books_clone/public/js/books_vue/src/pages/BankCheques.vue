@@ -51,7 +51,7 @@
         <tbody>
           <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="8"><div class="chq-shimmer"></div></td></tr></template>
           <template v-else>
-            <tr v-for="p in sorted" :key="p.name" class="chq-row" @click="openView(p)">
+            <tr v-for="p in paged" :key="p.name" class="chq-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
               <td><span class="chq-num">{{ p.name }}</span></td>
               <td>{{ p.party_name||p.party||'—' }}</td>
@@ -80,7 +80,7 @@
           <div>{{ list.length ? 'No cheques match' : 'No cheque payments found' }}</div>
         </div>
         <template v-else>
-          <div v-for="p in sorted" :key="p.name" class="chq-mobile-card" @click="openView(p)">
+          <div v-for="p in paged" :key="p.name" class="chq-mobile-card" @click="openView(p)">
             <div class="chq-mc-top">
               <span class="chq-mc-docno">{{ p.name }}</span>
               <span class="chq-badge" :class="statusBadge(p.cheque_status)">{{ p.cheque_status||'Issued' }}</span>
@@ -96,6 +96,10 @@
           </div>
         </template>
       </div>
+    </div>
+
+    <div v-if="!loading && sorted.length" style="padding:4px 0 0">
+      <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="sorted.length" />
     </div>
 
     <!-- View drawer -->
@@ -158,6 +162,8 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
+import Pagination from "../components/Pagination.vue";
+import { usePagination } from "../composables/usePagination.js";
 const { toast } = useToast();
 const activeTab = ref("all");
 const tabs = [
@@ -213,6 +219,10 @@ const sorted = computed(() => {
 });
 function sort(col) { if (sortCol.value===col) sortDir.value=sortDir.value==="asc"?"desc":"asc"; else { sortCol.value=col; sortDir.value="asc"; } }
 function sortArrow(col) { if (sortCol.value!==col) return '<span style="color:#d1d5db">⇅</span>'; return sortDir.value==="asc"?"↑":"↓"; }
+
+// Selection/export act on the full filtered+sorted set (all pages); only the
+// table rendering itself is paginated via `paged`.
+const { page, pageSize, paged } = usePagination(sorted, { storageKey: "bank-cheques" });
 
 const totalAmount = computed(() => list.value.reduce((s, p) => s + flt(p.paid_amount), 0));
 function tabCount(key) {

@@ -4251,10 +4251,10 @@ def suggest_payment_matches(bank_transaction_name, date_tolerance_days=7, amount
         return {"already_reconciled": True, "matches": []}
 
     # Bank-side amount + direction:
-    #   debit on BTXN  = money INTO bank (Receive type PE expected)
-    #   credit on BTXN = money OUT of bank (Pay type PE expected)
+    #   debit on BTXN  = money OUT of bank (Pay type PE expected)
+    #   credit on BTXN = money INTO bank (Receive type PE expected)
     amount = flt(bt.debit) if flt(bt.debit) > 0 else flt(bt.credit)
-    pe_type_pref = "Receive" if flt(bt.debit) > 0 else "Pay"
+    pe_type_pref = "Pay" if flt(bt.debit) > 0 else "Receive"
     if amount <= 0:
         return {"matches": [], "reason": "Bank Transaction has no amount"}
 
@@ -4323,11 +4323,113 @@ def suggest_payment_matches(bank_transaction_name, date_tolerance_days=7, amount
     }
 
 
+def _parse_statement_date(raw):
+    """Best-effort date parser: handles ISO/slash/dash strings and Excel
+    serial-date numbers (in case a spreadsheet cell wasn't text-formatted)."""
+    from frappe.utils import getdate
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    # Excel serial date (e.g. "45678" or "45678.0")
+    try:
+        serial = float(raw)
+        if 20000 < serial < 60000:  # sane range for modern dates
+            from datetime import datetime, timedelta
+            epoch = datetime(1899, 12, 30)  # Excel's day-0, accounting for its leap-year bug
+            return (epoch + timedelta(days=serial)).date()
+    except ValueError:
+        pass
+    # getdate() only reliably parses ISO "YYYY-MM-DD" strings and raises
+    # InvalidDateError on anything else — but bank statements commonly use
+    # DD-MM-YYYY / DD/MM/YYYY (India) or MM/DD/YYYY. Try those explicitly
+    # before giving up, otherwise every non-ISO row in the file gets
+    # silently skipped as "no valid date".
+    from datetime import datetime as _dt
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%d.%m.%Y", "%Y/%m/%d"):
+        try:
+            return _dt.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    try:
+        return getdate(raw)
+    except Exception:
+        return None
+
+
+def _find_existing_bank_transaction_match(bank_account, date, debit, credit, exclude_names):
+    """Look for an already-existing Bank Transaction that represents the same
+    real-world movement as an incoming statement row.
+
+    Every Payment Entry submission auto-creates its own mirror Bank Transaction
+    (see api/books_data.py::_create_bank_transaction), already Unreconciled and
+    already on this bank_account. So a statement row usually isn't a "new"
+    transaction at all — it's confirmation that one of these mirrors cleared.
+    Matching against that existing row (and marking IT reconciled) is what
+    reconciliation means; inserting a second row for the same money movement
+    creates a duplicate and double-counts the balance.
+
+    Only auto-matches on an exact, unambiguous date + debit + credit match.
+    """
+    candidates = frappe.db.sql("""
+        SELECT name FROM `tabBank Transaction`
+        WHERE docstatus = 1
+          AND bank_account = %(bank_account)s
+          AND status != 'Reconciled'
+          AND date = %(date)s
+          AND ABS(debit - %(debit)s) <= 0.01
+          AND ABS(credit - %(credit)s) <= 0.01
+    """, {"bank_account": bank_account, "date": date, "debit": debit, "credit": credit}, as_dict=True)
+
+    candidates = [c for c in candidates if c.name not in exclude_names]
+    if len(candidates) != 1:
+        return None  # none, or ambiguous — leave for manual reconciliation
+    return candidates[0].name
+
+
+def _auto_reconcile_bank_transaction(bt, already_linked):
+    """Fallback match against a raw Payment Entry (no mirror Bank Transaction
+    exists — e.g. it was made before a Bank Account/GL link existed). Only
+    used when _find_existing_bank_transaction_match found nothing, since most
+    Payment Entries already have their own mirror row.
+    Returns the matched Payment Entry name, or None.
+    """
+    amount = flt(bt.debit) if flt(bt.debit) > 0 else flt(bt.credit)
+    if amount <= 0:
+        return None
+    pe_type_pref = "Pay" if flt(bt.debit) > 0 else "Receive"
+
+    candidates = frappe.db.sql("""
+        SELECT name, payment_type, paid_amount, payment_date
+        FROM `tabPayment Entry`
+        WHERE docstatus = 1
+          AND payment_type = %(pe_type)s
+          AND payment_date = %(date)s
+          AND ABS(paid_amount - %(amt)s) <= 0.01
+    """, {"pe_type": pe_type_pref, "date": bt.date, "amt": amount}, as_dict=True)
+
+    candidates = [c for c in candidates if c.name not in already_linked]
+    if len(candidates) != 1:
+        return None  # no match, or ambiguous — leave for manual reconciliation
+    return candidates[0].name
+
+
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def import_bank_statement_csv(bank_account, csv_data):
-    """Parse a CSV string and create one Bank Transaction per row.
-    CSV columns expected (case-insensitive, lenient): date, description, debit, credit
-    (or amount + type=DR/CR). Returns count + list of created names.
+    """Parse a CSV string (also used for Excel files converted to CSV
+    client-side). CSV columns expected (case-insensitive, lenient):
+    date, description, debit, credit (or amount + type=DR/CR).
+
+    For each row:
+      1. First look for an existing Unreconciled Bank Transaction on this
+         account with the same date/debit/credit (the mirror auto-created
+         when a Payment Entry was submitted) — if found, mark THAT row
+         Reconciled. No duplicate is created.
+      2. Otherwise, fall back to matching a raw Payment Entry that has no
+         mirror yet.
+      3. Otherwise, create a new Unreconciled Bank Transaction (a genuine
+         bank-only movement — charges, interest, etc. — not yet in the books).
+
+    Returns counts of created vs matched-and-reconciled rows.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("banking", write=True)
@@ -4336,15 +4438,38 @@ def import_bank_statement_csv(bank_account, csv_data):
     if not bank_account or not frappe.db.exists("Bank Account", bank_account):
         frappe.throw("Bank Account is required")
 
+    # Bank Transaction is a financial document — central_validator.on_validate
+    # requires `company` to be set, but it's never on the CSV, so it must be
+    # resolved from the Bank Account itself.
+    company = frappe.db.get_value("Bank Account", bank_account, "company")
+    if not company:
+        frappe.throw(f"Bank Account {bank_account} has no company set — cannot import transactions.")
+
     import csv as _csv
     from io import StringIO
-    reader = _csv.DictReader(StringIO(csv_data or ""))
+    # Strip a UTF-8 BOM if present — otherwise it glues onto the first header
+    # (e.g. "Date" becomes "\ufeffDate"), that column never matches row.get("date"),
+    # and every row in the file gets silently skipped.
+    csv_data = (csv_data or "").lstrip("\ufeff")
+    reader = _csv.DictReader(StringIO(csv_data))
+
+    # Payment Entries already linked to some Bank Transaction — never re-link these.
+    already_linked = set(frappe.db.sql_list("""
+        SELECT payment_entry FROM `tabBank Transaction`
+        WHERE payment_entry IS NOT NULL AND payment_entry != ''
+    """))
+    # Existing Bank Transactions matched within this same import batch —
+    # never match two statement rows onto the same existing mirror row.
+    matched_this_batch = set()
+
     created = []
     skipped = 0
+    auto_reconciled = 0
     for raw in reader:
         # Lower-case keys for tolerance
         row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
-        date = row.get("date") or row.get("transaction_date") or row.get("posting_date")
+        raw_date = row.get("date") or row.get("transaction_date") or row.get("posting_date")
+        date = _parse_statement_date(raw_date)
         if not date:
             skipped += 1; continue
         desc = row.get("description") or row.get("narration") or row.get("particulars") or ""
@@ -4359,10 +4484,29 @@ def import_bank_statement_csv(bank_account, csv_data):
             elif typ.startswith("C"): credit = amt
         if debit + credit <= 0:
             skipped += 1; continue
+
         try:
+            # 1. Does an existing (mirror) Bank Transaction already represent
+            #    this exact movement? If so, reconcile it in place — don't
+            #    create a duplicate row for the same money movement.
+            existing_match = _find_existing_bank_transaction_match(
+                bank_account, date, debit, credit, matched_this_batch
+            )
+            if existing_match:
+                frappe.db.set_value("Bank Transaction", existing_match, {
+                    "status": "Reconciled",
+                }, update_modified=True)
+                matched_this_batch.add(existing_match)
+                auto_reconciled += 1
+                continue  # nothing new created for this row
+
+            # 2. No mirror row — create a new Bank Transaction for this
+            #    statement line (bank-only movement, or a Payment Entry made
+            #    before any Bank Account/GL link existed).
             bt = frappe.get_doc({
                 "doctype": "Bank Transaction",
                 "bank_account": bank_account,
+                "company": company,
                 "date": date, "description": desc[:140],
                 "debit": debit, "credit": credit,
                 "reference_number": ref[:80],
@@ -4373,11 +4517,22 @@ def import_bank_statement_csv(bank_account, csv_data):
             bt.insert()
             bt.submit()
             created.append(bt.name)
-        except Exception:
+
+            # 2b. Fall back to a raw Payment Entry match (no mirror existed).
+            match = _auto_reconcile_bank_transaction(bt, already_linked)
+            if match:
+                frappe.db.set_value("Bank Transaction", bt.name, {
+                    "status": "Reconciled",
+                    "payment_entry": match,
+                }, update_modified=True)
+                already_linked.add(match)
+                auto_reconciled += 1
+        except Exception as e:
+            frappe.log_error(f"Bank statement row import failed: {e}", "import_bank_statement_csv")
             skipped += 1
     frappe.db.commit()
     return {"created": created, "count": len(created), "skipped": skipped,
-            "bank_account": bank_account}
+            "auto_reconciled": auto_reconciled, "bank_account": bank_account}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4413,6 +4568,10 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
     # inventory/stock_link.py.
 
     _default_wh = frappe.db.get_single_value("Books Settings", "default_warehouse") or None
+    # The Sales Order's own dispatch warehouse takes priority over the item's
+    # default warehouse and the global fallback — previously this was ignored
+    # entirely, so every DN silently reverted to the global default warehouse.
+    so_wh = getattr(so, "set_warehouse", None) or None
     dn_items = []
     for it in (so.items or []):
         remaining = max(0.0, flt(it.qty) - flt(it.delivered_qty))
@@ -4427,7 +4586,7 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
             so_item_id = int(it.name)
         except (TypeError, ValueError):
             so_item_id = 0
-        item_wh = frappe.db.get_value("Item", it.item_code, "default_warehouse") or _default_wh
+        item_wh = so_wh or frappe.db.get_value("Item", it.item_code, "default_warehouse") or _default_wh
         dn_items.append({
             "doctype": "Delivery Note Item",
             "item_code":   it.item_code,
@@ -4454,7 +4613,11 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
         "lr_no":            lr_no or "",
         "transporter_name": transporter_name or "",
         "remarks":          remarks or "",
-        "set_warehouse":    _default_wh or "",
+        "set_warehouse":    so_wh or _default_wh or "",
+        "shipping_address":      getattr(so, "shipping_address", "") or "",
+        "shipping_address_name": getattr(so, "shipping_address_name", "") or "",
+        "billing_address":       getattr(so, "billing_address", "") or "",
+        "billing_address_name":  getattr(so, "billing_address_name", "") or "",
         "items":            dn_items,
     })
     dn.flags.ignore_permissions = True

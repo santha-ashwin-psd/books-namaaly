@@ -50,7 +50,7 @@
         <tbody>
           <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="6"><div class="cash-shimmer"></div></td></tr></template>
           <template v-else>
-            <tr v-for="p in sorted" :key="p.name" class="cash-row" @click="openView(p)">
+            <tr v-for="p in paged" :key="p.name" class="cash-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
               <td><span class="cash-num">{{ p.name }}</span></td>
               <td>{{ p.party_name||p.party||'—' }}</td>
@@ -77,7 +77,7 @@
           <div>{{ list.length ? 'No entries match' : 'No cash entries found' }}</div>
         </div>
         <template v-else>
-          <div v-for="p in sorted" :key="p.name" class="cash-mobile-card" @click="openView(p)">
+          <div v-for="p in paged" :key="p.name" class="cash-mobile-card" @click="openView(p)">
             <div class="cash-mc-top">
               <span class="cash-mc-docno">{{ p.name }}</span>
               <span class="cash-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Cash In':'Cash Out' }}</span>
@@ -90,6 +90,10 @@
           </div>
         </template>
       </div>
+    </div>
+
+    <div v-if="!loading && sorted.length" style="padding:4px 0 0">
+      <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="sorted.length" />
     </div>
 
     <!-- New Entry Drawer -->
@@ -191,6 +195,8 @@ import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import Pagination from "../components/Pagination.vue";
+import { usePagination } from "../composables/usePagination.js";
 const { toast } = useToast();
 const { confirm } = useConfirm();
 const cashAccount=ref(""),receivableAccount=ref(""),payableAccount=ref(""),companyCurrency=ref("INR");
@@ -218,6 +224,9 @@ const form=reactive({payment_type:"Receive",payment_date:new Date().toISOString(
 async function load(){loading.value=true;try{const co=await resolveCompany();list.value=await apiList("Payment Entry",{fields:["name","party","party_name","payment_type","payment_date","paid_amount","remarks","custom_purpose","custom_expense_category","docstatus"],filters:[["company","=",co],["mode_of_payment","=","Cash"],["docstatus","=",1]],limit:200,order: "payment_date desc, creation desc"});selected.value=new Set();}catch(e){toast.error(e.message||"Failed to load cash entries");}finally{loading.value=false;}}
 const filtered=computed(()=>{let r=list.value;if(activeTab.value!=="all")r=r.filter(p=>p.payment_type===activeTab.value);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(p=>(p.party_name||p.party||"").toLowerCase().includes(q)||(p.name||"").toLowerCase().includes(q)||(p.remarks||"").toLowerCase().includes(q));}return r;});
 const sorted=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
+// Selection/export act on the full filtered+sorted set (all pages); only the
+// table rendering itself is paginated via `paged`.
+const { page, pageSize, paged } = usePagination(sorted, { storageKey: "bank-cash" });
 function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"desc":"asc";else{sortCol.value=col;sortDir.value="asc";}}
 function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db">⇅</span>';return sortDir.value==="asc"?"↑":"↓";}
 const cashIn=computed(()=>list.value.filter(p=>p.payment_type==="Receive").reduce((s,p)=>s+flt(p.paid_amount),0));

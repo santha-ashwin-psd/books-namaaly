@@ -96,17 +96,19 @@
               </div>
             </td>
             <td class="vt-td vt-td-secondary">{{s.designation||'—'}}</td>
-            <td class="vt-td vt-td-secondary">{{s.reports_to||'—'}}</td>
+            <td class="vt-td vt-td-secondary">{{reportsToName(s.reports_to)}}</td>
             <td class="vt-td vt-td-num">{{ s.commission_rate ? s.commission_rate+'%' : '—' }}</td>
             <td class="vt-td vt-td-secondary">{{s.mobile_no||'—'}}</td>
             <td class="vt-td">
               <span class="vt-badge" :class="s.disabled ? 'vt-badge-gray' : 'vt-badge-green'">
-                {{ s.disabled ? 'Disabled' : (s.status||'Active') }}
+                <span class="vt-badge-dot"></span>{{ s.disabled ? 'Disabled' : (s.status||'Active') }}
               </span>
             </td>
             <td class="vt-td vt-td-actions" @click.stop>
-              <button class="vt-icon-btn" title="Edit" @click="openEdit(s)" v-html="icon('edit',14)"></button>
-              <button class="vt-icon-btn" title="Delete" @click="removeSP(s)" v-html="icon('trash',14)"></button>
+              <div class="vt-actions">
+                <button class="inv-act-btn vt-act-edit" title="Edit" @click="openEdit(s)"><span v-html="icon('edit',13)"></span></button>
+                <button class="inv-act-btn vt-act-del" title="Delete" @click="removeSP(s)"><span v-html="icon('trash',13)"></span></button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -115,60 +117,122 @@
   </div>
 
   <!-- ── DETAIL VIEW ── -->
-  <div v-else class="list-page">
-    <div class="sales-toolbar">
-      <button class="sales-btn-ghost" @click="selectedSP=null"><span v-html="icon('arrow-left',13)"></span> Back</button>
-      <div class="cust-toolbar-right">
-        <button class="sales-btn-ghost" @click="openEdit(selectedSP)"><span v-html="icon('edit',13)"></span> Edit</button>
+  <div v-else class="sp-page">
+    <!-- Breadcrumb -->
+    <div class="sp-bread">
+      <a class="sp-back" @click="selectedSP=null">
+        <span v-html="icon('arrow-left',13)"></span> All Sales Persons
+      </a>
+      <span class="sp-bread-sep">/</span>
+      <span class="sp-bread-cur">{{selectedSP.sales_person_name||selectedSP.name}}</span>
+    </div>
+
+    <!-- Header card -->
+    <div class="sp-header">
+      <div class="sp-header-left">
+        <div class="sp-avatar" :class="{disabled: selectedSP.disabled}">{{initials(selectedSP.sales_person_name)}}</div>
+        <div>
+          <div class="sp-name">{{selectedSP.sales_person_name}}</div>
+          <div class="sp-meta">
+            <span class="sp-chip sp-chip-muted">{{selectedSP.name}}</span>
+            <span v-if="selectedSP.designation" class="sp-chip">{{selectedSP.designation}}</span>
+            <span v-if="selectedSP.department" class="sp-chip sp-chip-muted">{{selectedSP.department}}</span>
+            <span v-if="selectedSP.disabled" class="sp-chip sp-chip-danger">Disabled</span>
+            <span v-else class="sp-chip sp-chip-green">Active</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="sp-btn-ghost" :disabled="!selectedSP.email_id" @click="selectedSP.email_id && (location.href='mailto:'+selectedSP.email_id)">
+          <span v-html="icon('mail',13)"></span> Email
+        </button>
+        <button class="sp-btn-primary" @click="openEdit(selectedSP)">
+          <span v-html="icon('edit',13)"></span> Edit
+        </button>
       </div>
     </div>
 
-    <div style="padding:20px 24px">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-        <div class="vt-avatar" style="width:48px;height:48px;font-size:16px">{{initials(selectedSP.sales_person_name)}}</div>
-        <div>
-          <div style="font-size:18px;font-weight:700;color:#111827">{{selectedSP.sales_person_name}}</div>
-          <div style="font-size:12.5px;color:#6b7280">{{selectedSP.name}} · {{selectedSP.designation||'—'}}</div>
-        </div>
-      </div>
-
-      <div class="bk-kpi-grid bk-kpi-grid-4" style="margin-bottom:18px">
-        <div class="bk-kpi-card">
+    <!-- KPI stat cards -->
+    <div class="bk-kpi-grid bk-kpi-grid-4" style="margin-bottom:16px">
+      <div class="bk-kpi-card">
+        <div class="bk-kpi-inner">
+          <div class="bk-kpi-icon" style="background:#EEF2FF" v-html="icon('file',18)"></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Invoices</div>
             <div class="bk-kpi-value">{{ perfLoading ? '…' : (performance.invoice_count||0) }}</div>
+            <div class="bk-kpi-trend bk-trend-neutral">Total raised</div>
           </div>
         </div>
-        <div class="bk-kpi-card">
+      </div>
+      <div class="bk-kpi-card">
+        <div class="bk-kpi-inner">
+          <div class="bk-kpi-icon" style="background:#F0FDF4" v-html="icon('trend',18)"></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Revenue</div>
             <div class="bk-kpi-value">{{ perfLoading ? '…' : fmtCur(performance.total_revenue||0) }}</div>
+            <div class="bk-kpi-trend bk-trend-neutral">Lifetime billed</div>
           </div>
         </div>
-        <div class="bk-kpi-card">
+      </div>
+      <div class="bk-kpi-card">
+        <div class="bk-kpi-inner">
+          <div class="bk-kpi-icon" style="background:#FEF2F2" v-html="icon('alert',18)"></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Outstanding</div>
-            <div class="bk-kpi-value">{{ perfLoading ? '…' : fmtCur(performance.outstanding||0) }}</div>
+            <div class="bk-kpi-value" :class="performance.outstanding>0?'bk-kpi-red':''">{{ perfLoading ? '…' : fmtCur(performance.outstanding||0) }}</div>
+            <div class="bk-kpi-trend bk-trend-neutral">Unpaid balance</div>
           </div>
         </div>
-        <div class="bk-kpi-card">
+      </div>
+      <div class="bk-kpi-card">
+        <div class="bk-kpi-inner">
+          <div class="bk-kpi-icon" style="background:#FFFBEB" v-html="icon('rupee',18)"></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Commission Earned</div>
             <div class="bk-kpi-value">{{ perfLoading ? '…' : fmtCur(performance.commission_earned||0) }}</div>
+            <div class="bk-kpi-trend bk-trend-neutral">{{ selectedSP.commission_rate ? selectedSP.commission_rate+'% rate' : '—' }}</div>
           </div>
         </div>
       </div>
-      <div v-if="performance.note" style="font-size:12px;color:#9ca3af;margin-bottom:18px">{{ performance.note }}</div>
+    </div>
+    <div v-if="performance.note" class="sp-note">{{ performance.note }}</div>
 
-      <div class="inv-sec-lbl">Contact</div>
-      <div class="inv-fg inv-fg2" style="margin-bottom:20px">
-        <div><span style="color:#6b7280;font-size:12.5px">Email</span><div>{{selectedSP.email_id||'—'}}</div></div>
-        <div><span style="color:#6b7280;font-size:12.5px">Mobile</span><div>{{selectedSP.mobile_no||'—'}}</div></div>
-        <div><span style="color:#6b7280;font-size:12.5px">Phone</span><div>{{selectedSP.phone||'—'}}</div></div>
-        <div><span style="color:#6b7280;font-size:12.5px">Department</span><div>{{selectedSP.department||'—'}}</div></div>
+    <!-- Contact + Job details card -->
+    <div class="sp-info-card">
+      <div class="sp-info-section">
+        <div class="sp-section-title">Contact</div>
+        <div class="sp-kv"><span class="sp-k">Email</span>
+          <a v-if="selectedSP.email_id" :href="`mailto:${selectedSP.email_id}`" class="sp-link">{{selectedSP.email_id}}</a>
+          <span v-else class="sp-v-empty">—</span>
+        </div>
+        <div class="sp-kv"><span class="sp-k">Mobile</span>
+          <a v-if="selectedSP.mobile_no" :href="`tel:${selectedSP.mobile_no}`" class="sp-link">{{selectedSP.mobile_no}}</a>
+          <span v-else class="sp-v-empty">—</span>
+        </div>
+        <div class="sp-kv"><span class="sp-k">Phone</span>
+          <a v-if="selectedSP.phone" :href="`tel:${selectedSP.phone}`" class="sp-link">{{selectedSP.phone}}</a>
+          <span v-else class="sp-v-empty">—</span>
+        </div>
+      </div>
+      <div class="sp-info-section">
+        <div class="sp-section-title">Job Details</div>
+        <div class="sp-kv"><span class="sp-k">Employee ID</span><span>{{selectedSP.employee_id||'—'}}</span></div>
+        <div class="sp-kv"><span class="sp-k">Department</span><span>{{selectedSP.department||'—'}}</span></div>
+        <div class="sp-kv"><span class="sp-k">Reports To</span><span>{{reportsToName(selectedSP.reports_to)}}</span></div>
+      </div>
+      <div class="sp-info-section">
+        <div class="sp-section-title">Address</div>
+        <div v-if="selectedSP.address_line1 || selectedSP.city" class="sp-address">
+          <div v-if="selectedSP.address_line1">{{selectedSP.address_line1}}</div>
+          <div v-if="selectedSP.address_line2">{{selectedSP.address_line2}}</div>
+          <div>{{[selectedSP.city, selectedSP.state, selectedSP.pincode].filter(Boolean).join(', ')}}</div>
+          <div v-if="selectedSP.country">{{selectedSP.country}}</div>
+        </div>
+        <div v-else class="sp-v-empty" style="font-style:italic">No address on file</div>
       </div>
     </div>
   </div>
+
 
   <!-- Drawer -->
   <Teleport to="body">
@@ -200,8 +264,12 @@
               <div v-if="formErrors.sales_person_name" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.sales_person_name}}</div>
             </div>
             <div class="inv-field">
-              <label class="inv-lbl">Employee ID</label>
-              <input v-model="form.employee_id" class="inv-fi" placeholder="EMP-001"/>
+              <label class="inv-lbl">Employee ID <span class="nim-req">*</span></label>
+              <input v-model="form.employee_id" class="inv-fi" placeholder="EMP-001"
+                :style="formErrors.employee_id?'border-color:#dc2626;background:#fff5f5':''"
+                @input="delete formErrors.employee_id"
+                @blur="validateField('employee_id')"/>
+              <div v-if="formErrors.employee_id" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.employee_id}}</div>
             </div>
             <div class="inv-field">
               <label class="inv-lbl">Status</label>
@@ -221,9 +289,12 @@
             <div class="inv-field">
               <label class="inv-lbl">Reports To</label>
               <select v-model="form.reports_to" class="inv-fi">
-                <option value="">None</option>
+                <option value="">No Manager (Top Level)</option>
                 <option v-for="sp in allSalesPersons.filter(p=>p.name!==form.name)" :key="sp.name" :value="sp.name">{{ sp.sales_person_name }}</option>
               </select>
+              <div v-if="!allSalesPersons.filter(p=>p.name!==form.name).length" style="margin-top:4px;font-size:11.5px;color:#9ca3af">
+                No other sales persons yet — add more to build a reporting hierarchy.
+              </div>
             </div>
             <div class="inv-field">
               <label class="inv-lbl">Commission Rate (%)</label>
@@ -246,8 +317,12 @@
               <div v-if="formErrors.email_id" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.email_id}}</div>
             </div>
             <div class="inv-field">
-              <label class="inv-lbl">Mobile</label>
-              <input v-model="form.mobile_no" class="inv-fi" placeholder="98765 43210"/>
+              <label class="inv-lbl">Mobile <span class="nim-req">*</span></label>
+              <input v-model="form.mobile_no" class="inv-fi" placeholder="98765 43210"
+                :style="formErrors.mobile_no?'border-color:#dc2626;background:#fff5f5':''"
+                @input="delete formErrors.mobile_no"
+                @blur="validateField('mobile_no')"/>
+              <div v-if="formErrors.mobile_no" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.mobile_no}}</div>
             </div>
             <div class="inv-field">
               <label class="inv-lbl">Phone</label>
@@ -390,6 +465,12 @@ function initials(name) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 }
 
+function reportsToName(id) {
+  if (!id) return "—";
+  const sp = allSalesPersons.value.find(p => p.name === id) || rows.value.find(p => p.name === id);
+  return sp ? sp.sales_person_name : id;
+}
+
 function fmtCur(v) {
   return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
@@ -440,6 +521,16 @@ function validateField(field) {
     if (!form.sales_person_name?.trim()) formErrors.sales_person_name = "Name is required";
     else delete formErrors.sales_person_name;
   }
+  if (field === "employee_id") {
+    if (!form.employee_id?.trim()) formErrors.employee_id = "Employee ID is required";
+    else delete formErrors.employee_id;
+  }
+  if (field === "mobile_no") {
+    const digits = (form.mobile_no || "").replace(/\D/g, "");
+    if (!digits) formErrors.mobile_no = "Mobile number is required";
+    else if (digits.length < 10) formErrors.mobile_no = "Enter a valid mobile number";
+    else delete formErrors.mobile_no;
+  }
   if (field === "email_id") {
     if (form.email_id && !EMAIL_REGEX.test(form.email_id)) formErrors.email_id = "Enter a valid email";
     else delete formErrors.email_id;
@@ -453,6 +544,8 @@ function validateField(field) {
 
 async function saveSP() {
   validateField("sales_person_name");
+  validateField("employee_id");
+  validateField("mobile_no");
   validateField("email_id");
   validateField("commission_rate");
   if (Object.keys(formErrors).length) {
@@ -508,3 +601,214 @@ async function bulkSetDisabled(disabled) {
 
 onMounted(load);
 </script>
+
+<style scoped>
+/* ── Drawer slide-in animation ──────────────────────────── */
+.inv-drawer-panel {
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.inv-drawer-panel.open {
+  transform: translateX(0);
+}
+.cust-drawer-header-left { display: flex; align-items: center; gap: 12px; }
+.cust-drawer-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: rgba(255,255,255,.15);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cust-drawer-sub { color: rgba(255,255,255,.75); font-size: 12px; margin-top: 2px; }
+
+/* ── Sales person avatar circle (purple gradient) ───────── */
+.vt-vendor-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vt-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #7C3AED, #5B21B6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+.vt-avatar-disabled { background: #d1d5db; }
+.vt-vendor-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.3;
+}
+.vt-vendor-id {
+  font-size: 11.5px;
+  color: #9ca3af;
+  margin-top: 1px;
+}
+
+/* ── Table columns ───────────────────────────────────────── */
+.vt-th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+  user-select: none;
+}
+.vt-th-check   { width: 36px; padding-left: 16px; }
+.vt-th-num     { text-align: right; }
+.vt-th-actions { text-align: center; width: 88px; }
+.vt-td {
+  padding: 11px 14px;
+  vertical-align: middle;
+  color: #374151;
+  white-space: nowrap;
+}
+.vt-td-check      { padding-left: 16px; width: 36px; }
+.vt-td-num        { text-align: right; }
+.vt-td-secondary  { color: #6b7280; font-size: 12.5px; }
+.vt-td-actions    { text-align: center; width: 88px; }
+.vt-checkbox { width: 15px; height: 15px; accent-color: #7C3AED; cursor: pointer; border-radius: 3px; }
+.vt-row-shimmer td { padding: 13px 14px; }
+.vt-row-disabled   { opacity: 0.55; }
+.vt-row-selected   { background: #f5f3ff !important; }
+
+.vt-actions {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.inv-row:hover .vt-actions { opacity: 1; }
+.vt-act-edit:hover { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.vt-act-del:hover  { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+
+/* ── Status badges ───────────────────────────────────────── */
+.vt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.vt-badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.vt-badge-green               { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.vt-badge-green .vt-badge-dot { background: #22c55e; }
+.vt-badge-gray                { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
+.vt-badge-gray  .vt-badge-dot { background: #9ca3af; }
+
+/* ── Empty state ─────────────────────────────────────────── */
+.vt-empty { padding: 52px 24px; text-align: center; }
+.vt-empty-icon {
+  margin: 0 auto 14px; width: 56px; height: 56px; border-radius: 14px;
+  background: #f9fafb; border: 1px solid #e5e7eb;
+  display: flex; align-items: center; justify-content: center;
+}
+.vt-empty-title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+.vt-empty-sub   { font-size: 13px; color: #9ca3af; }
+
+/* ── Table row hover ─────────────────────────────────────── */
+.inv-row {
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.inv-row:hover { background: #faf9ff; }
+
+/* ── Detail-view field grid helper ───────────────────────── */
+.inv-field { display: flex; flex-direction: column; gap: 5px; }
+
+/* ── Detail / profile view ───────────────────────────────── */
+.sp-page { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.sp-bread { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #6b7280; }
+.sp-back { color: #7C3AED; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; cursor: pointer; }
+.sp-back:hover { color: #5B21B6; text-decoration: underline; }
+.sp-bread-sep { color: #cbd5e1; }
+.sp-bread-cur { color: #0f172a; font-weight: 600; }
+
+.sp-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+  padding: 20px 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.sp-header-left { display: flex; align-items: center; gap: 16px; }
+.sp-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, #7C3AED, #5B21B6);
+  color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 700; flex-shrink: 0;
+}
+.sp-avatar.disabled { background: #9ca3af; }
+.sp-name { font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+.sp-meta { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.sp-chip { background: #f5f3ff; color: #6d28d9; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; }
+.sp-chip-muted { background: #f3f4f6; color: #475569; }
+.sp-chip-danger { background: #fee2e2; color: #dc2626; }
+.sp-chip-green { background: #f0fdf4; color: #15803d; }
+
+.sp-btn-ghost {
+  display: inline-flex; align-items: center; gap: 6px; background: #fff;
+  border: 1px solid #e5e7eb; color: #374151; border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.sp-btn-ghost:hover:not(:disabled) { background: #f9fafb; border-color: #cbd5e1; }
+.sp-btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.sp-btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #7C3AED; color: #fff; border: none; border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.sp-btn-primary:hover { background: #5B21B6; }
+
+.sp-note { font-size: 12px; color: #9ca3af; }
+
+.sp-info-card {
+  display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 24px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+  padding: 18px 22px; box-shadow: 0 1px 2px rgba(15,23,42,.03);
+}
+.sp-info-section { display: flex; flex-direction: column; gap: 10px; }
+.sp-section-title {
+  font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase;
+  letter-spacing: .05em; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6;
+}
+.sp-kv { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; gap: 8px; }
+.sp-k { color: #6b7280; font-weight: 500; flex-shrink: 0; }
+.sp-v-empty { color: #9ca3af; }
+.sp-link { color: #7C3AED; text-decoration: none; font-weight: 500; }
+.sp-link:hover { text-decoration: underline; }
+.sp-address { font-size: 12.5px; color: #374151; line-height: 1.6; }
+
+@media (max-width: 768px) {
+  .sp-page { padding: 12px !important; gap: 12px !important; }
+  .sp-header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 14px 16px; }
+  .sp-header > div:last-child { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .sp-header > div:last-child > button { flex: 1; justify-content: center; }
+  .sp-info-card { grid-template-columns: 1fr !important; gap: 0 !important; padding: 0 !important; }
+  .sp-info-section { padding: 14px 16px; border-bottom: 1px solid #f3f4f6; }
+  .sp-info-section:last-child { border-bottom: none; }
+}
+
+/* ── Responsive: hide Designation / Reports To on small screens ── */
+@media (max-width: 768px) {
+  .vt-th:nth-child(3), .vt-th:nth-child(4),
+  .vt-td:nth-child(3), .vt-td:nth-child(4) { display: none; }
+}
+</style>
