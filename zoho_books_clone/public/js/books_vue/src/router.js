@@ -85,6 +85,8 @@ import WorkstationTypeView    from "./pages/WorkstationTypeView.vue";
 import Routing                from "./pages/Routing.vue";
 import WorkOrder               from "./pages/WorkOrder.vue";
 import WorkOrderView           from "./pages/WorkOrderView.vue";
+import ProductionPlan          from "./pages/ProductionPlan.vue";
+import ProductionPlanView      from "./pages/ProductionPlanView.vue";
 
 import { useToast } from "./composables/useToast.js";
 import { usePermissions } from "./composables/usePermissions.js";
@@ -278,6 +280,8 @@ const routes = [
   { path: "/manufacturing/routing",               name: "manufacturing-routing",               component: Routing,             meta: { module: "inventory" } },
   { path: "/manufacturing/work-order",            name: "manufacturing-work-order",            component: WorkOrder,           meta: { module: "inventory" } },
   { path: "/manufacturing/work-order/:name",      name: "manufacturing-work-order-view",       component: WorkOrderView,       meta: { module: "inventory" } },
+  { path: "/manufacturing/production-plan",       name: "manufacturing-production-plan",       component: ProductionPlan,      meta: { module: "inventory" } },
+  { path: "/manufacturing/production-plan/:name", name: "manufacturing-production-plan-view",  component: ProductionPlanView,  meta: { module: "inventory" } },
   // Future phases append entries here.
   // Any unknown / wrong URL falls through to the dashboard instead of a 404.
   {

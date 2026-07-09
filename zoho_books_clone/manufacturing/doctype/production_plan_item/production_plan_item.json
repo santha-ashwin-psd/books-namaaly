@@ -1,0 +1,87 @@
+{
+ "name": "Production Plan Item",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "title_field": "",
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "naming_rule": "",
+ "autoname": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item to Manufacture",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item_code.item_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "bom_no",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "planned_qty",
+   "fieldtype": "Float",
+   "label": "Planned Qty",
+   "default": "1",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM",
+   "fetch_from": "item_code.stock_uom",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Finished Goods Warehouse",
+   "options": "Warehouse",
+   "description": "Overrides the Production Plan's default FG Warehouse for this row, if set."
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Data",
+   "label": "Sales Order Reference",
+   "description": "Optional free-text reference, populated automatically when this row was pulled in from Sales Order demand."
+  },
+  {
+   "fieldname": "work_order_created_qty",
+   "fieldtype": "Float",
+   "label": "Work Order Created Qty",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": []
+}

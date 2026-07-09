@@ -9,7 +9,7 @@
  "docstatus": 0,
  "idx": 0,
  "document_type": "",
- "search_fields": "item,is_active,is_default",
+ "search_fields": "item,bom_type,is_active,is_default",
  "title_field": "item",
  "is_submittable": 1,
  "track_changes": 1,
@@ -20,6 +20,16 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "fields": [
+  {
+   "fieldname": "bom_type",
+   "fieldtype": "Select",
+   "label": "BOM Type",
+   "options": "Manufacturing\nPacking",
+   "default": "Manufacturing",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
   {
    "fieldname": "item",
    "fieldtype": "Link",
@@ -127,16 +137,61 @@
    "options": "BOM Operation"
   },
   {
+   "fieldname": "sb_bulk_source",
+   "fieldtype": "Section Break",
+   "label": "Bulk Source (Packing BOM)",
+   "collapsible": 1,
+   "depends_on": "eval:doc.bom_type=='Packing'"
+  },
+  {
+   "fieldname": "bulk_item",
+   "fieldtype": "Link",
+   "label": "Bulk Item",
+   "options": "Item",
+   "description": "The manufactured bulk item this Packing BOM draws from (e.g. Bulk Herbal Oil).",
+   "mandatory_depends_on": "eval:doc.bom_type=='Packing'",
+   "depends_on": "eval:doc.bom_type=='Packing'"
+  },
+  {
+   "fieldname": "col_break_bulk",
+   "fieldtype": "Column Break",
+   "depends_on": "eval:doc.bom_type=='Packing'"
+  },
+  {
+   "fieldname": "bulk_qty_per_unit",
+   "fieldtype": "Float",
+   "label": "Bulk Qty Consumed per Packed Unit",
+   "description": "Quantity of the Bulk Item consumed to produce one unit of the packed/retail item.",
+   "mandatory_depends_on": "eval:doc.bom_type=='Packing'",
+   "depends_on": "eval:doc.bom_type=='Packing'"
+  },
+  {
    "fieldname": "sb_materials",
    "fieldtype": "Section Break",
    "label": "Raw Materials",
-   "collapsible": 1
+   "collapsible": 1,
+   "depends_on": "eval:doc.bom_type=='Manufacturing'"
   },
   {
    "fieldname": "items",
    "fieldtype": "Table",
    "label": "Raw Materials",
-   "options": "BOM Item"
+   "options": "BOM Item",
+   "depends_on": "eval:doc.bom_type=='Manufacturing'"
+  },
+  {
+   "fieldname": "sb_packing_materials",
+   "fieldtype": "Section Break",
+   "label": "Packing Materials",
+   "collapsible": 1,
+   "depends_on": "eval:doc.bom_type=='Packing'"
+  },
+  {
+   "fieldname": "packing_items",
+   "fieldtype": "Table",
+   "label": "Packing Materials",
+   "options": "BOM Item",
+   "depends_on": "eval:doc.bom_type=='Packing'"
   },
   {
    "fieldname": "tab_scrap",

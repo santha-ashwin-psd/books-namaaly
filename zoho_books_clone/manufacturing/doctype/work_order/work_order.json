@@ -207,6 +207,15 @@
    "description": "Optional free-text reference — for MRP/Production Plan linkage in a later phase."
   },
   {
+   "fieldname": "production_plan",
+   "fieldtype": "Link",
+   "label": "Production Plan",
+   "options": "Production Plan",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set automatically when this Work Order was bulk-created from a Production Plan."
+  },
+  {
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Remarks"

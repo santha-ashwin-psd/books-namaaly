@@ -1,0 +1,209 @@
+{
+ "name": "Production Plan",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "status,posting_date",
+ "title_field": "name",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By \"Naming Series\" field",
+ "autoname": "naming_series:PP-.YYYY.-.#####",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "PP-.YYYY.-.#####",
+   "default": "PP-.YYYY.-.#####"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nSubmitted\nWork Orders Created\nCompleted\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_pp_1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company"
+  },
+  {
+   "fieldname": "sec_pp_warehouses",
+   "fieldtype": "Section Break",
+   "label": "Default Warehouses"
+  },
+  {
+   "fieldname": "default_source_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Source Warehouse (Raw Materials)",
+   "options": "Warehouse",
+   "description": "Also used as the warehouse checked for raw-material availability when calculating requirements."
+  },
+  {
+   "fieldname": "default_wip_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Work-in-Progress Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "col_break_pp_warehouses",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "default_fg_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Finished Goods Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_scrap_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Scrap / By-Product Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "sec_pp_so",
+   "fieldtype": "Section Break",
+   "label": "Demand from Sales Orders"
+  },
+  {
+   "fieldname": "sales_orders",
+   "fieldtype": "Table",
+   "label": "Sales Orders",
+   "options": "Production Plan Sales Order"
+  },
+  {
+   "fieldname": "sec_pp_items",
+   "fieldtype": "Section Break",
+   "label": "Items to Manufacture"
+  },
+  {
+   "fieldname": "po_items",
+   "fieldtype": "Table",
+   "label": "Items to Manufacture",
+   "options": "Production Plan Item"
+  },
+  {
+   "fieldname": "sec_pp_mr",
+   "fieldtype": "Section Break",
+   "label": "Raw Material Requirement"
+  },
+  {
+   "fieldname": "mr_items",
+   "fieldtype": "Table",
+   "label": "Raw Material Requirement",
+   "options": "Production Plan Material Request Item"
+  },
+  {
+   "fieldname": "sec_pp_more",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Production Plan",
+   "no_copy": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "search_index": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  }
+ ]
+}

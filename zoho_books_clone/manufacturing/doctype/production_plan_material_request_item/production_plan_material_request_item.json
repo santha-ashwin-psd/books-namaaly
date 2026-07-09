@@ -1,0 +1,70 @@
+{
+ "name": "Production Plan Material Request Item",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "title_field": "",
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "naming_rule": "",
+ "autoname": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Raw Material",
+   "options": "Item",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item_code.item_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "required_qty",
+   "fieldtype": "Float",
+   "label": "Required Qty",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM",
+   "fetch_from": "item_code.stock_uom",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "available_qty",
+   "fieldtype": "Float",
+   "label": "Available Qty",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "shortfall_qty",
+   "fieldtype": "Float",
+   "label": "Shortfall Qty",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": []
+}
