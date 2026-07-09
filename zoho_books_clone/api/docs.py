@@ -691,6 +691,38 @@ def cancel_doc(doctype, name):
     frappe.db.commit()
     return d.as_dict()
 
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def amend_doc(doctype, name):
+    """Create a fresh draft copy of a cancelled document, linked back via
+    `amended_from`, so the person can edit and resubmit it as the next
+    revision. Generic — works for any doctype with an `amended_from` field
+    (BOM, Sales Invoice, Purchase Invoice, Stock Entry, etc.); doctype-specific
+    behaviour (e.g. BOM's version-number bump) belongs in that doctype's own
+    before_insert/on_submit hooks, not here.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import assert_can
+    assert_can(doctype, "create")
+
+    src = frappe.get_doc(doctype, name)
+    if src.docstatus != 2:
+        frappe.throw(_("Only a cancelled document can be amended."))
+
+    meta = frappe.get_meta(doctype)
+    if not meta.has_field("amended_from"):
+        frappe.throw(_("{0} does not support amendment.").format(doctype))
+
+    new_doc = frappe.copy_doc(src)
+    new_doc.amended_from = src.name
+    new_doc.docstatus = 0
+    new_doc.flags.ignore_permissions = True
+    new_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return new_doc.as_dict()
+
+
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def delete_doc(doctype, name):
     """Delete a document via GET — no CSRF needed."""

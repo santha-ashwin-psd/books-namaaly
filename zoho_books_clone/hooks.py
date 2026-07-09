@@ -219,6 +219,8 @@ website_route_rules = [
     {"from_route": "/quality", "to_route": "books"},
     {"from_route": "/sales-persons", "to_route": "books"},
     {"from_route": "/quality/<path:path>", "to_route": "books"},
+    {"from_route": "/manufacturing", "to_route": "books"},
+    {"from_route": "/manufacturing/<path:path>", "to_route": "books"},
 ]
 
 # Frappe's built-in account pages are not used by Books — bounce them to the

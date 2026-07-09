@@ -602,6 +602,17 @@
             </label>
           </div>
 
+          <div class="ad-section" v-if="form.is_stock_item && form.has_batch_no">
+            <div class="ad-section-title">Shelf Life</div>
+            <div class="ad-grid-2">
+              <div class="ad-field">
+                <label class="ad-label">Shelf Life (Days)</label>
+                <input type="number" class="ad-input" v-model="form.shelf_life_in_days" min="0"/>
+                <div class="ad-toggle-sub" style="margin-top:4px">If set, a Batch's Expiry Date is auto-calculated from Manufacturing Date + Shelf Life when left blank.</div>
+              </div>
+            </div>
+          </div>
+
           <div class="ad-section">
             <div class="ad-section-title">Stock Settings</div>
             <div class="ad-grid-2">
@@ -744,7 +755,7 @@ const form = reactive({
   stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
   standard_rate: 0, standard_buying_rate: 0, gst_rate: 18, tax_code: "",
   income_account: "", expense_account: "",
-  is_stock_item: 1, has_batch_no: 0, valuation_method: "FIFO", default_warehouse: "",
+  is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0, opening_stock: 0,
   has_variants: 0,
 });
@@ -1111,6 +1122,7 @@ function openAdd(presetType) {
     expense_account: defaultAccounts.value.expense,
     is_stock_item: d.is_stock !== undefined ? d.is_stock : 1,
     has_batch_no: 0,
+    shelf_life_in_days: 0,
     valuation_method: d.valuation || "FIFO",
     default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
@@ -1147,6 +1159,7 @@ async function openEdit(row) {
       expense_account:      full.expense_account      || defaultAccounts.value.expense,
       is_stock_item:        full.is_stock_item ? 1 : 0,
       has_batch_no:         full.has_batch_no ? 1 : 0,
+      shelf_life_in_days:   flt(full.shelf_life_in_days),
       valuation_method:     full.valuation_method     || "FIFO",
       default_warehouse:    full.default_warehouse    || "",
       reorder_level:        flt(full.reorder_level),
@@ -1209,6 +1222,7 @@ async function saveItem({ close = true } = {}) {
       tax_code: form.tax_code,
       income_account: form.income_account, expense_account: form.expense_account,
       is_stock_item: form.is_stock_item ? 1 : 0, has_batch_no: form.is_stock_item ? (form.has_batch_no ? 1 : 0) : 0,
+      shelf_life_in_days: (form.is_stock_item && form.has_batch_no) ? flt(form.shelf_life_in_days) : 0,
       valuation_method: form.valuation_method,
       default_warehouse: form.default_warehouse, reorder_level: flt(form.reorder_level),
       reorder_qty: flt(form.reorder_qty), opening_stock: openingQty,

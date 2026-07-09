@@ -208,6 +208,10 @@ export async function apiCancel(doctype, name) {
   return await apiPOST("zoho_books_clone.api.docs.cancel_doc", { doctype, name });
 }
 
+export async function apiAmend(doctype, name) {
+  return await apiPOST("zoho_books_clone.api.docs.amend_doc", { doctype, name });
+}
+
 // Doctypes with a native `company` field — filter by the current company.
 const _CO_SCOPED = new Set([
   "Sales Invoice", "Purchase Invoice", "Quotation", "Sales Order", "Purchase Order",

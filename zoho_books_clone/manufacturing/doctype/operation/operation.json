@@ -1,0 +1,98 @@
+{
+ "name": "Operation",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "operation_name,default_workstation",
+ "title_field": "operation_name",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By fieldname",
+ "autoname": "field:operation_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "operation_name",
+   "fieldtype": "Data",
+   "label": "Operation Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "default_workstation",
+   "fieldtype": "Link",
+   "label": "Default Workstation",
+   "options": "Workstation",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_corrective_operation",
+   "fieldtype": "Check",
+   "label": "Is Corrective Operation",
+   "default": "0"
+  },
+  {
+   "fieldname": "batch_size",
+   "fieldtype": "Check",
+   "label": "Create Job Card based on Batch Size",
+   "default": "0"
+  },
+  {
+   "fieldname": "quality_inspection_template",
+   "fieldtype": "Link",
+   "label": "QC Inspection Template",
+   "options": "QC Inspection Template",
+   "description": "Reuses the Quality module's inspection template (supports In Process inspection type for manufacturing operations)"
+  },
+  {
+   "fieldname": "sb_sub_ops",
+   "fieldtype": "Section Break",
+   "label": "Sub Operations"
+  },
+  {
+   "fieldname": "sub_operations",
+   "fieldtype": "Table",
+   "label": "Sub Operations",
+   "options": "Operation Sub Operation"
+  },
+  {
+   "fieldname": "sb_desc",
+   "fieldtype": "Section Break",
+   "label": "Operation Description",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",    "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager",  "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",     "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",   "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

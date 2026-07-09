@@ -156,8 +156,8 @@
 
       <div class="bt-dbody">
         <div class="bt-form-fld">
-          <label class="bt-form-lbl">Batch No <span class="req">*</span></label>
-          <input v-model="form.batch_no" class="bt-input" :disabled="!!editingName" placeholder="e.g. BATCH-2026-001" />
+          <label class="bt-form-lbl">Batch No</label>
+          <input v-model="form.batch_no" class="bt-input" :disabled="!!editingName" placeholder="Leave blank to auto-generate (Item Code-Year-Sequence)" />
         </div>
 
         <div class="bt-form-fld">
@@ -390,7 +390,6 @@ function openEdit(b) {
 }
 
 async function save() {
-  if (!form.batch_no.trim()) { toast.error("Batch No is required"); return; }
   if (!form.item) { toast.error("Item is required"); return; }
   if (!form.warehouse) { toast.error("Warehouse is required — stock can't be tracked without one"); return; }
   const addQty = !editingName.value ? flt(form.add_qty) : 0;
@@ -398,7 +397,7 @@ async function save() {
   try {
     const doc = {
       doctype: "Batch",
-      batch_no: form.batch_no.trim(),
+      batch_no: form.batch_no.trim() || null,
       item: form.item,
       warehouse: form.warehouse || null,
       manufacturing_date: form.manufacturing_date || null,
@@ -421,7 +420,7 @@ async function save() {
         stock_entry_type: "Material Receipt",
         posting_date: today(),
         to_warehouse: form.warehouse,
-        remarks: `Opening qty for batch ${form.batch_no.trim()}`,
+        remarks: `Opening qty for batch ${saved?.name || form.batch_no.trim()}`,
         items: [{
           doctype: "Stock Entry Detail",
           item_code: form.item,

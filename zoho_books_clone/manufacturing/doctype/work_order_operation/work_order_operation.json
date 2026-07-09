@@ -1,0 +1,73 @@
+{
+ "name": "Work Order Operation",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "title_field": "",
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "naming_rule": "",
+ "autoname": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "operation",
+   "fieldtype": "Data",
+   "label": "Operation",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "workstation",
+   "fieldtype": "Data",
+   "label": "Workstation",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nIn Process\nCompleted",
+   "default": "Pending",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_woo_1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "planned_time_in_mins",
+   "fieldtype": "Float",
+   "label": "Planned Time (Minutes)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "actual_time_in_mins",
+   "fieldtype": "Float",
+   "label": "Actual Time (Minutes)",
+   "default": "0"
+  },
+  {
+   "fieldname": "hour_rate",
+   "fieldtype": "Currency",
+   "label": "Hour Rate"
+  },
+  {
+   "fieldname": "cost",
+   "fieldtype": "Currency",
+   "label": "Cost",
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

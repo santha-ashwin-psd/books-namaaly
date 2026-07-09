@@ -8,3 +8,4 @@ Reports
 Books Setup
 Gst
 Quality
+Manufacturing

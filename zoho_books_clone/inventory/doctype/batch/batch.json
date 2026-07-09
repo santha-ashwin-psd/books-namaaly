@@ -35,7 +35,7 @@
  "track_changes": 1,
  "istable": 0,
  "issingle": 0,
- "autoname": "field:batch_no",
+ "autoname": "autoname",
  "title_field": "batch_no",
  "fields": [
   {
@@ -47,7 +47,7 @@
    "idx": 0,
    "permlevel": 0,
    "precision": "",
-   "reqd": 1,
+   "reqd": 0,
    "read_only": 0,
    "hidden": 0,
    "bold": 0,
@@ -68,7 +68,8 @@
    "print_width": "",
    "fieldname": "batch_no",
    "fieldtype": "Data",
-   "label": "Batch No"
+   "label": "Batch No",
+   "description": "Leave blank to auto-generate as {Item Code}-{Year}-{Sequence}."
   },
   {
    "creation": "2026-06-26 00:00:00.000000",

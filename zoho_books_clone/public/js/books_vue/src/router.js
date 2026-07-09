@@ -74,6 +74,17 @@ import PurchaseReceipts       from "./pages/PurchaseReceipts.vue";
 import QualityInspections     from "./pages/QualityInspections.vue";
 import QCTemplates            from "./pages/QCTemplates.vue";
 import QCApprovals            from "./pages/QCApprovals.vue";
+import BOM                    from "./pages/BOM.vue";
+import BOMView                from "./pages/BOMView.vue";
+import Operation              from "./pages/Operation.vue";
+import OperationView          from "./pages/OperationView.vue";
+import Workstation            from "./pages/Workstation.vue";
+import WorkstationView        from "./pages/WorkstationView.vue";
+import WorkstationType        from "./pages/WorkstationType.vue";
+import WorkstationTypeView    from "./pages/WorkstationTypeView.vue";
+import Routing                from "./pages/Routing.vue";
+import WorkOrder               from "./pages/WorkOrder.vue";
+import WorkOrderView           from "./pages/WorkOrderView.vue";
 
 import { useToast } from "./composables/useToast.js";
 import { usePermissions } from "./composables/usePermissions.js";
@@ -255,6 +266,18 @@ const routes = [
   { path: "/quality/inspections", name: "quality-inspections", component: QualityInspections, meta: { module: "inventory" } },
   { path: "/quality/templates",   name: "quality-templates",   component: QCTemplates,         meta: { module: "inventory" } },
   { path: "/quality/approvals",   name: "quality-approvals",   component: QCApprovals,         meta: { module: "inventory" } },
+  // Manufacturing
+  { path: "/manufacturing/bom",                 name: "manufacturing-bom",              component: BOM,             meta: { module: "inventory" } },
+  { path: "/manufacturing/bom/:name",            name: "manufacturing-bom-view",          component: BOMView,         meta: { module: "inventory" } },
+  { path: "/manufacturing/operation",            name: "manufacturing-operation",         component: Operation,       meta: { module: "inventory" } },
+  { path: "/manufacturing/operation/:name",      name: "manufacturing-operation-view",    component: OperationView,   meta: { module: "inventory" } },
+  { path: "/manufacturing/workstation",          name: "manufacturing-workstation",       component: Workstation,     meta: { module: "inventory" } },
+  { path: "/manufacturing/workstation/:name",    name: "manufacturing-workstation-view",  component: WorkstationView, meta: { module: "inventory" } },
+  { path: "/manufacturing/workstation-type",       name: "manufacturing-workstation-type",      component: WorkstationType,     meta: { module: "inventory" } },
+  { path: "/manufacturing/workstation-type/:name", name: "manufacturing-workstation-type-view", component: WorkstationTypeView, meta: { module: "inventory" } },
+  { path: "/manufacturing/routing",               name: "manufacturing-routing",               component: Routing,             meta: { module: "inventory" } },
+  { path: "/manufacturing/work-order",            name: "manufacturing-work-order",            component: WorkOrder,           meta: { module: "inventory" } },
+  { path: "/manufacturing/work-order/:name",      name: "manufacturing-work-order-view",       component: WorkOrderView,       meta: { module: "inventory" } },
   // Future phases append entries here.
   // Any unknown / wrong URL falls through to the dashboard instead of a 404.
   {

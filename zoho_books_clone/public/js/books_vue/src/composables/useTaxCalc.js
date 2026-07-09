@@ -120,8 +120,14 @@ export function computeTaxRows(lines, templates, ctx = {}) {
           amount: 0,
         };
       }
-      agg[key].amount += Math.round(base * rate / 100 * 100) / 100;
+      agg[key].amount += base * rate / 100;
     }
+  }
+  // Round once, after all lines for this component have been aggregated —
+  // matches how the physical/e-invoice computes GST (tax on the total
+  // taxable value, not the sum of individually-rounded per-line taxes).
+  for (const row of Object.values(agg)) {
+    row.amount = Math.round(row.amount * 100) / 100;
   }
   return Object.values(agg);
 }

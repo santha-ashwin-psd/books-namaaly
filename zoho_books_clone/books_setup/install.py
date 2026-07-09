@@ -103,6 +103,7 @@ def seed_naming_series():
         "Customer":         "CUST-.YYYY.-.#####",
         "Supplier":         "SUPP-.YYYY.-.#####",
         "QC Inspection":    "QCI-.YYYY.-.#####",
+        "BOM":              "BOM-.YYYY.-.#####",
     }
     for doctype, prefix in series.items():
         key = f"{prefix}."

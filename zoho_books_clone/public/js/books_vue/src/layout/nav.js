@@ -71,6 +71,15 @@ export const NAV = [
   // { path: "/quality/templates",             label: "QC Templates",     icon: "file",       module: "inventory"  },
   // { path: "/quality/approvals",             label: "QC Approvals",     icon: "check",      module: "inventory"  },
 
+  { section: "Manufacturing" },
+  { path: "/manufacturing/bom",               label: "Bill of Materials", icon: "box",        module: "inventory" },
+  { path: "/manufacturing/operation",         label: "Operations",       icon: "stack",      module: "inventory" },
+  { path: "/manufacturing/workstation",       label: "Workstations",     icon: "gear",       module: "inventory" },
+  { path: "/manufacturing/workstation-type",  label: "Workstation Types",icon: "badge",      module: "inventory" },
+  { path: "/manufacturing/routing",           label: "Routing",          icon: "recurring",  module: "inventory" },
+  { path: "/manufacturing/work-order",        label: "Work Orders",      icon: "order",      module: "inventory" },
+  { path: "/manufacturing/production-plan",   label: "Production Plan",  icon: "chart",      module: "inventory" },
+
   { section: "GST/Taxes" },
   { path: "/gst/tax-templates",             label: "Tax Templates",    icon: "percent",    module: "taxes"      },
   { path: "/gst/gstr1",                     label: "GSTR-1",           icon: "gstfile",    module: "accounts"   },

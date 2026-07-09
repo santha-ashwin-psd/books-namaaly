@@ -147,11 +147,24 @@ class StockEntry(Document):
             if direction.get("t") and not row.t_warehouse:
                 row.t_warehouse = self.to_warehouse
 
-            # Validate warehouse requirements
-            if direction.get("s") and not row.s_warehouse:
-                frappe.throw(_(f"Row {i}: Source Warehouse is required for {self.stock_entry_type}."))
-            if direction.get("t") and not row.t_warehouse:
-                frappe.throw(_(f"Row {i}: Target Warehouse is required for {self.stock_entry_type}."))
+            # Validate warehouse requirements.
+            # Manufacture is the one type where a single Stock Entry mixes two
+            # kinds of row: raw-material consumption (source only) and
+            # finished-goods/scrap receipt (target only) — the BOM/Work Order
+            # pattern. So for Manufacture we only require that a row set at
+            # least one side, not both; _make_sle() already creates the SLE
+            # for whichever side is actually populated on each row. Material
+            # Transfer (the other s+t type) genuinely moves the same item
+            # from one warehouse to another on every row, so it keeps the
+            # strict both-required check.
+            if self.stock_entry_type == "Manufacture":
+                if not row.s_warehouse and not row.t_warehouse:
+                    frappe.throw(_(f"Row {i}: set a Source Warehouse (raw material consumed) or a Target Warehouse (finished good/scrap received)."))
+            else:
+                if direction.get("s") and not row.s_warehouse:
+                    frappe.throw(_(f"Row {i}: Source Warehouse is required for {self.stock_entry_type}."))
+                if direction.get("t") and not row.t_warehouse:
+                    frappe.throw(_(f"Row {i}: Target Warehouse is required for {self.stock_entry_type}."))
 
             # Validate qty: Stock Adjustment allows negative (stock reduction correction)
             if self.stock_entry_type == "Stock Adjustment":

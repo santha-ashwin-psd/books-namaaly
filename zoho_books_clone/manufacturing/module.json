@@ -1,0 +1,9 @@
+{
+ "module_name": "Manufacturing",
+ "app_name": "zoho_books_clone",
+ "color": "#B45309",
+ "icon": "octicon octicon-tools",
+ "type": "module",
+ "label": "Manufacturing",
+ "doctype": "Module Def"
+}

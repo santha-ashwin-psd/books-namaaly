@@ -491,6 +491,7 @@
                     <div class="po-item-card-subtotal">
                       <span class="po-item-card-subtotal-label">SUBTOTAL</span>
                       <span class="po-item-card-amount">{{ fmtAmt(line.amount) }}</span>
+                      <span v-if="lineTaxTotal(line)" style="font-size:11px;color:#6b7280;margin-top:2px">+GST {{ fmtAmt(lineTaxTotal(line)) }} = {{ fmtAmt(lineAmountWithTax(line)) }}</span>
                     </div>
                     <span class="po-item-card-chevron" :class="{collapsed:line.collapsed}">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -553,6 +554,15 @@
                           </select>
                         </div>
                       </div>
+                      <div v-if="lineTaxBreakup(line).length" class="po-item-num-row" style="margin-top:2px">
+                        <div class="po-item-field" style="grid-column:1/-1">
+                          <label>GST</label>
+                          <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#374151;padding:6px 0">
+                            <span v-for="t in lineTaxBreakup(line)" :key="t.tax_type+t.rate">{{ t.tax_type }} @ {{ t.rate }}% <strong>{{ fmtAmt(t.amount) }}</strong></span>
+                            <span style="margin-left:auto;color:#1a1d23;font-weight:700">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -571,6 +581,7 @@
                     <div class="po-total-row"><span>{{ tl.template }} ({{ tl.rate }}%)</span><span>{{ fmtAmt(tl.amount) }}</span></div>
                   </template>
                   <div v-if="!taxLines.length" class="po-total-row"><span>Tax</span><span>{{ fmtAmt(0) }}</span></div>
+                  <div v-if="roundOff" class="po-total-row"><span>Round Off</span><span>{{ roundOff>0?'+':'' }}{{ fmtAmt(roundOff) }}</span></div>
                   <div class="po-total-row grand"><span>Grand Total</span><span>{{ fmtAmt(grandTotal) }}</span></div>
                 </div>
               </div>
@@ -919,9 +930,13 @@
                       <span class="t-lbl">Tax (0%)</span>
                       <span class="t-amt">{{ fmtAmt(0, viewInv.currency) }}</span>
                     </div>
+                    <div v-if="viewRoundOff" class="inv-total-line">
+                      <span class="t-lbl">Round Off</span>
+                      <span class="t-amt">{{ viewRoundOff>0?'+':'' }}{{ fmtAmt(viewRoundOff, viewInv.currency) }}</span>
+                    </div>
                     <div class="inv-grand-total-line">
                       <span class="inv-grand-lbl">Grand Total</span>
-                      <span class="inv-grand-amt">{{ fmtAmt(viewInv.grand_total, viewInv.currency) }}</span>
+                      <span class="inv-grand-amt">{{ fmtAmt(viewGrandTotal, viewInv.currency) }}</span>
                     </div>
                   </div>
                 </div>
@@ -1660,7 +1675,18 @@ const sorted = computed(()=>[...filtered.value].sort((a,b)=>{
 
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "invoices" });
 
-const subtotal = computed(()=>lines.value.reduce((s,l)=>s+flt(l.amount),0));
+// Exact (unrounded) line value — qty*rate less the line discount, computed
+// at full precision. Used only for the invoice-level Subtotal so it matches
+// the source invoice's truncation behaviour; per-line `amount` stays rounded
+// to 2dp for display/storage (matches the printed per-item Amount column).
+function exactLineAmount(l) {
+  const base = flt(l.qty) * flt(l.rate);
+  return base - base * flt(l.discount_percentage) / 100;
+}
+// The source invoice truncates (not rounds) its printed Subtotal from the
+// unrounded total across all lines — summing pre-rounded per-line amounts
+// instead overstates it by a paisa (e.g. ₹33,812.95 vs the correct ₹33,812.94).
+const subtotal = computed(()=>Math.floor(lines.value.reduce((s,l)=>s+exactLineAmount(l),0)*100)/100);
 
 const taxLines = computed(()=>
   computeTaxRows(lines.value, taxTemplates.value, {
@@ -1671,8 +1697,37 @@ const taxLines = computed(()=>
   }).map(r=>({ template:r.description, description:r.description, tax_type:r.tax_type, rate:r.rate, account_head:r.account_head, amount:r.amount }))
 );
 
+// Per-line GST breakup (e.g. "CGST 2.5% ₹226.60", "SGST 2.5% ₹226.60") — same
+// engine as the invoice-level taxLines, just scoped to a single line so each
+// item card can show its own tax like the printed invoice's per-item columns.
+function lineTaxBreakup(line) {
+  if (!line.tax_code || !flt(line.amount)) return [];
+  return computeTaxRows([line], taxTemplates.value, {
+    companyState: companyGstState.value,
+    placeOfSupply: form.place_of_supply,
+    gst: { cgst: gstAccounts.value.output_cgst, sgst: gstAccounts.value.output_sgst, igst: gstAccounts.value.output_igst },
+    defaultAccount: taxAccountHead.value,
+  });
+}
+function lineTaxTotal(line) { return lineTaxBreakup(line).reduce((s,t)=>s+t.amount,0); }
+// Line Total (incl. GST) must be rounded ONCE on the combined value — adding
+// the already-rounded Amount to the already-rounded GST (double rounding)
+// overstates it by a paisa vs. the source invoice's printed Amount column
+// (e.g. ₹9,517.15 instead of the correct ₹9,517.14).
+function lineAmountWithTax(line) {
+  const exact = exactLineAmount(line);
+  const rateTotal = lineTaxBreakup(line).reduce((s,t)=>s+t.rate,0);
+  return Math.round(exact * (1 + rateTotal / 100) * 100) / 100;
+}
+
 const taxAmount  = computed(()=>taxLines.value.reduce((s,t)=>s+t.amount,0));
-const grandTotal = computed(()=>subtotal.value+taxAmount.value);
+// GST rule (Sec 170, CGST Act): the invoice total is rounded off to the
+// nearest rupee. Without this step the app's total (e.g. ₹35,503.61) will
+// never match the printed/e-invoice total (₹35,504.00), which always
+// carries an explicit Round Off line.
+const preRoundTotal = computed(()=>subtotal.value+taxAmount.value);
+const roundOff   = computed(()=>Math.round((Math.round(preRoundTotal.value)-preRoundTotal.value)*100)/100);
+const grandTotal = computed(()=>Math.round(preRoundTotal.value));
 
 const previewData = computed(()=>({
   name: editingName.value||"INV-PREVIEW",
@@ -1742,6 +1797,17 @@ const viewSubtotal = computed(()=>{
   const net = viewInv.value.net_total != null ? flt(viewInv.value.net_total) : flt(viewInv.value.grand_total)-flt(viewInv.value.total_tax);
   return Math.round((net + viewDiscountTotal.value)*100)/100;
 });
+// Same round-off fix as the edit form's Grand Total: the stored grand_total
+// on older/unrounded documents is just net + tax with no invoice-level
+// rounding, so recompute it here rather than trusting the raw field.
+const viewNetTotal = computed(()=>Math.round((viewSubtotal.value - viewDiscountTotal.value)*100)/100);
+const viewTaxTotal = computed(()=>{
+  if (!viewInv.value?.taxes?.length) return 0;
+  return viewInv.value.taxes.reduce((s,t)=>s+flt(t.tax_amount!=null?t.tax_amount:t.amount),0);
+});
+const viewPreRoundTotal = computed(()=>viewNetTotal.value + viewTaxTotal.value);
+const viewRoundOff = computed(()=>Math.round((Math.round(viewPreRoundTotal.value)-viewPreRoundTotal.value)*100)/100);
+const viewGrandTotal = computed(()=>Math.round(viewPreRoundTotal.value));
 
 const timelineSteps = computed(()=>{
   if (!viewInv.value) return [];

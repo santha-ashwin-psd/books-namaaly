@@ -55,9 +55,16 @@ class SalesInvoice(Document):
             if flt(tax.rate) and not flt(tax.tax_amount):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
         tax_total = sum(flt(t.tax_amount) for t in (self.taxes or []))
-        self.net_total   = round(net, 2)
-        self.total_tax   = round(tax_total, 2)
-        self.grand_total = round(net + tax_total, 2)
+        self.net_total = round(net, 2)
+        self.total_tax = round(tax_total, 2)
+        # GST rule (Sec 170, CGST Act): the invoice total is rounded off to
+        # the nearest rupee, with the adjustment shown as its own "Round
+        # Off" line — e.g. a computed total of ₹35,503.59 is invoiced (and
+        # collected) as ₹35,504.00. Without this the saved grand_total just
+        # carries the raw paise remainder straight into the list/ledger.
+        pre_round_total = net + tax_total
+        self.grand_total = round(pre_round_total)
+        self.round_off = round(self.grand_total - pre_round_total, 2)
 
     def set_outstanding_amount(self):
         # For credit notes, outstanding is always 0 (balance tracked separately)
