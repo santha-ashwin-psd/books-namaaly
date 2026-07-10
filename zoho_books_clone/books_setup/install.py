@@ -20,6 +20,7 @@ def after_install():
     seed_invoice_custom_fields()
     seed_books_company_field()
     seed_qc_item_fields()
+    seed_manufacturing_settings()
     frappe.db.commit()
     print("✅  Zoho Books Clone installed successfully!")
 
@@ -41,6 +42,7 @@ def after_migrate():
     seed_invoice_custom_fields()
     seed_books_company_field()
     seed_qc_item_fields()
+    seed_manufacturing_settings()
     _normalize_company_names()
     frappe.db.commit()
 
@@ -104,6 +106,11 @@ def seed_naming_series():
         "Supplier":         "SUPP-.YYYY.-.#####",
         "QC Inspection":    "QCI-.YYYY.-.#####",
         "BOM":              "BOM-.YYYY.-.#####",
+        "Work Order":       "WO-.YYYY.-.#####",
+        "Production Plan":  "PP-.YYYY.-.#####",
+        "Job Card":         "JC-.YYYY.-.#####",
+        "Material Request": "MR-.YYYY.-.#####",
+        "Packing Slip":    "PS-.YYYY.-.#####",
     }
     for doctype, prefix in series.items():
         key = f"{prefix}."
@@ -781,6 +788,38 @@ def seed_books_company_field():
                 frappe.log_error(str(e), f"ALTER TABLE {table} add books_company")
 
     frappe.db.commit()
+
+
+# ─── Manufacturing Settings ──────────────────────────────────────────────────
+def seed_manufacturing_settings():
+    """Ensure the Manufacturing Settings singleton exists and has safe defaults.
+    Idempotent — only writes fields that are not yet set."""
+    if not frappe.db.exists("DocType", "Manufacturing Settings"):
+        return
+    try:
+        ms = frappe.get_single("Manufacturing Settings")
+        changed = False
+        defaults = {
+            "auto_create_job_cards": 1,
+            "over_production_allowance_pct": 0,
+            "allow_negative_stock": 0,
+            "backflush_raw_materials_based_on": "BOM",
+            "default_bom_type": "Manufacturing",
+            "set_rate_of_sub_assembly_item_based_on_bom": 0,
+            "job_card_hours_per_day": 8,
+            "capacity_planning_for_days": 30,
+            "warn_if_bom_not_default": 1,
+            "warn_on_missing_job_cards": 1,
+        }
+        for field, val in defaults.items():
+            current = ms.get(field)
+            if current is None or current == "":
+                frappe.db.set_value("Manufacturing Settings", "Manufacturing Settings", field, val)
+                changed = True
+        if changed:
+            frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(str(e), "seed_manufacturing_settings")
 
 
 # ─── QC Item Custom Fields ───────────────────────────────────────────────

@@ -1,0 +1,71 @@
+{
+ "name": "Routing",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "routing_name,is_active",
+ "title_field": "routing_name",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By fieldname",
+ "autoname": "field:routing_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "routing_name",
+   "fieldtype": "Data",
+   "label": "Routing Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_r1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sec_r_ops",
+   "fieldtype": "Section Break",
+   "label": "Operations Sequence"
+  },
+  {
+   "fieldname": "operations",
+   "fieldtype": "Table",
+   "label": "Operations",
+   "options": "Routing Operation"
+  },
+  {
+   "fieldname": "sec_r_more",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager", "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",    "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

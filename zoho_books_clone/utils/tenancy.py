@@ -246,3 +246,37 @@ hp_customer = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype,
 hp_supplier = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype, user)  # noqa: E731
 hp_item     = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype, user)  # noqa: E731
 hp_contact  = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype, user)  # noqa: E731
+
+
+def auto_stamp_company(doc, method=None):
+    """doc_events before_insert handler for manufacturing DocTypes.
+    Stamps `company` from the user's Books Company membership when the field
+    is empty — ensures multi-tenant isolation even on API-created records.
+    Bypass users (System Manager / Administrator) get the default company."""
+    if getattr(doc, "company", None):
+        return
+    company = get_user_company(frappe.session.user)
+    if not company and _is_bypass(frappe.session.user):
+        company = (
+            frappe.db.get_single_value("Books Settings", "default_company")
+            or frappe.db.get_value("Company", {}, "name")
+        )
+    if company:
+        doc.company = company
+
+
+# ── Manufacturing DocTypes (use the `company` field like transactional docs) ─
+
+qc_bom              = _make_qc("BOM")
+qc_work_order       = _make_qc("Work Order")
+qc_production_plan  = _make_qc("Production Plan")
+qc_job_card         = _make_qc("Job Card")
+qc_material_request = _make_qc("Material Request")
+qc_packing_slip     = _make_qc("Packing Slip")
+
+hp_bom              = _make_hp("BOM")
+hp_work_order       = _make_hp("Work Order")
+hp_production_plan  = _make_hp("Production Plan")
+hp_job_card         = _make_hp("Job Card")
+hp_material_request = _make_hp("Material Request")
+hp_packing_slip     = _make_hp("Packing Slip")

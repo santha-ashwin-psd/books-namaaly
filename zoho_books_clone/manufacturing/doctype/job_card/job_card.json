@@ -1,0 +1,157 @@
+{
+ "name": "Job Card",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "work_order,operation,status",
+ "title_field": "name",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "Expression",
+ "autoname": "JC-.YYYY.-.#####",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "Link",
+   "label": "Operation",
+   "options": "Operation",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_jc1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "workstation",
+   "fieldtype": "Link",
+   "label": "Workstation",
+   "options": "Workstation",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nWork In Progress\nCompleted\nCancelled",
+   "default": "Open",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Auto-derived from the Work Order. Used for multi-tenant data isolation."
+  },
+  {
+   "fieldname": "wo_operation_name",
+   "fieldtype": "Data",
+   "label": "WO Operation Row",
+   "hidden": 1,
+   "description": "Internal: the child row name in Work Order Operation table, used to sync status back."
+  },
+  {
+   "fieldname": "sec_jc_schedule",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "planned_start_time",
+   "fieldtype": "Datetime",
+   "label": "Planned Start"
+  },
+  {
+   "fieldname": "planned_end_time",
+   "fieldtype": "Datetime",
+   "label": "Planned End"
+  },
+  {
+   "fieldname": "col_break_jc2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "actual_start_time",
+   "fieldtype": "Datetime",
+   "label": "Actual Start"
+  },
+  {
+   "fieldname": "actual_end_time",
+   "fieldtype": "Datetime",
+   "label": "Actual End"
+  },
+  {
+   "fieldname": "sec_jc_qty",
+   "fieldtype": "Section Break",
+   "label": "Quantity & Employee"
+  },
+  {
+   "fieldname": "for_quantity",
+   "fieldtype": "Float",
+   "label": "For Quantity",
+   "default": "1",
+   "description": "Qty of the Work Order being covered by this Job Card."
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Data",
+   "label": "Employee"
+  },
+  {
+   "fieldname": "sec_jc_timelogs",
+   "fieldtype": "Section Break",
+   "label": "Time Logs"
+  },
+  {
+   "fieldname": "time_logs",
+   "fieldtype": "Table",
+   "label": "Time Logs",
+   "options": "Job Card Time Log"
+  },
+  {
+   "fieldname": "total_time_in_mins",
+   "fieldtype": "Float",
+   "label": "Total Time (Minutes)",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "sec_jc_more",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager", "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",    "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

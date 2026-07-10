@@ -42,6 +42,12 @@ DOCTYPE_MODULE = {
     # Inventory
     "Item": "inventory", "Item Group": "inventory", "Warehouse": "inventory",
     "Stock Entry": "inventory", "Stock Ledger Entry": "inventory", "Price List": "inventory",
+    # Manufacturing
+    "BOM": "inventory", "Work Order": "inventory", "Production Plan": "inventory",
+    "Job Card": "inventory", "Material Request": "inventory",
+    "Packing Slip": "inventory", "Alternative Item": "inventory",
+    "Routing": "inventory", "Operation": "inventory", "Workstation": "inventory",
+    "Workstation Type": "inventory",
     # Accounting
     "Account": "accounts", "Journal Entry": "accounts", "Cost Center": "accounts",
     "Fiscal Year": "accounts", "General Ledger Entry": "accounts",

@@ -1,0 +1,107 @@
+{
+ "name": "Material Request",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "status,material_request_type,company",
+ "title_field": "name",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "Expression",
+ "autoname": "MR-.YYYY.-.#####",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "material_request_type",
+   "fieldtype": "Select",
+   "label": "Purpose",
+   "options": "Purchase\nMaterial Transfer",
+   "default": "Purchase",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nSubmitted\nOrdered\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_mr1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Required By",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "production_plan",
+   "fieldtype": "Link",
+   "label": "Production Plan",
+   "options": "Production Plan",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set automatically when created from a Production Plan."
+  },
+  {
+   "fieldname": "sec_mr_items",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Material Request Item"
+  },
+  {
+   "fieldname": "sec_mr_more",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Material Request",
+   "no_copy": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "search_index": 1
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1, "create": 1, "delete": 1, "submit": 1, "cancel": 1, "amend": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager", "read": 1, "write": 1, "create": 1, "delete": 0, "submit": 1, "cancel": 1, "amend": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",    "read": 1, "write": 0, "create": 0, "delete": 0, "submit": 0, "cancel": 0, "amend": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0, "create": 0, "delete": 0, "submit": 0, "cancel": 0, "amend": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

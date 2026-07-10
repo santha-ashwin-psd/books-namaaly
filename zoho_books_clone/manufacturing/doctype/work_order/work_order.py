@@ -58,6 +58,34 @@ class WorkOrder(Document):
 
 	def on_submit(self):
 		self.db_set("status", "Submitted")
+		self._create_job_cards()
+
+	def _get_mfg_settings(self):
+		try:
+			return frappe.get_single("Manufacturing Settings")
+		except Exception:
+			return frappe._dict({"auto_create_job_cards": 1})
+
+	def _create_job_cards(self):
+		"""Auto-create Job Cards for every operation on the Work Order when the
+		Manufacturing Settings 'Auto-Create Job Cards' option is enabled."""
+		ms = self._get_mfg_settings()
+		if not ms.get("auto_create_job_cards", 1):
+			return
+
+		for op_row in (self.operations or []):
+			if not op_row.operation:
+				continue
+			jc = frappe.get_doc({
+				"doctype":           "Job Card",
+				"work_order":        self.name,
+				"operation":         op_row.operation,
+				"workstation":       op_row.workstation or "",
+				"for_quantity":      flt(self.qty),
+				"status":            "Open",
+				"wo_operation_name": op_row.name,
+			})
+			jc.insert(ignore_permissions=True)
 
 	def on_cancel(self):
 		if flt(self.produced_qty) > 0:

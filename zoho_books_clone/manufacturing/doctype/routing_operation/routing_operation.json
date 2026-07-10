@@ -1,0 +1,60 @@
+{
+ "name": "Routing Operation",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "title_field": "",
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "naming_rule": "",
+ "autoname": "",
+ "sort_field": "modified",
+ "sort_order": "ASC",
+ "fields": [
+  {
+   "fieldname": "sequence_id",
+   "fieldtype": "Int",
+   "label": "Seq",
+   "in_list_view": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "Link",
+   "label": "Operation",
+   "options": "Operation",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "workstation",
+   "fieldtype": "Link",
+   "label": "Workstation",
+   "options": "Workstation",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "time_in_mins",
+   "fieldtype": "Float",
+   "label": "Time (Minutes)",
+   "in_list_view": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "hour_rate",
+   "fieldtype": "Currency",
+   "label": "Hour Rate",
+   "default": "0"
+  }
+ ],
+ "permissions": []
+}

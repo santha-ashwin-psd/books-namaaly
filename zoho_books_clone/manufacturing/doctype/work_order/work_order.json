@@ -197,14 +197,16 @@
   },
   {
    "fieldname": "company",
-   "fieldtype": "Data",
-   "label": "Company"
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
   },
   {
    "fieldname": "sales_order",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Sales Order",
-   "description": "Optional free-text reference — for MRP/Production Plan linkage in a later phase."
+   "options": "Sales Order",
+   "description": "Optional. Links this Work Order to the originating Sales Order."
   },
   {
    "fieldname": "production_plan",

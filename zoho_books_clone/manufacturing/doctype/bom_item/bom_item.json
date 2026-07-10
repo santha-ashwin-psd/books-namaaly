@@ -63,6 +63,20 @@
    "label": "Amount",
    "read_only": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "sub_assembly_bom",
+   "fieldtype": "Link",
+   "label": "Sub-Assembly BOM",
+   "options": "BOM",
+   "description": "If this item is manufactured in-house, link its Sub-Assembly BOM. The Work Order explosion will flatten it into leaf raw materials automatically."
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "description": "Override the Work Order's default source warehouse for this specific raw material."
   }
  ],
  "permissions": []

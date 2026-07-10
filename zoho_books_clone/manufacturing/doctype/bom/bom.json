@@ -24,7 +24,7 @@
    "fieldname": "bom_type",
    "fieldtype": "Select",
    "label": "BOM Type",
-   "options": "Manufacturing\nPacking",
+   "options": "Manufacturing\nPacking\nSub-Assembly",
    "default": "Manufacturing",
    "reqd": 1,
    "in_list_view": 1,
@@ -86,9 +86,10 @@
   },
   {
    "fieldname": "routing",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Routing",
-   "description": "Placeholder — Routing doctype integration pending (see Step 3 of merge plan)"
+   "options": "Routing",
+   "description": "Selecting a Routing will auto-populate the Operations table from the Routing master."
   },
   {
    "fieldname": "sb_config",
@@ -170,14 +171,14 @@
    "fieldtype": "Section Break",
    "label": "Raw Materials",
    "collapsible": 1,
-   "depends_on": "eval:doc.bom_type=='Manufacturing'"
+   "depends_on": "eval:doc.bom_type=='Manufacturing'||doc.bom_type=='Sub-Assembly'"
   },
   {
    "fieldname": "items",
    "fieldtype": "Table",
    "label": "Raw Materials",
    "options": "BOM Item",
-   "depends_on": "eval:doc.bom_type=='Manufacturing'"
+   "depends_on": "eval:doc.bom_type=='Manufacturing'||doc.bom_type=='Sub-Assembly'"
   },
   {
    "fieldname": "sb_packing_materials",
@@ -213,6 +214,15 @@
    "fieldname": "tab_more",
    "fieldtype": "Tab Break",
    "label": "More Information"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Auto-set from your Books Company membership. Used for multi-tenant data isolation."
   },
   {
    "fieldname": "description",

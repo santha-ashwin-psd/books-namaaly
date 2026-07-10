@@ -19,8 +19,17 @@
         <button v-if="!isNew && wo.docstatus===2" class="sc-save-btn" @click="amendWO" :disabled="submitting">
           {{ submitting ? 'Amending...' : 'Amend' }}
         </button>
-        <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="nim-btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" @click="cancelWO" :disabled="submitting">
+        <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0 && wo.status!=='Stopped'" class="nim-btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" @click="cancelWO" :disabled="submitting">
           {{ submitting ? 'Cancelling...' : 'Cancel Work Order' }}
+        </button>
+        <button v-if="!isNew && wo.docstatus===1 && bomType==='Packing' && wo.status!=='Completed' && wo.status!=='Cancelled'" class="nim-btn" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" @click="createPackingSlip" :disabled="actionLoading==='ps'">
+          {{ actionLoading === 'ps' ? 'Creating…' : 'Create Packing Slip' }}
+        </button>
+        <button v-if="!isNew && wo.docstatus===1 && wo.status!=='Stopped' && wo.status!=='Completed'" class="nim-btn" style="background:#fff7ed;color:#92400e;border:1px solid #fcd34d;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" @click="stopWO" :disabled="submitting">
+          {{ submitting ? 'Stopping...' : 'Stop' }}
+        </button>
+        <button v-if="!isNew && wo.docstatus===1 && wo.status==='Stopped'" class="nim-btn" style="background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;" @click="resumeWO" :disabled="submitting">
+          {{ submitting ? 'Resuming...' : 'Resume' }}
         </button>
         <button v-if="!isNew && wo.docstatus===0" class="sc-save-btn" @click="submitWO" :disabled="submitting || saving">
           {{ submitting ? 'Submitting...' : 'Submit' }}
@@ -280,14 +289,15 @@
           <div class="sc-card-header"><div class="sc-card-title">Actions</div></div>
           <div class="sc-divider"></div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <button v-if="wo.wip_warehouse" class="sc-save-btn" @click="issueMaterials" :disabled="actionLoading || allTransferred">
+            <button v-if="wo.wip_warehouse" class="sc-save-btn" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped'">
               {{ actionLoading==='issue' ? 'Issuing…' : (allTransferred ? 'Materials Issued' : 'Issue Materials to WIP') }}
             </button>
-            <button class="sc-save-btn" style="background:linear-gradient(135deg,#16a34a,#15803d);" @click="openCompleteModal" :disabled="remainingQty<=0">
+            <button class="sc-save-btn" style="background:linear-gradient(135deg,#16a34a,#15803d);" @click="openCompleteModal" :disabled="remainingQty<=0 || wo.status==='Stopped'">
               Complete Work Order
             </button>
           </div>
-          <div class="sc-field-hint" v-if="remainingQty<=0">Fully produced — no further completions possible.</div>
+          <div class="sc-field-hint" v-if="wo.status==='Stopped'" style="color:#92400e;">Work Order is stopped — resume it to continue production.</div>
+          <div class="sc-field-hint" v-else-if="remainingQty<=0">Fully produced — no further completions possible.</div>
         </div>
 
         <div class="sc-card">
@@ -332,11 +342,17 @@
         <div class="sc-fg" style="margin-bottom:14px">
           <div class="nim-field">
             <label class="nim-label">Company</label>
-            <input type="text" class="nim-input" v-model="wo.company" :disabled="readOnly" />
+            <select class="nim-input" v-model="wo.company" :disabled="readOnly">
+              <option value="">— Select Company —</option>
+              <option v-for="c in companiesList" :key="c.name" :value="c.name">{{ c.name }}</option>
+            </select>
           </div>
           <div class="nim-field">
             <label class="nim-label">Sales Order</label>
-            <input type="text" class="nim-input" v-model="wo.sales_order" :disabled="readOnly" placeholder="Optional reference" />
+            <select class="nim-input" v-model="wo.sales_order" :disabled="readOnly">
+              <option value="">— None —</option>
+              <option v-for="s in salesOrdersList" :key="s.name" :value="s.name">{{ s.name }}</option>
+            </select>
           </div>
         </div>
         <div class="sc-fg sc-fg--single">
@@ -470,6 +486,12 @@ const warehouseList = ref([]);
 const stockEntries = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
+const companiesList = ref([]);
+const salesOrdersList = ref([]);
+const bomScrapItems = ref([]);
+const bomProcessLoss = ref(0);
+const bomType = ref("");
+const packingSlips = ref([]);
 
 const EMPTY_MATERIAL = () => ({ item_code: "", required_qty: 1, transferred_qty: 0, consumed_qty: 0, source_warehouse: "" });
 const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 0, actual_time_in_mins: 0, status: "Pending" });
@@ -483,7 +505,8 @@ const statusStyle = computed(() => {
   const s = wo.value.status;
   if (s === "Completed") return "background:#dcfce7;color:#16a34a";
   if (s === "Cancelled") return "background:#fee2e2;color:#dc2626";
-  if (s === "Draft") return "background:#fef3c7;color:#b45309";
+  if (s === "Stopped")   return "background:#fff7ed;color:#92400e";
+  if (s === "Draft")     return "background:#fef3c7;color:#b45309";
   return "background:#dbeafe;color:#1e40af";
 });
 
@@ -508,6 +531,12 @@ onMounted(async () => {
 
     const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" });
     workstationsList.value = wks || [];
+
+    const cos = await apiList("Company", { fields: ["name"], limit: 200, order: "name asc" }).catch(() => []);
+    companiesList.value = cos || [];
+
+    const sos = await apiList("Sales Order", { fields: ["name"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" }).catch(() => []);
+    salesOrdersList.value = sos || [];
 
     await loadWO();
   } catch (e) {
@@ -546,8 +575,27 @@ async function loadFromBom() {
     wo.value.production_item = r.production_item;
     wo.value.item_name = r.item_name;
     wo.value.stock_uom = r.stock_uom;
-    wo.value.items = (r.items || []).map(i => ({ ...EMPTY_MATERIAL(), ...i, source_warehouse: "" }));
+    wo.value.items = (r.items || []).map(i => ({
+      ...EMPTY_MATERIAL(),
+      ...i,
+      // use per-row source_warehouse from BOM Item if set, else fall back to
+      // the default source warehouse coming from Manufacturing Settings
+      source_warehouse: i.source_warehouse || r.default_source_warehouse || "",
+    }));
     wo.value.operations = (r.operations || []).map(o => ({ ...EMPTY_OP(), ...o }));
+    bomScrapItems.value = r.scrap_items || [];
+    bomProcessLoss.value = flt(r.process_loss);
+    bomType.value = r.bom_type || "Manufacturing";
+
+    // Pre-fill Work Order warehouse fields from Manufacturing Settings if empty
+    if (!wo.value.source_warehouse && r.default_source_warehouse)
+      wo.value.source_warehouse = r.default_source_warehouse;
+    if (!wo.value.wip_warehouse && r.default_wip_warehouse)
+      wo.value.wip_warehouse = r.default_wip_warehouse;
+    if (!wo.value.fg_warehouse && r.default_fg_warehouse)
+      wo.value.fg_warehouse = r.default_fg_warehouse;
+    if (!wo.value.scrap_warehouse && r.default_scrap_warehouse)
+      wo.value.scrap_warehouse = r.default_scrap_warehouse;
   } catch (e) {
     toast(e.message, "error");
   }
@@ -620,6 +668,32 @@ async function amendWO() {
   submitting.value = false;
 }
 
+async function stopWO() {
+  if (!wo.value.name) return;
+  submitting.value = true;
+  try {
+    await apiCall("zoho_books_clone.manufacturing.work_order_engine.stop_work_order", { work_order: wo.value.name });
+    wo.value.status = "Stopped";
+    toast("Work Order stopped");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  submitting.value = false;
+}
+
+async function resumeWO() {
+  if (!wo.value.name) return;
+  submitting.value = true;
+  try {
+    const newStatus = await apiCall("zoho_books_clone.manufacturing.work_order_engine.resume_work_order", { work_order: wo.value.name });
+    wo.value.status = newStatus;
+    toast("Work Order resumed");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  submitting.value = false;
+}
+
 const remainingQty = computed(() => flt(wo.value.qty) - flt(wo.value.produced_qty));
 const progressPct = computed(() => {
   const q = flt(wo.value.qty);
@@ -669,13 +743,21 @@ const completeForm = ref({
 });
 
 function openCompleteModal() {
+  const qtyMfg = remainingQty.value > 0 ? remainingQty.value : 0;
+  const ratio = qtyMfg / flt(wo.value.qty || 1);
+  const derivedLoss = bomProcessLoss.value > 0
+    ? parseFloat((qtyMfg * bomProcessLoss.value / 100).toFixed(4))
+    : 0;
+  const preScrap = bomScrapItems.value.length
+    ? bomScrapItems.value.map(s => ({ item_code: s.item_code, qty: parseFloat((flt(s.qty) * ratio).toFixed(4)) }))
+    : [];
   completeForm.value = {
-    qty_manufactured: remainingQty.value > 0 ? remainingQty.value : 0,
-    process_loss_qty: 0,
+    qty_manufactured: qtyMfg,
+    process_loss_qty: derivedLoss,
     batch_no: "",
     manufacturing_date: new Date().toISOString().slice(0, 10),
     expiry_date: "",
-    scrap_items: [],
+    scrap_items: preScrap,
   };
   showCompleteModal.value = true;
 }
@@ -702,6 +784,21 @@ async function submitComplete() {
     toast("Work Order completion recorded");
     showCompleteModal.value = false;
     await loadWO();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  actionLoading.value = false;
+}
+
+async function createPackingSlip() {
+  actionLoading.value = "ps";
+  try {
+    const psName = await apiCall("zoho_books_clone.manufacturing.packing_engine.create_packing_slip", {
+      work_order: wo.value.name,
+      qty_to_pack: flt(wo.value.qty) - flt(wo.value.produced_qty),
+    });
+    toast(`Packing Slip ${psName} created`);
+    router.push(`/manufacturing/packing-slip/${psName}`);
   } catch (e) {
     toast(e.message, "error");
   }

@@ -36,6 +36,7 @@ from frappe import _
 from frappe.utils import flt
 
 from zoho_books_clone.utils.access import assert_can
+from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
 from zoho_books_clone.inventory.utils import get_stock_balance_bulk
 
 
@@ -186,6 +187,7 @@ def create_work_orders(production_plan):
     assert_can("Work Order", "write")
 
     pp = frappe.get_doc("Production Plan", production_plan)
+    assert_doc_in_user_company(pp)
     if pp.docstatus != 1:
         frappe.throw(_("Production Plan must be submitted first."))
 
@@ -223,3 +225,92 @@ def create_work_orders(production_plan):
     frappe.db.commit()
 
     return created
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def bulk_submit_work_orders(production_plan):
+    """Submit all Draft Work Orders linked to this Production Plan at once.
+    Returns a dict with counts: submitted, skipped (already submitted), errors."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "write")
+
+    pp = frappe.get_doc("Production Plan", production_plan)
+    assert_doc_in_user_company(pp)
+    if pp.docstatus != 1:
+        frappe.throw(_("Production Plan must be submitted first."))
+
+    draft_wos = frappe.get_all(
+        "Work Order",
+        filters={"production_plan": production_plan, "docstatus": 0},
+        fields=["name"],
+    )
+
+    submitted = []
+    errors = []
+    for wo_row in draft_wos:
+        try:
+            wo = frappe.get_doc("Work Order", wo_row.name)
+            wo.submit()
+            submitted.append(wo.name)
+        except Exception as exc:
+            errors.append({"name": wo_row.name, "error": str(exc)})
+
+    frappe.db.commit()
+    return {"submitted": submitted, "errors": errors}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def create_material_requests(production_plan):
+    """Create one Material Request (Purpose = Purchase) from the shortfall rows
+    in the Production Plan's Raw Materials tab (mr_items table). Only rows with
+    shortfall_qty > 0 are included. Returns the list of Material Request names."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "read")
+
+    pp = frappe.get_doc("Production Plan", production_plan)
+    assert_doc_in_user_company(pp)
+    if pp.docstatus != 1:
+        frappe.throw(_("Production Plan must be submitted before creating Material Requests."))
+
+    shortfall_rows = [r for r in (pp.mr_items or []) if flt(r.shortfall_qty) > 0.0001]
+    if not shortfall_rows:
+        frappe.throw(_(
+            "No shortfall found. Run 'Calculate Requirement' on the Raw Materials tab "
+            "first, or there is no shortfall to procure."
+        ))
+
+    mr = frappe.new_doc("Material Request")
+    mr.material_request_type = "Purchase"
+    mr.company = pp.company
+    mr.production_plan = pp.name
+    mr.remarks = _("Auto-created from Production Plan {0}").format(pp.name)
+    for row in shortfall_rows:
+        mr.append("items", {
+            "item_code": row.item_code,
+            "item_name": row.item_name,
+            "required_qty": flt(row.shortfall_qty),
+            "uom": row.uom,
+            "warehouse": pp.default_source_warehouse or "",
+        })
+    mr.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return [mr.name]
+
+
+def maybe_complete_production_plan(production_plan_name):
+    """Called after a Work Order is completed. If every Work Order linked to the
+    Production Plan is now Completed, set the PP status to 'Completed'."""
+    if not production_plan_name:
+        return
+    all_wos = frappe.get_all(
+        "Work Order",
+        filters={"production_plan": production_plan_name, "docstatus": 1},
+        fields=["status"],
+    )
+    if not all_wos:
+        return
+    if all(wo.status == "Completed" for wo in all_wos):
+        frappe.db.set_value("Production Plan", production_plan_name, "status", "Completed")

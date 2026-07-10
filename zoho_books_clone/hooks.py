@@ -65,6 +65,13 @@ doc_events = {
     "Supplier":  {"before_insert": f"{_TN}.auto_stamp_books_company"},
     "Item":      {"before_insert": f"{_TN}.auto_stamp_books_company"},
     "Contact":   {"before_insert": f"{_TN}.auto_stamp_books_company"},
+    # Auto-stamp company on manufacturing transactional records
+    "BOM":              {"before_insert": f"{_TN}.auto_stamp_company"},
+    "Work Order":       {"before_insert": f"{_TN}.auto_stamp_company"},
+    "Production Plan":  {"before_insert": f"{_TN}.auto_stamp_company"},
+    "Material Request": {"before_insert": f"{_TN}.auto_stamp_company"},
+    "Packing Slip":     {"before_insert": f"{_TN}.auto_stamp_company"},
+    "Job Card":         {"before_insert": f"{_TN}.auto_stamp_company"},
 }
 
 scheduler_events = {
@@ -115,6 +122,18 @@ global_search_doctypes = {
         {"doctype": "Books Payment Mode"},
         {"doctype": "Payment Terms"},
     ],
+    "Manufacturing": [
+        {"doctype": "BOM"},
+        {"doctype": "Work Order"},
+        {"doctype": "Production Plan"},
+        {"doctype": "Job Card"},
+        {"doctype": "Material Request"},
+        {"doctype": "Packing Slip"},
+        {"doctype": "Alternative Item"},
+        {"doctype": "Operation"},
+        {"doctype": "Workstation"},
+        {"doctype": "Routing"},
+    ],
 }
 
 app_include_css = ["/assets/zoho_books_clone/css/books.css"]
@@ -152,6 +171,13 @@ permission_query_conditions = {
     "Supplier":          f"{_TN}.qc_supplier",
     "Item":              f"{_TN}.qc_item",
     "Contact":           f"{_TN}.qc_contact",
+    # Manufacturing — scoped by the `company` field
+    "BOM":               f"{_TN}.qc_bom",
+    "Work Order":        f"{_TN}.qc_work_order",
+    "Production Plan":   f"{_TN}.qc_production_plan",
+    "Job Card":          f"{_TN}.qc_job_card",
+    "Material Request":  f"{_TN}.qc_material_request",
+    "Packing Slip":      f"{_TN}.qc_packing_slip",
 }
 
 has_permission = {
@@ -176,6 +202,13 @@ has_permission = {
     "Supplier":          f"{_TN}.hp_supplier",
     "Item":              f"{_TN}.hp_item",
     "Contact":           f"{_TN}.hp_contact",
+    # Manufacturing — scoped by the `company` field
+    "BOM":               f"{_TN}.hp_bom",
+    "Work Order":        f"{_TN}.hp_work_order",
+    "Production Plan":   f"{_TN}.hp_production_plan",
+    "Job Card":          f"{_TN}.hp_job_card",
+    "Material Request":  f"{_TN}.hp_material_request",
+    "Packing Slip":      f"{_TN}.hp_packing_slip",
 }
 
 website_route_rules = [

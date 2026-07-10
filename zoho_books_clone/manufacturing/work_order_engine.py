@@ -26,6 +26,7 @@ from frappe import _
 from frappe.utils import flt, nowdate
 
 from zoho_books_clone.utils.access import assert_can
+from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
 
 
 def _get_work_order(work_order):
@@ -35,10 +36,37 @@ def _get_work_order(work_order):
     return wo
 
 
+def _get_mfg_settings():
+    """Return Manufacturing Settings singleton, falling back to safe defaults
+    if the DocType hasn't been migrated yet."""
+    try:
+        return frappe.get_single("Manufacturing Settings")
+    except Exception:
+        return frappe._dict({
+            "default_source_warehouse": "",
+            "default_wip_warehouse": "",
+            "default_fg_warehouse": "",
+            "default_scrap_warehouse": "",
+            "auto_create_job_cards": 1,
+            "over_production_allowance_pct": 0,
+            "allow_negative_stock": 0,
+            "backflush_raw_materials_based_on": "BOM",
+        })
+
+
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_bom_breakdown(bom, qty):
     """Preview the raw-material & operation rows a Work Order would get from
-    this BOM at the given quantity. Read-only — does not save anything."""
+    this BOM at the given quantity. Read-only — does not save anything.
+
+    Handles three BOM types:
+      Manufacturing  — standard flat material list; rows with a sub_assembly_bom
+                       are recursively exploded (max 5 levels deep) so the Work
+                       Order sees only leaf raw materials.
+      Sub-Assembly   — treated identically to Manufacturing in this context.
+      Packing        — materials are packing_items + the bulk_item consumed at
+                       bulk_qty_per_unit per packed unit.
+    """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
 
@@ -46,16 +74,14 @@ def get_bom_breakdown(bom, qty):
     if bom_doc.docstatus != 1:
         frappe.throw(_("Only a submitted BOM can be used on a Work Order."))
 
+    ms = _get_mfg_settings()
     ratio = flt(qty) / flt(bom_doc.quantity or 1)
 
-    items = [{
-        "item_code": r.item_code,
-        "item_name": r.item_name,
-        "required_qty": flt(r.qty) * ratio,
-        "uom": r.uom,
-        "rate": flt(r.rate),
-        "amount": flt(r.rate) * flt(r.qty) * ratio,
-    } for r in bom_doc.items]
+    if bom_doc.bom_type == "Packing":
+        items = _explode_packing_bom(bom_doc, ratio)
+    else:
+        # Manufacturing or Sub-Assembly
+        items = _explode_bom_items(bom_doc.items, ratio, depth=0)
 
     operations = [{
         "operation": r.operation,
@@ -65,13 +91,109 @@ def get_bom_breakdown(bom, qty):
         "cost": flt(r.cost),
     } for r in bom_doc.operations]
 
+    scrap_items = [{
+        "item_code": r.item_code,
+        "qty": flt(r.qty) * ratio,
+        "rate": flt(r.rate),
+    } for r in (bom_doc.scrap_items or [])]
+
     return {
         "production_item": bom_doc.item,
         "item_name": frappe.db.get_value("Item", bom_doc.item, "item_name"),
         "stock_uom": frappe.db.get_value("Item", bom_doc.item, "stock_uom"),
+        "bom_type": bom_doc.bom_type,
+        "process_loss": flt(bom_doc.process_loss),
         "items": items,
         "operations": operations,
+        "scrap_items": scrap_items,
+        # Manufacturing Settings defaults for pre-filling Work Order warehouses
+        "default_source_warehouse": ms.get("default_source_warehouse") or "",
+        "default_wip_warehouse": ms.get("default_wip_warehouse") or "",
+        "default_fg_warehouse": ms.get("default_fg_warehouse") or "",
+        "default_scrap_warehouse": ms.get("default_scrap_warehouse") or "",
     }
+
+
+def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None):
+    """Recursively flatten BOM Item rows up to MAX_DEPTH levels deep.
+
+    Rows are exploded (replaced by their own sub-components) when either:
+    a) the row has an explicit ``sub_assembly_bom`` link, OR
+    b) the item has a phantom BOM (is_phantom_bom=1) — phantom sub-assemblies
+       are always exploded because they are never stocked/issued as a separate
+       intermediate item.
+
+    All other rows pass through as-is (leaf raw materials).
+    """
+    MAX_DEPTH = 5
+    if _seen_boms is None:
+        _seen_boms = set()
+
+    result = []
+    for r in rows:
+        target_bom = r.sub_assembly_bom or ""
+
+        # Auto-detect phantom BOM even without explicit sub_assembly_bom linkage
+        if not target_bom:
+            target_bom = frappe.db.get_value(
+                "BOM",
+                {"item": r.item_code, "is_phantom_bom": 1, "docstatus": 1, "is_active": 1},
+                "name",
+            ) or ""
+
+        if target_bom and depth < MAX_DEPTH and target_bom not in _seen_boms:
+            try:
+                sub_doc = frappe.get_doc("BOM", target_bom)
+                if sub_doc.docstatus == 1:
+                    sub_ratio = flt(r.qty) * ratio / flt(sub_doc.quantity or 1)
+                    _seen_boms.add(target_bom)
+                    sub_items = _explode_bom_items(sub_doc.items, sub_ratio, depth + 1, _seen_boms)
+                    result.extend(sub_items)
+                    continue
+            except Exception:
+                pass  # If sub-BOM can't be loaded, fall through to include item as-is
+
+        result.append({
+            "item_code": r.item_code,
+            "item_name": r.item_name,
+            "required_qty": flt(r.qty) * ratio,
+            "uom": r.uom,
+            "rate": flt(r.rate),
+            "amount": flt(r.rate) * flt(r.qty) * ratio,
+            "source_warehouse": r.source_warehouse or "",
+        })
+    return result
+
+
+def _explode_packing_bom(bom_doc, ratio):
+    """For Packing BOMs, the consumed materials are:
+    1. The bulk item at bulk_qty_per_unit × ratio.
+    2. All packing_items rows scaled by ratio.
+    """
+    result = []
+    if bom_doc.bulk_item and flt(bom_doc.bulk_qty_per_unit) > 0:
+        bulk_name = frappe.db.get_value("Item", bom_doc.bulk_item, "item_name") or bom_doc.bulk_item
+        bulk_uom = frappe.db.get_value("Item", bom_doc.bulk_item, "stock_uom") or ""
+        result.append({
+            "item_code": bom_doc.bulk_item,
+            "item_name": bulk_name,
+            "required_qty": flt(bom_doc.bulk_qty_per_unit) * ratio,
+            "uom": bulk_uom,
+            "rate": 0.0,
+            "amount": 0.0,
+            "source_warehouse": "",
+        })
+    for r in (bom_doc.packing_items or []):
+        result.append({
+            "item_code": r.item_code,
+            "item_name": r.item_name,
+            "required_qty": flt(r.qty) * ratio,
+            "uom": r.uom,
+            "rate": flt(r.rate),
+            "amount": flt(r.rate) * flt(r.qty) * ratio,
+            "source_warehouse": "",
+        })
+    return result
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
@@ -85,6 +207,9 @@ def issue_materials(work_order):
     assert_can("Stock Entry", "write")
 
     wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+    if wo.status == "Stopped":
+        frappe.throw(_("Work Order is stopped. Resume it before issuing materials."))
     if not wo.wip_warehouse:
         frappe.throw(_(
             "Set a Work-in-Progress Warehouse on the Work Order to issue "
@@ -119,6 +244,7 @@ def issue_materials(work_order):
         row.db_set("transferred_qty", flt(row.required_qty), update_modified=False)
     if wo.status == "Submitted":
         wo.db_set("status", "In Process")
+    _set_operations_status(wo, "In Process")
     frappe.db.commit()
 
     return se.name
@@ -149,17 +275,30 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     scrap_items = scrap_items or []
 
     wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+    if wo.status == "Stopped":
+        frappe.throw(_("Work Order is stopped. Resume it before recording completion."))
 
     qty_manufactured = flt(qty_manufactured)
     process_loss_qty = flt(process_loss_qty)
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
 
-    remaining = flt(wo.qty) - flt(wo.produced_qty)
-    if qty_manufactured > remaining + 0.0001:
-        frappe.throw(_(
-            "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1})."
-        ).format(qty_manufactured, remaining))
+    ms = _get_mfg_settings()
+    over_pct = flt(ms.get("over_production_allowance_pct", 0))
+    max_allowed = flt(wo.qty) * (1.0 + over_pct / 100.0)
+    new_total = flt(wo.produced_qty) + qty_manufactured
+    if new_total > max_allowed + 0.0001:
+        if over_pct > 0:
+            frappe.throw(_(
+                "Total produced qty ({0}) would exceed the planned qty ({1}) plus the "
+                "{2}% over-production allowance (max {3})."
+            ).format(new_total, wo.qty, over_pct, max_allowed))
+        else:
+            frappe.throw(_(
+                "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1}). "
+                "Increase Over-Production Allowance % in Manufacturing Settings to allow this."
+            ).format(qty_manufactured, flt(wo.qty) - flt(wo.produced_qty)))
 
     ratio = qty_manufactured / flt(wo.qty or 1)
 
@@ -234,7 +373,64 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     new_produced_qty = flt(wo.produced_qty) + qty_manufactured
     wo.db_set("produced_qty", new_produced_qty)
     wo.db_set("process_loss_qty", flt(wo.process_loss_qty) + process_loss_qty)
-    wo.db_set("status", "Completed" if new_produced_qty >= flt(wo.qty) - 0.0001 else "In Process")
+    is_complete = new_produced_qty >= flt(wo.qty) - 0.0001
+    wo.db_set("status", "Completed" if is_complete else "In Process")
+    _set_operations_status(wo, "Completed" if is_complete else "In Process")
+
+    # If the Work Order is now fully completed and it belongs to a Production
+    # Plan, check whether all linked WOs are also done — if so, close the plan.
+    if is_complete and wo.production_plan:
+        from zoho_books_clone.manufacturing.production_plan_engine import maybe_complete_production_plan
+        maybe_complete_production_plan(wo.production_plan)
+
     frappe.db.commit()
 
     return se.name
+
+
+def _set_operations_status(wo, status):
+    """Bulk-update all Work Order Operation rows to the given status."""
+    if not wo.operations:
+        return
+    for op in wo.operations:
+        op.db_set("status", status, update_modified=False)
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def stop_work_order(work_order):
+    """Mark a submitted Work Order as Stopped, preventing further material
+    issue or completion until it is resumed."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "write")
+
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+    if wo.status in ("Completed", "Cancelled"):
+        frappe.throw(_("Cannot stop a {0} Work Order.").format(wo.status))
+    if wo.status == "Stopped":
+        frappe.throw(_("Work Order is already stopped."))
+
+    wo.db_set("status", "Stopped")
+    frappe.db.commit()
+    return "Stopped"
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def resume_work_order(work_order):
+    """Resume a previously stopped Work Order, restoring it to In Process
+    (or Submitted if no production has been recorded yet)."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "write")
+
+    wo = frappe.get_doc("Work Order", work_order)
+    if wo.docstatus != 1:
+        frappe.throw(_("Work Order must be submitted."))
+    if wo.status != "Stopped":
+        frappe.throw(_("Work Order is not stopped."))
+
+    resume_status = "In Process" if flt(wo.produced_qty) > 0 else "Submitted"
+    wo.db_set("status", resume_status)
+    frappe.db.commit()
+    return resume_status

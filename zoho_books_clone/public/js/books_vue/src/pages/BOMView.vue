@@ -72,8 +72,11 @@
           </div>
           <div class="nim-field">
             <label class="nim-label">Routing</label>
-            <input type="text" class="nim-input sc-input--readonly" value="Coming Soon" disabled style="font-style:italic;" />
-            <div class="sc-field-hint">Routing integration is coming soon.</div>
+            <select class="nim-input" v-model="bom.routing" :disabled="readOnly" @change="onRoutingChange">
+              <option value="">— None —</option>
+              <option v-for="r in routingsList" :key="r.name" :value="r.name">{{ r.name }}</option>
+            </select>
+            <div class="sc-field-hint">Selecting a Routing auto-populates the Operations table.</div>
           </div>
         </div>
         <div class="sc-fg sc-fg--three" style="margin-top:16px;">
@@ -128,6 +131,7 @@
               <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:600;font-size:12px;">Qty</th>
               <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:600;font-size:12px;">Rate</th>
               <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:600;font-size:12px;">Amount</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:600;font-size:12px;">Sub-Assembly BOM</th>
               <th style="width:40px;border-bottom:1px solid #e5e7eb;"></th>
             </tr>
           </thead>
@@ -136,13 +140,19 @@
               <td colspan="6" style="text-align:center;padding:24px;color:#9ca3af;">No raw materials added.</td>
             </tr>
             <tr v-for="(rm, idx) in bom.items" :key="idx">
-              <td style="padding:6px;"><select class="nim-input" style="padding:6px 10px;" v-model="rm.item_code" @change="onRmItemChange(rm)"><option value="">— Select —</option><option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option></select></td>
-              <td style="padding:6px;"><select class="nim-input" style="padding:6px 10px;" v-model="rm.uom"><option v-for="u in uomList" :key="u" :value="u">{{ u }}</option></select></td>
-              <td style="padding:6px;"><input type="number" class="nim-input" style="padding:6px 10px;text-align:right;" v-model="rm.qty" min="0" step="any"/></td>
-              <td style="padding:6px;"><input type="number" class="nim-input" style="padding:6px 10px;text-align:right;" v-model="rm.rate" min="0" step="any"/></td>
+              <td style="padding:6px;"><select class="nim-input" style="padding:6px 10px;" v-model="rm.item_code" @change="onRmItemChange(rm)" :disabled="readOnly"><option value="">— Select —</option><option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option></select></td>
+              <td style="padding:6px;"><select class="nim-input" style="padding:6px 10px;" v-model="rm.uom" :disabled="readOnly"><option v-for="u in uomList" :key="u" :value="u">{{ u }}</option></select></td>
+              <td style="padding:6px;"><input type="number" class="nim-input" style="padding:6px 10px;text-align:right;" v-model="rm.qty" min="0" step="any" :disabled="readOnly"/></td>
+              <td style="padding:6px;"><input type="number" class="nim-input" style="padding:6px 10px;text-align:right;" v-model="rm.rate" min="0" step="any" :disabled="readOnly"/></td>
               <td style="padding:6px;text-align:right;font-weight:600;vertical-align:middle;">{{ fmt(rm.qty * rm.rate) }}</td>
+              <td style="padding:6px;">
+                <select class="nim-input" style="padding:6px 10px;font-size:12px;" v-model="rm.sub_assembly_bom" :disabled="readOnly">
+                  <option value="">— None —</option>
+                  <option v-for="b in bomsList" :key="b.name" :value="b.name">{{ b.name }}</option>
+                </select>
+              </td>
               <td style="padding:6px;text-align:center;vertical-align:middle;">
-                <button @click="removeMaterial(idx)" style="background:none;border:none;color:#dc2626;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                <button v-if="!readOnly" @click="removeMaterial(idx)" style="background:none;border:none;color:#dc2626;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
               </td>
             </tr>
           </tbody>
@@ -305,6 +315,182 @@
     </div>
   </div>
 
+  <!-- Tab: BOM Tree -->
+  <div v-if="activeTab === 'bom-tree'" class="sc-body sc-body--narrow">
+    <div class="sc-col-main">
+      <div class="sc-card">
+        <div class="sc-card-header" style="justify-content:space-between;">
+          <div>
+            <div class="sc-card-title">Multi-Level BOM Explosion</div>
+            <div class="sc-card-subtitle">Recursively expands all sub-assembly BOMs (including phantom BOMs) into leaf raw materials.</div>
+          </div>
+          <button class="sc-save-btn" @click="loadBomTree" :disabled="treeLoading || isNew || bom.docstatus !== 1">
+            {{ treeLoading ? 'Exploding…' : 'Explode BOM' }}
+          </button>
+        </div>
+        <div v-if="isNew || bom.docstatus !== 1" style="padding:20px;color:#9ca3af;font-size:13px;">Submit the BOM first, then click "Explode BOM" to see the full multi-level tree.</div>
+        <div v-else-if="!treeNodes.length && !treeLoading" style="padding:20px;color:#9ca3af;font-size:13px;">Click "Explode BOM" to build the explosion tree.</div>
+      </div>
+
+      <div v-if="treeNodes.length" class="sc-card" style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Item</th>
+              <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Qty</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">UOM</th>
+              <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Rate</th>
+              <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Amount</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Sub-Assembly BOM</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(node, idx) in treeNodes" :key="idx"
+              :style="node.level === 0 ? '' : 'background:#f9fafb;'"
+              style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:8px;">
+                <span :style="`padding-left:${node.level * 20}px;display:inline-flex;align-items:center;gap:6px;`">
+                  <span v-if="node.level > 0" style="color:#d1d5db;">└</span>
+                  <span :style="node.has_sub_assembly ? 'font-weight:700;color:#2563eb;' : ''">{{ node.item_code }}</span>
+                  <span v-if="node.is_phantom" style="font-size:10px;padding:1px 6px;background:#fef3c7;color:#92400e;border-radius:8px;font-weight:600;">PHANTOM</span>
+                  <span v-if="node.has_sub_assembly && !node.is_phantom" style="font-size:10px;padding:1px 6px;background:#dbeafe;color:#1e40af;border-radius:8px;font-weight:600;">SUB-ASM</span>
+                </span>
+                <div :style="`padding-left:${node.level * 20 + (node.level > 0 ? 18 : 0)}px;font-size:11px;color:#9ca3af;`">{{ node.item_name }}</div>
+              </td>
+              <td style="padding:8px;text-align:right;">{{ fmt(node.qty) }}</td>
+              <td style="padding:8px;">{{ node.uom }}</td>
+              <td style="padding:8px;text-align:right;">{{ fmt(node.rate) }}</td>
+              <td style="padding:8px;text-align:right;font-weight:600;">{{ fmt(node.amount) }}</td>
+              <td style="padding:8px;">
+                <span v-if="node.sub_assembly_bom" class="inv-link" style="cursor:pointer;" @click="router.push(`/manufacturing/bom/${node.sub_assembly_bom}`)">{{ node.sub_assembly_bom }}</span>
+                <span v-else style="color:#d1d5db;">—</span>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="background:#eff6ff;">
+              <td style="padding:8px;font-weight:700;color:#1e40af;">Total</td>
+              <td colspan="3"></td>
+              <td style="padding:8px;text-align:right;font-weight:800;color:#1e3a8a;">{{ fmt(treeNodes.reduce((s, n) => n.level === 0 ? s + n.amount : s, 0)) }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Compare -->
+  <div v-if="activeTab === 'compare'" class="sc-body sc-body--narrow">
+    <div class="sc-col-main">
+      <div class="sc-card">
+        <div class="sc-card-header" style="justify-content:space-between;">
+          <div>
+            <div class="sc-card-title">Compare with another BOM</div>
+            <div class="sc-card-subtitle">Select a second submitted BOM and see a side-by-side diff of materials and operations.</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <select class="nim-input" style="padding:7px 12px;min-width:220px;" v-model="compareBom2">
+              <option value="">— Select BOM to compare —</option>
+              <option v-for="b in bomsList.filter(b => b.name !== bom.name)" :key="b.name" :value="b.name">{{ b.name }} ({{ b.item }})</option>
+            </select>
+            <button class="sc-save-btn" @click="runCompare" :disabled="compareLoading || !compareBom2 || isNew">
+              {{ compareLoading ? 'Comparing…' : 'Compare' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <template v-if="compareResult">
+        <!-- Header summary -->
+        <div class="sc-card" style="padding:0;overflow:hidden;">
+          <div style="display:flex;background:#f8f9fc;border-bottom:1px solid #e8ecf2;">
+            <div style="flex:1;padding:16px 20px;border-right:1px solid #e8ecf2;">
+              <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px;">BOM A (this)</div>
+              <div style="font-size:15px;font-weight:700;">{{ compareResult.bom1.name }}</div>
+              <div style="font-size:12px;color:#6b7280;">{{ compareResult.bom1.item }} · Qty {{ compareResult.bom1.qty }}</div>
+              <div style="font-size:13px;font-weight:700;color:#1e40af;margin-top:4px;">Total: {{ fmt(compareResult.bom1.total_cost) }}</div>
+            </div>
+            <div style="flex:1;padding:16px 20px;">
+              <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px;">BOM B (selected)</div>
+              <div style="font-size:15px;font-weight:700;">{{ compareResult.bom2.name }}</div>
+              <div style="font-size:12px;color:#6b7280;">{{ compareResult.bom2.item }} · Qty {{ compareResult.bom2.qty }}</div>
+              <div style="font-size:13px;font-weight:700;color:#1e40af;margin-top:4px;">Total: {{ fmt(compareResult.bom2.total_cost) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Materials diff -->
+        <div class="sc-card" style="overflow-x:auto;">
+          <div class="sc-card-title" style="margin-bottom:14px;">Materials</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#f9fafb;">
+                <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Item</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM A Qty</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM A Rate</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM B Qty</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM B Rate</th>
+                <th style="text-align:center;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in compareResult.materials" :key="m.item_code"
+                :style="m.status==='added'?'background:#f0fdf4;':(m.status==='removed'?'background:#fef2f2;':(m.status==='changed'?'background:#fffbeb;':''))"
+                style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:8px;">{{ m.item_code }}<div style="font-size:11px;color:#9ca3af;">{{ m.item_name }}</div></td>
+                <td style="padding:8px;text-align:right;">{{ m.bom1_qty != null ? fmt(m.bom1_qty) + ' ' + m.bom1_uom : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ m.bom1_rate != null ? fmt(m.bom1_rate) : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ m.bom2_qty != null ? fmt(m.bom2_qty) + ' ' + m.bom2_uom : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ m.bom2_rate != null ? fmt(m.bom2_rate) : '—' }}</td>
+                <td style="padding:8px;text-align:center;">
+                  <span :style="m.status==='added'?'color:#16a34a;background:#dcfce7;':(m.status==='removed'?'color:#dc2626;background:#fee2e2;':(m.status==='changed'?'color:#b45309;background:#fef3c7;':'color:#6b7280;background:#f3f4f6;'))"
+                    style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">
+                    {{ m.status.toUpperCase() }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Operations diff -->
+        <div class="sc-card" style="overflow-x:auto;" v-if="compareResult.operations.length">
+          <div class="sc-card-title" style="margin-bottom:14px;">Operations</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#f9fafb;">
+                <th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Operation</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM A Mins</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM A Rate/Hr</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM B Mins</th>
+                <th style="text-align:right;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">BOM B Rate/Hr</th>
+                <th style="text-align:center;padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;font-weight:600;">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="o in compareResult.operations" :key="o.operation"
+                :style="o.status==='added'?'background:#f0fdf4;':(o.status==='removed'?'background:#fef2f2;':(o.status==='changed'?'background:#fffbeb;':''))"
+                style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:8px;">{{ o.operation }}</td>
+                <td style="padding:8px;text-align:right;">{{ o.bom1_time != null ? fmt(o.bom1_time) : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ o.bom1_rate != null ? fmt(o.bom1_rate) : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ o.bom2_time != null ? fmt(o.bom2_time) : '—' }}</td>
+                <td style="padding:8px;text-align:right;">{{ o.bom2_rate != null ? fmt(o.bom2_rate) : '—' }}</td>
+                <td style="padding:8px;text-align:center;">
+                  <span :style="o.status==='added'?'color:#16a34a;background:#dcfce7;':(o.status==='removed'?'color:#dc2626;background:#fee2e2;':(o.status==='changed'?'color:#b45309;background:#fef3c7;':'color:#6b7280;background:#f3f4f6;'))"
+                    style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">
+                    {{ o.status.toUpperCase() }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+  </div>
+
   <!-- Tab 4: Website -->
   <div v-if="activeTab === 'website'" class="sc-body sc-body--narrow">
     <div class="sc-col-main">
@@ -331,7 +517,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend } from "../api/client.js";
+import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 
 const route = useRoute();
@@ -345,15 +531,18 @@ const saving = ref(false);
 const activeTab = ref("production");
 const tabs = [
   { id: "production", label: "Production Item" },
-  { id: "scrap", label: "Scrap & Process Loss" },
-  { id: "more", label: "More Information" },
-  { id: "website", label: "Website" },
+  { id: "scrap",      label: "Scrap & Process Loss" },
+  { id: "more",       label: "More Information" },
+  { id: "bom-tree",   label: "BOM Tree" },
+  { id: "compare",    label: "Compare" },
+  { id: "website",    label: "Website" },
 ];
 
 const bom = ref({
   doctype: "BOM",
   item: "",
   quantity: 1,
+  routing: "",
   is_active: 1,
   is_default: 1,
   allow_alternative_item: 0,
@@ -375,8 +564,19 @@ const stockItems = ref([]);
 const uomList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
+const routingsList = ref([]);
+const bomsList = ref([]);      // for compare BOM picker
 const oldQty = ref(1);
 const submitting = ref(false);
+
+// BOM Tree
+const treeNodes = ref([]);
+const treeLoading = ref(false);
+
+// Compare
+const compareBom2 = ref("");
+const compareResult = ref(null);
+const compareLoading = ref(false);
 
 // docstatus: 0 = Draft, 1 = Submitted, 2 = Cancelled.
 // A submitted or cancelled BOM shouldn't be freely edited — it should be
@@ -405,6 +605,11 @@ onMounted(async () => {
 
     const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" });
     workstationsList.value = wks || [];
+
+    const rtg = await apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
+    const boms = await apiList("BOM", { fields: ["name", "item", "bom_type"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" });
+    bomsList.value = boms || [];
+    routingsList.value = rtg || [];
 
     await loadBom();
   } catch (e) {
@@ -470,6 +675,22 @@ function onWorkstationChange(op) {
   const w = workstationsList.value.find(x => x.name === op.workstation);
   if (w) {
     op.hour_rate = w.hour_rate || 0;
+  }
+}
+
+async function onRoutingChange() {
+  if (!bom.value.routing) return;
+  try {
+    const rows = await apiCall(
+      "zoho_books_clone.manufacturing.doctype.routing.routing.get_routing_operations",
+      { routing: bom.value.routing }
+    );
+    if (rows && rows.length) {
+      bom.value.operations = rows;
+      toast(`${rows.length} operation(s) loaded from Routing "${bom.value.routing}"`);
+    }
+  } catch (e) {
+    toast("Could not load Routing operations: " + (e.message || e), "error");
   }
 }
 
@@ -575,6 +796,39 @@ async function cancelBom() {
     toast(e.message, "error");
   }
   submitting.value = false;
+}
+
+async function loadBomTree() {
+  if (!bom.value.name || bom.value.docstatus !== 1) return;
+  treeLoading.value = true;
+  treeNodes.value = [];
+  try {
+    const nodes = await apiCall(
+      "zoho_books_clone.manufacturing.bom_engine.get_bom_tree",
+      { bom: bom.value.name, qty: bom.value.quantity || 1 }
+    );
+    treeNodes.value = nodes || [];
+    if (!treeNodes.value.length) toast("No materials found in BOM", "error");
+  } catch (e) {
+    toast("Failed to build BOM tree: " + e.message, "error");
+  }
+  treeLoading.value = false;
+}
+
+async function runCompare() {
+  if (!bom.value.name || !compareBom2.value) return;
+  compareLoading.value = true;
+  compareResult.value = null;
+  try {
+    const result = await apiCall(
+      "zoho_books_clone.manufacturing.bom_engine.compare_boms",
+      { bom1: bom.value.name, bom2: compareBom2.value }
+    );
+    compareResult.value = result;
+  } catch (e) {
+    toast("Comparison failed: " + e.message, "error");
+  }
+  compareLoading.value = false;
 }
 
 async function amendBom() {

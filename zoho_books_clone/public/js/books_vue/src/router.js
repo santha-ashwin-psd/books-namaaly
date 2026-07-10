@@ -83,10 +83,21 @@ import WorkstationView        from "./pages/WorkstationView.vue";
 import WorkstationType        from "./pages/WorkstationType.vue";
 import WorkstationTypeView    from "./pages/WorkstationTypeView.vue";
 import Routing                from "./pages/Routing.vue";
+import RoutingView             from "./pages/RoutingView.vue";
+import JobCard                 from "./pages/JobCard.vue";
+import JobCardView             from "./pages/JobCardView.vue";
 import WorkOrder               from "./pages/WorkOrder.vue";
 import WorkOrderView           from "./pages/WorkOrderView.vue";
 import ProductionPlan          from "./pages/ProductionPlan.vue";
 import ProductionPlanView      from "./pages/ProductionPlanView.vue";
+import MaterialRequest         from "./pages/MaterialRequest.vue";
+import MaterialRequestView     from "./pages/MaterialRequestView.vue";
+import PackingSlip             from "./pages/PackingSlip.vue";
+import PackingSlipView         from "./pages/PackingSlipView.vue";
+import AlternativeItem             from "./pages/AlternativeItem.vue";
+import AlternativeItemView         from "./pages/AlternativeItemView.vue";
+import ManufacturingSettings       from "./pages/ManufacturingSettings.vue";
+import ManufacturingReports        from "./pages/ManufacturingReports.vue";
 
 import { useToast } from "./composables/useToast.js";
 import { usePermissions } from "./composables/usePermissions.js";
@@ -278,10 +289,21 @@ const routes = [
   { path: "/manufacturing/workstation-type",       name: "manufacturing-workstation-type",      component: WorkstationType,     meta: { module: "inventory" } },
   { path: "/manufacturing/workstation-type/:name", name: "manufacturing-workstation-type-view", component: WorkstationTypeView, meta: { module: "inventory" } },
   { path: "/manufacturing/routing",               name: "manufacturing-routing",               component: Routing,             meta: { module: "inventory" } },
+  { path: "/manufacturing/routing/:name",         name: "manufacturing-routing-view",          component: RoutingView,         meta: { module: "inventory" } },
+  { path: "/manufacturing/job-card",              name: "manufacturing-job-card",              component: JobCard,             meta: { module: "inventory" } },
+  { path: "/manufacturing/job-card/:name",        name: "manufacturing-job-card-view",         component: JobCardView,         meta: { module: "inventory" } },
   { path: "/manufacturing/work-order",            name: "manufacturing-work-order",            component: WorkOrder,           meta: { module: "inventory" } },
   { path: "/manufacturing/work-order/:name",      name: "manufacturing-work-order-view",       component: WorkOrderView,       meta: { module: "inventory" } },
   { path: "/manufacturing/production-plan",       name: "manufacturing-production-plan",       component: ProductionPlan,      meta: { module: "inventory" } },
   { path: "/manufacturing/production-plan/:name", name: "manufacturing-production-plan-view",  component: ProductionPlanView,  meta: { module: "inventory" } },
+  { path: "/manufacturing/material-request",       name: "manufacturing-material-request",       component: MaterialRequest,     meta: { module: "inventory" } },
+  { path: "/manufacturing/material-request/:name", name: "manufacturing-material-request-view",  component: MaterialRequestView, meta: { module: "inventory" } },
+  { path: "/manufacturing/packing-slip",           name: "manufacturing-packing-slip",           component: PackingSlip,         meta: { module: "inventory" } },
+  { path: "/manufacturing/packing-slip/:name",     name: "manufacturing-packing-slip-view",      component: PackingSlipView,     meta: { module: "inventory" } },
+  { path: "/manufacturing/alternative-item",       name: "manufacturing-alternative-item",       component: AlternativeItem,       meta: { module: "inventory" } },
+  { path: "/manufacturing/alternative-item/:name", name: "manufacturing-alternative-item-view",  component: AlternativeItemView,   meta: { module: "inventory" } },
+  { path: "/manufacturing/settings",               name: "manufacturing-settings",               component: ManufacturingSettings, meta: { module: "inventory" } },
+  { path: "/manufacturing/reports",               name: "manufacturing-reports",                component: ManufacturingReports,  meta: { module: "inventory" } },
   // Future phases append entries here.
   // Any unknown / wrong URL falls through to the dashboard instead of a 404.
   {

@@ -1,0 +1,160 @@
+{
+ "name": "Manufacturing Settings",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "System Settings",
+ "search_fields": "",
+ "title_field": "",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 1,
+ "naming_rule": "",
+ "autoname": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "sb_warehouses",
+   "fieldtype": "Section Break",
+   "label": "Default Warehouses"
+  },
+  {
+   "fieldname": "default_source_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Source Warehouse",
+   "options": "Warehouse",
+   "description": "Default warehouse from which raw materials are consumed. Can be overridden per Work Order or per BOM Item row."
+  },
+  {
+   "fieldname": "default_wip_warehouse",
+   "fieldtype": "Link",
+   "label": "Default WIP Warehouse",
+   "options": "Warehouse",
+   "description": "Work-in-Progress warehouse. Set this to enable the 'Issue Materials' step on Work Orders."
+  },
+  {
+   "fieldname": "col_break_wh1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_fg_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Finished Goods Warehouse",
+   "options": "Warehouse",
+   "description": "Default warehouse where finished manufactured goods are received."
+  },
+  {
+   "fieldname": "default_scrap_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Scrap Warehouse",
+   "options": "Warehouse",
+   "description": "Default warehouse for recoverable scrap / by-products."
+  },
+  {
+   "fieldname": "sb_wo_defaults",
+   "fieldtype": "Section Break",
+   "label": "Work Order Defaults"
+  },
+  {
+   "fieldname": "auto_create_job_cards",
+   "fieldtype": "Check",
+   "label": "Auto-Create Job Cards on Work Order Submit",
+   "default": "1",
+   "description": "If enabled, a Job Card is automatically created for every operation when a Work Order is submitted."
+  },
+  {
+   "fieldname": "over_production_allowance_pct",
+   "fieldtype": "Float",
+   "label": "Over-Production Allowance (%)",
+   "default": "0",
+   "description": "Percentage of the planned quantity that may be over-produced without an error. E.g. 5 means up to 105% of qty is allowed."
+  },
+  {
+   "fieldname": "col_break_wo1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allow_negative_stock",
+   "fieldtype": "Check",
+   "label": "Allow Negative Stock",
+   "default": "0",
+   "description": "If enabled, manufacturing stock entries will proceed even if stock goes below zero. Not recommended for production."
+  },
+  {
+   "fieldname": "backflush_raw_materials_based_on",
+   "fieldtype": "Select",
+   "label": "Backflush Raw Materials Based On",
+   "options": "BOM\nMaterial Transferred for Manufacture",
+   "default": "BOM",
+   "description": "BOM: consume qty proportional to the BOM at completion time. 'Material Transferred': consume exactly what was issued to WIP."
+  },
+  {
+   "fieldname": "sb_bom_defaults",
+   "fieldtype": "Section Break",
+   "label": "BOM Defaults"
+  },
+  {
+   "fieldname": "default_bom_type",
+   "fieldtype": "Select",
+   "label": "Default BOM Type",
+   "options": "Manufacturing\nPacking\nSub-Assembly",
+   "default": "Manufacturing"
+  },
+  {
+   "fieldname": "set_rate_of_sub_assembly_item_based_on_bom",
+   "fieldtype": "Check",
+   "label": "Set Rate of Sub-Assembly Item Based on BOM",
+   "default": "0",
+   "description": "If enabled, the cost of a sub-assembly material row is taken from the linked Sub-Assembly BOM's total cost instead of the Item's valuation rate."
+  },
+  {
+   "fieldname": "col_break_bom1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "job_card_hours_per_day",
+   "fieldtype": "Float",
+   "label": "Job Card Hours per Day",
+   "default": "8",
+   "description": "Used for capacity planning calculations to estimate how many days an operation takes."
+  },
+  {
+   "fieldname": "capacity_planning_for_days",
+   "fieldtype": "Int",
+   "label": "Capacity Planning Horizon (Days)",
+   "default": "30",
+   "description": "How many days ahead to plan production capacity."
+  },
+  {
+   "fieldname": "sb_notifications",
+   "fieldtype": "Section Break",
+   "label": "Notifications & Alerts"
+  },
+  {
+   "fieldname": "warn_if_bom_not_default",
+   "fieldtype": "Check",
+   "label": "Warn if BOM selected is not the Default BOM",
+   "default": "1",
+   "description": "Show a warning when a Work Order uses a non-default BOM for the item."
+  },
+  {
+   "fieldname": "warn_on_missing_job_cards",
+   "fieldtype": "Check",
+   "label": "Warn if Job Cards are Incomplete on Finish",
+   "default": "1",
+   "description": "Show a warning when completing a Work Order that still has open Job Cards."
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1},
+  {"role": "Books Manager", "read": 1, "write": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0}
+ ]
+}

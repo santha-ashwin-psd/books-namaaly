@@ -22,14 +22,17 @@
  "fields": [
   {
    "fieldname": "operation",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Operation",
+   "options": "Operation",
+   "reqd": 1,
    "in_list_view": 1
   },
   {
    "fieldname": "workstation",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Workstation",
+   "options": "Workstation",
    "in_list_view": 1
   },
   {

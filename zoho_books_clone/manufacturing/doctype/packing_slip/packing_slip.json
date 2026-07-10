@@ -1,0 +1,124 @@
+{
+ "name": "Packing Slip",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "work_order,status,production_item",
+ "title_field": "name",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "Expression",
+ "autoname": "PS-.YYYY.-.#####",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Progress\nPacked\nCancelled",
+   "default": "Draft",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_break_ps1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "production_item",
+   "fieldtype": "Link",
+   "label": "Item Being Packed",
+   "options": "Item",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Auto-derived from the Work Order. Used for multi-tenant data isolation."
+  },
+  {
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "Packing BOM",
+   "options": "BOM",
+   "read_only": 1,
+   "description": "The Packing BOM used for this Work Order."
+  },
+  {
+   "fieldname": "sec_ps_schedule",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "packing_date",
+   "fieldtype": "Date",
+   "label": "Packing Date"
+  },
+  {
+   "fieldname": "packed_by",
+   "fieldtype": "Data",
+   "label": "Packed By"
+  },
+  {
+   "fieldname": "col_break_ps2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qty_to_pack",
+   "fieldtype": "Float",
+   "label": "Qty to Pack",
+   "default": "0",
+   "description": "Number of packed units being produced in this run."
+  },
+  {
+   "fieldname": "sec_ps_items",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Packing Slip Item"
+  },
+  {
+   "fieldname": "sec_ps_more",
+   "fieldtype": "Section Break",
+   "label": "More Information"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager", "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",    "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

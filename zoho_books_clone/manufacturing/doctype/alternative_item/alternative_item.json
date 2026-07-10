@@ -1,0 +1,87 @@
+{
+ "name": "Alternative Item",
+ "module": "Manufacturing",
+ "doctype": "DocType",
+ "creation": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "item_code,alternative_item_code",
+ "title_field": "alternative_item_code",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "Expression (regex)",
+ "autoname": "format:{item_code}-{alternative_item_code}",
+ "sort_field": "item_code",
+ "sort_order": "ASC",
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Original Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "alternative_item_code",
+   "fieldtype": "Link",
+   "label": "Alternative Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "col_break_ai1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Conversion Factor",
+   "default": "1",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Qty of the Alternative Item needed to replace 1 unit of the Original Item. E.g. 2 means use 2 units of the alternative per 1 original."
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "label": "Is Default",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Mark the preferred alternative. Only one should be default per item."
+  },
+  {
+   "fieldname": "sec_ai_more",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description / Reason"
+  }
+ ],
+ "permissions": [
+  {"role": "Books Admin",   "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Books Manager", "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
+  {"role": "Accountant",    "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0},
+  {"role": "Books Viewer",  "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+ ]
+}

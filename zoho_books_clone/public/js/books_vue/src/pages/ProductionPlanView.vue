@@ -220,9 +220,14 @@
             <div class="sc-card-title">Raw Material Requirement</div>
             <div class="sc-card-subtitle">Explodes the BOM for every Item to Manufacture and compares against on-hand stock in the Default Source Warehouse.</div>
           </div>
-          <button class="sc-save-btn" @click="calculateRawMaterials" :disabled="mrLoading || !pp.po_items.length">
-            {{ mrLoading ? 'Calculating…' : 'Calculate Requirement' }}
-          </button>
+          <div style="display:flex;gap:8px;">
+            <button v-if="!isNew && pp.docstatus===1 && hasShortfall" class="sc-upload-btn" @click="createMaterialRequests" :disabled="actionLoading==='mr'">
+              {{ actionLoading === 'mr' ? 'Creating…' : 'Create Material Requests' }}
+            </button>
+            <button class="sc-save-btn" @click="calculateRawMaterials" :disabled="mrLoading || !pp.po_items.length">
+              {{ mrLoading ? 'Calculating…' : 'Calculate Requirement' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -265,9 +270,14 @@
               <div class="sc-card-title">Create Work Orders</div>
               <div class="sc-card-subtitle">Generates one Draft Work Order per row for whatever Planned Qty doesn't already have one. Review and submit each Work Order from there.</div>
             </div>
-            <button class="sc-save-btn" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty">
-              {{ actionLoading==='wo' ? 'Creating…' : 'Create Work Orders' }}
-            </button>
+            <div style="display:flex;gap:8px;">
+              <button v-if="hasDraftWorkOrders" class="sc-upload-btn" @click="bulkSubmitWorkOrders" :disabled="actionLoading==='bulk-submit'">
+                {{ actionLoading === 'bulk-submit' ? 'Submitting…' : 'Submit All Work Orders' }}
+              </button>
+              <button class="sc-save-btn" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty">
+                {{ actionLoading==='wo' ? 'Creating…' : 'Create Work Orders' }}
+              </button>
+            </div>
           </div>
           <div class="sc-field-hint" v-if="!pendingWOQty">Every row already has a Work Order for its full Planned Qty.</div>
         </div>
@@ -543,6 +553,8 @@ async function calculateRawMaterials() {
 
 // ── Work Orders ──────────────────────────────────────────────────────────
 const pendingWOQty = computed(() => (pp.value.po_items || []).some(r => flt(r.planned_qty) - flt(r.work_order_created_qty) > 0.0001));
+const hasShortfall = computed(() => (pp.value.mr_items || []).some(r => flt(r.shortfall_qty) > 0.0001));
+const hasDraftWorkOrders = computed(() => workOrders.value.some(w => w.status === "Draft"));
 
 async function loadWorkOrders() {
   woLoading.value = true;
@@ -562,6 +574,37 @@ async function createWorkOrders() {
     const created = await apiCall(ENGINE + "create_work_orders", { production_plan: pp.value.name });
     toast(`Created ${created.length} Work Order(s)`);
     await loadPP();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  actionLoading.value = false;
+}
+
+async function bulkSubmitWorkOrders() {
+  if (!confirm("Submit all Draft Work Orders linked to this Production Plan? They will be locked for editing.")) return;
+  actionLoading.value = "bulk-submit";
+  try {
+    const result = await apiCall(ENGINE + "bulk_submit_work_orders", { production_plan: pp.value.name });
+    const sub = (result.submitted || []).length;
+    const err = (result.errors || []).length;
+    if (err > 0) {
+      toast(`Submitted ${sub}, but ${err} Work Order(s) failed — check each individually.`, "error");
+    } else {
+      toast(`${sub} Work Order(s) submitted successfully`);
+    }
+    await loadWorkOrders();
+    await loadPP();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  actionLoading.value = false;
+}
+
+async function createMaterialRequests() {
+  actionLoading.value = "mr";
+  try {
+    const names = await apiCall(ENGINE + "create_material_requests", { production_plan: pp.value.name });
+    toast(`Material Request ${names[0]} created for shortfall items`);
   } catch (e) {
     toast(e.message, "error");
   }
