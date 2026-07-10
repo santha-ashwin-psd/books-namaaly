@@ -166,7 +166,7 @@
                     <span class="bomx-tree-icon">📦</span>
                     <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="rm.item_code" @change="onRmItemChange(rm)" :disabled="readOnly" :title="itemNameFor(rm.item_code) || rm.item_code">
                       <option value="">— Select item —</option>
-                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                      <option v-for="i in rawMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                     </select>
                     <div class="bomx-rm-card-amt">
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
@@ -429,10 +429,25 @@
                     </tr>
                   </tbody>
                 </table>
+                <div class="bomx-section-lbl" style="margin-top:16px">Operations</div>
+                <table class="bomx-cost-table">
+                  <thead><tr><th style="text-align:left">Operation</th><th style="text-align:right">A Time</th><th style="text-align:right">A Rate</th><th style="text-align:right">B Time</th><th style="text-align:right">B Rate</th><th style="text-align:center">Change</th></tr></thead>
+                  <tbody>
+                    <tr v-for="o in compareResult.operations" :key="o.operation">
+                      <td>{{ o.operation }}</td>
+                      <td style="text-align:right">{{ o.bom1_time != null ? o.bom1_time : '—' }}</td>
+                      <td style="text-align:right">{{ o.bom1_rate != null ? INR(o.bom1_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ o.bom2_time != null ? o.bom2_time : '—' }}</td>
+                      <td style="text-align:right">{{ o.bom2_rate != null ? INR(o.bom2_rate) : '—' }}</td>
+                      <td style="text-align:center"><span class="bomx-badge" :class="'badge-'+o.status">{{ o.status.toUpperCase() }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
               </template>
             </div>
 
           </div>
+
 
           <!-- Footer -->
           <div class="bomx-footer">
@@ -585,8 +600,15 @@ function emptyBom() {
 }
 const bom = ref(emptyBom());
 
-const manufacturedItems = ref([]);
 const stockItems = ref([]);
+// Production Item picker: only items that are actually manufactured (Finished Good / WIP).
+const manufacturedItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Finished Good" || i.item_type === "Work In Progress")
+);
+// Raw-material row picker: exclude Finished Goods (a finished good shouldn't be consumed as a raw material).
+const rawMaterialItems = computed(() =>
+  stockItems.value.filter(i => i.item_type !== "Finished Good")
+);
 const uomList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
@@ -611,15 +633,13 @@ function itemNameFor(code) {
 onMounted(async () => {
   loading.value = true;
   try {
-    const mfg = await apiList("Item", { fields: ["name", "item_name"], limit: 1000, order: "name asc" });
-    manufacturedItems.value = mfg || [];
-    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
     const uoms = await apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 });
     uomList.value = (uoms || []).map(r => r.name);
     const ops = await apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" });
     operationsList.value = ops || [];
-    const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" });
+    const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
     workstationsList.value = wks || [];
     const rtg = await apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
     routingsList.value = rtg || [];
@@ -662,7 +682,7 @@ async function loadBom() {
 
 function onQtyChange() {
   const newQty = parseFloat(bom.value.quantity) || 0;
-  if (newQty <= 0) { bom.value.quantity = 1; return; }
+  if (newQty <= 0) { bom.value.quantity = 1; oldQty.value = 1; return; }
   const ratio = newQty / oldQty.value;
   (bom.value.items || []).forEach(rm => { rm.qty = (rm.qty || 0) * ratio; });
   (bom.value.scrap_items || []).forEach(sc => { sc.qty = (sc.qty || 0) * ratio; });
@@ -681,6 +701,15 @@ function onWorkstationChange(op) {
 }
 async function onRoutingChange() {
   if (!bom.value.routing) return;
+  if ((bom.value.operations || []).length) {
+    const ok = await confirm({
+      title: "Replace Operations?",
+      body: "Loading this Routing will replace the current Operations rows. Any manual edits will be lost. Continue?",
+      okLabel: "Replace",
+      okStyle: "danger",
+    });
+    if (!ok) return;
+  }
   try {
     const rows = await apiCall("zoho_books_clone.manufacturing.doctype.routing.routing.get_routing_operations", { routing: bom.value.routing });
     if (rows && rows.length) {

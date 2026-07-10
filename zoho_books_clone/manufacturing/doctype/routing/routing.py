@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from zoho_books_clone.utils.access import assert_can
+
 
 class Routing(Document):
     def validate(self):
@@ -14,10 +16,14 @@ class Routing(Document):
             row.sequence_id = idx
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_routing_operations(routing):
     """Return the operations of a Routing as a list suitable for populating
     BOM Operation child rows. Called from BOMView.vue on routing change."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Routing", "read")
+
     doc = frappe.get_doc("Routing", routing)
     rows = []
     for op in doc.operations:

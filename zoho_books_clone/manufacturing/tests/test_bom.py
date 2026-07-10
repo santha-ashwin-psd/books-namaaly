@@ -230,7 +230,7 @@ class TestCompareBoms(unittest.TestCase):
         for ic in all_items:
             r1, r2 = m1.get(ic), m2.get(ic)
             if r1 and r2:
-                status = "same" if (r1["qty"] == r2["qty"] and r1["rate"] == r2["rate"]) else "changed"
+                status = "unchanged" if (r1["qty"] == r2["qty"] and r1["rate"] == r2["rate"]) else "changed"
             elif r1:
                 status = "removed"
             else:
@@ -241,7 +241,7 @@ class TestCompareBoms(unittest.TestCase):
     def test_same_items_marked_same(self):
         m = {"RM-A": {"qty": 10, "rate": 5, "uom": "Nos", "item_name": "RM-A"}}
         diff = self._compare(m, m)
-        self.assertEqual(diff[0]["status"], "same")
+        self.assertEqual(diff[0]["status"], "unchanged")
 
     def test_added_item_detected(self):
         m1 = {"RM-A": {"qty": 10, "rate": 5, "uom": "Nos", "item_name": "RM-A"}}
@@ -251,7 +251,7 @@ class TestCompareBoms(unittest.TestCase):
         }
         diff = self._compare(m1, m2)
         statuses = {d["item_code"]: d["status"] for d in diff}
-        self.assertEqual(statuses["RM-A"], "same")
+        self.assertEqual(statuses["RM-A"], "unchanged")
         self.assertEqual(statuses["RM-B"], "added")
 
     def test_removed_item_detected(self):

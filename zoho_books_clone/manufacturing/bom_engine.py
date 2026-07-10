@@ -108,7 +108,7 @@ def compare_boms(bom1, bom2):
                           bom2_time, bom2_rate, status } ],
         }
 
-    ``status`` for each row is one of: "same" | "changed" | "added" | "removed"
+    ``status`` for each row is one of: "unchanged" | "changed" | "added" | "removed"
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -139,7 +139,7 @@ def compare_boms(bom1, bom2):
     for ic in all_items:
         r1, r2 = m1.get(ic), m2.get(ic)
         if r1 and r2:
-            status = "same" if (r1["qty"] == r2["qty"] and r1["rate"] == r2["rate"]) else "changed"
+            status = "unchanged" if (r1["qty"] == r2["qty"] and r1["rate"] == r2["rate"]) else "changed"
         elif r1:
             status = "removed"
         else:
@@ -163,7 +163,7 @@ def compare_boms(bom1, bom2):
     for op in all_ops:
         o1, o2 = ops1.get(op), ops2.get(op)
         if o1 and o2:
-            status = "same" if (o1["time"] == o2["time"] and o1["rate"] == o2["rate"]) else "changed"
+            status = "unchanged" if (o1["time"] == o2["time"] and o1["rate"] == o2["rate"]) else "changed"
         elif o1:
             status = "removed"
         else:

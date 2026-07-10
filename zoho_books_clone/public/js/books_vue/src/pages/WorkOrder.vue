@@ -97,13 +97,23 @@
 
             <!-- ── TAB: Work Order ── -->
             <template v-if="activeTab==='details'">
-              <div class="bomx-section-lbl">BOM &amp; Quantity</div>
+              <div class="bomx-section-lbl">Production Item &amp; BOM</div>
+              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:2fr 1fr;margin-bottom:8px">
+                <div>
+                  <div class="bomx-hf-label">Production Item</div>
+                  <select class="bomx-fi" v-model="selectedProductionItem" @change="onProductionItemChange" :disabled="readOnly" style="width:100%">
+                    <option value="">— Select Item —</option>
+                    <option v-for="i in manufacturedItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                  </select>
+                  <div class="bomx-field-hint">Picking an item auto-suggests its BOM below — still overridable.</div>
+                </div>
+              </div>
               <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:2fr 1fr;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">BOM <span style="color:var(--bx-red)">*</span></div>
                   <select class="bomx-fi" v-model="wo.bom" @change="onBomChange" :disabled="readOnly" style="width:100%">
                     <option value="">— Select Submitted BOM —</option>
-                    <option v-for="b in bomList" :key="b.name" :value="b.name">{{ b.name }} — {{ b.item_name || b.item }}</option>
+                    <option v-for="b in filteredBomList" :key="b.name" :value="b.name">{{ b.name }} — {{ b.item_name || b.item }}</option>
                   </select>
                   <div class="bomx-field-hint" v-if="wo.item_name">Manufactures: <strong>{{ wo.item_name }}</strong> ({{ wo.stock_uom }})</div>
                 </div>
@@ -521,7 +531,16 @@ function emptyWO() {
 const wo = ref(emptyWO());
 
 const bomList = ref([]);
+const selectedProductionItem = ref("");
+const filteredBomList = computed(() => {
+  if (!selectedProductionItem.value) return bomList.value;
+  return bomList.value.filter(b => b.item === selectedProductionItem.value);
+});
 const stockItems = ref([]);
+// Production Item picker: only items that are actually manufactured (Finished Good / WIP).
+const manufacturedItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Finished Good" || i.item_type === "Work In Progress")
+);
 const warehouseList = ref([]);
 const stockEntries = ref([]);
 const operationsList = ref([]);
@@ -547,7 +566,7 @@ onMounted(async () => {
     if (isNew.value) wo.value.company = co;
 
     const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
-    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
     const itemNameOf = {};
     stockItems.value.forEach(i => itemNameOf[i.name] = i.item_name);
@@ -569,28 +588,10 @@ onMounted(async () => {
     salesOrdersList.value = sos || [];
 
     await loadList();
-    if (route.params.name) {
+    if (route.params.name && !isNew.value) {
       await loadWO();
     } else {
-      // New Work Order — prefill default warehouses from Manufacturing Settings
-      // (previously these only appeared after a BOM was selected)
-      try {
-        const ms = await apiCall(
-          "zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults"
-        );
-        if (ms) {
-          if (!wo.value.source_warehouse && ms.default_source_warehouse)
-            wo.value.source_warehouse = ms.default_source_warehouse;
-          if (!wo.value.wip_warehouse && ms.default_wip_warehouse)
-            wo.value.wip_warehouse = ms.default_wip_warehouse;
-          if (!wo.value.fg_warehouse && ms.default_fg_warehouse)
-            wo.value.fg_warehouse = ms.default_fg_warehouse;
-          if (!wo.value.scrap_warehouse && ms.default_scrap_warehouse)
-            wo.value.scrap_warehouse = ms.default_scrap_warehouse;
-        }
-      } catch (e) {
-        // non-fatal — settings may not be configured yet
-      }
+      await prefillManufacturingDefaults();
     }
   } catch (e) {
     toast("Error loading data: " + e.message, "error");
@@ -598,9 +599,31 @@ onMounted(async () => {
   loading.value = false;
 });
 
+// New Work Order — prefill default warehouses from Manufacturing Settings
+// (previously these only appeared after a BOM was selected)
+async function prefillManufacturingDefaults() {
+  try {
+    const ms = await apiCall(
+      "zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults"
+    );
+    if (ms) {
+      if (!wo.value.source_warehouse && ms.default_source_warehouse)
+        wo.value.source_warehouse = ms.default_source_warehouse;
+      if (!wo.value.wip_warehouse && ms.default_wip_warehouse)
+        wo.value.wip_warehouse = ms.default_wip_warehouse;
+      if (!wo.value.fg_warehouse && ms.default_fg_warehouse)
+        wo.value.fg_warehouse = ms.default_fg_warehouse;
+      if (!wo.value.scrap_warehouse && ms.default_scrap_warehouse)
+        wo.value.scrap_warehouse = ms.default_scrap_warehouse;
+    }
+  } catch (e) {
+    // non-fatal — settings may not be configured yet
+  }
+}
+
 watch(() => route.params.name, async (name) => {
   activeTab.value = "details";
-  if (!name) { wo.value = emptyWO(); return; }
+  if (!name) { wo.value = emptyWO(); selectedProductionItem.value = ""; return; }
   loading.value = true;
   try {
     await loadWO();
@@ -613,13 +636,44 @@ watch(() => route.params.name, async (name) => {
 async function loadWO() {
   if (isNew.value) {
     wo.value = emptyWO();
+    selectedProductionItem.value = "";
+    await prefillManufacturingDefaults();
     return;
   }
   const data = await apiGet("Work Order", route.params.name);
   wo.value = data;
+  selectedProductionItem.value = data.production_item || "";
   if (!wo.value.items) wo.value.items = [];
   if (!wo.value.operations) wo.value.operations = [];
   if (wo.value.docstatus === 1) await loadStockEntries();
+}
+
+async function onProductionItemChange() {
+  // Changing the Production Item invalidates whatever BOM/materials/
+  // operations were loaded for the previous item.
+  wo.value.bom = "";
+  wo.value.production_item = selectedProductionItem.value;
+  wo.value.item_name = "";
+  wo.value.stock_uom = "";
+  wo.value.items = [];
+  wo.value.operations = [];
+  bomScrapItems.value = [];
+  bomProcessLoss.value = 0;
+  bomType.value = "";
+
+  if (!selectedProductionItem.value) return;
+
+  try {
+    const r = await apiCall("zoho_books_clone.manufacturing.work_order_engine.get_default_bom_for_item", {
+      item_code: selectedProductionItem.value,
+    });
+    if (r && r.bom) {
+      wo.value.bom = r.bom;
+      await loadFromBom();
+    }
+  } catch (e) {
+    // Non-fatal — user can still pick a BOM manually from the dropdown.
+  }
 }
 
 async function onBomChange() {
@@ -635,6 +689,7 @@ async function loadFromBom() {
       bom: wo.value.bom, qty: wo.value.qty,
     });
     wo.value.production_item = r.production_item;
+    selectedProductionItem.value = r.production_item || "";
     wo.value.item_name = r.item_name;
     wo.value.stock_uom = r.stock_uom;
     wo.value.items = (r.items || []).map(i => ({

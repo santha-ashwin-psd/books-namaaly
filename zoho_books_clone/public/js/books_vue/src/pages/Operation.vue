@@ -218,9 +218,10 @@ function goBackToList() {
 
 async function isOperationDeletable(row) {
   try {
-    const [inBom, inWo] = await Promise.all([
+    const [inBom, inWo, inRouting] = await Promise.all([
       apiList("BOM Operation", { fields: ["parent"], filters: [["operation", "=", row.name]], limit: 1 }),
       apiList("Work Order Operation", { fields: ["parent"], filters: [["operation", "=", row.name]], limit: 1 }),
+      apiList("Routing Operation", { fields: ["parent"], filters: [["operation", "=", row.name]], limit: 1 }),
     ]);
     if (inBom && inBom.length) {
       toast(`${row.name} is used in BOM ${inBom[0].parent} and cannot be deleted.`, "error");
@@ -228,6 +229,10 @@ async function isOperationDeletable(row) {
     }
     if (inWo && inWo.length) {
       toast(`${row.name} is used in Work Order ${inWo[0].parent} and cannot be deleted.`, "error");
+      return false;
+    }
+    if (inRouting && inRouting.length) {
+      toast(`${row.name} is used in Routing ${inRouting[0].parent} and cannot be deleted.`, "error");
       return false;
     }
   } catch (e) {

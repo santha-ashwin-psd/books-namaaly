@@ -639,6 +639,45 @@
             </div>
           </div>
 
+          <div class="ad-section" v-if="form.is_stock_item">
+            <div class="ad-section-title">Manufacturing</div>
+
+            <div class="ad-field" v-if="form.item_type === 'Finished Good' || form.item_type === 'Work In Progress'">
+              <label class="ad-label">Default BOM</label>
+              <select class="ad-input" v-model="form.default_bom" :disabled="drawerMode !== 'edit'">
+                <option value="">— None —</option>
+                <option v-for="b in bomOptions" :key="b.name" :value="b.name">{{ b.name }}{{ b.is_default ? ' (default)' : '' }}</option>
+              </select>
+              <div class="ad-toggle-sub" style="margin-top:4px" v-if="drawerMode !== 'edit'">Save the item first, then reopen it to link an active BOM here.</div>
+              <div class="ad-toggle-sub" style="margin-top:4px" v-else-if="!bomOptions.length">No submitted, active BOM found for this item yet. Create one from Manufacturing → BOM, then reopen this item.</div>
+              <div class="ad-toggle-sub" style="margin-top:4px" v-else>Auto-suggested when creating a Work Order for this item.</div>
+            </div>
+
+            <div class="ad-grid-2" :style="(form.item_type === 'Finished Good' || form.item_type === 'Work In Progress') ? 'margin-top:12px' : ''">
+              <div class="ad-field">
+                <label class="ad-label">Minimum Order Qty</label>
+                <input type="number" class="ad-input" v-model="form.min_order_qty" min="0"/>
+                <div class="ad-toggle-sub" style="margin-top:4px">Used for Material Request / Production Plan suggestions.</div>
+              </div>
+              <div class="ad-field">
+                <label class="ad-label">Lead Time (Days)</label>
+                <input type="number" class="ad-input" v-model="form.lead_time_days" min="0"/>
+                <div class="ad-toggle-sub" style="margin-top:4px">Days between raising a request and receiving/producing this item.</div>
+              </div>
+            </div>
+
+            <div class="ad-toggle-row" style="margin-top:16px">
+              <div class="ad-toggle-left">
+                <div class="ad-toggle-title">Quality Inspection Required</div>
+                <div class="ad-toggle-sub">Flag this item for QC before receipt/consumption (no QC workflow enforced yet)</div>
+              </div>
+              <label class="ad-switch">
+                <input type="checkbox" :checked="!!form.quality_inspection_required" @change="form.quality_inspection_required=($event.target.checked?1:0)"/>
+                <span class="ad-switch-track ad-switch-track--green"></span>
+              </label>
+            </div>
+          </div>
+
           <div class="ad-info-banner">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <p style="margin:0">To set or adjust stock quantities, go to <strong>Inventory → Warehouses</strong> → select a warehouse → click <strong>Adjust</strong> next to any item.</p>
@@ -699,7 +738,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { apiList, apiGET, apiGet, apiPOST, apiSave, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
@@ -749,6 +788,7 @@ const brandList     = ref([]);
 const defaultAccounts = ref({ income: "", expense: "" });
 const incomeAccounts  = ref([]);
 const expenseAccounts = ref([]);
+const bomOptions      = ref([]);   // Active, submitted BOMs for the item being edited
 
 const form = reactive({
   name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
@@ -757,6 +797,7 @@ const form = reactive({
   income_account: "", expense_account: "",
   is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0, opening_stock: 0,
+  default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
   has_variants: 0,
 });
 
@@ -855,7 +896,7 @@ async function load() {
   loading.value = true;
   try {
     const rows = await apiList("Item", {
-      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation"],
+      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation","default_bom","quality_inspection_required","min_order_qty","lead_time_days"],
       order: "item_name asc", limit: 500,
     });
     list.value = rows || [];
@@ -1097,6 +1138,31 @@ async function openView(row) {
   } catch {}
 }
 
+// Fetch active, submitted BOMs whose Production Item is this item, for the
+// Default BOM picker. Only meaningful once the item exists (edit mode).
+async function loadBomOptionsForItem(itemName) {
+  if (!itemName) { bomOptions.value = []; return; }
+  try {
+    const r = await apiList("BOM", {
+      fields: ["name", "item", "is_active", "is_default", "docstatus"],
+      filters: [["item", "=", itemName], ["is_active", "=", 1], ["docstatus", "=", 1]],
+      limit: 100, order: "is_default desc, modified desc",
+    });
+    bomOptions.value = r || [];
+  } catch { bomOptions.value = []; }
+}
+
+// Keep the Default BOM picker's options in sync if the user flips item_type
+// while the drawer is open (e.g. corrects a mis-set type mid-edit).
+watch(() => form.item_type, (t) => {
+  if (drawerMode.value === "edit" && (t === "Finished Good" || t === "Work In Progress")) {
+    loadBomOptionsForItem(form.name);
+  } else {
+    bomOptions.value = [];
+    form.default_bom = "";
+  }
+});
+
 function applyTypeDefaults(type) {
   const d = ITEM_TYPE_DEFAULTS[type] || {};
   // Set is_stock_item
@@ -1126,12 +1192,14 @@ function openAdd(presetType) {
     valuation_method: d.valuation || "FIFO",
     default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
+    default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
   });
   // Auto-select warehouse matching type
   if (d.warehouse_type && warehouses.value.length) {
     const match = warehouses.value.find(w => (w.label || "").toLowerCase().includes(d.warehouse_type.toLowerCase()));
     if (match) form.default_warehouse = match.name;
   }
+  bomOptions.value = [];
   variantAttrs.value = [];
   showDrawer.value = true;
 }
@@ -1168,7 +1236,17 @@ async function openEdit(row) {
       disabled:             full.disabled ? 1 : 0,
       brand:                full.brand                || "",
       has_variants:         full.has_variants ? 1 : 0,
+      default_bom:                 full.default_bom                 || "",
+      quality_inspection_required: full.quality_inspection_required ? 1 : 0,
+      min_order_qty:                flt(full.min_order_qty),
+      lead_time_days:                full.lead_time_days ? parseInt(full.lead_time_days) : 0,
     });
+    // Load BOM options for the picker now that we know the item's name/type.
+    if (full.item_type === "Finished Good" || full.item_type === "Work In Progress") {
+      loadBomOptionsForItem(row.name);
+    } else {
+      bomOptions.value = [];
+    }
     // Rebuild the variant attribute builder: group stored rows by attribute.
     const groups = {};
     for (const r of (full.attributes || [])) {
@@ -1227,6 +1305,10 @@ async function saveItem({ close = true } = {}) {
       default_warehouse: form.default_warehouse, reorder_level: flt(form.reorder_level),
       reorder_qty: flt(form.reorder_qty), opening_stock: openingQty,
       has_variants: form.has_variants ? 1 : 0, attributes,
+      default_bom: (form.item_type === "Finished Good" || form.item_type === "Work In Progress") ? (form.default_bom || "") : "",
+      quality_inspection_required: form.quality_inspection_required ? 1 : 0,
+      min_order_qty: flt(form.min_order_qty),
+      lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : 0,
     };
     if (isEdit) doc.name = form.name;
     const saved = await apiSave(doc);

@@ -5,6 +5,11 @@ Everything doctype-agnostic (create/save/submit/cancel/amend/list Work Order
 itself) is already handled by api/docs.py's generic endpoints — this module
 only holds the bespoke logic that's specific to running a Work Order:
 
+  get_default_bom_for_item -- resolve which BOM a new Work Order should
+                          default to for a given Production Item (Item's
+                          default_bom, falling back to any active submitted
+                          BOM for that item), so the Work Order form can
+                          auto-fill the BOM field on item selection.
   get_bom_breakdown   -- preview raw materials & operations from a BOM at a
                           given qty, so the Work Order form can populate/
                           refresh its child tables client-side before save.
@@ -55,6 +60,48 @@ def _get_mfg_settings():
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_default_bom_for_item(item_code):
+    """Resolve the BOM a new Work Order should default to for this
+    Production Item, so the client can auto-fill the BOM field the moment
+    the item is picked (still overridable — this is only a suggestion).
+
+    Resolution order:
+      1. Item.default_bom, if set and it still qualifies (submitted, active,
+         and actually built against this item — guards against a stale
+         link left over from a re-typed item or a cancelled/deactivated BOM).
+      2. Otherwise, the most recently modified submitted+active BOM for this
+         item (preferring one flagged is_default), matching the same lookup
+         InventoryItems.vue uses to populate its own BOM picker.
+      3. None, if the item has no usable BOM yet.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not item_code or not frappe.db.exists("Item", item_code):
+        return {"bom": "", "source": "none"}
+
+    default_bom = frappe.db.get_value("Item", item_code, "default_bom")
+    if default_bom and frappe.db.exists("BOM", default_bom):
+        bom_row = frappe.db.get_value(
+            "BOM", default_bom, ["item", "docstatus", "is_active"], as_dict=True
+        )
+        if bom_row and bom_row.item == item_code and bom_row.docstatus == 1 and bom_row.is_active:
+            return {"bom": default_bom, "source": "item_default"}
+
+    fallback = frappe.get_all(
+        "BOM",
+        filters={"item": item_code, "docstatus": 1, "is_active": 1},
+        fields=["name"],
+        order_by="is_default desc, modified desc",
+        limit=1,
+    )
+    if fallback:
+        return {"bom": fallback[0].name, "source": "fallback"}
+
+    return {"bom": "", "source": "none"}
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_bom_breakdown(bom, qty):
     """Preview the raw-material & operation rows a Work Order would get from
     this BOM at the given quantity. Read-only — does not save anything.
@@ -86,9 +133,9 @@ def get_bom_breakdown(bom, qty):
     operations = [{
         "operation": r.operation,
         "workstation": r.workstation,
-        "planned_time_in_mins": flt(r.time_in_mins),
+        "planned_time_in_mins": flt(r.time_in_mins) * ratio,
         "hour_rate": flt(r.hour_rate),
-        "cost": flt(r.cost),
+        "cost": flt(r.cost) * ratio,
     } for r in bom_doc.operations]
 
     scrap_items = [{

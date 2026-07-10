@@ -19,6 +19,7 @@
   "status",
   "payment_terms",
   "cost_center",
+  "sales_person",
   "company",
   "fiscal_year",
   "place_of_supply",
@@ -127,6 +128,12 @@
    "fieldtype": "Link",
    "label": "Cost Center",
    "options": "Cost Center"
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "options": "Sales Person"
   },
   {
    "fieldname": "company",
