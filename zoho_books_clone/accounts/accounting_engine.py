@@ -57,6 +57,70 @@ def _get_tds_payable(company: str) -> str | None:
         return None
 
 
+def _get_round_off_account(company: str) -> str | None:
+    """Account that absorbs the paise-level Round Off adjustment (Sec 170,
+    CGST Act) between the pre-round (net + tax) total and the rounded
+    Grand Total, so GL debits/credits stay balanced to the rupee."""
+    acct = frappe.db.get_value(
+        "Account",
+        {"account_name": ["like", "%Round Off%"], "company": company, "is_group": 0},
+        "name",
+    )
+    if acct:
+        return acct
+
+    parent = (
+        frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Indirect Expense%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_type": "Expense"}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Expense%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1}, "name")
+    )
+    if not parent:
+        return None
+    try:
+        doc = frappe.get_doc({
+            "doctype": "Account",
+            "account_name": "Round Off",
+            "company": company,
+            "account_type": "Expense",
+            "parent_account": parent,
+            "is_group": 0,
+        })
+        doc.insert(ignore_permissions=True)
+        return doc.name
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Round Off account auto-create failed for {company}")
+        return None
+
+
+def _append_round_off_entry(gl_map: list[dict], doc) -> None:
+    """Append the GL line for doc.round_off, if any, so debits == credits.
+
+    round_off = grand_total - (net_total + tax_total). A positive round_off
+    means the debit leg (grand_total) exceeds the credit legs (net + tax),
+    so the difference must be *credited*; a negative round_off is the
+    reverse and must be *debited*.
+    """
+    round_off = flt(getattr(doc, "round_off", 0))
+    if not round_off:
+        return
+    account = _get_round_off_account(doc.company)
+    if not account:
+        frappe.throw(_("Please set up a Round Off account for {0} to submit this invoice").format(doc.company))
+    gl_map.append({
+        "account":      account,
+        "debit":        -round_off if round_off < 0 else 0,
+        "credit":       round_off if round_off > 0 else 0,
+        "voucher_type": doc.doctype,
+        "voucher_no":   doc.name,
+        "posting_date": doc.posting_date,
+        "company":      doc.company,
+        "fiscal_year":  doc.fiscal_year or "",
+        "cost_center":  doc.cost_center or "",
+        "remarks":      f"Round Off \u2014 {doc.doctype} {doc.name}",
+    })
+
+
 # ─── Sales Invoice ─────────────────────────────────────────────────────────────
 
 def post_sales_invoice(doc) -> None:
@@ -106,6 +170,7 @@ def post_sales_invoice(doc) -> None:
                 "cost_center":  doc.cost_center or "",
                 "remarks":      f"{tax.description} — Invoice {doc.name}",
             })
+    _append_round_off_entry(gl_map, doc)
     make_gl_entries(gl_map)
 
 

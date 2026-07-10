@@ -50,7 +50,9 @@ class SalesInvoice(Document):
             item.amount = round(base - item.discount_amount, 2)
 
     def calculate_totals(self):
-        net = sum(flt(i.amount) for i in self.items)
+        subtotal = sum(flt(i.amount) for i in self.items)
+        self.calculate_discount(subtotal)
+        net = subtotal - flt(self.additional_discount_amount)
         for tax in (self.taxes or []):
             if flt(tax.rate) and not flt(tax.tax_amount):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
@@ -65,6 +67,24 @@ class SalesInvoice(Document):
         pre_round_total = net + tax_total
         self.grand_total = round(pre_round_total)
         self.round_off = round(self.grand_total - pre_round_total, 2)
+
+    def calculate_discount(self, subtotal):
+        """Common invoice-level discount applied on the items subtotal,
+        before tax. Percentage mode derives the amount from subtotal;
+        Amount mode is taken as entered (clamped to the subtotal)."""
+        self.discount_type = self.discount_type or "Percentage"
+        if self.discount_type == "Percentage":
+            self.additional_discount_percentage = flt(self.additional_discount_percentage)
+            self.additional_discount_amount = round(
+                subtotal * self.additional_discount_percentage / 100, 2
+            )
+        else:
+            self.additional_discount_percentage = 0
+            self.additional_discount_amount = round(flt(self.additional_discount_amount), 2)
+        # Never let discount exceed subtotal or go negative
+        self.additional_discount_amount = max(
+            0.0, min(flt(self.additional_discount_amount), subtotal)
+        )
 
     def set_outstanding_amount(self):
         # For credit notes, outstanding is always 0 (balance tracked separately)

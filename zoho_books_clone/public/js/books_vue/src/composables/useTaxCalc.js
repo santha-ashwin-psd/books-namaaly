@@ -90,6 +90,43 @@ export function templateHeadlineRate(taxes) {
 }
 
 /**
+ * Common invoice-level discount on the items subtotal, applied before tax.
+ * Mirrors SalesInvoice.calculate_discount() in sales_invoice.py.
+ *
+ * @param subtotal      sum of line item amounts
+ * @param discountType  "Percentage" | "Amount"
+ * @param discountValue percentage (if type=Percentage) or flat amount
+ * @returns discountAmount, clamped to [0, subtotal]
+ */
+export function computeDiscountAmount(subtotal, discountType, discountValue) {
+  const base = num(subtotal);
+  const type = discountType || "Percentage";
+  let amount = type === "Percentage"
+    ? base * num(discountValue) / 100
+    : num(discountValue);
+  amount = Math.max(0, Math.min(amount, base));
+  return Math.round(amount * 100) / 100;
+}
+
+/**
+ * Spreads a flat discountAmount proportionally across line amounts (by each
+ * line's share of the subtotal), so per-line tax_code/rate taxation in
+ * computeTaxRows() is still calculated on the post-discount taxable value —
+ * same net effect as reducing net_total once, but done per-line so mixed tax
+ * rates on different items each get their fair share of the discount.
+ */
+export function applyDiscountToLines(lines, discountAmount) {
+  const rows = lines || [];
+  const subtotal = rows.reduce((s, l) => s + num(l.amount), 0);
+  if (!subtotal || !discountAmount) return rows.map((l) => ({ ...l }));
+  const ratio = num(discountAmount) / subtotal;
+  return rows.map((l) => ({
+    ...l,
+    amount: Math.round((num(l.amount) - num(l.amount) * ratio) * 100) / 100,
+  }));
+}
+
+/**
  * @param lines     [{ amount, tax_code }]
  * @param templates [{ name, tax_type, rate (summed, legacy), account, taxes:[{tax_type,rate,account_head}] }]
  * @param ctx       { companyState, placeOfSupply, gst:{cgst,sgst,igst}(legacy fallback), defaultAccount }

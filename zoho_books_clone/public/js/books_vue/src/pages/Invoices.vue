@@ -577,6 +577,29 @@
                 <div style="font-size:12px;color:#6b7280">Tax is applied per item via Tax Template.</div>
                 <div class="po-totals-right">
                   <div class="po-total-row"><span>Subtotal</span><span>{{ fmtAmt(subtotal) }}</span></div>
+                  <div class="po-total-row" style="align-items:center">
+                    <span>Discount</span>
+                    <span style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                      <select v-model="form.discount_type" class="inv-fi" style="width:74px;padding:2px 4px">
+                        <option value="Percentage">%</option>
+                        <option value="Amount">₹</option>
+                      </select>
+                      <input
+                        v-if="form.discount_type==='Percentage'"
+                        v-model.number="form.additional_discount_percentage"
+                        type="number" min="0" max="100" step="0.1"
+                        class="inv-fi" style="width:72px;text-align:right" placeholder="0"
+                      />
+                      <input
+                        v-else
+                        v-model.number="form.additional_discount_amount"
+                        type="number" min="0" :max="subtotal" step="0.01"
+                        class="inv-fi" style="width:90px;text-align:right" placeholder="0"
+                      />
+                    </span>
+                  </div>
+                  <div v-if="discountAmount" class="po-total-row"><span>Discount Amount</span><span>-{{ fmtAmt(discountAmount) }}</span></div>
+                  <div class="po-total-row"><span>Net Total</span><span>{{ fmtAmt(netTotal) }}</span></div>
                   <template v-for="tl in taxLines" :key="tl.template">
                     <div class="po-total-row"><span>{{ tl.template }} ({{ tl.rate }}%)</span><span>{{ fmtAmt(tl.amount) }}</span></div>
                   </template>
@@ -917,8 +940,16 @@
                       <span class="t-amt">{{ fmtAmt(viewSubtotal, viewInv.currency) }}</span>
                     </div>
                     <div v-if="viewDiscountTotal" class="inv-total-line">
-                      <span class="t-lbl">Discount</span>
+                      <span class="t-lbl">Item Discount</span>
                       <span class="t-amt">-{{ fmtAmt(viewDiscountTotal, viewInv.currency) }}</span>
+                    </div>
+                    <div v-if="viewAdditionalDiscount" class="inv-total-line">
+                      <span class="t-lbl">Discount{{ viewInv.discount_type==='Percentage' && viewInv.additional_discount_percentage ? ' (' + viewInv.additional_discount_percentage + '%)' : '' }}</span>
+                      <span class="t-amt">-{{ fmtAmt(viewAdditionalDiscount, viewInv.currency) }}</span>
+                    </div>
+                    <div v-if="viewDiscountTotal || viewAdditionalDiscount" class="inv-total-line">
+                      <span class="t-lbl">Net Total</span>
+                      <span class="t-amt">{{ fmtAmt(viewNetTotal, viewInv.currency) }}</span>
                     </div>
                     <template v-if="viewInv.taxes&&viewInv.taxes.length">
                       <div v-for="(tx,i) in viewInv.taxes" :key="i" class="inv-total-line">
@@ -1357,7 +1388,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import IrnQrCode from "../components/IrnQrCode.vue";
 import { useLivePreview } from "../composables/useLivePreview.js";
-import { computeTaxRows } from "../composables/useTaxCalc.js";
+import { computeTaxRows, computeDiscountAmount, applyDiscountToLines } from "../composables/useTaxCalc.js";
 
 const { toast } = useToast();
 const { canWrite } = usePermissions();
@@ -1542,6 +1573,7 @@ const form = reactive({
   update_stock:1, set_warehouse:"",
   logo:"",
   cost_center:"", sales_person:"",
+  discount_type:"Percentage", additional_discount_percentage:0, additional_discount_amount:0,
 });
 const customerBillingAddrs  = ref([]);
 const customerShippingAddrs = ref([]);
@@ -1688,8 +1720,23 @@ function exactLineAmount(l) {
 // instead overstates it by a paisa (e.g. ₹33,812.95 vs the correct ₹33,812.94).
 const subtotal = computed(()=>Math.floor(lines.value.reduce((s,l)=>s+exactLineAmount(l),0)*100)/100);
 
+// Common invoice-level discount, applied on the subtotal before tax —
+// mirrors SalesInvoice.calculate_discount() in sales_invoice.py.
+const discountAmount = computed(()=>computeDiscountAmount(
+  subtotal.value,
+  form.discount_type,
+  form.discount_type === "Amount" ? form.additional_discount_amount : form.additional_discount_percentage,
+));
+// Keep the Amount field in sync for display when type=Percentage (read-only there).
+watch(discountAmount, (v)=>{ if (form.discount_type === "Percentage") form.additional_discount_amount = v; });
+// Net total after the invoice-level discount, before tax.
+const netTotal = computed(()=>Math.round((subtotal.value - discountAmount.value)*100)/100);
+// Lines with the discount spread proportionally, so per-line tax_code/rate
+// taxation is computed on each item's correct post-discount taxable value.
+const discountedLines = computed(()=>applyDiscountToLines(lines.value, discountAmount.value));
+
 const taxLines = computed(()=>
-  computeTaxRows(lines.value, taxTemplates.value, {
+  computeTaxRows(discountedLines.value, taxTemplates.value, {
     companyState: companyGstState.value,
     placeOfSupply: form.place_of_supply,
     gst: { cgst: gstAccounts.value.output_cgst, sgst: gstAccounts.value.output_sgst, igst: gstAccounts.value.output_igst },
@@ -1725,7 +1772,7 @@ const taxAmount  = computed(()=>taxLines.value.reduce((s,t)=>s+t.amount,0));
 // nearest rupee. Without this step the app's total (e.g. ₹35,503.61) will
 // never match the printed/e-invoice total (₹35,504.00), which always
 // carries an explicit Round Off line.
-const preRoundTotal = computed(()=>subtotal.value+taxAmount.value);
+const preRoundTotal = computed(()=>netTotal.value+taxAmount.value);
 const roundOff   = computed(()=>Math.round((Math.round(preRoundTotal.value)-preRoundTotal.value)*100)/100);
 const grandTotal = computed(()=>Math.round(preRoundTotal.value));
 
@@ -1741,6 +1788,7 @@ const previewData = computed(()=>({
   items: lines.value.filter(l=>l.item_code||l.item_name),
   taxes: taxLines.value.map(tl=>({description:tl.template,rate:tl.rate,amount:tl.amount})),
   subtotal: subtotal.value,
+  discountAmount: discountAmount.value,
   totalTax: taxAmount.value,
   grandTotal: grandTotal.value,
   terms: form.terms,
@@ -1792,15 +1840,18 @@ const viewDiscountTotal = computed(()=>{
   if (!viewInv.value?.items) return 0;
   return Math.round(viewInv.value.items.reduce((s,it)=>s+lineDiscount(it),0)*100)/100;
 });
+// Invoice-level common discount (on subtotal, applied after per-line
+// discounts) — stored directly on the doc by the backend.
+const viewAdditionalDiscount = computed(()=>flt(viewInv.value?.additional_discount_amount));
 const viewSubtotal = computed(()=>{
   if (!viewInv.value) return 0;
   const net = viewInv.value.net_total != null ? flt(viewInv.value.net_total) : flt(viewInv.value.grand_total)-flt(viewInv.value.total_tax);
-  return Math.round((net + viewDiscountTotal.value)*100)/100;
+  return Math.round((net + viewDiscountTotal.value + viewAdditionalDiscount.value)*100)/100;
 });
 // Same round-off fix as the edit form's Grand Total: the stored grand_total
 // on older/unrounded documents is just net + tax with no invoice-level
 // rounding, so recompute it here rather than trusting the raw field.
-const viewNetTotal = computed(()=>Math.round((viewSubtotal.value - viewDiscountTotal.value)*100)/100);
+const viewNetTotal = computed(()=>Math.round((viewSubtotal.value - viewDiscountTotal.value - viewAdditionalDiscount.value)*100)/100);
 const viewTaxTotal = computed(()=>{
   if (!viewInv.value?.taxes?.length) return 0;
   return viewInv.value.taxes.reduce((s,t)=>s+flt(t.tax_amount!=null?t.tax_amount:t.amount),0);
@@ -2154,7 +2205,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:""});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2162,7 +2213,7 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||""});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
   fetchWarehouses("");
@@ -2181,6 +2232,9 @@ async function openEdit(inv) {
       currency:doc.currency||"INR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
       update_stock:doc.update_stock||0,set_warehouse:doc.set_warehouse||"",
       logo:doc.logo||"",cost_center:doc.cost_center||"",sales_person:doc.sales_person||"",
+      discount_type:doc.discount_type||"Percentage",
+      additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
+      additional_discount_amount:flt(doc.additional_discount_amount)||0,
     });
     lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
     if (!lines.value.length) addLine();
@@ -2236,7 +2290,7 @@ async function saveInvoice(docstatus, andNew = false) {
   try {
     const company=await resolveCompany();
     const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||""}));
-    const taxes=computeTaxRows(lines.value.filter(l=>l.item_code), taxTemplates.value, {
+    const taxes=computeTaxRows(discountedLines.value.filter(l=>l.item_code), taxTemplates.value, {
       companyState: companyGstState.value,
       placeOfSupply: form.place_of_supply,
       gst: { cgst: gstAccounts.value.output_cgst, sgst: gstAccounts.value.output_sgst, igst: gstAccounts.value.output_igst },
@@ -2250,7 +2304,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||""};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
 
