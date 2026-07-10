@@ -53,7 +53,7 @@
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
-   "options": "Company"
+   "options": "Books Company"
   },
   {
    "fieldname": "sec_pp_warehouses",
