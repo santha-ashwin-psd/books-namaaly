@@ -1,241 +1,527 @@
 <template>
-<div class="list-page">
+<div class="bomx-page">
+  <div class="bomx-two-col">
 
-  <!-- ── Toolbar ── -->
-  <div class="sales-toolbar">
-    <div class="sales-search">
-      <span v-html="icon('search',13)" style="color:#9ca3af;flex-shrink:0"></span>
-      <input v-model="search" placeholder="Search BOMs, items…" class="sales-search-input"/>
+    <!-- ══════════ LEFT: BOM LIST ══════════ -->
+    <div class="bomx-list-panel">
+      <div class="bomx-panel-hdr">
+        <span class="bomx-panel-title">📋 All BOMs <span class="bomx-count">({{ sorted.length }})</span></span>
+        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+      </div>
+      <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="draft">Draft</option>
+        <option value="inactive">Inactive</option>
+      </select>
+      <input class="bomx-search" v-model="search" type="text" placeholder="Search BOM by item name or number…"/>
+      <div class="bomx-list">
+        <template v-if="loading">
+          <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
+        </template>
+        <div v-else-if="!sorted.length" class="bomx-list-empty">No BOMs found</div>
+        <div v-else v-for="row in sorted" :key="row.name"
+             class="bomx-item" :class="{active: selectedName === row.name}"
+             @click="selectBOM(row.name)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div class="bomx-item-name">{{ row.item_name || row.item }}</div>
+            <span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
+          </div>
+          <div class="bomx-item-meta">
+            <span class="mono">{{ row.name }}</span>
+            <span>•</span>
+            <span v-if="row.bom_version">v{{ row.bom_version }}</span>
+          </div>
+          <div class="bomx-item-right">
+            <span style="font-size:12px;color:var(--bx-muted)">BOM Cost:</span>
+            <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--bx-mfgB)">{{ INR(row.total_cost) }}</span>
+            <span v-if="row.is_default" class="bomx-default-tag">Default</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="sales-pills">
-      <button v-for="t in tabs" :key="t.key"
-        class="sales-pill" :class="{active:filterTab===t.key, ['pill-'+t.key]: t.key!=='all'}"
-        @click="filterTab=t.key">
-        {{ t.label }}
-        <span v-if="t.key!=='all'" class="sales-pill-count">{{ counts[t.key] }}</span>
-      </button>
+
+    <!-- ══════════ RIGHT: BOM DETAIL ══════════ -->
+    <div class="bomx-detail-panel">
+
+      <!-- Empty state -->
+      <div v-if="!selectedName" class="bomx-empty-state">
+        <div class="bomx-empty-icon">📄</div>
+        <div class="bomx-empty-title">Select a BOM</div>
+        <div class="bomx-empty-sub">Choose a Bill of Materials from the list to view components, costs, and versions.</div>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First BOM</button>
+      </div>
+
+      <template v-else>
+        <div v-if="detailLoading" class="bomx-empty-state"><div class="shimmer" style="height:200px;border-radius:10px"></div></div>
+
+        <template v-else>
+          <!-- Header -->
+          <div class="bomx-detail-hdr">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+              <div style="min-width:0">
+                <div class="bomx-detail-title">{{ isNew ? 'New Bill of Materials' : (itemNameFor(bom.item) || bom.item) }}</div>
+                <div class="bomx-detail-meta">
+                  <span class="mono" v-if="!isNew">{{ bom.name }}</span>
+                  <span v-if="!isNew">•</span>
+                  <span>Produces: {{ bom.quantity || 1 }} {{ producedUom }}</span>
+                  <span>•</span>
+                  <span class="bomx-badge" :class="statusClass(bom)" style="font-size:11px">{{ statusLabel(bom) }}</span>
+                  <span v-if="bom.bom_version">• v{{ bom.bom_version }}</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+                <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
+                <button v-if="!isNew && bom.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendBom" :disabled="submitting">
+                  {{ submitting ? 'Amending…' : 'Amend' }}
+                </button>
+                <button v-if="!isNew && bom.docstatus===1" class="bomx-btn bomx-btn-light" style="color:#C92A2A" @click="cancelBom" :disabled="submitting">
+                  {{ submitting ? 'Cancelling…' : 'Cancel BOM' }}
+                </button>
+                <button v-if="!isNew && bom.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitBom" :disabled="submitting || saving">
+                  {{ submitting ? 'Submitting…' : 'Submit' }}
+                </button>
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                  {{ saving ? 'Saving…' : (isNew ? 'Save BOM' : 'Save Changes') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Header fields -->
+          <div class="bomx-hdr-fields">
+            <div>
+              <div class="bomx-hf-label">Production Item</div>
+              <select class="bomx-fi" v-model="bom.item" :disabled="readOnly" style="width:100%" :title="itemNameFor(bom.item) || bom.item">
+                <option value="">— Select —</option>
+                <option v-for="i in manufacturedItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+              </select>
+            </div>
+            <div>
+              <div class="bomx-hf-label">Quantity</div>
+              <input class="bomx-fi bomx-fi-mono" type="number" v-model="bom.quantity" @change="onQtyChange" min="0.01" step="any" :disabled="readOnly" style="width:100%"/>
+            </div>
+            <div>
+              <div class="bomx-hf-label">Routing</div>
+              <select class="bomx-fi" v-model="bom.routing" :disabled="readOnly" @change="onRoutingChange" style="width:100%">
+                <option value="">— None —</option>
+                <option v-for="r in routingsList" :key="r.name" :value="r.name">{{ r.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="bomx-toggle-row">
+            <label class="bomx-toggle"><input type="checkbox" v-model="bom.is_active" :true-value="1" :false-value="0" :disabled="readOnly"/> Is Active</label>
+            <label class="bomx-toggle"><input type="checkbox" v-model="bom.is_default" :true-value="1" :false-value="0" :disabled="readOnly"/> Is Default</label>
+            <label class="bomx-toggle"><input type="checkbox" v-model="bom.allow_alternative_item" :true-value="1" :false-value="0" :disabled="readOnly"/> Allow Alt Item</label>
+          </div>
+
+          <!-- Tabs -->
+          <div class="bomx-tabs">
+            <button v-for="t in tabs" :key="t.id" class="bomx-tab" :class="{active: activeTab===t.id}" @click="activeTab=t.id">{{ t.label }}</button>
+          </div>
+
+          <div class="bomx-body">
+
+            <!-- ── Components tab ── -->
+            <div v-if="activeTab==='components'">
+              <div v-if="readOnly" class="bomx-notice">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                This BOM is {{ bom.docstatus===2?'cancelled':'submitted' }}. Amend it to make changes.
+              </div>
+
+              <!-- Cost summary strip -->
+              <div class="bomx-cost-summary">
+                <div class="bomx-cost-title">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  BOM Cost Summary
+                </div>
+                <div class="bomx-cost-grid">
+                  <div class="bomx-cost-cell">
+                    <div class="bomx-cost-lbl">Material</div>
+                    <div class="bomx-cost-val">{{ INR(rm_cost) }}</div>
+                  </div>
+                  <div class="bomx-cost-cell">
+                    <div class="bomx-cost-lbl">Operations</div>
+                    <div class="bomx-cost-val">{{ INR(op_cost) }}</div>
+                  </div>
+                  <div class="bomx-cost-cell">
+                    <div class="bomx-cost-lbl">Scrap Value</div>
+                    <div class="bomx-cost-val" style="color:var(--bx-red)">-{{ INR(scrap_value) }}</div>
+                  </div>
+                  <div class="bomx-cost-cell bomx-cost-cell-total">
+                    <div class="bomx-cost-lbl" style="color:var(--bx-mfgB)">Total Cost</div>
+                    <div class="bomx-cost-val" style="color:var(--bx-mfgB);font-size:19px">{{ INR(total_cost) }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Raw Materials -->
+              <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px">
+                Raw Materials <span class="bomx-count" v-if="bom.items && bom.items.length">({{ bom.items.length }})</span>
+              </div>
+              <div class="bomx-rm-cards">
+                <div v-if="!bom.items || !bom.items.length" class="bomx-tree-empty">No raw materials added.</div>
+                <div class="bomx-rm-card" v-for="(rm, idx) in bom.items" :key="'rm'+idx">
+                  <div class="bomx-rm-card-hdr">
+                    <span class="bomx-tree-icon">📦</span>
+                    <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="rm.item_code" @change="onRmItemChange(rm)" :disabled="readOnly" :title="itemNameFor(rm.item_code) || rm.item_code">
+                      <option value="">— Select item —</option>
+                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                    </select>
+                    <div class="bomx-rm-card-amt">
+                      <span class="bomx-rm-card-amt-lbl">Amount</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ INR((rm.qty||0)*(rm.rate||0)) }}</span>
+                    </div>
+                    <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                  <div class="bomx-rm-card-body">
+                    <div class="bomx-rm-field">
+                      <label>Qty</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="rm.qty" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>UOM</label>
+                      <select class="bomx-fi" v-model="rm.uom" :disabled="readOnly">
+                        <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
+                      </select>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Rate (₹)</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="rm.rate" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                    <div class="bomx-rm-field bomx-rm-field-wide">
+                      <label>Sub-Assembly BOM</label>
+                      <select class="bomx-fi" v-model="rm.sub_assembly_bom" :disabled="readOnly">
+                        <option value="">— None —</option>
+                        <option v-for="b in bomsList" :key="b.name" :value="b.name">{{ b.name }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!readOnly" class="bomx-add-row" @click="addMaterial">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Component
+              </div>
+
+              <!-- Operations -->
+              <div class="bomx-tree-col-hdr" style="margin-top:20px">
+                <div style="flex:1;padding-left:4px">Operations</div>
+                <div style="min-width:80px;text-align:right">Mins</div>
+                <div style="min-width:90px;text-align:right">Hr Rate (₹)</div>
+                <div style="min-width:90px;text-align:right">Cost (₹)</div>
+                <div style="width:36px"></div>
+              </div>
+              <div class="bomx-tree">
+                <div v-if="!bom.operations || !bom.operations.length" class="bomx-tree-empty">No operations added.</div>
+                <div class="bomx-tree-row" v-for="(op, idx) in bom.operations" :key="'op'+idx">
+                  <div class="bomx-tree-dot" style="background:var(--bx-violet)"></div>
+                  <span class="bomx-tree-icon">⚙️</span>
+                  <div style="flex:1;min-width:0;display:flex;gap:6px">
+                    <select class="bomx-fi bomx-fi-inline" style="flex:1" v-model="op.operation" :disabled="readOnly">
+                      <option value="">— Operation —</option>
+                      <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
+                    </select>
+                    <select class="bomx-fi bomx-fi-inline" style="flex:1" v-model="op.workstation" @change="onWorkstationChange(op)" :disabled="readOnly">
+                      <option value="">— Workstation —</option>
+                      <option v-for="w in workstationsList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select>
+                  </div>
+                  <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="op.time_in_mins" min="0" step="any" :disabled="readOnly"/>
+                  <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="op.hour_rate" min="0" step="any" :disabled="readOnly"/>
+                  <span class="bomx-tree-cost" style="color:var(--bx-violet)">{{ INR(((op.time_in_mins||0)/60)*(op.hour_rate||0)) }}</span>
+                  <div class="bomx-tree-actions">
+                    <button v-if="!readOnly" class="bomx-btn-icon danger" @click="removeOp(idx)" title="Remove">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!readOnly" class="bomx-add-row" @click="addOp">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Operation
+              </div>
+            </div>
+
+            <!-- ── Cost Breakdown tab ── -->
+            <div v-if="activeTab==='costs'">
+              <div style="font-size:13px;font-weight:700;color:var(--bx-text);margin-bottom:14px">Full Cost Breakdown</div>
+              <table class="bomx-cost-table">
+                <thead><tr>
+                  <th style="text-align:left">Component</th>
+                  <th style="text-align:right">Qty</th>
+                  <th style="text-align:right">UOM</th>
+                  <th style="text-align:right">Rate</th>
+                  <th style="text-align:right">Amount</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-if="!bom.items || !bom.items.length"><td colspan="5" style="text-align:center;color:var(--bx-muted);padding:20px">No materials</td></tr>
+                  <tr v-for="(rm, idx) in bom.items" :key="idx">
+                    <td>{{ itemNameFor(rm.item_code) || rm.item_code }} <span class="mono" style="font-size:11px;color:var(--bx-muted)">{{ rm.item_code }}</span></td>
+                    <td style="text-align:right" class="mono">{{ rm.qty }}</td>
+                    <td style="text-align:right" class="mono">{{ rm.uom }}</td>
+                    <td style="text-align:right" class="mono">{{ INR(rm.rate) }}</td>
+                    <td style="text-align:right;font-weight:700" class="mono">{{ INR((rm.qty||0)*(rm.rate||0)) }}</td>
+                  </tr>
+                </tbody>
+                <tfoot><tr>
+                  <td colspan="4" style="font-weight:700;color:var(--bx-mfgB)">Total Material Cost</td>
+                  <td style="text-align:right;font-weight:700;color:var(--bx-mfgB)" class="mono">{{ INR(rm_cost) }}</td>
+                </tr></tfoot>
+              </table>
+
+              <div style="margin-top:20px">
+                <div class="bomx-section-lbl">Labour &amp; Overhead</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div class="bomx-lo-cell">
+                    <div style="font-size:13px;font-weight:600">Operation Cost</div>
+                    <div class="mono" style="font-weight:700">{{ INR(op_cost) }}</div>
+                  </div>
+                  <div class="bomx-lo-cell">
+                    <div style="font-size:13px;font-weight:600">Scrap Value</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-red)">-{{ INR(scrap_value) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Scrap tab ── -->
+            <div v-if="activeTab==='scrap'">
+              <div class="bomx-field-block">
+                <div class="bomx-hf-label">Process Loss (%)</div>
+                <input class="bomx-fi bomx-fi-mono" type="number" v-model="bom.process_loss" min="0" max="100" step="any" :disabled="readOnly" style="width:160px"/>
+                <div class="bomx-field-hint">Percentage of material permanently lost during production.</div>
+              </div>
+
+              <div class="bomx-tree-col-hdr" style="margin-top:16px">
+                <div style="flex:1;padding-left:4px">Scrap Items</div>
+                <div style="min-width:60px;text-align:right">Qty</div>
+                <div style="min-width:80px;text-align:right">Rate (₹)</div>
+                <div style="min-width:90px;text-align:right">Amount (₹)</div>
+                <div style="width:36px"></div>
+              </div>
+              <div class="bomx-tree">
+                <div v-if="!bom.scrap_items || !bom.scrap_items.length" class="bomx-tree-empty">No scrap items added.</div>
+                <div class="bomx-tree-row" v-for="(sc, idx) in bom.scrap_items" :key="idx">
+                  <div class="bomx-tree-dot" style="background:var(--bx-red)"></div>
+                  <span class="bomx-tree-icon">🗑️</span>
+                  <div style="flex:1;min-width:0">
+                    <select class="bomx-fi bomx-fi-inline" v-model="sc.item_code" :disabled="readOnly">
+                      <option value="">— Select item —</option>
+                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                    </select>
+                  </div>
+                  <input class="bomx-fi bomx-fi-mono bomx-tree-qty-inp" type="number" v-model="sc.qty" min="0" step="any" :disabled="readOnly"/>
+                  <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="sc.rate" min="0" step="any" :disabled="readOnly"/>
+                  <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ INR((sc.qty||0)*(sc.rate||0)) }}</span>
+                  <div class="bomx-tree-actions">
+                    <button v-if="!readOnly" class="bomx-btn-icon danger" @click="removeScrap(idx)" title="Remove">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!readOnly" class="bomx-add-row" @click="addScrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Scrap Item
+              </div>
+            </div>
+
+            <!-- ── More Info tab ── -->
+            <div v-if="activeTab==='more'">
+              <div class="bomx-field-block">
+                <div class="bomx-hf-label">Project</div>
+                <input class="bomx-fi" type="text" v-model="bom.project" :disabled="readOnly" style="width:100%"/>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+                <div>
+                  <div class="bomx-hf-label">Description</div>
+                  <textarea class="bomx-fi" v-model="bom.description" rows="3" :disabled="readOnly" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div>
+                  <div class="bomx-hf-label">Internal Notes</div>
+                  <textarea class="bomx-fi" v-model="bom.internal_notes" rows="3" :disabled="readOnly" style="width:100%;resize:vertical"></textarea>
+                </div>
+              </div>
+              <div class="bomx-toggle-row" style="margin-top:16px">
+                <label class="bomx-toggle"><input type="checkbox" v-model="bom.is_phantom_bom" :true-value="1" :false-value="0" :disabled="readOnly"/> Is Phantom BOM</label>
+                <label class="bomx-toggle"><input type="checkbox" v-model="bom.set_rate_of_sub_assembly_from_bom" :true-value="1" :false-value="0" :disabled="readOnly"/> Set Rate of Sub-Assembly from BOM</label>
+              </div>
+              <div class="bomx-toggle-row" style="margin-top:8px">
+                <label class="bomx-toggle"><input type="checkbox" v-model="bom.publish_bom" :true-value="1" :false-value="0" :disabled="readOnly"/> Publish to Website</label>
+              </div>
+            </div>
+
+            <!-- ── BOM Tree tab ── -->
+            <div v-if="activeTab==='tree'">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div>
+                  <div style="font-size:13px;font-weight:700">Multi-Level BOM Explosion</div>
+                  <div style="font-size:12px;color:var(--bx-muted)">Recursively expands all sub-assembly BOMs (including phantom BOMs) into leaf raw materials.</div>
+                </div>
+                <button class="bomx-btn bomx-btn-mfg" @click="loadBomTree" :disabled="treeLoading || isNew || bom.docstatus !== 1">
+                  {{ treeLoading ? 'Exploding…' : 'Explode BOM' }}
+                </button>
+              </div>
+              <div v-if="isNew || bom.docstatus !== 1" style="color:var(--bx-muted);font-size:13px">Submit the BOM first, then click "Explode BOM" to see the full multi-level tree.</div>
+              <div v-else-if="!treeNodes.length && !treeLoading" style="color:var(--bx-muted);font-size:13px">Click "Explode BOM" to build the explosion tree.</div>
+              <table v-if="treeNodes.length" class="bomx-cost-table">
+                <thead><tr>
+                  <th style="text-align:left">Item</th><th style="text-align:right">Qty</th><th style="text-align:left">UOM</th>
+                  <th style="text-align:right">Rate</th><th style="text-align:right">Amount</th><th style="text-align:left">Sub-Assembly BOM</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="(node, idx) in treeNodes" :key="idx">
+                    <td :style="{paddingLeft: (12+node.level*20)+'px'}">
+                      <span :style="node.has_sub_assembly ? 'font-weight:700;color:var(--bx-mfgB)' : ''">{{ node.item_code }}</span>
+                      <span v-if="node.is_phantom" style="font-size:10px;padding:1px 6px;background:var(--bx-mfgS);color:var(--bx-mfgB);border-radius:8px;font-weight:700;margin-left:4px">PHANTOM</span>
+                      <div style="font-size:11px;color:var(--bx-muted)">{{ node.item_name }}</div>
+                    </td>
+                    <td style="text-align:right" class="mono">{{ INR(node.qty) }}</td>
+                    <td>{{ node.uom }}</td>
+                    <td style="text-align:right" class="mono">{{ INR(node.rate) }}</td>
+                    <td style="text-align:right;font-weight:700" class="mono">{{ INR(node.amount) }}</td>
+                    <td><span v-if="node.sub_assembly_bom" class="bomx-link" @click="router.push(`/manufacturing/bom/${node.sub_assembly_bom}`)">{{ node.sub_assembly_bom }}</span><span v-else style="color:var(--bx-muted)">—</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- ── Compare tab ── -->
+            <div v-if="activeTab==='compare'">
+              <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                <select class="bomx-fi" style="min-width:220px" v-model="compareBom2">
+                  <option value="">— Select BOM to compare —</option>
+                  <option v-for="b in bomsList.filter(b => b.name !== bom.name)" :key="b.name" :value="b.name">{{ b.name }} ({{ b.item }})</option>
+                </select>
+                <button class="bomx-btn bomx-btn-mfg" @click="runCompare" :disabled="compareLoading || !compareBom2 || isNew">
+                  {{ compareLoading ? 'Comparing…' : 'Compare' }}
+                </button>
+              </div>
+              <template v-if="compareResult">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                  <div class="bomx-lo-cell">
+                    <div class="bomx-hf-label">BOM A (this)</div>
+                    <div style="font-weight:700">{{ compareResult.bom1.name }}</div>
+                    <div style="font-size:12px;color:var(--bx-muted)">{{ compareResult.bom1.item }} · Qty {{ compareResult.bom1.qty }}</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ INR(compareResult.bom1.total_cost) }}</div>
+                  </div>
+                  <div class="bomx-lo-cell">
+                    <div class="bomx-hf-label">BOM B (selected)</div>
+                    <div style="font-weight:700">{{ compareResult.bom2.name }}</div>
+                    <div style="font-size:12px;color:var(--bx-muted)">{{ compareResult.bom2.item }} · Qty {{ compareResult.bom2.qty }}</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ INR(compareResult.bom2.total_cost) }}</div>
+                  </div>
+                </div>
+                <div class="bomx-section-lbl">Materials</div>
+                <table class="bomx-cost-table">
+                  <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">A Qty</th><th style="text-align:right">A Rate</th><th style="text-align:right">B Qty</th><th style="text-align:right">B Rate</th><th style="text-align:center">Change</th></tr></thead>
+                  <tbody>
+                    <tr v-for="m in compareResult.materials" :key="m.item_code">
+                      <td>{{ m.item_code }}<div style="font-size:11px;color:var(--bx-muted)">{{ m.item_name }}</div></td>
+                      <td style="text-align:right">{{ m.bom1_qty != null ? INR(m.bom1_qty) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom1_rate != null ? INR(m.bom1_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom2_qty != null ? INR(m.bom2_qty) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom2_rate != null ? INR(m.bom2_rate) : '—' }}</td>
+                      <td style="text-align:center"><span class="bomx-badge" :class="'badge-'+m.status">{{ m.status.toUpperCase() }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div class="bomx-footer">
+            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteFromDetail" v-if="!isNew && bom.docstatus===0">Delete BOM</button>
+            <div style="flex:1"></div>
+            <button v-if="!readOnly" class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || loading">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
+              {{ saving ? 'Saving…' : (isNew ? 'Save BOM' : 'Save Changes') }}
+            </button>
+          </div>
+        </template>
+      </template>
     </div>
-    <div class="sales-actions">
-      <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openAdd"><span v-html="icon('plus',13)"></span> New BOM</button>
-    </div>
-  </div>
 
-  <!-- Bulk action bar -->
-  <div v-if="selected.size" class="inv-bulk-bar" style="margin: 0 0 12px">
-    <span class="inv-bulk-count">{{ selected.size }} selected</span>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkBusy">
-      <span v-html="icon('trash',13)"></span> Delete selected
-    </button>
-    <button class="inv-bulk-clear" @click="selected.clear()">✕ Clear</button>
   </div>
-
-  <!-- Table view -->
-  <div class="inv-table-wrap">
-    <table class="inv-table items-desktop-tbl">
-      <thead><tr>
-        <th class="th-check"><input type="checkbox" @change="toggleAll" :checked="allChecked"/></th>
-        <th class="sortable" @click="sortBy('name')">BOM ID <span v-html="sortArrow('name')"></span></th>
-        <th class="sortable" @click="sortBy('item')">Item <span v-html="sortArrow('item')"></span></th>
-        <th>Status</th>
-        <th style="text-align:center">Default</th>
-        <th class="ta-r sortable" @click="sortBy('modified')">Last Modified <span v-html="sortArrow('modified')"></span></th>
-        <th style="width:90px;text-align:center">Actions</th>
-      </tr></thead>
-      <tbody>
-        <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="7"><div class="shimmer"></div></td></tr></template>
-        <tr v-else-if="!sorted.length"><td colspan="7" class="bk-empty-state"><div class="bk-empty-inner">
-          <template v-if="search||filterTab!=='all'">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <p class="bk-empty-title">No BOMs match your filters</p>
-          </template>
-          <template v-else>
-            <p class="bk-empty-title">No Bill of Materials yet</p>
-            <p class="bk-empty-sub">Create your first BOM to start manufacturing items.</p>
-            <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New BOM</button>
-          </template>
-        </div></td></tr>
-        <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
-          <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
-          <td @click="openView(row)" data-label="BOM ID"><span class="inv-link">{{row.name}}</span></td>
-          <td @click="openView(row)" class="fw-600" data-label="Item">{{row.item_name || row.item}}</td>
-          <td @click="openView(row)" data-label="Status">
-            <span class="inv-status-badge" :class="!row.is_active?'status-inactive':'status-active'">{{!row.is_active?'Inactive':'Active'}}</span>
-            <span v-if="row.docstatus===2" class="inv-status-badge status-inactive" style="margin-left:4px;">Cancelled</span>
-            <span v-else-if="row.docstatus===0" class="inv-status-badge" style="margin-left:4px;background:#fef3c7;color:#b45309;">Draft</span>
-            <span v-if="row.bom_version" style="margin-left:6px;font-size:11px;color:#6b7280;">v{{ row.bom_version }}</span>
-          </td>
-          <td @click="openView(row)" style="text-align:center" data-label="Default">
-            <span v-if="row.is_default" style="color:#16a34a;font-weight:700;font-size:15px">✓</span>
-            <span v-else style="color:#d1d5db;font-size:14px">—</span>
-          </td>
-          <td @click="openView(row)" class="ta-r text-muted mono-sm" data-label="Last Modified">{{fmtDate(row.modified)}}</td>
-          <td style="text-align:center;white-space:nowrap" @click.stop>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="sales-pagination" v-if="sorted.length > pageSize">
-    <div class="sales-page-info">Showing {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, sorted.length) }} of {{ sorted.length }}</div>
-    <div class="sales-page-controls">
-      <button class="sales-page-btn" :disabled="page <= 1" @click="page--"><span v-html="icon('chevL',12)"></span></button>
-      <button class="sales-page-btn" :disabled="page >= totalPages" @click="page++"><span v-html="icon('chevR',12)"></span></button>
-    </div>
-  </div>
-
 </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
-import { apiList, apiDelete } from "../api/client.js";
+import { apiGet, apiList, apiSave, apiDelete, apiSubmit, apiCancel, apiAmend, apiCall } from "../api/client.js";
 
+const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
 const { confirm } = useConfirm();
 
+// ── LIST STATE ──────────────────────────────────────────────
 const loading = ref(false);
 const list = ref([]);
 const search = ref("");
-const filterTab = ref("all");
-const sortCol = ref("modified");
-const sortAsc = ref(false);
-const page = ref(1);
-const pageSize = 50;
+const filterStatus = ref("");
 
-const selected = ref(new Set());
-const bulkBusy = ref(false);
+const selectedName = computed(() => (route.params.name && route.params.name !== "new") ? route.params.name : (route.params.name === "new" ? "new" : null));
 
-const tabs = [
-  { key: "all",      label: "All" },
-  { key: "active",   label: "Active" },
-  { key: "inactive", label: "Inactive" },
-  { key: "default",  label: "Default" },
-];
-
-onMounted(load);
-
-watch([search, filterTab], () => { page.value = 1; });
-
-async function load() {
+async function loadList() {
   loading.value = true;
-  selected.value.clear();
-
-  let r = null;
   try {
-    const fields = ["name", "item", "is_active", "is_default", "docstatus", "bom_version", "modified"];
-    r = await apiList("BOM", { fields, limit: 1000, order: "modified desc" });
-  } catch (e) {
-    toast("Could not load BOMs", "error");
-    loading.value = false;
-    return;
-  }
-
-  list.value = r || [];
-
-  // Resolve item names for display. Scoped to only the item codes actually
-  // referenced by the loaded BOMs (not the whole catalog), and isolated in
-  // its own try/catch so a failure here degrades to showing raw item codes
-  // instead of wiping out the BOM list we already have.
-  if (list.value.length) {
-    try {
+    const fields = ["name", "item", "is_active", "is_default", "docstatus", "bom_version", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost"];
+    const r = await apiList("BOM", { fields, limit: 1000, order: "modified desc" });
+    list.value = r || [];
+    if (list.value.length) {
       const uniqueItemCodes = [...new Set(list.value.map(row => row.item).filter(Boolean))];
       if (uniqueItemCodes.length) {
-        const items = await apiList("Item", {
-          fields: ["name", "item_name"],
-          filters: [["name", "in", uniqueItemCodes]],
-          limit: uniqueItemCodes.length,
-        });
-        const itemNames = {};
-        if (items) items.forEach(i => itemNames[i.name] = i.item_name);
-        list.value.forEach(row => row.item_name = itemNames[row.item] || row.item);
+        try {
+          const items = await apiList("Item", { fields: ["name", "item_name"], filters: [["name", "in", uniqueItemCodes]], limit: uniqueItemCodes.length });
+          const itemNames = {};
+          if (items) items.forEach(i => itemNames[i.name] = i.item_name);
+          list.value.forEach(row => row.item_name = itemNames[row.item] || row.item);
+        } catch (e) { /* degrade gracefully */ }
       }
-    } catch (e) {
-      // Degrade gracefully: rows keep row.item as a fallback display value
-      // (the template already does `row.item_name || row.item`).
     }
+  } catch (e) {
+    toast("Could not load BOMs", "error");
   }
-
   loading.value = false;
 }
 
-const counts = computed(() => {
-  const c = { all: list.value.length, active: 0, inactive: 0, default: 0 };
-  list.value.forEach(i => {
-    if (i.is_active) c.active++;
-    if (!i.is_active) c.inactive++;
-    if (i.is_default) c.default++;
-  });
-  return c;
-});
-
-const filtered = computed(() => {
+const sorted = computed(() => {
   let r = list.value;
-  if (filterTab.value === "active")   r = r.filter(i =>  i.is_active);
-  if (filterTab.value === "inactive") r = r.filter(i => !i.is_active);
-  if (filterTab.value === "default")  r = r.filter(i =>  i.is_default);
-  
+  if (filterStatus.value === "active") r = r.filter(i => i.is_active && i.docstatus !== 2);
+  if (filterStatus.value === "inactive") r = r.filter(i => !i.is_active && i.docstatus !== 2);
+  if (filterStatus.value === "draft") r = r.filter(i => i.docstatus === 0);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter(i => [i.item_name, i.item, i.name].filter(Boolean).join(" ").toLowerCase().includes(q));
   return r;
 });
 
-const sorted = computed(() => {
-  const r = [...filtered.value];
-  const c = sortCol.value;
-  const asc = sortAsc.value ? 1 : -1;
-  r.sort((a, b) => {
-    const va = (c === "item" ? (a.item_name || a.item) : a[c]) || "";
-    const vb = (c === "item" ? (b.item_name || b.item) : b[c]) || "";
-    if (va < vb) return -1 * asc;
-    if (va > vb) return 1 * asc;
-    return 0;
-  });
-  return r;
-});
-
-const totalPages = computed(() => Math.ceil(sorted.value.length / pageSize) || 1);
-const paged = computed(() => sorted.value.slice((page.value - 1) * pageSize, page.value * pageSize));
-
-const allChecked = computed(() => paged.value.length > 0 && paged.value.every(r => selected.value.has(r.name)));
-function toggleAll(e) {
-  if (e.target.checked) paged.value.forEach(r => selected.value.add(r.name));
-  else paged.value.forEach(r => selected.value.delete(r.name));
+function statusLabel(row) {
+  if (row.docstatus === 2) return "Obsolete";
+  if (row.docstatus === 0) return "Draft";
+  return row.is_active ? "Active" : "Inactive";
 }
-function toggle(name) {
-  if (selected.value.has(name)) selected.value.delete(name);
-  else selected.value.add(name);
+function statusClass(row) {
+  const l = statusLabel(row);
+  return l === "Active" ? "badge-active" : (l === "Draft" ? "badge-draft" : "badge-obsolete");
 }
 
-function sortBy(col) {
-  if (sortCol.value === col) sortAsc.value = !sortAsc.value;
-  else { sortCol.value = col; sortAsc.value = true; }
+function selectBOM(name) {
+  router.push(`/manufacturing/bom/${name}`);
 }
-
-function sortArrow(col) {
-  if (sortCol.value !== col) return "";
-  return icon(sortAsc.value ? 'arrowU' : 'arrowD', 11);
-}
-
-function fmtDate(d) {
-  if (!d) return "";
-  const obj = new Date(d);
-  if (isNaN(obj)) return d;
-  return obj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 function openAdd() {
   router.push("/manufacturing/bom/new");
 }
-
-function openView(row) {
-  router.push(`/manufacturing/bom/${row.name}`);
+function goBackToList() {
+  router.push("/manufacturing/bom");
 }
 
 async function isBomDeletable(row) {
@@ -244,11 +530,7 @@ async function isBomDeletable(row) {
     return false;
   }
   try {
-    const inUse = await apiList("Work Order", {
-      fields: ["name"],
-      filters: [["bom", "=", row.name], ["docstatus", "!=", 2]],
-      limit: 1,
-    });
+    const inUse = await apiList("Work Order", { fields: ["name"], filters: [["bom", "=", row.name], ["docstatus", "!=", 2]], limit: 1 });
     if (inUse && inUse.length) {
       toast(`${row.name} is used by Work Order ${inUse[0].name} and cannot be deleted.`, "error");
       return false;
@@ -260,61 +542,432 @@ async function isBomDeletable(row) {
   return true;
 }
 
-async function confirmDel(row) {
+async function deleteFromDetail() {
+  const row = { name: bom.value.name, docstatus: bom.value.docstatus };
   if (!(await isBomDeletable(row))) return;
   if (await confirm({ title: "Delete BOM?", body: `Are you sure you want to delete ${row.name}?`, okLabel: "Delete", okStyle: "danger" })) {
     try {
       await apiDelete("BOM", row.name);
       toast("BOM deleted");
-      load();
+      goBackToList();
+      loadList();
     } catch (e) {
       toast("Could not delete BOM: " + e.message, "error");
     }
   }
 }
 
-async function bulkDelete() {
-  const rows = list.value.filter(r => selected.value.has(r.name));
-  if (!rows.length) return;
-  if (!(await confirm({
-    title: "Delete selected BOMs?",
-    body: `Are you sure you want to delete ${rows.length} BOM${rows.length > 1 ? "s" : ""}?`,
-    okLabel: "Delete",
-    okStyle: "danger",
-  }))) return;
+// ── DETAIL STATE ─────────────────────────────────────────────
+const isNew = computed(() => route.params.name === "new");
+const detailLoading = ref(false);
+const saving = ref(false);
+const submitting = ref(false);
 
-  bulkBusy.value = true;
-  let deleted = 0, skipped = 0;
-  for (const row of rows) {
-    if (!(await isBomDeletable(row))) { skipped++; continue; }
-    try {
-      await apiDelete("BOM", row.name);
-      deleted++;
-    } catch (e) {
-      skipped++;
-    }
-  }
-  bulkBusy.value = false;
+const activeTab = ref("components");
+const tabs = [
+  { id: "components", label: "Components" },
+  { id: "costs",       label: "Cost Breakdown" },
+  { id: "scrap",       label: "Scrap & Process Loss" },
+  { id: "more",        label: "More Information" },
+  { id: "tree",        label: "BOM Tree" },
+  { id: "compare",     label: "Compare" },
+];
 
-  if (deleted) toast(`Deleted ${deleted} BOM${deleted > 1 ? "s" : ""}` + (skipped ? `, ${skipped} skipped` : ""));
-  else toast("No BOMs were deleted", "error");
+function emptyBom() {
+  return {
+    doctype: "BOM", item: "", quantity: 1, routing: "",
+    is_active: 1, is_default: 1, allow_alternative_item: 0,
+    set_rate_of_sub_assembly_from_bom: 0, is_phantom_bom: 0,
+    process_loss: 0, publish_bom: 0,
+    items: [], operations: [], scrap_items: [],
+    rm_cost: 0, op_cost: 0, scrap_value: 0, total_cost: 0,
+  };
+}
+const bom = ref(emptyBom());
 
-  selected.value.clear();
-  load();
+const manufacturedItems = ref([]);
+const stockItems = ref([]);
+const uomList = ref([]);
+const operationsList = ref([]);
+const workstationsList = ref([]);
+const routingsList = ref([]);
+const bomsList = ref([]);
+const oldQty = ref(1);
+
+const treeNodes = ref([]);
+const treeLoading = ref(false);
+const compareBom2 = ref("");
+const compareResult = ref(null);
+const compareLoading = ref(false);
+
+const readOnly = computed(() => !isNew.value && (bom.value.docstatus === 1 || bom.value.docstatus === 2));
+const producedUom = computed(() => (stockItems.value.find(i => i.name === bom.value.item) || {}).stock_uom || "Nos");
+
+function itemNameFor(code) {
+  const i = stockItems.value.find(x => x.name === code) || manufacturedItems.value.find(x => x.name === code);
+  return i ? i.item_name : null;
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const mfg = await apiList("Item", { fields: ["name", "item_name"], limit: 1000, order: "name asc" });
+    manufacturedItems.value = mfg || [];
+    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    stockItems.value = stk || [];
+    const uoms = await apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 });
+    uomList.value = (uoms || []).map(r => r.name);
+    const ops = await apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" });
+    operationsList.value = ops || [];
+    const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" });
+    workstationsList.value = wks || [];
+    const rtg = await apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
+    routingsList.value = rtg || [];
+    const bl = await apiList("BOM", { fields: ["name", "item", "bom_type"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" });
+    bomsList.value = bl || [];
+  } catch (e) {
+    toast("Error loading manufacturing data: " + e.message, "error");
+  }
+  await loadList();
+  if (route.params.name) await loadBom();
+  loading.value = false;
+});
+
+watch(() => route.params.name, async (name) => {
+  if (!name) { bom.value = emptyBom(); return; }
+  await loadBom();
+});
+
+async function loadBom() {
+  if (isNew.value) {
+    bom.value = emptyBom();
+    activeTab.value = "components";
+    return;
+  }
+  detailLoading.value = true;
+  try {
+    const data = await apiGet("BOM", route.params.name);
+    bom.value = data;
+    oldQty.value = data.quantity || 1;
+    if (!bom.value.items) bom.value.items = [];
+    if (!bom.value.operations) bom.value.operations = [];
+    if (!bom.value.scrap_items) bom.value.scrap_items = [];
+    activeTab.value = "components";
+  } catch (e) {
+    toast("Error loading BOM: " + e.message, "error");
+    goBackToList();
+  }
+  detailLoading.value = false;
+}
+
+function onQtyChange() {
+  const newQty = parseFloat(bom.value.quantity) || 0;
+  if (newQty <= 0) { bom.value.quantity = 1; return; }
+  const ratio = newQty / oldQty.value;
+  (bom.value.items || []).forEach(rm => { rm.qty = (rm.qty || 0) * ratio; });
+  (bom.value.scrap_items || []).forEach(sc => { sc.qty = (sc.qty || 0) * ratio; });
+  oldQty.value = newQty;
+}
+
+function onRmItemChange(rm) {
+  if (!rm.item_code) return;
+  const item = stockItems.value.find(i => i.name === rm.item_code);
+  if (item) { rm.rate = item.standard_rate || 0; rm.uom = item.stock_uom || "Nos"; rm.item_name = item.item_name; }
+}
+function onWorkstationChange(op) {
+  if (!op.workstation) return;
+  const w = workstationsList.value.find(x => x.name === op.workstation);
+  if (w) op.hour_rate = w.hour_rate || 0;
+}
+async function onRoutingChange() {
+  if (!bom.value.routing) return;
+  try {
+    const rows = await apiCall("zoho_books_clone.manufacturing.doctype.routing.routing.get_routing_operations", { routing: bom.value.routing });
+    if (rows && rows.length) {
+      bom.value.operations = rows;
+      toast(`${rows.length} operation(s) loaded from Routing "${bom.value.routing}"`);
+    }
+  } catch (e) {
+    toast("Could not load Routing operations: " + (e.message || e), "error");
+  }
+}
+
+function addMaterial() { bom.value.items.push({ item_code: "", uom: "Nos", qty: 1, rate: 0 }); }
+function removeMaterial(idx) { bom.value.items.splice(idx, 1); }
+function addOp() { bom.value.operations.push({ operation: "", workstation: "", time_in_mins: 60, hour_rate: 0 }); }
+function removeOp(idx) { bom.value.operations.splice(idx, 1); }
+function addScrap() { bom.value.scrap_items.push({ item_code: "", qty: 1, rate: 0 }); }
+function removeScrap(idx) { bom.value.scrap_items.splice(idx, 1); }
+
+const rm_cost = computed(() => (bom.value.items || []).reduce((s, rm) => s + (parseFloat(rm.qty) || 0) * (parseFloat(rm.rate) || 0), 0));
+const op_cost = computed(() => (bom.value.operations || []).reduce((s, op) => s + ((parseFloat(op.time_in_mins) || 0) / 60) * (parseFloat(op.hour_rate) || 0), 0));
+const scrap_value = computed(() => (bom.value.scrap_items || []).reduce((s, sc) => s + (parseFloat(sc.qty) || 0) * (parseFloat(sc.rate) || 0), 0));
+const total_cost = computed(() => rm_cost.value + op_cost.value - scrap_value.value);
+
+async function save() {
+  if (!bom.value.item) return toast("Please select a Production Item", "error");
+  if (!bom.value.quantity || bom.value.quantity <= 0) return toast("Quantity must be greater than 0", "error");
+  const pl = parseFloat(bom.value.process_loss) || 0;
+  if (pl < 0 || pl > 100) return toast("Process Loss must be between 0 and 100%", "error");
+  let totalScrapQty = 0;
+  (bom.value.scrap_items || []).forEach(sc => totalScrapQty += (parseFloat(sc.qty) || 0));
+  if (totalScrapQty > bom.value.quantity) return toast("Total Scrap quantity cannot exceed Production Quantity", "error");
+
+  saving.value = true;
+  try {
+    bom.value.rm_cost = rm_cost.value;
+    bom.value.op_cost = op_cost.value;
+    bom.value.scrap_value = scrap_value.value;
+    bom.value.total_cost = total_cost.value;
+    const doc = await apiSave(bom.value);
+    toast(isNew.value ? "BOM created successfully" : "BOM updated");
+    if (isNew.value) {
+      router.replace(`/manufacturing/bom/${doc.name}`);
+    } else {
+      bom.value = doc;
+      oldQty.value = doc.quantity || 1;
+    }
+    loadList();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  saving.value = false;
+}
+
+async function submitBom() {
+  if (!bom.value.name) return;
+  submitting.value = true;
+  try {
+    const doc = await apiSubmit("BOM", bom.value.name);
+    bom.value = doc;
+    toast("BOM submitted — it's now the active revision");
+    loadList();
+  } catch (e) { toast(e.message, "error"); }
+  submitting.value = false;
+}
+
+async function cancelBom() {
+  if (!bom.value.name) return;
+  if (!(await confirm({ title: "Cancel BOM?", body: "Cancel this BOM? You can amend it into a new draft revision afterwards.", okLabel: "Cancel BOM", okStyle: "danger" }))) return;
+  submitting.value = true;
+  try {
+    const doc = await apiCancel("BOM", bom.value.name);
+    bom.value = doc;
+    toast("BOM cancelled");
+    loadList();
+  } catch (e) { toast(e.message, "error"); }
+  submitting.value = false;
+}
+
+async function amendBom() {
+  if (!bom.value.name) return;
+  submitting.value = true;
+  try {
+    const doc = await apiAmend("BOM", bom.value.name);
+    toast(`New revision ${doc.name} created — v${doc.bom_version}`);
+    router.push(`/manufacturing/bom/${doc.name}`);
+    loadList();
+  } catch (e) { toast(e.message, "error"); }
+  submitting.value = false;
+}
+
+async function loadBomTree() {
+  if (!bom.value.name || bom.value.docstatus !== 1) return;
+  treeLoading.value = true;
+  treeNodes.value = [];
+  try {
+    const nodes = await apiCall("zoho_books_clone.manufacturing.bom_engine.get_bom_tree", { bom: bom.value.name, qty: bom.value.quantity || 1 });
+    treeNodes.value = nodes || [];
+    if (!treeNodes.value.length) toast("No materials found in BOM", "error");
+  } catch (e) { toast("Failed to build BOM tree: " + e.message, "error"); }
+  treeLoading.value = false;
+}
+
+async function runCompare() {
+  if (!bom.value.name || !compareBom2.value) return;
+  compareLoading.value = true;
+  compareResult.value = null;
+  try {
+    compareResult.value = await apiCall("zoho_books_clone.manufacturing.bom_engine.compare_boms", { bom1: bom.value.name, bom2: compareBom2.value });
+  } catch (e) { toast("Comparison failed: " + e.message, "error"); }
+  compareLoading.value = false;
+}
+
+// ── UTIL ─────────────────────────────────────────────────────
+function INR(n) {
+  if (n == null || isNaN(n)) return "₹0.00";
+  return "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const ICONS = {
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
-  arrowU: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>',
-  arrowD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>',
-  chevL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>',
-  chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
 }
 </script>
+
+<style scoped>
+.bomx-page {
+  --bx-bg:#F3F4F6; --bx-surface:#FFFFFF; --bx-surf2:#F8F9FC; --bx-border:#E2E8F0;
+  --bx-text:#1A1D23; --bx-muted:#868E96;
+  --bx-green:#2F9E44; --bx-greenS:#EBFBEE;
+  --bx-red:#C92A2A; --bx-redS:#FFF5F5;
+  --bx-amber:#E67700; --bx-amberS:#FFF3BF;
+  --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
+  --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
+  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-radius:10px; --bx-rsm:6px;
+  padding: 16px;
+}
+.bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
+@media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
+
+.mono { font-family: "DM Mono", ui-monospace, monospace; }
+
+/* ── List panel ── */
+.bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
+.bomx-panel-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.bomx-panel-title { font-size:13px; font-weight:700; color:var(--bx-text); }
+.bomx-count { font-size:12px; font-weight:400; color:var(--bx-muted); }
+.bomx-status-filter { margin:8px 12px 0; width:calc(100% - 24px); font-size:12px; padding:6px 10px; }
+.bomx-search { width:100%; border:none; outline:none; font-size:13px; padding:10px 14px; margin-top:8px; border-bottom:1px solid var(--bx-border); background:#fff; color:var(--bx-text); }
+.bomx-search::placeholder { color:var(--bx-muted); }
+.bomx-list { overflow-y:auto; max-height: calc(100vh - 230px); }
+.bomx-list-empty { text-align:center; padding:32px; color:var(--bx-muted); font-size:13px; }
+.bomx-item { padding:12px 14px; border-bottom:1px solid #F1F3F5; cursor:pointer; transition:background .12s; display:flex; flex-direction:column; gap:4px; }
+.bomx-item:hover { background:#FAFBFF; }
+.bomx-item.active { background:var(--bx-mfgS); border-left:3px solid var(--bx-mfg); }
+.bomx-item-name { font-size:13.5px; font-weight:600; color:var(--bx-text); }
+.bomx-item-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bx-muted); }
+.bomx-item-right { display:flex; align-items:center; gap:6px; margin-top:2px; }
+.bomx-default-tag { font-size:10px; font-weight:700; background:#E8EAF6; color:#1A237E; padding:1px 6px; border-radius:10px; margin-left:2px; }
+
+/* ── Badges ── */
+.bomx-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+.badge-active { background:var(--bx-greenS); color:var(--bx-green); }
+.badge-draft { background:var(--bx-amberS); color:var(--bx-amber); }
+.badge-obsolete { background:#F1F3F5; color:var(--bx-muted); }
+.badge-added { background:var(--bx-greenS); color:var(--bx-green); }
+.badge-removed { background:var(--bx-redS); color:var(--bx-red); }
+.badge-changed { background:var(--bx-amberS); color:var(--bx-amber); }
+.badge-unchanged { background:#F1F3F5; color:var(--bx-muted); }
+
+/* ── Detail panel ── */
+.bomx-detail-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; min-height: calc(100vh - 100px); }
+.bomx-empty-state { text-align:center; padding:60px 20px; color:var(--bx-muted); }
+.bomx-empty-icon { font-size:48px; margin-bottom:14px; }
+.bomx-empty-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:6px; }
+.bomx-empty-sub { font-size:13px; line-height:1.6; max-width:280px; margin:0 auto 20px; }
+
+.bomx-detail-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); }
+.bomx-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
+.bomx-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+.bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
+.bomx-toggle-row { display:flex; gap:20px; padding:0 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
+.bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
+
+.bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto; }
+.bomx-tab { padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+.bomx-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
+.bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
+
+.bomx-notice { background:var(--bx-amberS); border:1px solid rgba(230,119,0,.2); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:var(--bx-amber); display:flex; align-items:center; gap:8px; }
+
+/* ── Cost summary ── */
+.bomx-cost-summary { background:var(--bx-mfgS); border:1px solid rgba(180,83,9,.15); border-radius:var(--bx-radius); padding:16px 18px; margin-bottom:18px; }
+.bomx-cost-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-mfg); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+.bomx-cost-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.bomx-cost-cell { background:#fff; border:1px solid rgba(180,83,9,.12); border-radius:var(--bx-rsm); padding:10px 12px; }
+.bomx-cost-cell-total { background:var(--bx-mfgS); border-color:rgba(180,83,9,.2); }
+.bomx-cost-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-mfg); margin-bottom:3px; }
+.bomx-cost-val { font-size:17px; font-weight:700; font-family:"DM Mono",monospace; color:var(--bx-mfgB); }
+
+/* ── Tree rows (materials / ops / scrap) ── */
+.bomx-tree-col-hdr { display:flex; align-items:center; padding:7px 10px 7px 12px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); margin-bottom:4px; gap:8px; }
+.bomx-tree { display:flex; flex-direction:column; gap:2px; }
+.bomx-tree-empty { text-align:center; padding:20px; color:var(--bx-muted); font-size:13px; }
+.bomx-tree-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:var(--bx-rsm); transition:background .1s; }
+.bomx-tree-row:hover { background:#F5F6FF; }
+.bomx-tree-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.bomx-tree-icon { font-size:14px; flex-shrink:0; }
+.bomx-tree-cost { font-family:"DM Mono",monospace; font-size:13px; font-weight:700; min-width:90px; text-align:right; }
+.bomx-tree-actions { display:flex; gap:3px; }
+.bomx-fi-inline { width:100%; }
+.bomx-tree-qty-inp { width:60px; text-align:right; }
+.bomx-tree-uom-inp { width:70px; }
+.bomx-tree-rate-inp { width:80px; text-align:right; }
+.bomx-tree-sa-inp { width:150px; font-size:12px; }
+.bomx-add-row { display:flex; align-items:center; gap:8px; padding:8px 12px; color:var(--bx-mfg); cursor:pointer; font-size:13px; font-weight:600; border-radius:var(--bx-rsm); margin-top:4px; }
+.bomx-add-row:hover { background:var(--bx-mfgS); }
+
+/* ── Raw material cards ── */
+.bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
+.bomx-rm-card { background:#fff; border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; box-shadow:0 1px 3px rgba(16,24,40,.04); }
+.bomx-rm-card-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bx-mfgS); border-bottom:1px solid var(--bx-border); }
+.bomx-rm-card-title { flex:1; min-width:0; font-weight:600; }
+.bomx-rm-card-amt { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; gap:1px; }
+.bomx-rm-card-amt-lbl { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--bx-muted); }
+.bomx-rm-card-rm { flex-shrink:0; }
+.bomx-rm-card-body { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; padding:12px 14px; }
+.bomx-rm-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.bomx-rm-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
+.bomx-rm-field .bomx-fi { width:100%; }
+.bomx-rm-field-wide { grid-column:span 1; }
+@media (max-width:640px) {
+  .bomx-rm-card-body { grid-template-columns:1fr 1fr; }
+  .bomx-rm-field-wide { grid-column:1 / -1; }
+}
+
+/* ── Cost breakdown table ── */
+.bomx-cost-table { width:100%; border-collapse:collapse; font-size:13px; border:1px solid var(--bx-border); border-radius:var(--bx-rsm); overflow:hidden; }
+.bomx-cost-table th { padding:8px 12px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); }
+.bomx-cost-table td { padding:8px 12px; border-top:1px solid #F1F3F5; }
+.bomx-cost-table tfoot td { background:var(--bx-mfgS); font-weight:700; }
+
+.bomx-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); margin-bottom:8px; }
+.bomx-lo-cell { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-rsm); padding:12px 16px; }
+.bomx-field-block { margin-bottom:4px; }
+.bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
+.bomx-link { color:var(--bx-mfg); font-weight:600; cursor:pointer; }
+.bomx-link:hover { text-decoration:underline; }
+
+.bomx-footer { padding:12px 22px; border-top:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+
+/* ── Buttons / inputs ── */
+.bomx-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; }
+.bomx-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
+.bomx-fi:disabled { background:#F8F9FC; color:var(--bx-muted); }
+.bomx-fi-mono { font-family:"DM Mono",monospace; }
+select.bomx-fi {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
+.bomx-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--bx-rsm); font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; line-height:1; white-space:nowrap; }
+.bomx-btn:disabled { opacity:.6; cursor:not-allowed; }
+.bomx-btn-sm { padding:6px 10px; font-size:12px; }
+.bomx-btn-mfg { background:var(--bx-mfg); color:#fff; }
+.bomx-btn-mfg:hover:not(:disabled) { background:var(--bx-mfgB); }
+.bomx-btn-light { background:rgba(255,255,255,.92); color:var(--bx-mfgB); }
+.bomx-btn-light:hover:not(:disabled) { background:#fff; }
+.bomx-btn-ghost-inv { background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3); }
+.bomx-btn-ghost-inv:hover:not(:disabled) { background:rgba(255,255,255,.25); }
+.bomx-btn-icon { background:none; border:1px solid var(--bx-border); border-radius:5px; cursor:pointer; padding:4px 6px; display:inline-flex; color:var(--bx-muted); }
+.bomx-btn-icon:hover { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
+.bomx-btn-icon.danger { color:var(--bx-red); }
+.bomx-btn-icon.danger:hover { background:var(--bx-redS); border-color:var(--bx-red); }
+
+.shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
+@keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+</style>

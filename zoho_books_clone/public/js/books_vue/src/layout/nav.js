@@ -82,7 +82,7 @@ export const NAV = [
   { path: "/manufacturing/production-plan",   label: "Production Plan",  icon: "chart",      module: "inventory" },
   { path: "/manufacturing/material-request",  label: "Material Requests", icon: "purchase",   module: "inventory" },
   { path: "/manufacturing/packing-slip",      label: "Packing Slips",     icon: "box",        module: "inventory" },
-  { path: "/manufacturing/alternative-item", label: "Alternative Items",   icon: "refresh-cw", module: "inventory" },
+  { path: "/manufacturing/alternative-item", label: "Alternative Items",   icon: "stack", module: "inventory" },
   { path: "/manufacturing/reports",          label: "Mfg Reports",         icon: "chart",      module: "inventory" },
   { path: "/manufacturing/settings",         label: "Mfg Settings",        icon: "gear",       module: "inventory" },
 

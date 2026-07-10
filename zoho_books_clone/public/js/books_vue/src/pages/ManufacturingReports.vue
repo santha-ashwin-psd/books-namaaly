@@ -1,239 +1,237 @@
 <template>
-<div class="sc-page">
-  <div class="sc-sticky">
-    <div class="sc-header">
-      <span class="sc-title">Manufacturing Reports</span>
+<div class="mrx-page">
+  <div class="mrx-panel">
+
+    <!-- Header -->
+    <div class="mrx-hdr">
+      <div>
+        <div class="mrx-hdr-title">📊 Manufacturing Reports</div>
+        <div class="mrx-hdr-sub">{{ tabs.find(t => t.id === activeTab)?.desc }}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button v-if="result" class="mrx-btn mrx-btn-light" @click="exportCSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <button class="mrx-btn mrx-btn-mfg" @click="runReport" :disabled="loading">
+          <span v-if="loading" class="mrx-spinner"></span>
+          <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          {{ loading ? 'Running…' : 'Run Report' }}
+        </button>
+      </div>
     </div>
-    <div class="sc-tabs">
+
+    <!-- Tabs -->
+    <div class="mrx-tabs">
       <button v-for="t in tabs" :key="t.id"
-        class="sc-tab" :class="{ 'sc-tab--active': activeTab === t.id }"
+        class="mrx-tab" :class="{ active: activeTab === t.id }"
         @click="activeTab = t.id; result = null">
-        {{ t.label }}
+        <span class="mrx-tab-ic">{{ t.icon }}</span> {{ t.label }}
       </button>
     </div>
-  </div>
 
-  <div class="sc-body sc-body--narrow">
-    <div class="sc-col-main">
-
-      <!-- Filter card -->
-      <div class="sc-card">
-        <div class="sc-fg" style="align-items:flex-end;gap:10px;flex-wrap:wrap;">
-          <!-- Date range (not shown for BOM Cost Analysis) -->
-          <template v-if="activeTab !== 'bom-cost'">
-            <div class="nim-field" style="min-width:140px;">
-              <label class="nim-label">From Date</label>
-              <input type="date" class="nim-input" v-model="filters.from_date" />
-            </div>
-            <div class="nim-field" style="min-width:140px;">
-              <label class="nim-label">To Date</label>
-              <input type="date" class="nim-input" v-model="filters.to_date" />
-            </div>
-          </template>
-
-          <!-- Status filter -->
-          <div class="nim-field" v-if="activeTab === 'wo-status' || activeTab === 'performance'">
-            <label class="nim-label">Status</label>
-            <select class="nim-input" v-model="filters.status">
-              <option value="All">All</option>
-              <option v-if="activeTab === 'wo-status'" value="Submitted">Submitted</option>
-              <option v-if="activeTab === 'wo-status'" value="In Process">In Process</option>
-              <option value="Completed">Completed</option>
-              <option v-if="activeTab === 'wo-status'" value="Stopped">Stopped</option>
-            </select>
-          </div>
-
-          <!-- BOM Type filter -->
-          <div class="nim-field" v-if="activeTab === 'bom-cost'">
-            <label class="nim-label">BOM Type</label>
-            <select class="nim-input" v-model="filters.bom_type">
-              <option value="All">All</option>
-              <option value="Manufacturing">Manufacturing</option>
-              <option value="Packing">Packing</option>
-              <option value="Sub-Assembly">Sub-Assembly</option>
-            </select>
-          </div>
-
-          <!-- Active filter -->
-          <div class="nim-field" v-if="activeTab === 'bom-cost'">
-            <label class="nim-label">Active Only</label>
-            <select class="nim-input" v-model="filters.is_active">
-              <option value="">All</option>
-              <option value="1">Active</option>
-              <option value="0">Inactive</option>
-            </select>
-          </div>
-
-          <div style="display:flex;gap:8px;margin-bottom:1px;">
-            <button class="sc-save-btn" @click="runReport" :disabled="loading">
-              <span v-if="loading" style="display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;"></span>
-              {{ loading ? 'Running…' : 'Run Report' }}
-            </button>
-            <button v-if="result" class="nim-btn" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer;" @click="exportCSV">
-              Export CSV
-            </button>
-          </div>
+    <!-- Filters -->
+    <div class="mrx-filters">
+      <template v-if="activeTab !== 'bom-cost'">
+        <div>
+          <div class="mrx-hf-label">From Date</div>
+          <input type="date" class="mrx-fi" v-model="filters.from_date" />
         </div>
+        <div>
+          <div class="mrx-hf-label">To Date</div>
+          <input type="date" class="mrx-fi" v-model="filters.to_date" />
+        </div>
+      </template>
+
+      <div v-if="activeTab === 'wo-status' || activeTab === 'performance'">
+        <div class="mrx-hf-label">Status</div>
+        <select class="mrx-fi" v-model="filters.status">
+          <option value="All">All</option>
+          <option v-if="activeTab === 'wo-status'" value="Submitted">Submitted</option>
+          <option v-if="activeTab === 'wo-status'" value="In Process">In Process</option>
+          <option value="Completed">Completed</option>
+          <option v-if="activeTab === 'wo-status'" value="Stopped">Stopped</option>
+        </select>
       </div>
 
-      <!-- Summary KPI strip -->
-      <div v-if="result && summary" class="sc-card" style="padding:0;overflow:hidden;">
-        <div style="display:flex;background:#f8f9fc;border-bottom:1px solid #e8ecf2;">
-          <div v-for="kpi in summaryKpis" :key="kpi.label"
-            style="flex:1;padding:14px 20px;border-right:1px solid #e8ecf2;">
-            <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px;">{{ kpi.label }}</div>
-            <div style="font-size:18px;font-weight:700;" :style="kpi.color ? `color:${kpi.color}` : ''">{{ kpi.value }}</div>
-          </div>
-        </div>
+      <div v-if="activeTab === 'bom-cost'">
+        <div class="mrx-hf-label">BOM Type</div>
+        <select class="mrx-fi" v-model="filters.bom_type">
+          <option value="All">All</option>
+          <option value="Manufacturing">Manufacturing</option>
+          <option value="Packing">Packing</option>
+          <option value="Sub-Assembly">Sub-Assembly</option>
+        </select>
       </div>
 
-      <!-- ── Work Order Status table ── -->
-      <div v-if="activeTab === 'wo-status' && result" class="sc-card" style="overflow-x:auto;">
-        <div v-if="!result.rows.length" style="padding:24px;text-align:center;color:#9ca3af;">No Work Orders found for the selected filters.</div>
-        <table v-else style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th class="rth">Work Order</th>
-              <th class="rth">Item</th>
-              <th class="rth">BOM</th>
-              <th class="rth" style="text-align:right;">Planned Qty</th>
-              <th class="rth" style="text-align:right;">Produced</th>
-              <th class="rth" style="text-align:right;">Completion</th>
-              <th class="rth">Status</th>
-              <th class="rth">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in result.rows" :key="r.name" class="sc-list-row" @click="router.push(`/manufacturing/work-order/${r.name}`)">
-              <td class="rtd" style="color:#2563eb;font-weight:600;">{{ r.name }}</td>
-              <td class="rtd">{{ r.item_name }}<div style="font-size:11px;color:#9ca3af;">{{ r.production_item }}</div></td>
-              <td class="rtd" style="font-size:12px;color:#6b7280;">{{ r.bom || '—' }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.qty) }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.produced_qty) }}</td>
-              <td class="rtd" style="text-align:right;">
-                <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
-                  <div style="width:60px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
-                    <div :style="`width:${r.completion_pct}%;height:100%;background:${r.completion_pct>=100?'#16a34a':'#2563eb'};border-radius:3px;`"></div>
+      <div v-if="activeTab === 'bom-cost'">
+        <div class="mrx-hf-label">Active Only</div>
+        <select class="mrx-fi" v-model="filters.is_active">
+          <option value="">All</option>
+          <option value="1">Active</option>
+          <option value="0">Inactive</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="mrx-body">
+
+      <!-- Loading -->
+      <div v-if="loading" class="shimmer" style="height:220px;border-radius:10px"></div>
+
+      <template v-else-if="result">
+        <!-- KPI strip -->
+        <div v-if="summary" class="mrx-kpi-grid" :style="`grid-template-columns:repeat(${summaryKpis.length},1fr)`">
+          <div v-for="kpi in summaryKpis" :key="kpi.label" class="mrx-kpi-cell">
+            <div class="mrx-kpi-lbl">{{ kpi.label }}</div>
+            <div class="mrx-kpi-val" :style="kpi.color ? `color:${kpi.color}` : ''">{{ kpi.value }}</div>
+          </div>
+        </div>
+
+        <!-- ── Work Order Status table ── -->
+        <div v-if="activeTab === 'wo-status'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No Work Orders found for the selected filters.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>Work Order</th><th>Item</th><th>BOM</th>
+                <th style="text-align:right;">Planned Qty</th>
+                <th style="text-align:right;">Produced</th>
+                <th style="text-align:right;">Completion</th>
+                <th>Status</th><th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.name" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.name}`)">
+                <td class="mrx-link">{{ r.name }}</td>
+                <td>{{ r.item_name }}<div class="mrx-sub">{{ r.production_item }}</div></td>
+                <td class="mrx-sub">{{ r.bom || '—' }}</td>
+                <td style="text-align:right;">{{ fmt(r.qty) }}</td>
+                <td style="text-align:right;">{{ fmt(r.produced_qty) }}</td>
+                <td style="text-align:right;">
+                  <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+                    <div class="mrx-bar"><div class="mrx-bar-fill" :style="`width:${r.completion_pct}%;background:${r.completion_pct>=100?'var(--bx-green)':'var(--bx-blue)'};`"></div></div>
+                    <span>{{ r.completion_pct }}%</span>
                   </div>
-                  <span>{{ r.completion_pct }}%</span>
-                </div>
-              </td>
-              <td class="rtd"><span :style="statusBadge(r.status)">{{ r.status }}</span></td>
-              <td class="rtd" style="font-size:12px;color:#6b7280;">{{ r.creation?.slice(0,10) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                </td>
+                <td><span class="mrx-badge" :class="statusClass(r.status)">{{ r.status }}</span></td>
+                <td class="mrx-sub">{{ r.creation?.slice(0,10) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- ── Stock Requirement table ── -->
-      <div v-if="activeTab === 'stock-req' && result" class="sc-card" style="overflow-x:auto;">
-        <div v-if="!result.rows.length" style="padding:24px;text-align:center;color:#9ca3af;">No open Work Orders found — no material requirements.</div>
-        <table v-else style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th class="rth">Item</th>
-              <th class="rth" style="text-align:right;">Required Qty</th>
-              <th class="rth" style="text-align:right;">On-Hand</th>
-              <th class="rth" style="text-align:right;">Shortfall</th>
-              <th class="rth">UOM</th>
-              <th class="rth">Source WH</th>
-              <th class="rth" style="text-align:right;">WOs</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in result.rows" :key="r.item_code"
-              :style="r.shortfall_qty > 0 ? 'background:#fef2f2;' : ''"
-              style="border-bottom:1px solid #f3f4f6;">
-              <td class="rtd" style="font-weight:600;">{{ r.item_code }}<div style="font-size:11px;color:#9ca3af;">{{ r.item_name }}</div></td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.required_qty) }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.on_hand_qty) }}</td>
-              <td class="rtd" style="text-align:right;" :style="r.shortfall_qty > 0 ? 'color:#dc2626;font-weight:700;' : 'color:#16a34a;'">
-                {{ r.shortfall_qty > 0 ? fmt(r.shortfall_qty) : '✓' }}
-              </td>
-              <td class="rtd">{{ r.uom }}</td>
-              <td class="rtd" style="font-size:12px;color:#6b7280;">{{ r.source_warehouse || '—' }}</td>
-              <td class="rtd" style="text-align:right;">{{ r.work_order_count }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <!-- ── Stock Requirement table ── -->
+        <div v-if="activeTab === 'stock-req'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No open Work Orders found — no material requirements.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align:right;">Required Qty</th>
+                <th style="text-align:right;">On-Hand</th>
+                <th style="text-align:right;">Shortfall</th>
+                <th>UOM</th><th>Source WH</th>
+                <th style="text-align:right;">WOs</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.item_code" :style="r.shortfall_qty > 0 ? 'background:var(--bx-redS);' : ''">
+                <td style="font-weight:600;">{{ r.item_code }}<div class="mrx-sub">{{ r.item_name }}</div></td>
+                <td style="text-align:right;">{{ fmt(r.required_qty) }}</td>
+                <td style="text-align:right;">{{ fmt(r.on_hand_qty) }}</td>
+                <td style="text-align:right;" :style="r.shortfall_qty > 0 ? 'color:var(--bx-red);font-weight:700;' : 'color:var(--bx-green);'">
+                  {{ r.shortfall_qty > 0 ? fmt(r.shortfall_qty) : '✓' }}
+                </td>
+                <td>{{ r.uom }}</td>
+                <td class="mrx-sub">{{ r.source_warehouse || '—' }}</td>
+                <td style="text-align:right;">{{ r.work_order_count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- ── BOM Cost Analysis table ── -->
-      <div v-if="activeTab === 'bom-cost' && result" class="sc-card" style="overflow-x:auto;">
-        <div v-if="!result.rows.length" style="padding:24px;text-align:center;color:#9ca3af;">No submitted BOMs found for the selected filters.</div>
-        <table v-else style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th class="rth">BOM</th>
-              <th class="rth">Item</th>
-              <th class="rth">Type</th>
-              <th class="rth" style="text-align:right;">Qty</th>
-              <th class="rth" style="text-align:right;">RM Cost</th>
-              <th class="rth" style="text-align:right;">Op Cost</th>
-              <th class="rth" style="text-align:right;">Scrap Value</th>
-              <th class="rth" style="text-align:right;">Total Cost</th>
-              <th class="rth" style="text-align:center;">Active</th>
-              <th class="rth" style="text-align:center;">Default</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in result.rows" :key="r.name" class="sc-list-row" @click="router.push(`/manufacturing/bom/${r.name}`)">
-              <td class="rtd" style="color:#2563eb;font-weight:600;font-size:12px;">{{ r.name }}</td>
-              <td class="rtd">{{ r.item_name }}<div style="font-size:11px;color:#9ca3af;">{{ r.item }}</div></td>
-              <td class="rtd"><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;font-weight:600;">{{ r.bom_type }}</span></td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.quantity) }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.rm_cost) }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.op_cost) }}</td>
-              <td class="rtd" style="text-align:right;color:#dc2626;">{{ fmt(r.scrap_value) }}</td>
-              <td class="rtd" style="text-align:right;font-weight:700;color:#1e3a8a;">{{ fmt(r.total_cost) }}</td>
-              <td class="rtd" style="text-align:center;">{{ r.is_active ? '✓' : '' }}</td>
-              <td class="rtd" style="text-align:center;">{{ r.is_default ? '★' : '' }}</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr style="background:#eff6ff;font-weight:700;">
-              <td class="rtd" colspan="4" style="color:#1e40af;">Totals</td>
-              <td class="rtd" style="text-align:right;color:#1e40af;">{{ fmt(result.summary.total_rm) }}</td>
-              <td class="rtd" style="text-align:right;color:#1e40af;">{{ fmt(result.summary.total_op) }}</td>
-              <td class="rtd"></td>
-              <td class="rtd" style="text-align:right;color:#1e3a8a;">{{ fmt(result.summary.total_cost) }}</td>
-              <td class="rtd" colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+        <!-- ── BOM Cost Analysis table ── -->
+        <div v-if="activeTab === 'bom-cost'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No submitted BOMs found for the selected filters.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>BOM</th><th>Item</th><th>Type</th>
+                <th style="text-align:right;">Qty</th>
+                <th style="text-align:right;">RM Cost</th>
+                <th style="text-align:right;">Op Cost</th>
+                <th style="text-align:right;">Scrap Value</th>
+                <th style="text-align:right;">Total Cost</th>
+                <th style="text-align:center;">Active</th>
+                <th style="text-align:center;">Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.name" class="mrx-row" @click="router.push(`/manufacturing/bom/${r.name}`)">
+                <td class="mrx-link" style="font-size:12px;">{{ r.name }}</td>
+                <td>{{ r.item_name }}<div class="mrx-sub">{{ r.item }}</div></td>
+                <td><span class="mrx-badge badge-changed">{{ r.bom_type }}</span></td>
+                <td style="text-align:right;">{{ fmt(r.quantity) }}</td>
+                <td style="text-align:right;">{{ fmt(r.rm_cost) }}</td>
+                <td style="text-align:right;">{{ fmt(r.op_cost) }}</td>
+                <td style="text-align:right;color:var(--bx-red);">{{ fmt(r.scrap_value) }}</td>
+                <td style="text-align:right;font-weight:700;color:var(--bx-mfgB);">{{ fmt(r.total_cost) }}</td>
+                <td style="text-align:center;">{{ r.is_active ? '✓' : '' }}</td>
+                <td style="text-align:center;">{{ r.is_default ? '★' : '' }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="mrx-tfoot">
+                <td colspan="4">Totals</td>
+                <td style="text-align:right;">{{ fmt(result.summary.total_rm) }}</td>
+                <td style="text-align:right;">{{ fmt(result.summary.total_op) }}</td>
+                <td></td>
+                <td style="text-align:right;color:var(--bx-mfgB);">{{ fmt(result.summary.total_cost) }}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
 
-      <!-- ── Production Performance table ── -->
-      <div v-if="activeTab === 'performance' && result" class="sc-card" style="overflow-x:auto;">
-        <div v-if="!result.rows.length" style="padding:24px;text-align:center;color:#9ca3af;">No Work Orders found for the selected filters.</div>
-        <table v-else style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th class="rth">Work Order</th>
-              <th class="rth">Item</th>
-              <th class="rth" style="text-align:right;">Planned</th>
-              <th class="rth" style="text-align:right;">Produced</th>
-              <th class="rth" style="text-align:right;">Process Loss</th>
-              <th class="rth" style="text-align:right;">Yield %</th>
-              <th class="rth" style="text-align:right;">Efficiency %</th>
-              <th class="rth">Status</th>
-              <th class="rth">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in result.rows" :key="r.name" class="sc-list-row" @click="router.push(`/manufacturing/work-order/${r.name}`)">
-              <td class="rtd" style="color:#2563eb;font-weight:600;">{{ r.name }}</td>
-              <td class="rtd">{{ r.item_name }}<div style="font-size:11px;color:#9ca3af;">{{ r.production_item }}</div></td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.qty) }}</td>
-              <td class="rtd" style="text-align:right;">{{ fmt(r.produced_qty) }}</td>
-              <td class="rtd" style="text-align:right;color:#dc2626;">{{ fmt(r.process_loss_qty) }}</td>
-              <td class="rtd" style="text-align:right;" :style="r.yield_pct < 90 ? 'color:#dc2626;font-weight:700;' : 'color:#16a34a;font-weight:700;'">{{ r.yield_pct }}%</td>
-              <td class="rtd" style="text-align:right;" :style="r.efficiency_pct < 90 ? 'color:#b45309;font-weight:700;' : ''">{{ r.efficiency_pct }}%</td>
-              <td class="rtd"><span :style="statusBadge(r.status)">{{ r.status }}</span></td>
-              <td class="rtd" style="font-size:12px;color:#6b7280;">{{ r.creation?.slice(0,10) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <!-- ── Production Performance table ── -->
+        <div v-if="activeTab === 'performance'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No Work Orders found for the selected filters.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>Work Order</th><th>Item</th>
+                <th style="text-align:right;">Planned</th>
+                <th style="text-align:right;">Produced</th>
+                <th style="text-align:right;">Process Loss</th>
+                <th style="text-align:right;">Yield %</th>
+                <th style="text-align:right;">Efficiency %</th>
+                <th>Status</th><th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.name" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.name}`)">
+                <td class="mrx-link">{{ r.name }}</td>
+                <td>{{ r.item_name }}<div class="mrx-sub">{{ r.production_item }}</div></td>
+                <td style="text-align:right;">{{ fmt(r.qty) }}</td>
+                <td style="text-align:right;">{{ fmt(r.produced_qty) }}</td>
+                <td style="text-align:right;color:var(--bx-red);">{{ fmt(r.process_loss_qty) }}</td>
+                <td style="text-align:right;" :style="r.yield_pct < 90 ? 'color:var(--bx-red);font-weight:700;' : 'color:var(--bx-green);font-weight:700;'">{{ r.yield_pct }}%</td>
+                <td style="text-align:right;" :style="r.efficiency_pct < 90 ? 'color:var(--bx-mfg);font-weight:700;' : ''">{{ r.efficiency_pct }}%</td>
+                <td><span class="mrx-badge" :class="statusClass(r.status)">{{ r.status }}</span></td>
+                <td class="mrx-sub">{{ r.creation?.slice(0,10) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- Empty state before first run -->
+      <div v-else class="mrx-empty-state">
+        <div class="mrx-empty-icon">📊</div>
+        <div class="mrx-empty-title">No report generated yet</div>
+        <div class="mrx-empty-sub">Set your filters above and click "Run Report" to view results.</div>
       </div>
 
     </div>
@@ -252,10 +250,10 @@ const { toast } = useToast();
 
 const activeTab = ref("wo-status");
 const tabs = [
-  { id: "wo-status",   label: "Work Order Status" },
-  { id: "stock-req",   label: "Stock Requirement" },
-  { id: "bom-cost",    label: "BOM Cost Analysis" },
-  { id: "performance", label: "Production Performance" },
+  { id: "wo-status",   label: "Work Order Status",       icon: "📋", desc: "Track progress and completion of all work orders." },
+  { id: "stock-req",   label: "Stock Requirement",       icon: "📦", desc: "Material needs and shortfalls across open work orders." },
+  { id: "bom-cost",    label: "BOM Cost Analysis",       icon: "💰", desc: "Cost breakdown of raw materials, operations, and scrap per BOM." },
+  { id: "performance", label: "Production Performance",  icon: "⚙️", desc: "Yield, efficiency, and process loss across completed runs." },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -297,27 +295,27 @@ const summaryKpis = computed(() => {
   const s = summary.value;
   if (activeTab.value === "wo-status") return [
     { label: "Total", value: s.total },
-    { label: "In Process", value: s.in_process, color: "#2563eb" },
-    { label: "Completed", value: s.completed, color: "#16a34a" },
-    { label: "Stopped", value: s.stopped, color: "#dc2626" },
+    { label: "In Process", value: s.in_process, color: "var(--bx-blue)" },
+    { label: "Completed", value: s.completed, color: "var(--bx-green)" },
+    { label: "Stopped", value: s.stopped, color: "var(--bx-red)" },
   ];
   if (activeTab.value === "stock-req") return [
     { label: "Materials Needed", value: s.total_items },
-    { label: "With Shortfall", value: s.shortfall_items, color: s.shortfall_items > 0 ? "#dc2626" : "#16a34a" },
-    { label: "Sufficient", value: s.total_items - s.shortfall_items, color: "#16a34a" },
+    { label: "With Shortfall", value: s.shortfall_items, color: s.shortfall_items > 0 ? "var(--bx-red)" : "var(--bx-green)" },
+    { label: "Sufficient", value: s.total_items - s.shortfall_items, color: "var(--bx-green)" },
   ];
   if (activeTab.value === "bom-cost") return [
     { label: "BOMs", value: s.total_boms },
     { label: "Total RM Cost", value: fmt(s.total_rm) },
     { label: "Total Op Cost", value: fmt(s.total_op) },
-    { label: "Total Cost", value: fmt(s.total_cost), color: "#1e40af" },
+    { label: "Total Cost", value: fmt(s.total_cost), color: "var(--bx-mfgB)" },
   ];
   if (activeTab.value === "performance") return [
     { label: "Orders", value: s.total_orders },
     { label: "Planned", value: fmt(s.total_planned) },
     { label: "Produced", value: fmt(s.total_produced) },
-    { label: "Avg Yield", value: s.avg_yield_pct + "%", color: s.avg_yield_pct >= 90 ? "#16a34a" : "#dc2626" },
-    { label: "Avg Efficiency", value: s.avg_efficiency + "%", color: s.avg_efficiency >= 90 ? "#16a34a" : "#b45309" },
+    { label: "Avg Yield", value: s.avg_yield_pct + "%", color: s.avg_yield_pct >= 90 ? "var(--bx-green)" : "var(--bx-red)" },
+    { label: "Avg Efficiency", value: s.avg_efficiency + "%", color: s.avg_efficiency >= 90 ? "var(--bx-green)" : "var(--bx-mfg)" },
   ];
   return [];
 });
@@ -327,17 +325,16 @@ function fmt(val) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
-function statusBadge(status) {
+function statusClass(status) {
   const map = {
-    "Completed":  "background:#dcfce7;color:#16a34a;",
-    "In Process": "background:#dbeafe;color:#1e40af;",
-    "Submitted":  "background:#fef3c7;color:#92400e;",
-    "Stopped":    "background:#fee2e2;color:#dc2626;",
-    "Cancelled":  "background:#f3f4f6;color:#6b7280;",
-    "Draft":      "background:#f3f4f6;color:#6b7280;",
+    "Completed":  "badge-active",
+    "In Process": "badge-changed",
+    "Submitted":  "badge-draft",
+    "Stopped":    "badge-removed",
+    "Cancelled":  "badge-obsolete",
+    "Draft":      "badge-obsolete",
   };
-  const base = "font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700;";
-  return base + (map[status] || "background:#f3f4f6;color:#6b7280;");
+  return map[status] || "badge-obsolete";
 }
 
 function exportCSV() {
@@ -361,18 +358,90 @@ onMounted(() => runReport());
 </script>
 
 <style scoped>
-.rth {
-  text-align: left;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
+.mrx-page {
+  --bx-bg:#F3F4F6; --bx-surface:#FFFFFF; --bx-surf2:#F8F9FC; --bx-border:#E2E8F0;
+  --bx-text:#1A1D23; --bx-muted:#868E96;
+  --bx-green:#2F9E44; --bx-greenS:#EBFBEE;
+  --bx-red:#C92A2A; --bx-redS:#FFF5F5;
+  --bx-amber:#E67700; --bx-amberS:#FFF3BF;
+  --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
+  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-radius:10px; --bx-rsm:6px;
+  padding: 16px;
 }
-.rtd {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  vertical-align: middle;
+.mrx-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; min-height: calc(100vh - 32px); }
+
+.mrx-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.mrx-hdr-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
+.mrx-hdr-sub { font-size:12.5px; color:rgba(255,255,255,.75); }
+
+.mrx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto; }
+.mrx-tab { display:flex; align-items:center; gap:6px; padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+.mrx-tab-ic { font-size:13px; }
+.mrx-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
+
+.mrx-filters { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.mrx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
+
+.mrx-body { padding:20px 22px; overflow-y:auto; flex:1; }
+
+/* ── KPI strip ── */
+.mrx-kpi-grid { display:grid; gap:10px; margin-bottom:18px; }
+.mrx-kpi-cell { background:var(--bx-mfgS); border:1px solid rgba(180,83,9,.15); border-radius:var(--bx-rsm); padding:12px 14px; }
+.mrx-kpi-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-mfg); margin-bottom:4px; }
+.mrx-kpi-val { font-size:19px; font-weight:700; font-family:"DM Mono",monospace; color:var(--bx-text); }
+@media (max-width:900px) { .mrx-kpi-grid { grid-template-columns:1fr 1fr !important; } }
+
+/* ── Table ── */
+.mrx-table-wrap { overflow-x:auto; border:1px solid var(--bx-border); border-radius:var(--bx-rsm); }
+.mrx-empty { text-align:center; padding:32px; color:var(--bx-muted); font-size:13px; }
+.mrx-table { width:100%; border-collapse:collapse; font-size:13px; }
+.mrx-table th { text-align:left; padding:8px 12px; border-bottom:1px solid var(--bx-border); color:var(--bx-muted); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:var(--bx-surf2); white-space:nowrap; }
+.mrx-table td { padding:9px 12px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.mrx-row { cursor:pointer; transition:background .1s; }
+.mrx-row:hover { background:#FAFBFF; }
+.mrx-link { color:var(--bx-mfg); font-weight:600; }
+.mrx-sub { font-size:11px; color:var(--bx-muted); }
+.mrx-bar { width:60px; height:6px; background:#E5E7EB; border-radius:3px; overflow:hidden; }
+.mrx-bar-fill { height:100%; border-radius:3px; }
+.mrx-tfoot td { background:var(--bx-mfgS); font-weight:700; color:var(--bx-mfgB); }
+
+/* ── Badges ── */
+.mrx-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+.badge-active { background:var(--bx-greenS); color:var(--bx-green); }
+.badge-draft { background:var(--bx-amberS); color:var(--bx-amber); }
+.badge-obsolete { background:#F1F3F5; color:var(--bx-muted); }
+.badge-changed { background:var(--bx-blueS); color:var(--bx-blue); }
+.badge-removed { background:var(--bx-redS); color:var(--bx-red); }
+
+/* ── Empty state ── */
+.mrx-empty-state { text-align:center; padding:60px 20px; color:var(--bx-muted); }
+.mrx-empty-icon { font-size:48px; margin-bottom:14px; }
+.mrx-empty-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:6px; }
+.mrx-empty-sub { font-size:13px; line-height:1.6; max-width:320px; margin:0 auto; }
+
+/* ── Buttons / inputs ── */
+.mrx-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; min-width:140px; }
+.mrx-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
+select.mrx-fi {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
+.mrx-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--bx-rsm); font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; line-height:1; white-space:nowrap; }
+.mrx-btn:disabled { opacity:.6; cursor:not-allowed; }
+.mrx-btn-mfg { background:var(--bx-mfg); color:#fff; }
+.mrx-btn-mfg:hover:not(:disabled) { background:var(--bx-mfgB); }
+.mrx-btn-light { background:#fff; color:var(--bx-mfgB); border:1px solid var(--bx-border); }
+.mrx-btn-light:hover:not(:disabled) { background:var(--bx-surf2); }
+
+.mrx-spinner { display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
+@keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
 </style>
