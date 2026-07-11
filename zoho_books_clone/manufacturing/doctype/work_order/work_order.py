@@ -108,4 +108,30 @@ class WorkOrder(Document):
 				"production recorded against it. Cancel/reverse the Manufacture "
 				"Stock Entries first if this was posted in error."
 			))
+		# A Work Order can have had issue_materials() run -- a submitted
+		# Material Transfer moving stock into the WIP warehouse -- with zero
+		# production recorded yet. The produced_qty check above doesn't catch
+		# that case, so without this a cancel would leave that Stock Entry
+		# submitted and its stock stranded in WIP with no Work Order left to
+		# consume it.
+		linked_stock_entries = frappe.get_all(
+			"Stock Entry", filters={"work_order": self.name, "docstatus": 1}, limit=1
+		)
+		if linked_stock_entries:
+			frappe.throw(_(
+				"Cannot cancel: Stock Entry {0} is still submitted against this Work "
+				"Order (materials were issued and/or production was recorded). "
+				"Cancel that Stock Entry first if this was posted in error."
+			).format(linked_stock_entries[0].name))
+
 		self.db_set("status", "Cancelled")
+		# Job Cards aren't submittable documents, so they don't block cancel
+		# the way a submitted Stock Entry does -- but leaving them Open/Work
+		# In Progress after their parent Work Order is cancelled would orphan
+		# them pointing at a dead parent. Completed Job Cards are left alone
+		# as a historical record.
+		frappe.db.sql(
+			"""UPDATE `tabJob Card` SET status = 'Cancelled'
+			   WHERE work_order = %s AND status NOT IN ('Completed', 'Cancelled')""",
+			(self.name,),
+		)

@@ -86,6 +86,9 @@
                 <button v-if="!isNew && ps.status==='In Progress'" class="psx-btn psx-btn-light" style="color:#2F9E44" @click="markPacked" :disabled="saving">
                   {{ saving ? 'Saving…' : 'Mark as Packed' }}
                 </button>
+                <button v-if="!isNew && ps.status==='Packed' && !ps.stock_entry" class="psx-btn psx-btn-mfg" @click="postStockConsumption" :disabled="postingStock || saving">
+                  {{ postingStock ? 'Posting…' : '📦 Post Stock Consumption' }}
+                </button>
                 <button v-if="!readOnly" class="psx-btn psx-btn-light" @click="save" :disabled="saving || loading">
                   {{ saving ? 'Saving…' : (isNew ? 'Save' : 'Save Changes') }}
                 </button>
@@ -121,6 +124,24 @@
             <div>
               <div class="psx-hf-label">Packed By</div>
               <input class="psx-fi" v-model="ps.packed_by" :disabled="readOnly" style="width:100%"/>
+            </div>
+            <div>
+              <div class="psx-hf-label">Consume Materials From</div>
+              <select class="psx-fi" v-model="ps.source_warehouse" :disabled="postLocked" style="width:100%">
+                <option value="">— Select —</option>
+                <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+              </select>
+            </div>
+            <div>
+              <div class="psx-hf-label">Receive Packed Goods At</div>
+              <select class="psx-fi" v-model="ps.target_warehouse" :disabled="postLocked" style="width:100%">
+                <option value="">— Defaults to Work Order FG Warehouse —</option>
+                <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+              </select>
+            </div>
+            <div v-if="ps.stock_entry">
+              <div class="psx-hf-label">Stock Entry Posted</div>
+              <input class="psx-fi" :value="ps.stock_entry" disabled style="width:100%;color:var(--bx-green);font-weight:600;"/>
             </div>
           </div>
 
@@ -290,6 +311,10 @@ function emptyPS() {
     qty_to_pack: 1,
     packing_date: new Date().toISOString().slice(0, 10),
     packed_by: "",
+    source_warehouse: "",
+    target_warehouse: "",
+    stock_entry: "",
+    posted_batch_no: "",
     items: [],
     remarks: "",
   };
@@ -301,6 +326,12 @@ const itemsList = ref([]);
 const uomList = ref([]);
 
 const readOnly = computed(() => !isNew.value && (ps.value.status === "Packed" || ps.value.status === "Cancelled"));
+// Warehouses (and the Post Stock Consumption action) lock only once stock
+// has actually been posted -- they stay editable through "Packed" status so
+// the user can pick warehouses before triggering the Stock Entry.
+const postLocked = computed(() => !!ps.value.stock_entry || ps.value.status === "Cancelled");
+const warehouseList = ref([]);
+const postingStock = ref(false);
 const packedCount = computed(() =>
   (ps.value.items || []).filter(r => flt(r.packed_qty) >= flt(r.required_qty) - 0.0001 && flt(r.required_qty) > 0).length
 );
@@ -308,8 +339,8 @@ const packedCount = computed(() =>
 onMounted(async () => {
   loading.value = true;
   try {
-    await resolveCompany();
-    const [wos, items, uoms] = await Promise.all([
+    const co = await resolveCompany();
+    const [wos, items, uoms, warehouses] = await Promise.all([
       apiList("Work Order", {
         fields: ["name", "production_item", "bom", "status", "qty", "produced_qty"],
         filters: [["docstatus", "=", 1], ["status", "!=", "Cancelled"]],
@@ -318,10 +349,12 @@ onMounted(async () => {
       }),
       apiList("Item", { fields: ["name", "item_name", "stock_uom"], limit: 5000, order: "name asc" }),
       apiList("UOM", { fields: ["name"], limit: 200, order: "name asc" }),
+      apiList("Warehouse", { fields: ["name"], filters: [["company", "=", co], ["is_group", "=", 0]], limit: 200, order: "name asc" }),
     ]);
     workOrderList.value = wos || [];
     itemsList.value = items || [];
     uomList.value = uoms || [];
+    warehouseList.value = warehouses || [];
   } catch (e) {
     toast("Error loading manufacturing data: " + e.message, "error");
   }
@@ -428,6 +461,27 @@ async function markPacked() {
     toast(e.message, "error");
   }
   saving.value = false;
+}
+
+async function postStockConsumption() {
+  if (!ps.value.source_warehouse) return toast("Select a 'Consume Materials From' warehouse first", "error");
+  postingStock.value = true;
+  try {
+    // Persist the chosen warehouses before posting, so the engine call
+    // reads what's actually on screen rather than a stale saved value.
+    const saved = await apiSave(ps.value);
+    ps.value = saved;
+    const stockEntry = await apiCall(
+      "zoho_books_clone.manufacturing.packing_engine.post_packing_consumption",
+      { packing_slip: ps.value.name }
+    );
+    toast(`Stock posted — ${stockEntry}`);
+    await loadPS();
+    loadList();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  postingStock.value = false;
 }
 
 async function cancelPS() {

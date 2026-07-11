@@ -55,7 +55,11 @@ def get_open_sales_orders(company=None):
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     assert_can("Sales Order", "read")
 
-    filters = {"status": ["not in", ["Closed", "Cancelled"]]}
+    # docstatus=1 (submitted) is required in addition to the status check --
+    # "Draft" is a valid `status` value for an unsubmitted (docstatus=0)
+    # Sales Order, so without this an order that was never even confirmed
+    # could show up as demand in the Production Plan picker.
+    filters = {"status": ["not in", ["Closed", "Cancelled"]], "docstatus": 1}
     if company:
         filters["company"] = company
 
@@ -321,9 +325,17 @@ def maybe_complete_production_plan(production_plan_name):
     Production Plan is now Completed, set the PP status to 'Completed'."""
     if not production_plan_name:
         return
+    # Include Draft (docstatus=0) Work Orders, not just submitted ones.
+    # create_work_orders() deliberately leaves new Work Orders in Draft for
+    # review before submitting -- excluding them here meant completing every
+    # *submitted* Work Order could close out the whole Production Plan while
+    # a real, planned-for Work Order was still sitting untouched in Draft.
+    # A Draft row's own status is never "Completed", so including it here
+    # naturally keeps the plan open until it's been submitted and finished
+    # (or explicitly cancelled, which is excluded).
     all_wos = frappe.get_all(
         "Work Order",
-        filters={"production_plan": production_plan_name, "docstatus": 1},
+        filters={"production_plan": production_plan_name, "docstatus": ["in", [0, 1]]},
         fields=["status"],
     )
     if not all_wos:

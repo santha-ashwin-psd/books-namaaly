@@ -208,10 +208,11 @@ function goBackToList() {
 
 async function isWorkstationDeletable(row) {
   try {
-    const [inOp, inWoOp, inBomOp] = await Promise.all([
+    const [inOp, inWoOp, inBomOp, inJobCard] = await Promise.all([
       apiList("Operation", { fields: ["name"], filters: [["default_workstation", "=", row.name]], limit: 1 }),
       apiList("Work Order Operation", { fields: ["parent"], filters: [["workstation", "=", row.name]], limit: 1 }),
       apiList("BOM Operation", { fields: ["parent"], filters: [["workstation", "=", row.name]], limit: 1 }),
+      apiList("Job Card", { fields: ["name"], filters: [["workstation", "=", row.name]], limit: 1 }),
     ]);
     if (inOp && inOp.length) {
       toast(`${row.name} is used as the default workstation on Operation ${inOp[0].name} and cannot be deleted.`, "error");
@@ -223,6 +224,10 @@ async function isWorkstationDeletable(row) {
     }
     if (inBomOp && inBomOp.length) {
       toast(`${row.name} is used by BOM ${inBomOp[0].parent} and cannot be deleted.`, "error");
+      return false;
+    }
+    if (inJobCard && inJobCard.length) {
+      toast(`${row.name} is referenced by Job Card ${inJobCard[0].name} and cannot be deleted.`, "error");
       return false;
     }
   } catch (e) {

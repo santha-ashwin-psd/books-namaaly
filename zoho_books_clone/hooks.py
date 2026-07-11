@@ -130,6 +130,7 @@ global_search_doctypes = {
         {"doctype": "Material Request"},
         {"doctype": "Packing Slip"},
         {"doctype": "Alternative Item"},
+        {"doctype": "Material Substitution Log"},
         {"doctype": "Operation"},
         {"doctype": "Workstation"},
         {"doctype": "Routing"},

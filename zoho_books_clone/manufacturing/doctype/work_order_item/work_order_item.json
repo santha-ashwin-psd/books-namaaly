@@ -88,6 +88,32 @@
    "fieldtype": "Currency",
    "label": "Amount",
    "read_only": 1
+  },
+  {
+   "fieldname": "sec_substitution",
+   "fieldtype": "Section Break",
+   "label": "Substitution"
+  },
+  {
+   "fieldname": "is_substituted",
+   "fieldtype": "Check",
+   "label": "Is Substituted",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "original_item_code",
+   "fieldtype": "Data",
+   "label": "Original Item Code",
+   "read_only": 1,
+   "depends_on": "eval:doc.is_substituted"
+  },
+  {
+   "fieldname": "substitution_reason",
+   "fieldtype": "Small Text",
+   "label": "Substitution Reason",
+   "read_only": 1,
+   "depends_on": "eval:doc.is_substituted"
   }
  ],
  "permissions": []

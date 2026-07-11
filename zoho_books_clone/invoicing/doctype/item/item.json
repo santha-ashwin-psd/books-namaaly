@@ -1314,6 +1314,13 @@
    "description": "Flag only for now \u2014 no Quality Inspection doctype exists yet. Indicates this item should be QC'd before receipt/consumption."
   },
   {
+   "fieldname": "requires_substitution_approval",
+   "fieldtype": "Check",
+   "label": "Requires Approval for Substitution",
+   "default": "0",
+   "description": "Mark for active ingredients / herbs where any Alternative Item substitution in production must be reviewed and approved before it takes effect. Leave unchecked for packaging/excipient items, where substitution can apply immediately."
+  },
+  {
    "creation": "2026-07-10 00:00:00.000000",
    "modified": "2026-07-10 00:00:00.000000",
    "modified_by": "Administrator",

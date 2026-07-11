@@ -158,12 +158,17 @@
               <div v-if="!doc.time_logs || !doc.time_logs.length" class="bomx-tree-empty">No time logs yet.</div>
               <div v-for="(tl, idx) in doc.time_logs" :key="tl._uid" class="bomx-rm-card">
                 <div class="bomx-rm-card-hdr">
-                  <div class="bomx-rm-card-title">Log #{{ idx + 1 }}</div>
+                  <div class="bomx-rm-card-title">
+                    Log #{{ idx + 1 }}
+                    <span v-if="tl.from_time && !tl.to_time" class="bomx-badge badge-wip" style="margin-left:6px;font-size:10px">Running</span>
+                  </div>
+                  <button v-if="!tl.from_time || tl.to_time" class="bomx-btn bomx-btn-sm" style="background:var(--bx-greenS);color:var(--bx-green)" @click="startTimeLog(tl)">▶ Start</button>
+                  <button v-else class="bomx-btn bomx-btn-sm" style="background:var(--bx-redS);color:var(--bx-red)" @click="stopTimeLog(tl)">■ Stop</button>
                   <div class="bomx-rm-card-amt" v-if="tl.time_in_mins">
                     <span class="bomx-rm-card-amt-lbl">Duration</span>
                     <span class="mono" style="font-size:13px;font-weight:700;color:var(--bx-mfgB)">{{ fmtMins(tl.time_in_mins) }}</span>
                   </div>
-                  <button class="bomx-btn-icon danger" @click="doc.time_logs.splice(idx,1)" title="Remove">
+                  <button class="bomx-btn-icon danger" @click="removeTimeLog(idx)" title="Remove">
                     <span v-html="icon('trash',13)"></span>
                   </button>
                 </div>
@@ -184,6 +189,9 @@
                     <label>Employee</label>
                     <input class="bomx-fi" type="text" v-model="tl.employee" placeholder="Name"/>
                   </div>
+                </div>
+                <div v-if="tl._invalidRange" class="bomx-field-hint" style="color:var(--bx-red);font-weight:600;padding:0 14px 10px">
+                  ⚠ To Time is before From Time — fix this row before saving.
                 </div>
               </div>
             </div>
@@ -229,7 +237,7 @@ const { confirm } = useConfirm();
 const loading = ref(false);
 const list = ref([]);
 const search = ref("");
-const filterStatus = ref("");
+const filterStatus = ref(typeof route.query.status === "string" ? route.query.status : "");
 
 const selectedName = computed(() => (route.params.name && route.params.name !== "new") ? route.params.name : (route.params.name === "new" ? "new" : null));
 
@@ -322,7 +330,7 @@ function ensureUids(rows) { (rows || []).forEach(r => { if (!r._uid) r._uid = ne
 async function loadDropdowns() {
   try {
     const [wos, ops, wks] = await Promise.all([
-      apiList("Work Order", { fields: ["name"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" }),
+      apiList("Work Order", { fields: ["name"], filters: [["docstatus", "=", 1], ["status", "not in", ["Completed", "Stopped", "Cancelled"]]], limit: 2000, order: "name desc" }),
       apiList("Operation",  { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
       apiList("Workstation",{ fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
     ]);
@@ -350,6 +358,13 @@ watch(() => route.params.name, async (name) => {
 async function loadDoc() {
   if (isNew.value) {
     doc.value = emptyDoc();
+    // Deep-link support: Work Order page can send users here pre-filled via
+    // /manufacturing/job-card/new?work_order=X&operation=Y&workstation=Z
+    if (route.query.work_order) doc.value.work_order = route.query.work_order;
+    if (route.query.operation) doc.value.operation = route.query.operation;
+    if (route.query.workstation) doc.value.workstation = route.query.workstation;
+    if (route.query.work_order && !workOrdersList.value.some(w => w.name === route.query.work_order))
+      workOrdersList.value = [{ name: route.query.work_order }, ...workOrdersList.value];
     return;
   }
   detailLoading.value = true;
@@ -373,16 +388,46 @@ async function loadDoc() {
 }
 
 function calcTimeDiff(tl) {
-  if (!tl.from_time || !tl.to_time) { tl.time_in_mins = 0; return; }
+  if (!tl.from_time || !tl.to_time) { tl.time_in_mins = 0; tl._invalidRange = false; recomputeTotal(); return; }
   const diff = (new Date(tl.to_time) - new Date(tl.from_time)) / 60000;
-  tl.time_in_mins = diff > 0 ? parseFloat(diff.toFixed(2)) : 0;
+  if (diff > 0) {
+    tl.time_in_mins = parseFloat(diff.toFixed(2));
+    tl._invalidRange = false;
+  } else {
+    // Don't silently zero this out and hide the problem — flag the row so the
+    // user sees exactly which one is wrong, right where they're editing it,
+    // instead of finding out from a generic toast after clicking Save.
+    tl.time_in_mins = 0;
+    tl._invalidRange = true;
+  }
+  recomputeTotal();
+}
+
+function recomputeTotal() {
   doc.value.total_time_in_mins = (doc.value.time_logs || []).reduce((s, r) => s + (r.time_in_mins || 0), 0);
+}
+
+function removeTimeLog(idx) {
+  doc.value.time_logs.splice(idx, 1);
+  recomputeTotal();
+}
+
+function startTimeLog(tl) {
+  tl.from_time = new Date().toISOString().slice(0, 16);
+  tl.to_time = "";
+  tl.time_in_mins = 0;
+  tl._invalidRange = false;
+  recomputeTotal();
+}
+
+function stopTimeLog(tl) {
+  tl.to_time = new Date().toISOString().slice(0, 16);
+  calcTimeDiff(tl);
 }
 
 function addTimeLog() {
   if (!doc.value.time_logs) doc.value.time_logs = [];
-  const now = new Date().toISOString().slice(0, 16);
-  doc.value.time_logs.push({ _uid: nextUid(), from_time: now, to_time: "", time_in_mins: 0, employee: doc.value.employee || "" });
+  doc.value.time_logs.push({ _uid: nextUid(), from_time: "", to_time: "", time_in_mins: 0, employee: doc.value.employee || "" });
 }
 
 function fmtMins(m) {
@@ -393,12 +438,15 @@ function fmtMins(m) {
 async function save() {
   if (!doc.value.work_order) return toast("Work Order is required", "error");
   if (!doc.value.operation)  return toast("Operation is required", "error");
+  if ((doc.value.time_logs || []).some(tl => tl._invalidRange)) {
+    return toast("Fix the time log row where To Time is before From Time", "error");
+  }
 
   saving.value = true;
   try {
     const payload = {
       ...doc.value,
-      time_logs: (doc.value.time_logs || []).map(({ _uid, ...rest }) => rest),
+      time_logs: (doc.value.time_logs || []).map(({ _uid, _invalidRange, ...rest }) => rest),
     };
     const r = await apiSave(payload);
     toast(isNew.value ? "Job Card created successfully" : "Saved successfully");

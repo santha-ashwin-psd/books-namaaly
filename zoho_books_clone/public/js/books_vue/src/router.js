@@ -74,7 +74,9 @@ import PurchaseReceipts       from "./pages/PurchaseReceipts.vue";
 import QualityInspections     from "./pages/QualityInspections.vue";
 import QCTemplates            from "./pages/QCTemplates.vue";
 import QCApprovals            from "./pages/QCApprovals.vue";
+import MaterialSubstitutions  from "./pages/MaterialSubstitutions.vue";
 import BOM                    from "./pages/BOM.vue";
+import ManufacturingDashboard  from "./pages/ManufacturingDashboard.vue";
 import Operation              from "./pages/Operation.vue";
 import Workstation            from "./pages/Workstation.vue";
 import WorkstationType        from "./pages/WorkstationType.vue";
@@ -269,6 +271,7 @@ const routes = [
   { path: "/quality/templates",   name: "quality-templates",   component: QCTemplates,         meta: { module: "inventory" } },
   { path: "/quality/approvals",   name: "quality-approvals",   component: QCApprovals,         meta: { module: "inventory" } },
   // Manufacturing
+  { path: "/manufacturing",                      name: "manufacturing-dashboard",         component: ManufacturingDashboard, meta: { module: "inventory" } },
   { path: "/manufacturing/bom",                 name: "manufacturing-bom",              component: BOM,             meta: { module: "inventory" } },
   { path: "/manufacturing/bom/:name",            name: "manufacturing-bom-view",          component: BOM,             meta: { module: "inventory" } },
   { path: "/manufacturing/operation",            name: "manufacturing-operation",         component: Operation,       meta: { module: "inventory" } },
@@ -291,6 +294,7 @@ const routes = [
   { path: "/manufacturing/packing-slip/:name",     name: "manufacturing-packing-slip-view",      component: PackingSlip,         meta: { module: "inventory" } },
   { path: "/manufacturing/alternative-item",       name: "manufacturing-alternative-item",       component: AlternativeItem,       meta: { module: "inventory" } },
   { path: "/manufacturing/alternative-item/:name", name: "manufacturing-alternative-item-view",  component: AlternativeItem,       meta: { module: "inventory" } },
+  { path: "/manufacturing/material-substitutions", name: "manufacturing-material-substitutions", component: MaterialSubstitutions, meta: { module: "inventory" } },
   { path: "/manufacturing/settings",               name: "manufacturing-settings",               component: ManufacturingSettings, meta: { module: "inventory" } },
   { path: "/manufacturing/reports",               name: "manufacturing-reports",                component: ManufacturingReports,  meta: { module: "inventory" } },
   // Future phases append entries here.

@@ -167,6 +167,16 @@
    "depends_on": "eval:doc.bom_type=='Packing'"
   },
   {
+   "fieldname": "bulk_rate",
+   "fieldtype": "Float",
+   "label": "Bulk Item Rate",
+   "description": "Cost per unit of the Bulk Item, used to value it into this BOM's Raw Material Cost. Leave 0 to exclude it from costing.",
+   "mandatory_depends_on": "eval:doc.bom_type=='Packing'",
+   "depends_on": "eval:doc.bom_type=='Packing'",
+   "reqd": 0,
+   "default": ""
+  },
+  {
    "fieldname": "sb_materials",
    "fieldtype": "Section Break",
    "label": "Raw Materials",

@@ -12,9 +12,21 @@ class PackingSlip(Document):
 
     def validate(self):
         if not self.is_new():
-            prev_status = frappe.db.get_value("Packing Slip", self.name, "status")
+            prev_status, prev_stock_entry = frappe.db.get_value(
+                "Packing Slip", self.name, ["status", "stock_entry"]
+            )
             if prev_status == "Cancelled":
                 frappe.throw(_("This Packing Slip is cancelled and cannot be edited."))
+            if prev_stock_entry:
+                # Stock has already been consumed/received for this slip via
+                # post_packing_consumption. Any further edit here (qty,
+                # warehouses, items) would silently drift from what was
+                # actually posted to the stock ledger, so the slip is locked
+                # once stock_entry is set -- same treatment as Cancelled.
+                frappe.throw(_(
+                    "Stock has already been posted for this Packing Slip ({0}) "
+                    "and it can no longer be edited."
+                ).format(prev_stock_entry))
 
         if not self.packing_date:
             self.packing_date = nowdate()

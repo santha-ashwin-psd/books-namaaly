@@ -47,10 +47,12 @@
         <div class="mrx-hf-label">Status</div>
         <select class="mrx-fi" v-model="filters.status">
           <option value="All">All</option>
+          <option v-if="activeTab === 'wo-status'" value="Draft">Draft</option>
           <option v-if="activeTab === 'wo-status'" value="Submitted">Submitted</option>
           <option v-if="activeTab === 'wo-status'" value="In Process">In Process</option>
           <option value="Completed">Completed</option>
           <option v-if="activeTab === 'wo-status'" value="Stopped">Stopped</option>
+          <option v-if="activeTab === 'wo-status'" value="Cancelled">Cancelled</option>
         </select>
       </div>
 

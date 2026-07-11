@@ -72,6 +72,7 @@ export const NAV = [
   // { path: "/quality/approvals",             label: "QC Approvals",     icon: "check",      module: "inventory"  },
 
   { section: "Manufacturing" },
+  // { path: "/manufacturing",                    label: "Dashboard",        icon: "grid",       module: "inventory" },
   { path: "/manufacturing/bom",               label: "Bill of Materials", icon: "box",        module: "inventory" },
   { path: "/manufacturing/operation",         label: "Operations",       icon: "stack",      module: "inventory" },
   { path: "/manufacturing/workstation",       label: "Workstations",     icon: "gear",       module: "inventory" },
@@ -83,6 +84,7 @@ export const NAV = [
   { path: "/manufacturing/material-request",  label: "Material Requests", icon: "purchase",   module: "inventory" },
   { path: "/manufacturing/packing-slip",      label: "Packing Slips",     icon: "box",        module: "inventory" },
   { path: "/manufacturing/alternative-item", label: "Alternative Items",   icon: "stack", module: "inventory" },
+  { path: "/manufacturing/material-substitutions", label: "Substitution Approvals", icon: "check", module: "inventory" },
   { path: "/manufacturing/reports",          label: "Mfg Reports",         icon: "chart",      module: "inventory" },
   { path: "/manufacturing/settings",         label: "Mfg Settings",        icon: "gear",       module: "inventory" },
 

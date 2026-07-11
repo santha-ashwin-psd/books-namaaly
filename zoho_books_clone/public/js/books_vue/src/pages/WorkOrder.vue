@@ -116,6 +116,9 @@
                     <option v-for="b in filteredBomList" :key="b.name" :value="b.name">{{ b.name }} — {{ b.item_name || b.item }}</option>
                   </select>
                   <div class="bomx-field-hint" v-if="wo.item_name">Manufactures: <strong>{{ wo.item_name }}</strong> ({{ wo.stock_uom }})</div>
+                  <div class="bomx-field-hint" style="color:var(--bx-amber);font-weight:600" v-if="warnBomNotDefault && wo.bom && selectedBomIsNotDefault">
+                    ⚠ This isn't the default BOM for {{ wo.item_name || selectedProductionItem }}.
+                  </div>
                 </div>
                 <div>
                   <div class="bomx-hf-label">Qty to Manufacture <span style="color:var(--bx-red)">*</span></div>
@@ -164,7 +167,7 @@
               </div>
 
               <div class="bomx-section-lbl">Schedule</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:20px">
+              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">Planned Start Date</div>
                   <input class="bomx-fi" type="date" v-model="wo.planned_start_date" :disabled="readOnly" style="width:100%"/>
@@ -173,6 +176,20 @@
                   <div class="bomx-hf-label">Planned End Date</div>
                   <input class="bomx-fi" type="date" v-model="wo.planned_end_date" :disabled="readOnly" style="width:100%"/>
                 </div>
+              </div>
+              <div v-if="totalPlannedOperationMinutes > 0" class="bomx-field-hint" style="margin-bottom:20px">
+                Estimated {{ estimatedProductionDays.toFixed(1) }} working day(s) at {{ jobCardHoursPerDay }} hr/day
+                (capacity planning window: {{ capacityPlanningForDays }} day(s)).
+                <span v-if="capacityWindowExceeded" style="color:var(--bx-amber);font-weight:600">
+                  ⚠ This exceeds the configured capacity planning window.
+                </span>
+                <button
+                  v-if="!readOnly && wo.planned_start_date"
+                  type="button"
+                  class="bomx-btn bomx-btn-sm bomx-btn-light"
+                  style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg);margin-left:8px"
+                  @click="suggestPlannedEndDate"
+                >Suggest End Date</button>
               </div>
 
               <div class="bomx-section-lbl" style="display:flex;align-items:center;justify-content:space-between">
@@ -185,7 +202,9 @@
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">📦</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ rm.item_code || 'New Row' }}</span>
+                    <span v-if="rm.is_substituted" class="bomx-badge" style="background:#eef2ff;color:#4338ca;font-size:10px" :title="'Substituted from ' + rm.original_item_code">Substituted</span>
                     <div style="flex:1"></div>
+                    <button v-if="readOnly && wo.docstatus===1 && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="openSubstitute(rm)" title="Substitute this material">Substitute</button>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -195,7 +214,7 @@
                       <label>Item Code</label>
                       <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly">
                         <option value="">— Select —</option>
-                        <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                        <option v-for="i in rawMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                       </select>
                     </div>
                     <div class="bomx-rm-field">
@@ -232,6 +251,12 @@
                     <span class="bomx-tree-icon">⚙️</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ op.operation || 'New Operation' }}</span>
                     <div style="flex:1"></div>
+                    <template v-if="!isNew && op.operation">
+                      <span v-for="jc in jobCardsFor(op.operation)" :key="jc.name" class="bomx-badge"
+                            style="cursor:pointer" :class="jc.status==='Completed' ? 'badge-active' : (jc.status==='Cancelled' ? 'badge-obsolete' : 'badge-wip')"
+                            :title="jc.name" @click="router.push('/manufacturing/job-card/' + jc.name)">{{ jc.status || 'Open' }}</span>
+                      <button v-if="!jobCardsFor(op.operation).length" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="createJobCardFor(op)">+ Job Card</button>
+                    </template>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -254,6 +279,12 @@
                     <div class="bomx-rm-field">
                       <label>Planned (Mins)</label>
                       <input class="bomx-fi bomx-fi-mono" type="number" v-model="op.planned_time_in_mins" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                    <div class="bomx-rm-field" v-if="!isNew">
+                      <label>Actual (Mins)</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" :value="fmt(op.actual_time_in_mins)" disabled
+                        :style="flt(op.actual_time_in_mins) > flt(op.planned_time_in_mins) && flt(op.planned_time_in_mins) > 0 ? 'color:var(--bx-red);font-weight:600;' : ''"
+                        title="Rolled up from Job Card time logs for this operation"/>
                     </div>
                     <div class="bomx-rm-field">
                       <label>Status</label>
@@ -332,6 +363,27 @@
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div class="bomx-prod-card">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div class="bomx-section-lbl" style="margin-bottom:0">Job Cards</div>
+                    <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadJobCards" :disabled="jcLoading">Refresh</button>
+                  </div>
+                  <div class="bomx-rm-cards" style="margin-top:10px" v-if="jobCards.length">
+                    <div class="bomx-rm-card" v-for="jc in jobCards" :key="jc.name" style="cursor:pointer" @click="router.push('/manufacturing/job-card/' + jc.name)">
+                      <div class="bomx-rm-card-hdr">
+                        <span class="bomx-tree-icon">🗂️</span>
+                        <span class="bomx-rm-card-title mono" style="font-weight:600">{{ jc.name }}</span>
+                        <span class="bomx-badge" :class="jc.status==='Completed' ? 'badge-active' : (jc.status==='Cancelled' ? 'badge-obsolete' : 'badge-wip')">{{ jc.status || 'Open' }}</span>
+                      </div>
+                      <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
+                        <div class="bomx-rm-field"><label>Operation</label><div class="bomx-rm-static">{{ jc.operation }}</div></div>
+                        <div class="bomx-rm-field"><label>Workstation</label><div class="bomx-rm-static">{{ jc.workstation || '—' }}</div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="bomx-tree-empty">No Job Cards created for this Work Order yet.</div>
                 </div>
 
                 <div class="bomx-prod-card">
@@ -455,6 +507,47 @@
     </div>
   </div>
 
+  <!-- Substitute Material Modal -->
+  <div v-if="showSubstituteModal" class="bomx-modal-overlay" @click.self="closeSubstituteModal">
+    <div class="bomx-modal" style="width:520px;max-width:94vw">
+      <div class="bomx-modal-title">Substitute Material</div>
+      <div class="bomx-modal-body">
+        <div style="margin-bottom:14px">
+          <div class="bomx-hf-label">Original Item</div>
+          <div class="bomx-rm-static">{{ substituteRow && substituteRow.item_code }}</div>
+        </div>
+        <div v-if="substituteLoading" class="bomx-tree-empty">Loading alternatives…</div>
+        <div v-else-if="!substituteOptions.length" class="bomx-tree-empty">
+          No Alternative Items are defined for this item. Add one under Manufacturing → Alternative Items first.
+        </div>
+        <template v-else>
+          <div style="margin-bottom:14px">
+            <div class="bomx-hf-label">Alternative Item <span style="color:var(--bx-red)">*</span></div>
+            <select class="bomx-fi" v-model="substituteForm.alternative_item_code" style="width:100%">
+              <option value="">— Select —</option>
+              <option v-for="o in substituteOptions" :key="o.alternative_item_code" :value="o.alternative_item_code">
+                {{ o.alternative_item_code }}{{ o.is_default ? ' (default)' : '' }} — factor {{ o.conversion_factor }}
+              </option>
+            </select>
+            <div v-if="selectedOption && selectedOption.requires_approval" class="bomx-field-hint" style="color:var(--bx-amber);font-weight:600">
+              This item requires approval — the substitution won't apply until a Books Admin / System Manager reviews it.
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div class="bomx-hf-label">Reason <span style="color:var(--bx-red)">*</span></div>
+            <textarea class="bomx-fi" rows="2" style="width:100%" v-model="substituteForm.reason" placeholder="Why this substitution is needed…"></textarea>
+          </div>
+        </template>
+      </div>
+      <div class="bomx-modal-actions">
+        <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeSubstituteModal" :disabled="substituteSaving">Cancel</button>
+        <button v-if="substituteOptions.length" class="bomx-btn bomx-btn-mfg" @click="submitSubstitute" :disabled="substituteSaving">
+          {{ substituteSaving ? 'Submitting…' : 'Submit Substitution' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
 </template>
 
@@ -463,16 +556,18 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 
 const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
+const { confirm } = useConfirm();
 
 // ── LIST STATE ──────────────────────────────────────────────
 const loading = ref(false);
 const list = ref([]);
 const search = ref("");
-const filterStatus = ref("");
+const filterStatus = ref(typeof route.query.status === "string" ? route.query.status : "");
 
 const statusOptions = ["Draft", "Submitted", "In Process", "Stopped", "Completed", "Cancelled"];
 
@@ -574,10 +669,18 @@ const stockItems = ref([]);
 const manufacturedItems = computed(() =>
   stockItems.value.filter(i => i.item_type === "Finished Good" || i.item_type === "Work In Progress")
 );
+// Raw-material row picker: exclude Finished Goods (a finished good shouldn't be
+// consumed as a raw material into another Work Order) — mirrors BOM.vue's
+// rawMaterialItems restriction on the BOM component picker.
+const rawMaterialItems = computed(() =>
+  stockItems.value.filter(i => i.item_type !== "Finished Good")
+);
 const warehouseList = ref([]);
 const stockEntries = ref([]);
 const qcInspections = ref([]);
 const qcLoading = ref(false);
+const jobCards = ref([]);
+const jcLoading = ref(false);
 const operationsList = ref([]);
 const workstationsList = ref([]);
 const companiesList = ref([]);
@@ -638,6 +741,10 @@ onMounted(async () => {
 // New Work Order — prefill default warehouses from Manufacturing Settings
 // (previously these only appeared after a BOM was selected)
 let manufacturingDefaults = null;
+const warnBomNotDefault = ref(true);
+const warnOnMissingJobCards = ref(true);
+const jobCardHoursPerDay = ref(8);
+const capacityPlanningForDays = ref(30);
 async function fetchManufacturingDefaults() {
   try {
     manufacturingDefaults = await apiCall(
@@ -645,11 +752,50 @@ async function fetchManufacturingDefaults() {
     );
     if (manufacturingDefaults) {
       overProductionAllowancePct.value = flt(manufacturingDefaults.over_production_allowance_pct);
+      warnBomNotDefault.value = !!manufacturingDefaults.warn_if_bom_not_default;
+      warnOnMissingJobCards.value = !!manufacturingDefaults.warn_on_missing_job_cards;
+      jobCardHoursPerDay.value = flt(manufacturingDefaults.job_card_hours_per_day) || 8;
+      capacityPlanningForDays.value = flt(manufacturingDefaults.capacity_planning_for_days) || 30;
     }
   } catch (e) {
     // non-fatal — settings may not be configured yet
   }
 }
+
+// Total planned operation time across all rows, in minutes
+const totalPlannedOperationMinutes = computed(() =>
+  (wo.value.operations || []).reduce((sum, op) => sum + (flt(op.planned_time_in_mins) || 0), 0)
+);
+
+// Estimated number of working days needed to run all operations,
+// based on Manufacturing Settings > Job Card Hours Per Day
+const estimatedProductionDays = computed(() => {
+  const hoursPerDay = jobCardHoursPerDay.value || 8;
+  const totalHours = totalPlannedOperationMinutes.value / 60;
+  return hoursPerDay > 0 ? totalHours / hoursPerDay : 0;
+});
+
+// Whether the estimated duration exceeds the configured capacity planning window
+const capacityWindowExceeded = computed(() =>
+  estimatedProductionDays.value > (capacityPlanningForDays.value || 0)
+);
+
+// Suggests a Planned End Date from Planned Start Date + estimated production days,
+// respecting Job Card Hours Per Day. Does not overwrite a date the user already set.
+function suggestPlannedEndDate() {
+  if (!wo.value.planned_start_date || !totalPlannedOperationMinutes.value) return;
+  const days = Math.max(1, Math.ceil(estimatedProductionDays.value));
+  const start = new Date(wo.value.planned_start_date);
+  if (isNaN(start)) return;
+  start.setDate(start.getDate() + days);
+  wo.value.planned_end_date = start.toISOString().slice(0, 10);
+}
+
+const selectedBomIsNotDefault = computed(() => {
+  if (!wo.value.bom) return false;
+  const b = bomList.value.find(x => x.name === wo.value.bom);
+  return !!b && !b.is_default;
+});
 
 function applyWarehouseDefaults() {
   const ms = manufacturingDefaults;
@@ -689,7 +835,7 @@ async function loadWO() {
   selectedProductionItem.value = data.production_item || "";
   if (!wo.value.items) wo.value.items = [];
   if (!wo.value.operations) wo.value.operations = [];
-  if (wo.value.docstatus === 1) await loadStockEntries();
+  if (wo.value.docstatus === 1) { await loadStockEntries(); await loadJobCards(); }
 
   // If the linked BOM is no longer active (it was amended into a newer version,
   // or cancelled), auto-switch a still-editable draft to the latest active
@@ -968,6 +1114,32 @@ async function loadQcInspections() {
   qcLoading.value = false;
 }
 
+// Job Cards aren't a child table on Work Order — they're separate documents that
+// reference this Work Order by name. Surface them here (with a shortcut to create
+// one per operation) rather than making users navigate to a separate page and
+// re-pick the same Work Order + Operation from scratch.
+async function loadJobCards() {
+  jcLoading.value = true;
+  try {
+    jobCards.value = await apiList("Job Card", {
+      fields: ["name", "operation", "workstation", "status", "for_quantity", "total_time_in_mins"],
+      filters: [["work_order", "=", wo.value.name]],
+      limit: 100, order: "creation desc",
+    }) || [];
+  } catch (e) { jobCards.value = []; }
+  jcLoading.value = false;
+}
+
+function jobCardsFor(opName) {
+  return (jobCards.value || []).filter(jc => jc.operation === opName);
+}
+function createJobCardFor(op) {
+  router.push({
+    path: "/manufacturing/job-card/new",
+    query: { work_order: wo.value.name, operation: op.operation, workstation: op.workstation || "" },
+  });
+}
+
 const qcSummary = computed(() => {
   const list = qcInspections.value || [];
   if (!list.length) return null;
@@ -1050,6 +1222,24 @@ async function submitComplete() {
   if (qty <= 0) return toast("Qty Manufactured must be greater than zero", "error");
   if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value>0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}`, "error");
 
+  // Warn on Incomplete Job Cards (Manufacturing Settings): if this completion
+  // would finish the Work Order but one or more Job Cards are still open,
+  // give the user a chance to back out and close them first — otherwise
+  // they're silently force-completed by the backend once the WO is done.
+  const willFinish = (wo.value.produced_qty || 0) + qty >= flt(wo.value.qty) - 0.0001;
+  if (warnOnMissingJobCards.value && willFinish) {
+    const incomplete = (jobCards.value || []).filter(jc => jc.status !== "Completed" && jc.status !== "Cancelled");
+    if (incomplete.length) {
+      const names = incomplete.map(jc => jc.name).join(", ");
+      if (!(await confirm({
+        title: "Incomplete Job Cards",
+        body: `This completion will finish the Work Order, but ${incomplete.length} Job Card(s) are still open (${names}). They'll be force-marked Completed. Continue anyway?`,
+        okLabel: "Complete Anyway",
+        okStyle: "danger",
+      }))) return;
+    }
+  }
+
   actionLoading.value = "complete";
   try {
     const scrapItems = completeForm.value.scrap_items.filter(s => s.item_code && flt(s.qty) > 0);
@@ -1085,6 +1275,59 @@ async function createPackingSlip() {
     toast(e.message, "error");
   }
   actionLoading.value = false;
+}
+
+// ── Substitute Material modal ──────────────────────────────────────────
+const showSubstituteModal = ref(false);
+const substituteRow = ref(null);
+const substituteOptions = ref([]);
+const substituteLoading = ref(false);
+const substituteSaving = ref(false);
+const substituteForm = ref({ alternative_item_code: "", reason: "" });
+
+const selectedOption = computed(() =>
+  substituteOptions.value.find(o => o.alternative_item_code === substituteForm.value.alternative_item_code) || null
+);
+
+async function openSubstitute(rm) {
+  substituteRow.value = rm;
+  substituteForm.value = { alternative_item_code: "", reason: "" };
+  substituteOptions.value = [];
+  showSubstituteModal.value = true;
+  substituteLoading.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.material_substitution.get_substitution_options", {
+      work_order: wo.value.name,
+      work_order_item_row: rm.name,
+    });
+    const data = res?.message || res || {};
+    substituteOptions.value = data.options || [];
+  } catch (e) {
+    toast(e.message || "Could not load alternative items", "error");
+  }
+  substituteLoading.value = false;
+}
+function closeSubstituteModal() { showSubstituteModal.value = false; }
+
+async function submitSubstitute() {
+  if (!substituteForm.value.alternative_item_code) return toast("Select an alternative item", "error");
+  if (!substituteForm.value.reason.trim()) return toast("A reason is required", "error");
+  substituteSaving.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.material_substitution.request_material_substitution", {
+      work_order: wo.value.name,
+      work_order_item_row: substituteRow.value.name,
+      alternative_item_code: substituteForm.value.alternative_item_code,
+      reason: substituteForm.value.reason,
+    });
+    const data = res?.message || res || {};
+    toast(data.message || "Substitution submitted");
+    showSubstituteModal.value = false;
+    await loadWO();
+  } catch (e) {
+    toast(e.message || "Substitution failed", "error");
+  }
+  substituteSaving.value = false;
 }
 
 function flt(n) { const v = parseFloat(n); return isNaN(v) ? 0 : v; }

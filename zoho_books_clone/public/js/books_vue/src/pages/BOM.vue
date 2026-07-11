@@ -13,6 +13,7 @@
         <option value="active">Active</option>
         <option value="draft">Draft</option>
         <option value="inactive">Inactive</option>
+        <option value="obsolete">Obsolete</option>
       </select>
       <input class="bomx-search" v-model="search" type="text" placeholder="Search BOM by item name or number…"/>
       <div class="bomx-list">
@@ -79,6 +80,11 @@
                         class="bomx-btn bomx-btn-light" @click="newVersion" :disabled="submitting">
                   {{ submitting ? 'Creating…' : '+ New Version' }}
                 </button>
+                <button v-if="!isNew && isLatestInChain && bom.docstatus===1"
+                        class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(255,255,255,.4)"
+                        @click="cancelBom" :disabled="submitting || cancelling">
+                  {{ cancelling ? 'Cancelling…' : 'Cancel BOM' }}
+                </button>
                 <button v-if="!isNew && bom.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitBom" :disabled="submitting || saving">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
@@ -118,11 +124,36 @@
                 <option v-for="r in routingsList" :key="r.name" :value="r.name">{{ r.name }}</option>
               </select>
             </div>
+            <div>
+              <div class="bomx-hf-label">BOM Type</div>
+              <select class="bomx-fi" v-model="bom.bom_type" :disabled="readOnly || !isNew" style="width:100%" title="BOM Type is set on creation and cannot be changed afterwards.">
+                <option value="Manufacturing">Manufacturing</option>
+                <option value="Sub-Assembly">Sub-Assembly</option>
+                <option value="Packing">Packing</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="bom.bom_type === 'Packing'" class="bomx-hdr-fields" style="border-top:1px dashed var(--bx-border)">
+            <div>
+              <div class="bomx-hf-label">Bulk Item</div>
+              <select class="bomx-fi" v-model="bom.bulk_item" @change="onBulkItemChange" :disabled="readOnly" style="width:100%" :title="itemNameFor(bom.bulk_item) || bom.bulk_item">
+                <option value="">— Select —</option>
+                <option v-for="i in bulkItemOptions" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+              </select>
+              <div class="bomx-field-hint">The loose/bulk output (from a Manufacturing BOM) that this Packing BOM packs into the Production Item.</div>
+            </div>
+            <div>
+              <div class="bomx-hf-label">Bulk Qty Consumed per Packed Unit</div>
+              <input class="bomx-fi bomx-fi-mono" type="number" v-model="bom.bulk_qty_per_unit" min="0" step="any" :disabled="readOnly" style="width:100%"/>
+            </div>
+            <div>
+              <div class="bomx-hf-label">Bulk Item Rate (₹)</div>
+              <input class="bomx-fi bomx-fi-mono" type="number" v-model="bom.bulk_rate" min="0" step="any" :disabled="readOnly" style="width:100%"/>
+            </div>
           </div>
           <div class="bomx-toggle-row">
             <label class="bomx-toggle"><input type="checkbox" v-model="bom.is_active" :true-value="1" :false-value="0" :disabled="readOnly"/> Is Active</label>
             <label class="bomx-toggle"><input type="checkbox" v-model="bom.is_default" :true-value="1" :false-value="0" :disabled="readOnly"/> Is Default</label>
-            <label class="bomx-toggle"><input type="checkbox" v-model="bom.allow_alternative_item" :true-value="1" :false-value="0" :disabled="readOnly"/> Allow Alt Item</label>
           </div>
 
           <!-- Tabs -->
@@ -165,7 +196,8 @@
                 </div>
               </div>
 
-              <!-- Raw Materials -->
+              <!-- Raw Materials (Manufacturing / Sub-Assembly BOMs) -->
+              <template v-if="bom.bom_type !== 'Packing'">
               <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px">
                 Raw Materials <span class="bomx-count" v-if="bom.items && bom.items.length">({{ bom.items.length }})</span>
               </div>
@@ -208,6 +240,10 @@
                         <option v-for="b in bomsList.filter(b => b.item === rm.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
                       </select>
                       <div class="bomx-field-hint" v-if="rm.item_code && !bomsList.some(b => b.item === rm.item_code)">No submitted BOM exists yet for this item — it can't be used as a sub-assembly until one is created.</div>
+                      <div class="bomx-field-hint bomx-field-hint-danger" v-else-if="rm.sub_assembly_bom && wouldCreateCycle(rm.sub_assembly_bom)">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        Circular reference: this sub-assembly loops back to this BOM. Explosion will be truncated.
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -216,8 +252,57 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Component
               </div>
+              </template>
 
-              <!-- Operations -->
+              <!-- Packing Materials (Packing BOMs only) -->
+              <template v-else>
+              <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px">
+                Packing Materials <span class="bomx-count" v-if="bom.packing_items && bom.packing_items.length">({{ bom.packing_items.length }})</span>
+              </div>
+              <div class="bomx-field-hint" style="margin-bottom:10px">Bottles, caps, labels, cartons etc. consumed per Quantity of the packed unit — the Bulk Item above is consumed separately.</div>
+              <div class="bomx-rm-cards">
+                <div v-if="!bom.packing_items || !bom.packing_items.length" class="bomx-tree-empty">No packing materials added.</div>
+                <div class="bomx-rm-card" v-for="(pi, idx) in bom.packing_items" :key="'pi'+idx">
+                  <div class="bomx-rm-card-hdr">
+                    <span class="bomx-tree-icon">🏷️</span>
+                    <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="pi.item_code" @change="onPackingItemChange(pi)" :disabled="readOnly" :title="itemNameFor(pi.item_code) || pi.item_code">
+                      <option value="">— Select item —</option>
+                      <option v-for="i in packingMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                    </select>
+                    <div class="bomx-rm-card-amt">
+                      <span class="bomx-rm-card-amt-lbl">Amount</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ INR((pi.qty||0)*(pi.rate||0)) }}</span>
+                    </div>
+                    <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removePackingMaterial(idx)" title="Remove">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                  <div class="bomx-rm-card-body">
+                    <div class="bomx-rm-field">
+                      <label>Qty</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="pi.qty" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>UOM</label>
+                      <select class="bomx-fi" v-model="pi.uom" :disabled="readOnly">
+                        <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
+                      </select>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Rate (₹)</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="pi.rate" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!readOnly" class="bomx-add-row" @click="addPackingMaterial">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Packing Material
+              </div>
+              </template>
+
+              <!-- Operations (Manufacturing / Sub-Assembly BOMs only — Packing BOMs don't run operations) -->
+              <template v-if="bom.bom_type !== 'Packing'">
               <div class="bomx-tree-col-hdr" style="margin-top:20px">
                 <div style="flex:1;padding-left:4px">Operations</div>
                 <div style="min-width:80px;text-align:right">Mins</div>
@@ -254,6 +339,7 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Operation
               </div>
+              </template>
             </div>
 
             <!-- ── Cost Breakdown tab ── -->
@@ -539,6 +625,7 @@ const sorted = computed(() => {
   if (filterStatus.value === "active") r = r.filter(i => i.is_active && i.docstatus !== 2);
   if (filterStatus.value === "inactive") r = r.filter(i => !i.is_active && i.docstatus !== 2);
   if (filterStatus.value === "draft") r = r.filter(i => i.docstatus === 0);
+  if (filterStatus.value === "obsolete") r = r.filter(i => i.docstatus === 2);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter(i => [i.item_name, i.item, i.name].filter(Boolean).join(" ").toLowerCase().includes(q));
 
@@ -616,6 +703,7 @@ const isNew = computed(() => route.params.name === "new");
 const detailLoading = ref(false);
 const saving = ref(false);
 const submitting = ref(false);
+const cancelling = ref(false);
 
 const activeTab = ref("components");
 const tabs = [
@@ -630,13 +718,17 @@ const tabs = [
 function emptyBom() {
   return {
     doctype: "BOM", item: "", quantity: 1, routing: "",
+    bom_type: mfgDefaultBomType.value || "Manufacturing",
     is_active: 1, is_default: 1, allow_alternative_item: 0,
-    set_rate_of_sub_assembly_from_bom: 0, is_phantom_bom: 0,
+    set_rate_of_sub_assembly_from_bom: mfgDefaultSubAssemblyRate.value ? 1 : 0, is_phantom_bom: 0,
     process_loss: 0, publish_bom: 0,
     items: [], operations: [], scrap_items: [],
+    packing_items: [], bulk_item: "", bulk_qty_per_unit: 0, bulk_rate: 0,
     rm_cost: 0, op_cost: 0, scrap_value: 0, total_cost: 0,
   };
 }
+const mfgDefaultBomType = ref("Manufacturing");
+const mfgDefaultSubAssemblyRate = ref(false);
 const bom = ref(emptyBom());
 
 const stockItems = ref([]);
@@ -648,12 +740,26 @@ const manufacturedItems = computed(() =>
 const rawMaterialItems = computed(() =>
   stockItems.value.filter(i => i.item_type !== "Finished Good")
 );
+// Packing Materials row picker (Packing BOMs only): bottles, caps, labels,
+// cartons etc. — restricted to the Packing Material item type so a raw
+// material or finished good can't be picked into a packing line by mistake.
+const packingMaterialItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Packing Material")
+);
+// Bulk Item picker (Packing BOMs only): the loose/bulk output being packed —
+// same pool as the Production Item picker (Finished Good / WIP), since a
+// Packing BOM's bulk source is whatever a Manufacturing BOM produced.
+const bulkItemOptions = computed(() => manufacturedItems.value);
 const uomList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
 const routingsList = ref([]);
 const bomsList = ref([]);
 const oldQty = ref(1);
+// Graph of parent BOM name -> [sub_assembly_bom names it references], used to detect
+// circular sub-assembly chains before they're built (the backend depth-limits and
+// dedupes silently during explosion, but gives no warning at edit time).
+const subAssemblyEdges = ref({});
 
 const treeNodes = ref([]);
 const treeLoading = ref(false);
@@ -705,6 +811,20 @@ onMounted(async () => {
     routingsList.value = rtg || [];
     const bl = await apiList("BOM", { fields: ["name", "item", "bom_type"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" });
     bomsList.value = bl || [];
+    const saRows = await apiList("BOM Item", { fields: ["parent", "sub_assembly_bom"], filters: [["sub_assembly_bom", "!=", ""]], limit: 5000 });
+    const edges = {};
+    (saRows || []).forEach(r => {
+      if (!r.sub_assembly_bom) return;
+      (edges[r.parent] || (edges[r.parent] = [])).push(r.sub_assembly_bom);
+    });
+    subAssemblyEdges.value = edges;
+    try {
+      const mfgDefaults = await apiCall(
+        "zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults"
+      );
+      if (mfgDefaults && mfgDefaults.default_bom_type) mfgDefaultBomType.value = mfgDefaults.default_bom_type;
+      if (mfgDefaults) mfgDefaultSubAssemblyRate.value = !!mfgDefaults.set_rate_of_sub_assembly_item_based_on_bom;
+    } catch (e) { /* non-critical — keep the "Manufacturing" fallback */ }
   } catch (e) {
     toast("Error loading manufacturing data: " + e.message, "error");
   }
@@ -751,13 +871,43 @@ function onQtyChange() {
   // rescaling this table too, changing Quantity on a Packing BOM silently
   // leaves every packing material's qty at its old, now-wrong value.
   (bom.value.packing_items || []).forEach(pi => { pi.qty = (pi.qty || 0) * ratio; });
+  // Operation time must scale with quantity too — otherwise op_cost stays pinned
+  // to the old quantity's time. Mirrors get_bom_breakdown() on the backend, which
+  // scales planned_time_in_mins by the same qty ratio when previewing a Work Order.
+  (bom.value.operations || []).forEach(op => { op.time_in_mins = (op.time_in_mins || 0) * ratio; });
   oldQty.value = newQty;
+}
+
+// Would picking `candidateBom` as a Sub-Assembly BOM on this row eventually loop
+// back to the BOM currently being edited? Walks the known sub-assembly graph
+// (built from submitted BOMs) forward from the candidate looking for our own name.
+function wouldCreateCycle(candidateBom) {
+  if (!candidateBom || !bom.value.name) return false;
+  const target = bom.value.name;
+  if (candidateBom === target) return true;
+  const seen = new Set();
+  const stack = [candidateBom];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    for (const next of (subAssemblyEdges.value[cur] || [])) {
+      if (next === target) return true;
+      if (!seen.has(next)) stack.push(next);
+    }
+  }
+  return false;
 }
 
 function onRmItemChange(rm) {
   if (!rm.item_code) return;
   const item = stockItems.value.find(i => i.name === rm.item_code);
   if (item) { rm.rate = item.standard_rate || 0; rm.uom = item.stock_uom || "Nos"; rm.item_name = item.item_name; }
+}
+function onBulkItemChange() {
+  if (!bom.value.bulk_item) return;
+  const item = stockItems.value.find(i => i.name === bom.value.bulk_item);
+  if (item && !bom.value.bulk_rate) bom.value.bulk_rate = item.standard_rate || 0;
 }
 function onWorkstationChange(op) {
   if (!op.workstation) return;
@@ -788,6 +938,13 @@ async function onRoutingChange() {
 
 function addMaterial() { bom.value.items.push({ item_code: "", uom: "Nos", qty: 1, rate: 0 }); }
 function removeMaterial(idx) { bom.value.items.splice(idx, 1); }
+function onPackingItemChange(pi) {
+  if (!pi.item_code) return;
+  const item = stockItems.value.find(i => i.name === pi.item_code);
+  if (item) { pi.rate = item.standard_rate || 0; pi.uom = item.stock_uom || "Nos"; pi.item_name = item.item_name; }
+}
+function addPackingMaterial() { bom.value.packing_items.push({ item_code: "", uom: "Nos", qty: 1, rate: 0 }); }
+function removePackingMaterial(idx) { bom.value.packing_items.splice(idx, 1); }
 function addOp() { bom.value.operations.push({ operation: "", workstation: "", time_in_mins: 60, hour_rate: 0 }); }
 function removeOp(idx) { bom.value.operations.splice(idx, 1); }
 function addScrap() { bom.value.scrap_items.push({ item_code: "", qty: 1, rate: 0 }); }
@@ -795,7 +952,11 @@ function removeScrap(idx) { bom.value.scrap_items.splice(idx, 1); }
 
 const rm_cost = computed(() => {
   const sourceItems = bom.value.bom_type === "Packing" ? bom.value.packing_items : bom.value.items;
-  return (sourceItems || []).reduce((s, rm) => s + (parseFloat(rm.qty) || 0) * (parseFloat(rm.rate) || 0), 0);
+  let total = (sourceItems || []).reduce((s, rm) => s + (parseFloat(rm.qty) || 0) * (parseFloat(rm.rate) || 0), 0);
+  if (bom.value.bom_type === "Packing" && bom.value.bulk_item && parseFloat(bom.value.bulk_qty_per_unit) > 0) {
+    total += (parseFloat(bom.value.bulk_qty_per_unit) || 0) * (parseFloat(bom.value.quantity) || 1) * (parseFloat(bom.value.bulk_rate) || 0);
+  }
+  return total;
 });
 const op_cost = computed(() => (bom.value.operations || []).reduce((s, op) => s + ((parseFloat(op.time_in_mins) || 0) / 60) * (parseFloat(op.hour_rate) || 0), 0));
 const scrap_value = computed(() => (bom.value.scrap_items || []).reduce((s, sc) => s + (parseFloat(sc.qty) || 0) * (parseFloat(sc.rate) || 0), 0));
@@ -809,6 +970,13 @@ async function save() {
   let totalScrapQty = 0;
   (bom.value.scrap_items || []).forEach(sc => totalScrapQty += (parseFloat(sc.qty) || 0));
   if (totalScrapQty > bom.value.quantity) return toast("Total Scrap quantity cannot exceed Production Quantity", "error");
+
+  if (bom.value.bom_type === "Packing") {
+    if (!bom.value.bulk_item) return toast("Packing BOM requires a Bulk Item to consume from", "error");
+    if (!bom.value.bulk_qty_per_unit || bom.value.bulk_qty_per_unit <= 0) return toast("Bulk Qty Consumed per Packed Unit must be greater than 0", "error");
+    if (bom.value.bulk_item === bom.value.item) return toast("Bulk Item cannot be the same as the Production Item being packed", "error");
+    if (!bom.value.packing_items || !bom.value.packing_items.length) return toast("Add at least one Packing Material row", "error");
+  }
 
   saving.value = true;
   try {
@@ -864,6 +1032,24 @@ async function newVersion() {
     loadList();
   } catch (e) { toast(e.message, "error"); }
   submitting.value = false;
+}
+
+async function cancelBom() {
+  if (!bom.value.name) return;
+  if (!(await confirm({
+    title: "Cancel BOM?",
+    body: `This will discontinue ${bom.value.name} without creating a replacement version. It will no longer be usable in new Work Orders or Sub-Assembly links. This cannot be undone from here.`,
+    okLabel: "Cancel BOM",
+    okStyle: "danger",
+  }))) return;
+  cancelling.value = true;
+  try {
+    const doc = await apiCancel("BOM", bom.value.name);
+    bom.value = doc;
+    toast("BOM cancelled");
+    loadList();
+  } catch (e) { toast(e.message, "error"); }
+  cancelling.value = false;
 }
 
 async function loadBomTree() {
@@ -971,7 +1157,8 @@ function icon(name, size) {
 }
 .bomx-vchip-tick { color:#2F9E44; font-weight:700; }
 
-.bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+@media (max-width:760px) { .bomx-hdr-fields { grid-template-columns:1fr 1fr; } }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
@@ -1038,6 +1225,7 @@ function icon(name, size) {
 .bomx-lo-cell { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-rsm); padding:12px 16px; }
 .bomx-field-block { margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
+.bomx-field-hint-danger { color:var(--bx-red); font-weight:600; display:flex; align-items:center; gap:4px; }
 .bomx-link { color:var(--bx-mfg); font-weight:600; cursor:pointer; }
 .bomx-link:hover { text-decoration:underline; }
 

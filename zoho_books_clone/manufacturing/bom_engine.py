@@ -202,9 +202,13 @@ def get_alternative_items(item_code):
     if not frappe.db.exists("DocType", "Alternative Item"):
         return []
 
-    return frappe.get_all(
+    rows = frappe.get_all(
         "Alternative Item",
         filters={"item_code": item_code},
         fields=["alternative_item_code", "conversion_factor", "uom", "is_default", "description"],
         order_by="is_default desc, alternative_item_code asc",
     )
+    requires_approval = bool(frappe.db.get_value("Item", item_code, "requires_substitution_approval"))
+    for row in rows:
+        row["requires_approval"] = requires_approval
+    return rows

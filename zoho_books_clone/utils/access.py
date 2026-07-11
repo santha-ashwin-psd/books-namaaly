@@ -46,6 +46,7 @@ DOCTYPE_MODULE = {
     "BOM": "inventory", "Work Order": "inventory", "Production Plan": "inventory",
     "Job Card": "inventory", "Material Request": "inventory",
     "Packing Slip": "inventory", "Alternative Item": "inventory",
+    "Material Substitution Log": "inventory",
     "Routing": "inventory", "Operation": "inventory", "Workstation": "inventory",
     "Workstation Type": "inventory",
     # Accounting

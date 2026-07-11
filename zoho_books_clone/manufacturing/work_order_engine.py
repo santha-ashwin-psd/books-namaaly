@@ -126,7 +126,7 @@ def get_bom_breakdown(bom, qty):
     ratio = flt(qty) / flt(bom_doc.quantity or 1)
 
     if bom_doc.bom_type == "Packing":
-        items = _explode_packing_bom(bom_doc, ratio)
+        items = _explode_packing_bom(bom_doc, ratio, flt(qty))
     else:
         # Manufacturing or Sub-Assembly
         items = _explode_bom_items(bom_doc.items, ratio, depth=0)
@@ -241,10 +241,17 @@ def _merge_duplicate_rows(rows):
     return [merged[k] for k in order]
 
 
-def _explode_packing_bom(bom_doc, ratio):
+def _explode_packing_bom(bom_doc, ratio, qty_to_pack):
     """For Packing BOMs, the consumed materials are:
-    1. The bulk item at bulk_qty_per_unit × ratio.
+    1. The bulk item at bulk_qty_per_unit × qty_to_pack.
     2. All packing_items rows scaled by ratio.
+
+    The bulk item scales directly with qty_to_pack, NOT with `ratio`
+    (qty_to_pack / bom.quantity) -- bulk_qty_per_unit is defined as "per
+    packed unit" and is independent of whatever batch size the BOM's own
+    packing_items happen to be defined for. Using `ratio` here silently
+    divided bulk consumption by bom.quantity for any Packing BOM whose
+    Quantity field wasn't exactly 1.
     """
     result = []
     if bom_doc.bulk_item and flt(bom_doc.bulk_qty_per_unit) > 0:
@@ -253,10 +260,10 @@ def _explode_packing_bom(bom_doc, ratio):
         result.append({
             "item_code": bom_doc.bulk_item,
             "item_name": bulk_name,
-            "required_qty": flt(bom_doc.bulk_qty_per_unit) * ratio,
+            "required_qty": flt(bom_doc.bulk_qty_per_unit) * flt(qty_to_pack),
             "uom": bulk_uom,
-            "rate": 0.0,
-            "amount": 0.0,
+            "rate": flt(bom_doc.bulk_rate),
+            "amount": flt(bom_doc.bulk_rate) * flt(bom_doc.bulk_qty_per_unit) * flt(qty_to_pack),
             "source_warehouse": "",
         })
     for r in (bom_doc.packing_items or []):
@@ -326,7 +333,29 @@ def issue_materials(work_order):
     return se.name
 
 
-@frappe.whitelist(allow_guest=False, methods=["POST"])
+def _consume_qty_for_row(row, wo, consumption_ratio, ms):
+    """How much of this row's raw material to consume for this completion run.
+
+    "BOM" (default) — proportional to the BOM's planned qty (required_qty),
+    scaled by how much of the Work Order's total qty this run covers.
+
+    "Material Transferred for Manufacture" — proportional to what was
+    actually staged into WIP for this row (transferred_qty), not the
+    theoretical BOM requirement, so consumption reflects real shop-floor
+    transfers rather than the plan. Falls back to the BOM basis for any row
+    that was never transferred (e.g. no WIP warehouse configured), and is
+    capped so a run can never consume more than remains un-consumed of what
+    was transferred.
+    """
+    basis = ms.get("backflush_raw_materials_based_on") or "BOM"
+    if basis == "Material Transferred for Manufacture" and flt(row.transferred_qty) > 0:
+        row_ratio = flt(row.transferred_qty) / flt(wo.qty or 1)
+        consume_qty = row_ratio * consumption_ratio * flt(wo.qty or 1)
+        remaining_transferred = flt(row.transferred_qty) - flt(row.consumed_qty)
+        return max(min(consume_qty, remaining_transferred), 0)
+    return flt(row.required_qty) * consumption_ratio
+
+
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
                          manufacturing_date=None, expiry_date=None):
@@ -414,7 +443,7 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # ones, so without this the FG receipt has no cost basis to draw from.
     total_consumed_cost = 0.0
     for row in wo.items:
-        consume_qty = flt(row.required_qty) * consumption_ratio
+        consume_qty = _consume_qty_for_row(row, wo, consumption_ratio, ms)
         if consume_qty <= 0:
             continue
         s_wh = wo.wip_warehouse or row.source_warehouse or wo.source_warehouse
@@ -518,7 +547,7 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     se.submit()
 
     for row in wo.items:
-        consume_qty = flt(row.required_qty) * consumption_ratio
+        consume_qty = _consume_qty_for_row(row, wo, consumption_ratio, ms)
         if consume_qty > 0:
             current_consumed_qty = flt(frappe.db.get_value("Work Order Item", row.name, "consumed_qty"))
             row.db_set("consumed_qty", current_consumed_qty + consume_qty, update_modified=False)
@@ -594,6 +623,58 @@ def stop_work_order(work_order):
     _set_operations_status(wo, "Stopped", skip_statuses={"Completed"})
     frappe.db.commit()
     return "Stopped"
+
+
+def apply_row_substitution(work_order, work_order_item_row, alternative_item_code,
+                            conversion_factor, reason):
+    """Internal (non-whitelisted) helper — actually mutates a Work Order Item
+    row to point at the alternative item, scaling required_qty by the
+    conversion factor. Called either immediately (packaging/excipient path,
+    no approval needed) or once a Material Substitution Log is approved
+    (herb/active-ingredient path). Only allowed before any of that row's
+    material has been consumed, so substitution never rewrites history for
+    partially-consumed batches.
+
+    Returns the updated row as a dict for the caller to report back.
+    """
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+    if wo.status in ("Completed", "Cancelled", "Stopped"):
+        frappe.throw(_("Cannot substitute materials on a {0} Work Order.").format(wo.status))
+
+    row = next((r for r in wo.items if r.name == work_order_item_row), None)
+    if not row:
+        frappe.throw(_("Work Order Item row {0} not found.").format(work_order_item_row))
+    if flt(row.consumed_qty) > 0:
+        frappe.throw(_(
+            "{0} has already been partly or fully consumed on this Work Order "
+            "and can no longer be substituted."
+        ).format(row.item_code))
+
+    alt_item = frappe.db.get_value(
+        "Item", alternative_item_code, ["item_name", "stock_uom"], as_dict=True
+    )
+    if not alt_item:
+        frappe.throw(_("Alternative item {0} does not exist.").format(alternative_item_code))
+
+    original_item_code = row.original_item_code or row.item_code
+    new_required_qty = flt(row.required_qty) * flt(conversion_factor or 1)
+
+    row.db_set("original_item_code", original_item_code, update_modified=False)
+    row.db_set("item_code", alternative_item_code, update_modified=False)
+    row.db_set("item_name", alt_item.item_name, update_modified=False)
+    row.db_set("uom", alt_item.stock_uom, update_modified=False)
+    row.db_set("required_qty", new_required_qty, update_modified=False)
+    row.db_set("is_substituted", 1, update_modified=False)
+    row.db_set("substitution_reason", reason or "", update_modified=False)
+    frappe.db.commit()
+
+    return {
+        "work_order_item_row": row.name,
+        "original_item_code": original_item_code,
+        "alternative_item_code": alternative_item_code,
+        "new_required_qty": new_required_qty,
+    }
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])

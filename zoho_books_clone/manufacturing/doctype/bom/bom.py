@@ -62,8 +62,28 @@ class BOM(Document):
         source_items = self.packing_items if self.bom_type == "Packing" else (self.items or [])
         rm = 0.0
         for r in source_items:
+            # "Set Rate of Sub-Assembly from BOM" (toggle on the BOM, defaulted
+            # from Manufacturing Settings when the BOM is created): for a row
+            # linked to a Sub-Assembly BOM, derive its rate from that BOM's
+            # actual per-unit cost instead of leaving it as a manually-typed
+            # (and easily stale) standard rate.
+            if self.set_rate_of_sub_assembly_from_bom and getattr(r, "sub_assembly_bom", None):
+                sub_cost, sub_qty = frappe.db.get_value(
+                    "BOM", r.sub_assembly_bom, ["total_cost", "quantity"]
+                ) or (None, None)
+                if sub_cost is not None and flt(sub_qty):
+                    r.rate = flt(sub_cost) / flt(sub_qty)
             r.amount = flt(r.qty) * flt(r.rate)
             rm += r.amount
+
+        # Packing BOMs also consume the bulk item itself (bulk_qty_per_unit
+        # per packed unit, for this BOM's own batch quantity) but it lives
+        # outside packing_items with no rate field of its own until now --
+        # without this, a Packing BOM's Total Cost silently omitted the bulk
+        # item's value entirely, which for something like bottling a liquid
+        # is usually the majority of the real cost.
+        if self.bom_type == "Packing" and self.bulk_item and flt(self.bulk_qty_per_unit) > 0:
+            rm += flt(self.bulk_qty_per_unit) * flt(self.quantity or 1) * flt(self.bulk_rate)
 
         # Operation cost  (time_in_mins / 60 * hour_rate)
         op = 0.0

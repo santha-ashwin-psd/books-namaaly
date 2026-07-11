@@ -92,6 +92,12 @@
                   <span class="bomx-tree-icon">⚙️</span>
                   <span class="bomx-rm-card-title" style="font-weight:700;color:var(--bx-mfgB);flex:none">#{{ idx + 1 }}</span>
                   <div style="flex:1"></div>
+                  <button class="bomx-btn-icon" @click="moveOp(idx, -1)" :disabled="idx===0" title="Move up">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button class="bomx-btn-icon" @click="moveOp(idx, 1)" :disabled="idx===doc.operations.length-1" title="Move down">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
                   <button class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
@@ -321,6 +327,12 @@ function addOp() {
 function removeOp(idx) {
   doc.value.operations.splice(idx, 1);
 }
+function moveOp(idx, dir) {
+  const arr = doc.value.operations;
+  const target = idx + dir;
+  if (target < 0 || target >= arr.length) return;
+  [arr[idx], arr[target]] = [arr[target], arr[idx]];
+}
 
 function onOpChange(op) {
   // Auto-fill workstation from Operation.default_workstation if workstation is blank
@@ -494,6 +506,8 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 .bomx-btn-ghost-inv:hover:not(:disabled) { background:rgba(255,255,255,.25); }
 .bomx-btn-icon { background:none; border:1px solid var(--bx-border); border-radius:5px; cursor:pointer; padding:4px 6px; display:inline-flex; color:var(--bx-muted); }
 .bomx-btn-icon:hover { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
+.bomx-btn-icon:disabled { opacity:.35; cursor:not-allowed; }
+.bomx-btn-icon:disabled:hover { border-color:var(--bx-border); color:var(--bx-muted); background:none; }
 .bomx-btn-icon.danger { color:var(--bx-red); }
 .bomx-btn-icon.danger:hover { background:var(--bx-redS); border-color:var(--bx-red); }
 

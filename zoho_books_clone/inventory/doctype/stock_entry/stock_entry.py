@@ -26,6 +26,15 @@ SE_TYPE_DIRECTION = {
 }
 
 
+def _allow_negative_stock():
+    """Manufacturing Settings > Allow Negative Stock. Defaults to blocking
+    (False) if the setting hasn't been migrated/configured yet."""
+    try:
+        return bool(frappe.db.get_single_value("Manufacturing Settings", "allow_negative_stock"))
+    except Exception:
+        return False
+
+
 class StockEntry(Document):
 
     # ── Validate ──────────────────────────────────────────────────────────────
@@ -174,8 +183,9 @@ class StockEntry(Document):
                 if flt(row.qty) <= 0:
                     frappe.throw(_(f"Row {i}: Qty must be greater than 0."))
 
-            # Audit-1: Block negative stock — check available qty before outgoing movements
-            if direction.get("s") and row.s_warehouse:
+            # Audit-1: Block negative stock — check available qty before outgoing
+            # movements, unless Manufacturing Settings > Allow Negative Stock is on.
+            if direction.get("s") and row.s_warehouse and not _allow_negative_stock():
                 available = flt(frappe.db.get_value(
                     "Bin",
                     {"item_code": row.item_code, "warehouse": row.s_warehouse},

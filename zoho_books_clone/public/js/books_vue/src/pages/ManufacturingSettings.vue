@@ -104,6 +104,28 @@
         </div>
       </div>
 
+      <!-- Capacity Planning -->
+      <div class="msx-sect">
+        <div class="msx-sect-hdr">
+          <div class="msx-sect-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          </div>
+          <div><div class="msx-sect-title">Capacity Planning</div></div>
+        </div>
+        <div class="msx-fg">
+          <div>
+            <div class="msx-hf-label">Job Card Hours Per Day</div>
+            <input type="number" class="msx-fi msx-fi-mono" v-model="s.job_card_hours_per_day" min="0.1" step="0.5" style="width:100%"/>
+            <div class="msx-hint">Working hours assumed per day when estimating how long a Work Order's operations will take.</div>
+          </div>
+          <div>
+            <div class="msx-hf-label">Capacity Planning Window (Days)</div>
+            <input type="number" class="msx-fi msx-fi-mono" v-model="s.capacity_planning_for_days" min="0" step="1" style="width:100%"/>
+            <div class="msx-hint">If a Work Order's estimated duration exceeds this many days, a warning is shown on the Work Order.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- BOM Defaults -->
       <div class="msx-sect">
         <div class="msx-sect-hdr">
@@ -135,17 +157,9 @@
           </div>
           <div><div class="msx-sect-title">Capacity Planning</div></div>
         </div>
-        <div class="msx-fg">
-          <div>
-            <div class="msx-hf-label">Job Card Hours per Day</div>
-            <input type="number" class="msx-fi msx-fi-mono" v-model="s.job_card_hours_per_day" min="1" max="24" step="0.5" style="width:100%"/>
-            <div class="msx-hint">Working hours per day used for operation duration estimates.</div>
-          </div>
-          <div>
-            <div class="msx-hf-label">Capacity Planning Horizon (Days)</div>
-            <input type="number" class="msx-fi msx-fi-mono" v-model="s.capacity_planning_for_days" min="1" step="1" style="width:100%"/>
-            <div class="msx-hint">How many days ahead to plan production.</div>
-          </div>
+        <div class="msx-hint" style="margin:0">
+          Capacity planning (working hours per day, planning horizon) isn't wired into scheduling yet — these controls were
+          removed from here rather than left as settings that silently do nothing. They'll return once that feature ships.
         </div>
       </div>
 
@@ -239,10 +253,6 @@ async function save() {
   if (pct < 0 || pct > 100) {
     return toast("Over-Production Allowance must be between 0 and 100%", "error");
   }
-  const hrs = parseFloat(s.value.job_card_hours_per_day) || 0;
-  if (hrs <= 0) {
-    return toast("Job Card Hours per Day must be greater than 0", "error");
-  }
 
   saving.value = true;
   saved.value = false;
@@ -261,8 +271,8 @@ async function save() {
         backflush_raw_materials_based_on: s.value.backflush_raw_materials_based_on,
         default_bom_type: s.value.default_bom_type,
         set_rate_of_sub_assembly_item_based_on_bom: s.value.set_rate_of_sub_assembly_item_based_on_bom,
-        job_card_hours_per_day: hrs,
-        capacity_planning_for_days: parseInt(s.value.capacity_planning_for_days) || 30,
+        job_card_hours_per_day: s.value.job_card_hours_per_day,
+        capacity_planning_for_days: s.value.capacity_planning_for_days,
         warn_if_bom_not_default: s.value.warn_if_bom_not_default,
         warn_on_missing_job_cards: s.value.warn_on_missing_job_cards,
       },

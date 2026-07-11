@@ -105,6 +105,46 @@
    "options": "Packing Slip Item"
   },
   {
+   "fieldname": "sec_ps_stock",
+   "fieldtype": "Section Break",
+   "label": "Stock Posting"
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Consume Materials From",
+   "options": "Warehouse",
+   "description": "Warehouse holding the bulk item and packing materials to be consumed when stock is posted."
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Receive Packed Goods At",
+   "options": "Warehouse",
+   "description": "Warehouse the finished packed item is received into. Defaults to the Work Order's FG Warehouse."
+  },
+  {
+   "fieldname": "col_break_ps3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Manufacture Stock Entry posted when materials were consumed and the packed item was received. Set once, then locked."
+  },
+  {
+   "fieldname": "posted_batch_no",
+   "fieldtype": "Link",
+   "label": "Packed Item Batch",
+   "options": "Batch",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
    "fieldname": "sec_ps_more",
    "fieldtype": "Section Break",
    "label": "More Information"
