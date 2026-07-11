@@ -46,25 +46,54 @@ class Item(Document):
                 or ""
             )
 
+            item_row = {
+                "item_code": self.name,
+                "item_name": self.item_name,
+                "qty": flt(self.opening_stock),
+                "basic_rate": flt(getattr(self, "standard_buying_rate", 0)) or flt(getattr(self, "standard_rate", 0)),
+                "uom": self.stock_uom or "Nos",
+                "t_warehouse": warehouse,
+            }
+
+            # Batch-tracked items need a Batch to already exist before Stock
+            # Entry's own validation will accept the row (same requirement
+            # complete_work_order and the transaction pages already handle) —
+            # without this, opening_stock set directly on a batch-tracked
+            # Item's form would fail insert() and, since this whole method is
+            # wrapped in a broad try/except that only logs to the Error Log,
+            # the item would be created with opening_stock silently never
+            # actually landing in stock and no indication to the user.
+            if self.get("has_batch_no"):
+                new_batch = frappe.get_doc({
+                    "doctype": "Batch",
+                    "item": self.name,
+                    "warehouse": warehouse,
+                    "manufacturing_date": frappe.utils.nowdate(),
+                })
+                new_batch.insert(ignore_permissions=True)
+                item_row["batch_no"] = new_batch.name
+
             se = frappe.get_doc({
                 "doctype": "Stock Entry",
                 "stock_entry_type": "Opening Stock",
                 "company": company,
                 "to_warehouse": warehouse,
-                "items": [{
-                    "item_code": self.name,
-                    "item_name": self.item_name,
-                    "qty": flt(self.opening_stock),
-                    "basic_rate": flt(getattr(self, "standard_buying_rate", 0)) or flt(getattr(self, "standard_rate", 0)),
-                    "uom": self.stock_uom or "Nos",
-                    "t_warehouse": warehouse,
-                }]
+                "items": [item_row],
             })
             se.insert(ignore_permissions=True)
             se.submit()
             frappe.db.commit()
         except Exception as e:
             frappe.log_error(frappe.get_traceback(), f"Opening stock for {self.name}")
+            frappe.msgprint(
+                _(
+                    "Item {0} was created, but its Opening Stock could not be posted "
+                    "automatically ({1}). Please post it manually from the Inventory "
+                    "module."
+                ).format(self.name, str(e)),
+                indicator="orange",
+                alert=True,
+            )
 
     def on_update(self):
         """Sync reorder settings to Bin records when item is updated."""

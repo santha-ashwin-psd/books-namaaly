@@ -21,7 +21,7 @@
         </template>
         <div v-else-if="!sorted.length" class="bomx-list-empty">No BOMs found</div>
         <div v-else v-for="row in sorted" :key="row.name"
-             class="bomx-item" :class="{active: selectedName === row.name}"
+             class="bomx-item" :class="{active: !isNew && bom.name && chainRoot(bom.name) === chainRoot(row.name)}"
              @click="selectBOM(row.name)">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
             <div class="bomx-item-name">{{ row.item_name || row.item }}</div>
@@ -30,7 +30,11 @@
           <div class="bomx-item-meta">
             <span class="mono">{{ row.name }}</span>
             <span>•</span>
-            <span v-if="row.bom_version">v{{ row.bom_version }}</span>
+            <span v-if="row.bom_version">v{{ formatVersion(row.bom_version) }}</span>
+            <template v-if="row._versionCount > 1">
+              <span>•</span>
+              <span>{{ row._versionCount }} versions</span>
+            </template>
           </div>
           <div class="bomx-item-right">
             <span style="font-size:12px;color:var(--bx-muted)">BOM Cost:</span>
@@ -67,16 +71,13 @@
                   <span>Produces: {{ bom.quantity || 1 }} {{ producedUom }}</span>
                   <span>•</span>
                   <span class="bomx-badge" :class="statusClass(bom)" style="font-size:11px">{{ statusLabel(bom) }}</span>
-                  <span v-if="bom.bom_version">• v{{ bom.bom_version }}</span>
                 </div>
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button v-if="!isNew && bom.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendBom" :disabled="submitting">
-                  {{ submitting ? 'Amending…' : 'Amend' }}
-                </button>
-                <button v-if="!isNew && bom.docstatus===1" class="bomx-btn bomx-btn-light" style="color:#C92A2A" @click="cancelBom" :disabled="submitting">
-                  {{ submitting ? 'Cancelling…' : 'Cancel BOM' }}
+                <button v-if="!isNew && isLatestInChain && (bom.docstatus===1 || bom.docstatus===2)"
+                        class="bomx-btn bomx-btn-light" @click="newVersion" :disabled="submitting">
+                  {{ submitting ? 'Creating…' : '+ New Version' }}
                 </button>
                 <button v-if="!isNew && bom.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitBom" :disabled="submitting || saving">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
@@ -85,6 +86,15 @@
                   {{ saving ? 'Saving…' : (isNew ? 'Save BOM' : 'Save Changes') }}
                 </button>
               </div>
+            </div>
+            <div v-if="!isNew && bomVersions.length" class="bomx-version-chips">
+              <button v-for="v in bomVersions" :key="v.name"
+                      class="bomx-vchip" :class="{ active: v.name === bom.name }"
+                      @click="v.name !== bom.name && selectBOM(v.name)"
+                      :title="v.name + ' — ' + statusLabel(v)">
+                v{{ formatVersion(v.bom_version) }}
+                <span v-if="v.name === bom.name" class="bomx-vchip-tick">✓</span>
+              </button>
             </div>
           </div>
 
@@ -126,7 +136,7 @@
             <div v-if="activeTab==='components'">
               <div v-if="readOnly" class="bomx-notice">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-                This BOM is {{ bom.docstatus===2?'cancelled':'submitted' }}. Amend it to make changes.
+                This BOM is {{ bom.docstatus===2?'cancelled':'submitted' }}. {{ isLatestInChain ? 'Create a new version to make changes.' : 'This is an older version — open the latest version to make changes.' }}
               </div>
 
               <!-- Cost summary strip -->
@@ -195,8 +205,9 @@
                       <label>Sub-Assembly BOM</label>
                       <select class="bomx-fi" v-model="rm.sub_assembly_bom" :disabled="readOnly">
                         <option value="">— None —</option>
-                        <option v-for="b in bomsList" :key="b.name" :value="b.name">{{ b.name }}</option>
+                        <option v-for="b in bomsList.filter(b => b.item === rm.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
                       </select>
+                      <div class="bomx-field-hint" v-if="rm.item_code && !bomsList.some(b => b.item === rm.item_code)">No submitted BOM exists yet for this item — it can't be used as a sub-assembly until one is created.</div>
                     </div>
                   </div>
                 </div>
@@ -489,7 +500,7 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "item", "is_active", "is_default", "docstatus", "bom_version", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost"];
+    const fields = ["name", "item", "is_active", "is_default", "docstatus", "bom_version", "amended_from", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost"];
     const r = await apiList("BOM", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
     if (list.value.length) {
@@ -509,6 +520,20 @@ async function loadList() {
   loading.value = false;
 }
 
+// Amended revisions link back via `amended_from`. Walk that chain to find the
+// original root document, which we use as the stable grouping key for a version set.
+function chainRoot(name) {
+  const byName = new Map(list.value.map(r => [r.name, r]));
+  let cur = byName.get(name);
+  const seen = new Set();
+  while (cur && cur.amended_from && !seen.has(cur.name)) {
+    seen.add(cur.name);
+    if (!byName.has(cur.amended_from)) break;
+    cur = byName.get(cur.amended_from);
+  }
+  return cur ? cur.name : name;
+}
+
 const sorted = computed(() => {
   let r = list.value;
   if (filterStatus.value === "active") r = r.filter(i => i.is_active && i.docstatus !== 2);
@@ -516,7 +541,21 @@ const sorted = computed(() => {
   if (filterStatus.value === "draft") r = r.filter(i => i.docstatus === 0);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter(i => [i.item_name, i.item, i.name].filter(Boolean).join(" ").toLowerCase().includes(q));
-  return r;
+
+  // Group all revisions that share the same base document id into a single list row.
+  const groups = new Map();
+  for (const row of r) {
+    const key = chainRoot(row.name);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return [...groups.values()].map(rows => {
+    // Prefer a non-cancelled revision as the representative; fall back to the newest overall.
+    const notCancelled = rows.filter(x => x.docstatus !== 2);
+    const pool = notCancelled.length ? notCancelled : rows;
+    const rep = pool.slice().sort((a, b) => (Number(b.bom_version) || 0) - (Number(a.bom_version) || 0))[0];
+    return { ...rep, _versionCount: rows.length };
+  }).sort((a, b) => new Date(b.modified) - new Date(a.modified));
 });
 
 function statusLabel(row) {
@@ -630,6 +669,27 @@ function itemNameFor(code) {
   return i ? i.item_name : null;
 }
 
+// All revisions sharing the same base document id as the open BOM, newest version first.
+const bomVersions = computed(() => {
+  if (!bom.value.name) return [];
+  const base = chainRoot(bom.value.name);
+  return list.value
+    .filter(r => chainRoot(r.name) === base)
+    .slice()
+    .sort((a, b) => (Number(b.bom_version) || 0) - (Number(a.bom_version) || 0));
+});
+// Only the newest revision in a version chain may be cancelled/amended into a further version;
+// older, superseded revisions are read-only history.
+const isLatestInChain = computed(() => {
+  if (!bomVersions.value.length) return true;
+  return bomVersions.value[0].name === bom.value.name;
+});
+function formatVersion(v) {
+  if (v == null || v === "") return "1.0";
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(1) : String(v);
+}
+
 onMounted(async () => {
   loading.value = true;
   try {
@@ -686,6 +746,11 @@ function onQtyChange() {
   const ratio = newQty / oldQty.value;
   (bom.value.items || []).forEach(rm => { rm.qty = (rm.qty || 0) * ratio; });
   (bom.value.scrap_items || []).forEach(sc => { sc.qty = (sc.qty || 0) * ratio; });
+  // Packing BOMs keep their materials in packing_items (items is required to
+  // stay empty for that bom_type — see BOM.validate_packing_bom) — without
+  // rescaling this table too, changing Quantity on a Packing BOM silently
+  // leaves every packing material's qty at its old, now-wrong value.
+  (bom.value.packing_items || []).forEach(pi => { pi.qty = (pi.qty || 0) * ratio; });
   oldQty.value = newQty;
 }
 
@@ -728,7 +793,10 @@ function removeOp(idx) { bom.value.operations.splice(idx, 1); }
 function addScrap() { bom.value.scrap_items.push({ item_code: "", qty: 1, rate: 0 }); }
 function removeScrap(idx) { bom.value.scrap_items.splice(idx, 1); }
 
-const rm_cost = computed(() => (bom.value.items || []).reduce((s, rm) => s + (parseFloat(rm.qty) || 0) * (parseFloat(rm.rate) || 0), 0));
+const rm_cost = computed(() => {
+  const sourceItems = bom.value.bom_type === "Packing" ? bom.value.packing_items : bom.value.items;
+  return (sourceItems || []).reduce((s, rm) => s + (parseFloat(rm.qty) || 0) * (parseFloat(rm.rate) || 0), 0);
+});
 const op_cost = computed(() => (bom.value.operations || []).reduce((s, op) => s + ((parseFloat(op.time_in_mins) || 0) / 60) * (parseFloat(op.hour_rate) || 0), 0));
 const scrap_value = computed(() => (bom.value.scrap_items || []).reduce((s, sc) => s + (parseFloat(sc.qty) || 0) * (parseFloat(sc.rate) || 0), 0));
 const total_cost = computed(() => rm_cost.value + op_cost.value - scrap_value.value);
@@ -775,24 +843,22 @@ async function submitBom() {
   submitting.value = false;
 }
 
-async function cancelBom() {
+async function newVersion() {
   if (!bom.value.name) return;
-  if (!(await confirm({ title: "Cancel BOM?", body: "Cancel this BOM? You can amend it into a new draft revision afterwards.", okLabel: "Cancel BOM", okStyle: "danger" }))) return;
+  if (!(await confirm({
+    title: "Create new version?",
+    body: bom.value.docstatus === 1
+      ? "This will cancel the current active revision and open a new draft version for editing."
+      : "This will open a new draft version for editing.",
+    okLabel: "New Version",
+  }))) return;
   submitting.value = true;
   try {
-    const doc = await apiCancel("BOM", bom.value.name);
-    bom.value = doc;
-    toast("BOM cancelled");
-    loadList();
-  } catch (e) { toast(e.message, "error"); }
-  submitting.value = false;
-}
-
-async function amendBom() {
-  if (!bom.value.name) return;
-  submitting.value = true;
-  try {
-    const doc = await apiAmend("BOM", bom.value.name);
+    let target = bom.value;
+    if (bom.value.docstatus === 1) {
+      target = await apiCancel("BOM", bom.value.name);
+    }
+    const doc = await apiAmend("BOM", target.name);
     toast(`New revision ${doc.name} created — v${doc.bom_version}`);
     router.push(`/manufacturing/bom/${doc.name}`);
     loadList();
@@ -845,7 +911,7 @@ function icon(name, size) {
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
   --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
@@ -893,9 +959,23 @@ function icon(name, size) {
 .bomx-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
 .bomx-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
+.bomx-version-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.bomx-vchip {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:600;
+  background:rgba(255,255,255,.92); color:var(--bx-mfgB);
+  border:1px solid rgba(255,255,255,.4); cursor:pointer; line-height:1.2;
+}
+.bomx-vchip:hover:not(.active) { background:#fff; }
+.bomx-vchip.active {
+  background:#fff; color:var(--bx-mfg);
+  border-color:var(--bx-mfg); font-weight:700;
+}
+.bomx-vchip-tick { color:#2F9E44; font-weight:700; }
+
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
-.bomx-toggle-row { display:flex; gap:20px; padding:0 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
+.bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
 .bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto; }

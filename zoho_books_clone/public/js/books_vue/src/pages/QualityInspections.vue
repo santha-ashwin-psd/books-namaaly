@@ -292,6 +292,10 @@
               <span class="qc-sumbar-lbl">Reference</span>
               <span class="qc-sumbar-val" style="color:#2563eb">{{ viewDoc.reference_type }} / {{ viewDoc.reference_name }}</span>
             </div>
+            <div class="qc-sumbar-item" v-if="viewDoc.work_order">
+              <span class="qc-sumbar-lbl">Work Order</span>
+              <span class="qc-sumbar-val" style="color:#2563eb;cursor:pointer" @click="router.push('/manufacturing/work-order/' + viewDoc.work_order)">{{ viewDoc.work_order }}</span>
+            </div>
             <div class="qc-sumbar-item">
               <span class="qc-sumbar-lbl">Item</span>
               <span class="qc-sumbar-val">{{ viewDoc.item }}</span>
@@ -485,6 +489,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { apiCall, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
@@ -492,6 +497,8 @@ import { fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
+const route = useRoute();
+const router = useRouter();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const list        = ref([]);
@@ -682,6 +689,15 @@ async function load() {
     toast.error(e.message || "Failed to load QC Inspections");
   } finally {
     loading.value = false;
+  }
+
+  // Deep-link support: /quality/inspections?open=QCI-0001 (used by the
+  // Work Order QC panel to jump straight to a specific inspection).
+  const openName = route.query.open;
+  if (openName) {
+    const row = list.value.find(r => r.name === openName);
+    if (row) openView(row);
+    else openView({ name: openName });
   }
 }
 

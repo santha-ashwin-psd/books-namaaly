@@ -365,7 +365,7 @@ onMounted(() => runReport());
   --bx-red:#C92A2A; --bx-redS:#FFF5F5;
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }

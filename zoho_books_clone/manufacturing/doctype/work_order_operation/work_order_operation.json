@@ -39,7 +39,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Pending\nIn Process\nCompleted",
+   "options": "Pending\nIn Process\nCompleted\nStopped",
    "default": "Pending",
    "in_list_view": 1
   },

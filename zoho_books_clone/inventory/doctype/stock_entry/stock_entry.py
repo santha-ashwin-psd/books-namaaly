@@ -395,8 +395,16 @@ class StockEntry(Document):
         Material Issue:    DR COGS / CR Inventory Asset   (stock leaves)
         Material Receipt:  DR Inventory Asset / CR Stock Adjustment  (stock arrives)
         Material Transfer: no net GL impact (value stays in inventory).
+        Manufacture:       DR Work In Progress / CR Inventory Asset  (raw materials consumed)
+                            DR Inventory Asset / CR Work In Progress  (FG + scrap received)
+                            The two WIP legs net to the process-loss variance whenever
+                            incoming value differs from outgoing value, which is the normal
+                            case since FG/scrap value reflects the BOM cost roll-up rather
+                            than a 1:1 mirror of raw material cost.
         """
-        if self.stock_entry_type not in ("Material Issue", "Material Receipt", "Stock Adjustment"):
+        if self.stock_entry_type not in (
+            "Material Issue", "Material Receipt", "Stock Adjustment", "Manufacture"
+        ):
             return
 
         inventory_account = self._get_account_by_type("Stock")
@@ -445,6 +453,65 @@ class StockEntry(Document):
                     "remarks":      f"Inventory reduction — Stock Issue {self.name}",
                 },
             ]
+        elif self.stock_entry_type == "Manufacture":
+            # Raw materials leave inventory into WIP; finished goods/scrap come
+            # back out of WIP into inventory. Two independent DR/CR pairs (not
+            # a single netted pair) so both legs show up on the WIP ledger even
+            # when outgoing and incoming value differ (process loss/gain).
+            wip_account = (
+                self._get_account_by_type("Work In Progress")
+                or self._get_account_by_type("Stock")
+                or inventory_account   # fallback: self-balancing on same account
+            )
+            gl_map = []
+            if flt(self.total_outgoing_value):
+                gl_map += [
+                    {
+                        "account":      wip_account,
+                        "debit":        flt(self.total_outgoing_value),
+                        "credit":       0,
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"WIP — raw materials consumed {self.name}",
+                    },
+                    {
+                        "account":      inventory_account,
+                        "debit":        0,
+                        "credit":       flt(self.total_outgoing_value),
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"Inventory reduction — raw materials issued to WIP {self.name}",
+                    },
+                ]
+            if flt(self.total_incoming_value):
+                gl_map += [
+                    {
+                        "account":      inventory_account,
+                        "debit":        flt(self.total_incoming_value),
+                        "credit":       0,
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"Inventory addition — FG/scrap received from WIP {self.name}",
+                    },
+                    {
+                        "account":      wip_account,
+                        "debit":        0,
+                        "credit":       flt(self.total_incoming_value),
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"WIP — finished goods/scrap received {self.name}",
+                    },
+                ]
+            if not gl_map:
+                return
         else:
             # Material Receipt / Stock Adjustment — debit Inventory, credit the
             # contra. Honor a user-chosen adjustment account when provided.

@@ -108,13 +108,24 @@ class BOM(Document):
         if self.is_default:
             frappe.db.sql(
                 """UPDATE `tabBOM` SET is_default = 0
-                   WHERE item = %s AND bom_type = %s AND name != %s AND docstatus = 1""",
-                (self.item, self.bom_type, self.name),
+                   WHERE item = %s AND bom_type = %s AND company = %s
+                   AND name != %s AND docstatus = 1""",
+                (self.item, self.bom_type, self.company, self.name),
             )
         # The BOM this one amends is no longer the active revision.
         if self.amended_from:
             frappe.db.set_value("BOM", self.amended_from, "is_active", 0)
 
     def on_cancel(self):
+        linked = frappe.get_all(
+            "Work Order",
+            filters={"bom": self.name, "docstatus": 1},
+            limit=1,
+        )
+        if linked:
+            frappe.throw(_(
+                "Cannot cancel: submitted Work Order {0} still uses this BOM. "
+                "Cancel/complete that Work Order first if this was cancelled in error."
+            ).format(linked[0].name))
         self.is_active = 0
         self.db_set("is_active", 0)

@@ -301,6 +301,39 @@
                   <div class="bomx-field-hint" v-else-if="remainingQty<=0" style="margin-top:8px">Fully produced — no further completions possible.</div>
                 </div>
 
+                <div class="bomx-prod-card" v-if="qcInspections.length || qcLoading">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div class="bomx-section-lbl" style="margin-bottom:0">Quality Inspections</div>
+                    <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadQcInspections" :disabled="qcLoading">Refresh</button>
+                  </div>
+                  <div v-if="qcSummary" style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                    <span
+                      class="bomx-badge"
+                      :style="qcSummary.overall==='Fail' ? 'background:var(--bx-redS);color:var(--bx-red)' : (qcSummary.overall==='Pending' ? 'background:var(--bx-amberS);color:var(--bx-amber)' : 'background:var(--bx-greenS);color:var(--bx-green)')">
+                      {{ qcSummary.overall==='Fail' ? 'QC Failed' : (qcSummary.overall==='Pending' ? 'QC Pending' : 'QC Passed') }}
+                    </span>
+                    <span style="font-size:12px;color:var(--bx-muted)">
+                      {{ qcSummary.pass }} passed · {{ qcSummary.pending }} pending · {{ qcSummary.fail }} failed
+                    </span>
+                  </div>
+                  <div class="bomx-field-hint" v-if="qcSummary && qcSummary.overall!=='Pass'" style="color:var(--bx-amber);margin-top:8px">
+                    {{ qcSummary.overall==='Fail' ? 'One or more produced batches failed inspection — review before dispatch.' : 'Finished-good inspection is still pending for this Work Order.' }}
+                  </div>
+                  <div class="bomx-rm-cards" style="margin-top:10px" v-if="qcInspections.length">
+                    <div class="bomx-rm-card" v-for="qi in qcInspections" :key="qi.name" style="cursor:pointer" @click="router.push('/quality/inspections?open=' + qi.name)">
+                      <div class="bomx-rm-card-hdr">
+                        <span class="bomx-tree-icon">🔬</span>
+                        <span class="bomx-rm-card-title mono" style="font-weight:600">{{ qi.name }}</span>
+                        <span class="bomx-badge" :style="qi.status==='Fail' ? 'background:var(--bx-redS);color:var(--bx-red)' : (qi.status==='Pass' ? 'background:var(--bx-greenS);color:var(--bx-green)' : 'background:var(--bx-amberS);color:var(--bx-amber)')">{{ qi.docstatus===0 ? 'Pending' : qi.status }}</span>
+                      </div>
+                      <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
+                        <div class="bomx-rm-field"><label>Item</label><div class="bomx-rm-static">{{ qi.item_name || qi.item }}</div></div>
+                        <div class="bomx-rm-field"><label>Date</label><div class="bomx-rm-static">{{ fmtDate(qi.inspection_date) }}</div></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="bomx-prod-card">
                   <div style="display:flex;align-items:center;justify-content:space-between">
                     <div class="bomx-section-lbl" style="margin-bottom:0">Linked Stock Entries</div>
@@ -362,8 +395,8 @@
         <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:14px">
           <div>
             <div class="bomx-hf-label">Qty Manufactured <span style="color:var(--bx-red)">*</span></div>
-            <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="remainingQty" step="any" style="width:100%"/>
-            <div class="bomx-field-hint">Remaining planned qty: {{ fmt(remainingQty) }}</div>
+            <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="maxCompletableQty" step="any" style="width:100%"/>
+            <div class="bomx-field-hint">Remaining planned qty: {{ fmt(remainingQty) }}<span v-if="overProductionAllowancePct>0"> · up to {{ fmt(maxCompletableQty) }} allowed with the {{ overProductionAllowancePct }}% over-production allowance</span></div>
           </div>
           <div>
             <div class="bomx-hf-label">Process Loss / Wastage Qty</div>
@@ -543,6 +576,8 @@ const manufacturedItems = computed(() =>
 );
 const warehouseList = ref([]);
 const stockEntries = ref([]);
+const qcInspections = ref([]);
+const qcLoading = ref(false);
 const operationsList = ref([]);
 const workstationsList = ref([]);
 const companiesList = ref([]);
@@ -565,7 +600,7 @@ onMounted(async () => {
     const co = await resolveCompany();
     if (isNew.value) wo.value.company = co;
 
-    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
+    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus", "bom_version", "is_default"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
     const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
     const itemNameOf = {};
@@ -588,10 +623,11 @@ onMounted(async () => {
     salesOrdersList.value = sos || [];
 
     await loadList();
+    await fetchManufacturingDefaults();
     if (route.params.name && !isNew.value) {
       await loadWO();
     } else {
-      await prefillManufacturingDefaults();
+      applyWarehouseDefaults();
     }
   } catch (e) {
     toast("Error loading data: " + e.message, "error");
@@ -601,24 +637,31 @@ onMounted(async () => {
 
 // New Work Order — prefill default warehouses from Manufacturing Settings
 // (previously these only appeared after a BOM was selected)
-async function prefillManufacturingDefaults() {
+let manufacturingDefaults = null;
+async function fetchManufacturingDefaults() {
   try {
-    const ms = await apiCall(
+    manufacturingDefaults = await apiCall(
       "zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults"
     );
-    if (ms) {
-      if (!wo.value.source_warehouse && ms.default_source_warehouse)
-        wo.value.source_warehouse = ms.default_source_warehouse;
-      if (!wo.value.wip_warehouse && ms.default_wip_warehouse)
-        wo.value.wip_warehouse = ms.default_wip_warehouse;
-      if (!wo.value.fg_warehouse && ms.default_fg_warehouse)
-        wo.value.fg_warehouse = ms.default_fg_warehouse;
-      if (!wo.value.scrap_warehouse && ms.default_scrap_warehouse)
-        wo.value.scrap_warehouse = ms.default_scrap_warehouse;
+    if (manufacturingDefaults) {
+      overProductionAllowancePct.value = flt(manufacturingDefaults.over_production_allowance_pct);
     }
   } catch (e) {
     // non-fatal — settings may not be configured yet
   }
+}
+
+function applyWarehouseDefaults() {
+  const ms = manufacturingDefaults;
+  if (!ms) return;
+  if (!wo.value.source_warehouse && ms.default_source_warehouse)
+    wo.value.source_warehouse = ms.default_source_warehouse;
+  if (!wo.value.wip_warehouse && ms.default_wip_warehouse)
+    wo.value.wip_warehouse = ms.default_wip_warehouse;
+  if (!wo.value.fg_warehouse && ms.default_fg_warehouse)
+    wo.value.fg_warehouse = ms.default_fg_warehouse;
+  if (!wo.value.scrap_warehouse && ms.default_scrap_warehouse)
+    wo.value.scrap_warehouse = ms.default_scrap_warehouse;
 }
 
 watch(() => route.params.name, async (name) => {
@@ -637,7 +680,8 @@ async function loadWO() {
   if (isNew.value) {
     wo.value = emptyWO();
     selectedProductionItem.value = "";
-    await prefillManufacturingDefaults();
+    await fetchManufacturingDefaults();
+    applyWarehouseDefaults();
     return;
   }
   const data = await apiGet("Work Order", route.params.name);
@@ -646,6 +690,32 @@ async function loadWO() {
   if (!wo.value.items) wo.value.items = [];
   if (!wo.value.operations) wo.value.operations = [];
   if (wo.value.docstatus === 1) await loadStockEntries();
+
+  // If the linked BOM is no longer active (it was amended into a newer version,
+  // or cancelled), auto-switch a still-editable draft to the latest active
+  // version for the same production item so Submit doesn't fail.
+  if (!readOnly.value && wo.value.bom) {
+    const stillActive = bomList.value.some(b => b.name === wo.value.bom);
+    if (!stillActive) {
+      let itemCode = wo.value.production_item;
+      if (!itemCode) {
+        try {
+          const staleBom = await apiGet("BOM", wo.value.bom);
+          itemCode = staleBom ? staleBom.item : null;
+        } catch (e) { /* stale BOM may itself be inaccessible — fall through */ }
+      }
+      const candidates = bomList.value.filter(b => b.item === itemCode);
+      candidates.sort((a, b) => (Number(b.bom_version) || 0) - (Number(a.bom_version) || 0));
+      const replacement = candidates.find(c => c.is_default) || candidates[0] || null;
+      if (replacement) {
+        wo.value.bom = replacement.name;
+        toast(`Linked BOM was superseded — switched to the latest version, ${replacement.name}`, "error");
+      } else {
+        wo.value.bom = "";
+        toast("The linked BOM is no longer active. Please select a valid BOM.", "error");
+      }
+    }
+  }
 }
 
 async function onProductionItemChange() {
@@ -748,8 +818,17 @@ async function save() {
 
 async function submitWO() {
   if (!wo.value.name) return;
+  if (!wo.value.bom) return toast("Please select a BOM", "error");
+  if (!wo.value.qty || wo.value.qty <= 0) return toast("Qty to Manufacture must be greater than 0", "error");
+  if (!wo.value.fg_warehouse) return toast("Finished Goods Warehouse is required", "error");
+  if (!wo.value.items || !wo.value.items.length) return toast("Load raw materials from the BOM first", "error");
+
   submitting.value = true;
   try {
+    // Persist any unsaved edits (e.g. an auto-corrected BOM reference) before
+    // submitting — apiSubmit acts on the doc as currently stored in the DB.
+    const saved = await apiSave(wo.value);
+    wo.value = saved;
     const doc = await apiSubmit("Work Order", wo.value.name);
     wo.value = doc;
     toast("Work Order submitted");
@@ -818,6 +897,18 @@ async function resumeWO() {
 }
 
 const remainingQty = computed(() => flt(wo.value.qty) - flt(wo.value.produced_qty));
+// Manufacturing Settings' Over-Production Allowance % lets complete_work_order
+// (server-side) accept qty_manufactured beyond the planned qty. The Complete
+// modal used to hard-cap at remainingQty regardless of this setting, which
+// made the allowance completely unreachable from the UI — every over-planned
+// completion would be blocked client-side before the request even left the
+// browser, no matter how the admin had configured it.
+const overProductionAllowancePct = ref(0);
+const maxCompletableQty = computed(() => {
+  const planned = flt(wo.value.qty);
+  const allowance = planned * (flt(overProductionAllowancePct.value) / 100);
+  return Math.max(0, planned + allowance - flt(wo.value.produced_qty));
+});
 const progressPct = computed(() => {
   const q = flt(wo.value.qty);
   if (!q) return 0;
@@ -852,7 +943,37 @@ async function loadStockEntries() {
     }) || [];
   } catch (e) { /* non-fatal */ }
   seLoading.value = false;
+  await loadQcInspections();
 }
+
+// QC Inspections for finished-good items get auto-created (In Process type)
+// against the Manufacture Stock Entry when this Work Order is completed —
+// see zoho_books_clone.quality.qc_engine.auto_create_qc_for_stock_entry.
+// They're stamped with a `work_order` field for traceability; surface them
+// here so a Pending/Fail QC on the produced batch is never silently missed.
+async function loadQcInspections() {
+  qcLoading.value = true;
+  try {
+    qcInspections.value = await apiList("QC Inspection", {
+      fields: ["name", "status", "item", "item_name", "inspection_date", "reference_name", "docstatus"],
+      filters: [["work_order", "=", wo.value.name]],
+      limit: 50, order: "creation desc",
+    }) || [];
+  } catch (e) { qcInspections.value = []; }
+  qcLoading.value = false;
+}
+
+const qcSummary = computed(() => {
+  const list = qcInspections.value || [];
+  if (!list.length) return null;
+  const fail = list.filter(q => q.status === "Fail").length;
+  const pending = list.filter(q => q.status === "Pending" || q.docstatus === 0).length;
+  const pass = list.filter(q => q.status === "Pass" && q.docstatus === 1).length;
+  let overall = "Pass";
+  if (fail > 0) overall = "Fail";
+  else if (pending > 0) overall = "Pending";
+  return { fail, pending, pass, overall, total: list.length };
+});
 
 // ── Complete Work Order modal ──────────────────────────────────────────
 const showCompleteModal = ref(false);
@@ -865,8 +986,10 @@ const completeForm = ref({
   scrap_items: [],
 });
 
-function openCompleteModal() {
-  const qtyMfg = remainingQty.value > 0 ? remainingQty.value : 0;
+// Derive the BOM-proportional process loss & scrap-item quantities for a
+// given Qty Manufactured. Shared by openCompleteModal (initial prefill) and
+// the qty_manufactured watcher below (keeps them in sync on edits).
+function deriveScrapAndLoss(qtyMfg) {
   const ratio = qtyMfg / flt(wo.value.qty || 1);
   const derivedLoss = bomProcessLoss.value > 0
     ? parseFloat((qtyMfg * bomProcessLoss.value / 100).toFixed(4))
@@ -874,6 +997,12 @@ function openCompleteModal() {
   const preScrap = bomScrapItems.value.length
     ? bomScrapItems.value.map(s => ({ item_code: s.item_code, qty: parseFloat((flt(s.qty) * ratio).toFixed(4)) }))
     : [];
+  return { derivedLoss, preScrap };
+}
+
+function openCompleteModal() {
+  const qtyMfg = remainingQty.value > 0 ? remainingQty.value : 0;
+  const { derivedLoss, preScrap } = deriveScrapAndLoss(qtyMfg);
   completeForm.value = {
     qty_manufactured: qtyMfg,
     process_loss_qty: derivedLoss,
@@ -887,10 +1016,31 @@ function openCompleteModal() {
 function closeCompleteModal() { showCompleteModal.value = false; }
 function addCompleteScrap() { completeForm.value.scrap_items.push({ item_code: "", qty: 1 }); }
 
+// Keep the BOM-derived process loss & scrap-item quantities in sync with
+// Qty Manufactured whenever the person edits it in the modal. Without this,
+// a partial completion (qty edited down from the prefilled full remaining
+// qty) would silently submit scrap/process-loss figures sized for the
+// original, larger qty.
+watch(() => completeForm.value.qty_manufactured, (newQty) => {
+  if (!showCompleteModal.value) return;
+  const qtyMfg = flt(newQty);
+  const { derivedLoss, preScrap } = deriveScrapAndLoss(qtyMfg);
+  completeForm.value.process_loss_qty = derivedLoss;
+
+  // Only rescale rows that still match a BOM-derived scrap item (by
+  // item_code) so manually added/edited scrap rows aren't clobbered.
+  const bomCodes = new Set(bomScrapItems.value.map(s => s.item_code));
+  completeForm.value.scrap_items = completeForm.value.scrap_items.map(row => {
+    if (!bomCodes.has(row.item_code)) return row;
+    const match = preScrap.find(p => p.item_code === row.item_code);
+    return match ? { ...row, qty: match.qty } : row;
+  });
+});
+
 async function submitComplete() {
   const qty = flt(completeForm.value.qty_manufactured);
   if (qty <= 0) return toast("Qty Manufactured must be greater than zero", "error");
-  if (qty > remainingQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed the remaining ${fmt(remainingQty.value)}`, "error");
+  if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value>0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}`, "error");
 
   actionLoading.value = "complete";
   try {
@@ -959,7 +1109,7 @@ function icon(name, size) {
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
   --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
@@ -1014,7 +1164,7 @@ function icon(name, size) {
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
-.bomx-toggle-row { display:flex; gap:20px; padding:0 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
+.bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
 .bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }

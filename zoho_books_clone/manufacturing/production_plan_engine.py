@@ -108,21 +108,32 @@ def get_items_from_sales_orders(sales_orders):
             "item_name": r.item_name,
             "planned_qty": 0.0,
             "stock_uom": r.uom,
-            "sales_order": r.parent,
+            # Multiple orders can contribute to the same item — keep the
+            # ordered, de-duplicated list of contributing orders here and
+            # join it into the free-text "sales_order" field below. A plain
+            # substring check on the joined string (e.g. "SO-0001" being a
+            # substring of "SO-00010") would wrongly skip genuinely new
+            # orders, so track membership with the list itself instead.
+            "_sales_orders": [],
         })
         entry["planned_qty"] += pending
-        # Multiple orders can contribute to the same item — keep the first
-        # order as the free-text reference rather than trying to track many.
-        if entry["sales_order"] != r.parent:
-            entry["sales_order"] = entry["sales_order"] + ", " + r.parent \
-                if r.parent not in entry["sales_order"] else entry["sales_order"]
+        if r.parent not in entry["_sales_orders"]:
+            entry["_sales_orders"].append(r.parent)
 
     items = list(agg.values())
     for it in items:
+        it["sales_order"] = ", ".join(it.pop("_sales_orders"))
+        # Only resolve to a BOM that's still submitted AND active — an
+        # is_default BOM that's since been deactivated/superseded shouldn't
+        # get silently pre-selected on the Items-to-Manufacture table.
         bom = frappe.db.get_value(
-            "BOM", {"item": it["item_code"], "is_default": 1, "docstatus": 1}, "name"
+            "BOM",
+            {"item": it["item_code"], "is_default": 1, "docstatus": 1, "is_active": 1},
+            "name",
         ) or frappe.db.get_value(
-            "BOM", {"item": it["item_code"], "docstatus": 1}, "name"
+            "BOM",
+            {"item": it["item_code"], "docstatus": 1, "is_active": 1},
+            "name",
         )
         it["bom_no"] = bom or ""
 
@@ -138,30 +149,29 @@ def get_raw_materials(po_items, warehouse=None):
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     assert_can("BOM", "read")
 
+    from zoho_books_clone.manufacturing.work_order_engine import get_bom_breakdown
+
     po_items = _parse_list(po_items)
     po_items = [r for r in po_items if r.get("bom_no") and flt(r.get("planned_qty")) > 0]
     if not po_items:
         frappe.throw(_("Add items with a selected BOM and Planned Qty first."))
 
-    # Cache BOM docs since the same BOM can appear on multiple rows.
-    bom_cache = {}
+    # Reuse the same explosion logic Work Orders use so Packing BOMs (whose
+    # materials live in packing_items + bulk_item, not the `items` table) and
+    # Manufacturing/Sub-Assembly BOMs with sub-assembly or phantom rows (which
+    # need recursive explosion down to leaf raw materials) are both handled
+    # correctly — reading bom_doc.items directly here, as before, silently
+    # produced zero rows for Packing BOMs and counted intermediate
+    # sub-assembly items as if they were purchasable raw materials.
     agg = {}
     for row in po_items:
-        bom_no = row["bom_no"]
-        bom_doc = bom_cache.get(bom_no)
-        if bom_doc is None:
-            bom_doc = frappe.get_doc("BOM", bom_no)
-            if bom_doc.docstatus != 1:
-                frappe.throw(_("BOM {0} is not submitted.").format(bom_no))
-            bom_cache[bom_no] = bom_doc
-
-        ratio = flt(row["planned_qty"]) / flt(bom_doc.quantity or 1)
-        for r in bom_doc.items:
-            entry = agg.setdefault(r.item_code, {
-                "item_code": r.item_code, "item_name": r.item_name,
-                "uom": r.uom, "required_qty": 0.0,
+        breakdown = get_bom_breakdown(row["bom_no"], row["planned_qty"])
+        for r in breakdown["items"]:
+            entry = agg.setdefault(r["item_code"], {
+                "item_code": r["item_code"], "item_name": r["item_name"],
+                "uom": r["uom"], "required_qty": 0.0,
             })
-            entry["required_qty"] += flt(r.qty) * ratio
+            entry["required_qty"] += flt(r["required_qty"])
 
     item_codes = list(agg.keys())
     balances = get_stock_balance_bulk(item_codes, warehouse) if warehouse else {}
@@ -204,6 +214,12 @@ def create_work_orders(production_plan):
 
         wo = frappe.new_doc("Work Order")
         wo.bom = row.bom_no
+        # production_item's fetch_from="bom.item" only runs in the browser
+        # form controller — it does nothing on a server-side frappe.new_doc()
+        # insert, and the field is mandatory, so without this line every row
+        # here throws a MandatoryError before the first Work Order is even
+        # created.
+        wo.production_item = row.item_code
         wo.qty = pending
         wo.source_warehouse = pp.default_source_warehouse
         wo.wip_warehouse = pp.default_wip_warehouse

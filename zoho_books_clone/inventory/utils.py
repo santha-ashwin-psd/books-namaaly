@@ -180,33 +180,38 @@ def check_reorder(item_code: str, warehouse: str) -> bool:
     item_name = item_doc.get("item_name") or item_code
     subject   = f"Reorder Alert: {item_name} ({item_code})"
 
-    # ── Notification (deduplicated per item) ────────────────────────────────
-    existing = frappe.db.exists(
-        "Notification Log",
-        {"subject": subject, "document_type": "Bin", "read": 0},
-    )
-    if not existing:
-        for user in frappe.get_all(
-            "Has Role",
-            filters={"role": "System Manager", "parenttype": "User"},
-            fields=["parent"],
-            distinct=True,
-        ):
-            try:
-                frappe.get_doc({
-                    "doctype":       "Notification Log",
-                    "subject":       subject,
-                    "email_content": (
-                        f"{item_name} ({item_code}) in <b>{warehouse}</b> — "
-                        f"qty {flt(bin_data.actual_qty):.2f} is below "
-                        f"reorder level {flt(bin_data.reorder_level):.2f}."
-                    ),
-                    "for_user":      user.parent,
-                    "document_type": "Bin",
-                    "type":          "Alert",
-                }).insert(ignore_permissions=True)
-            except Exception:
-                pass
+    # ── Notification (deduplicated per item, per user) ──────────────────────
+    for user in frappe.get_all(
+        "Has Role",
+        filters={"role": "System Manager", "parenttype": "User"},
+        fields=["parent"],
+        distinct=True,
+    ):
+        # Dedup must be scoped to the recipient — checking existence without
+        # for_user meant that once *any* System Manager had one unread alert
+        # for this item, every other System Manager silently never got
+        # notified at all, since the loop below never ran for anyone.
+        already_notified = frappe.db.exists(
+            "Notification Log",
+            {"subject": subject, "document_type": "Bin", "read": 0, "for_user": user.parent},
+        )
+        if already_notified:
+            continue
+        try:
+            frappe.get_doc({
+                "doctype":       "Notification Log",
+                "subject":       subject,
+                "email_content": (
+                    f"{item_name} ({item_code}) in <b>{warehouse}</b> — "
+                    f"qty {flt(bin_data.actual_qty):.2f} is below "
+                    f"reorder level {flt(bin_data.reorder_level):.2f}."
+                ),
+                "for_user":      user.parent,
+                "document_type": "Bin",
+                "type":          "Alert",
+            }).insert(ignore_permissions=True)
+        except Exception:
+            pass
 
     # ── Auto PO ─────────────────────────────────────────────────────────────
     if item_doc.get("auto_po_enabled"):
@@ -219,6 +224,20 @@ def _auto_create_po(item_code: str, item_doc: dict, triggered_warehouse: str) ->
     """Create a draft PO from the item's saved reorder config. Errors are logged, not raised."""
     try:
         from frappe.utils import today
+
+        # check_reorder can fire repeatedly while stock stays below the
+        # reorder level (every stock-decreasing movement re-triggers it) —
+        # without this guard, each call would create another draft PO for
+        # the same item. Skip if an un-submitted auto-created PO for this
+        # item already exists; once it's submitted/received or the person
+        # deletes it, the next reorder check is free to create a new one.
+        existing_draft = frappe.db.exists(
+            "Purchase Order Item",
+            {"item_code": item_code, "docstatus": 0},
+        )
+        if existing_draft:
+            return
+
         supplier  = item_doc.get("reorder_supplier") or ""
         recv_wh   = (item_doc.get("reorder_warehouse_override")
                      or item_doc.get("default_warehouse")

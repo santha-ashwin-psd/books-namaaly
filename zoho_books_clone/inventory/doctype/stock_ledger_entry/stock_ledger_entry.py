@@ -119,3 +119,16 @@ class StockLedgerEntry(Document):
         bin_doc.flags.ignore_links = True
         bin_doc.flags.ignore_mandatory = True
         bin_doc.save(ignore_permissions=True)
+
+        # Reorder check runs against the freshly-saved Bin. This is the only
+        # place it's wired up: it used to live in Stock Entry's _sync_bin(),
+        # but that method is dead code — nothing calls it, since _update_bin()
+        # here is the single authoritative Bin writer (see the comments in
+        # Stock Entry._create_sle / _reverse_sle). As a result reorder alerts
+        # and auto-PO creation never actually fired in practice. Best-effort:
+        # a failure here must not roll back the stock movement itself.
+        try:
+            from zoho_books_clone.inventory.utils import check_reorder
+            check_reorder(self.item_code, self.warehouse)
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "Reorder check failed")

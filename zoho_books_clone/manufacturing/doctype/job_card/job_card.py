@@ -18,6 +18,10 @@ class JobCard(Document):
         for row in (self.time_logs or []):
             if row.from_time and row.to_time:
                 diff_secs = time_diff_in_seconds(row.to_time, row.from_time)
+                if diff_secs < 0:
+                    frappe.throw(
+                        _("Time log row: To Time cannot be before From Time.")
+                    )
                 row.time_in_mins = flt(diff_secs) / 60
             total += flt(row.time_in_mins)
         self.total_time_in_mins = total

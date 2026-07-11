@@ -208,9 +208,10 @@ function goBackToList() {
 
 async function isWorkstationDeletable(row) {
   try {
-    const [inOp, inWoOp] = await Promise.all([
+    const [inOp, inWoOp, inBomOp] = await Promise.all([
       apiList("Operation", { fields: ["name"], filters: [["default_workstation", "=", row.name]], limit: 1 }),
       apiList("Work Order Operation", { fields: ["parent"], filters: [["workstation", "=", row.name]], limit: 1 }),
+      apiList("BOM Operation", { fields: ["parent"], filters: [["workstation", "=", row.name]], limit: 1 }),
     ]);
     if (inOp && inOp.length) {
       toast(`${row.name} is used as the default workstation on Operation ${inOp[0].name} and cannot be deleted.`, "error");
@@ -218,6 +219,10 @@ async function isWorkstationDeletable(row) {
     }
     if (inWoOp && inWoOp.length) {
       toast(`${row.name} is used by Work Order ${inWoOp[0].parent} and cannot be deleted.`, "error");
+      return false;
+    }
+    if (inBomOp && inBomOp.length) {
+      toast(`${row.name} is used by BOM ${inBomOp[0].parent} and cannot be deleted.`, "error");
       return false;
     }
   } catch (e) {
@@ -351,7 +356,7 @@ function icon(name, size) {
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
   --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
@@ -395,7 +400,7 @@ function icon(name, size) {
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
-.bomx-toggle-row { display:flex; gap:20px; padding:0 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
+.bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
 .bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }

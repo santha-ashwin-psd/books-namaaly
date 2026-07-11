@@ -1,4 +1,5 @@
 import { useConfirm } from "../composables/useConfirm.js";
+import { useToast } from "../composables/useToast.js";
 import { session } from "./session.js";
 
 // ── Global read-only guard ──────────────────────────────────────────────────
@@ -33,6 +34,25 @@ function _parseServerMessage(msg) {
   const text = (typeof obj === "object" ? obj.message : String(obj) || "");
   return text.replace(/<[^>]*>/g, "")
              .replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/^\s+|\s+$/g, "");
+}
+
+// frappe.msgprint(indicator=...) -> Toast type. Defaults to "info" for
+// plain msgprints with no indicator (e.g. informational, non-alert messages).
+function _indicatorToToastType(msg) {
+  let obj = msg;
+  if (typeof msg === "string") {
+    const trimmed = msg.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try { obj = JSON.parse(trimmed); } catch { return "info"; }
+    } else {
+      return "info";
+    }
+  }
+  const indicator = (typeof obj === "object" && obj.indicator) ? String(obj.indicator).toLowerCase() : "";
+  if (indicator === "red") return "error";
+  if (indicator === "orange" || indicator === "yellow") return "warning";
+  if (indicator === "green") return "success";
+  return "info";
 }
 
 function _parseResponse(json, status) {
@@ -77,7 +97,7 @@ function _parseResponse(json, status) {
       const list = Array.isArray(msgs) ? msgs : [msgs];
       for (const m of list) {
         const text = _parseServerMessage(m);
-        if (text) console.warn("[server]", text);
+        if (text) useToast().toast(text, _indicatorToToastType(m), 6000);
       }
     } catch (e) {}
   }

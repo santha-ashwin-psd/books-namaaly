@@ -129,6 +129,7 @@ def get_bom_breakdown(bom, qty):
     else:
         # Manufacturing or Sub-Assembly
         items = _explode_bom_items(bom_doc.items, ratio, depth=0)
+        items = _merge_duplicate_rows(items)
 
     operations = [{
         "operation": r.operation,
@@ -210,6 +211,33 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None):
             "source_warehouse": r.source_warehouse or "",
         })
     return result
+
+
+def _merge_duplicate_rows(rows):
+    """Consolidate exploded raw-material rows that share the same item_code
+    and source_warehouse into a single row.
+
+    The same raw material can appear more than once when it's used both
+    directly on the top BOM and inside one or more sub-assembly/phantom BOMs
+    that get exploded into the flat list — without merging, the Work Order
+    (and later the Manufacture Stock Entry) would carry two separate rows for
+    the same item. Stock Entry's negative-stock guard checks each row against
+    the warehouse's Bin qty independently and doesn't decrement for earlier
+    rows in the same document, so split rows can jointly overconsume qty that
+    a single merged row would correctly have blocked.
+    """
+    merged = {}
+    order = []
+    for r in rows:
+        key = (r["item_code"], r.get("source_warehouse") or "")
+        if key not in merged:
+            merged[key] = dict(r)
+            order.append(key)
+        else:
+            m = merged[key]
+            m["required_qty"] = flt(m["required_qty"]) + flt(r["required_qty"])
+            m["amount"] = flt(m["amount"]) + flt(r["amount"])
+    return [merged[k] for k in order]
 
 
 def _explode_packing_bom(bom_doc, ratio):
@@ -398,16 +426,32 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         fg_row["batch_no"] = batch_no
     se.append("items", fg_row)
 
-    # Recoverable scrap/by-products, if any.
+    # Recoverable scrap/by-products, if any. Mirror the FG handling above:
+    # batch-tracked scrap items need a Batch pre-created before Stock Entry's
+    # own validation (which requires the Batch to already exist) will let the
+    # row through. A caller can pass an explicit batch_no per scrap item via
+    # {"item_code": ..., "qty": ..., "batch_no": ...}; otherwise one is
+    # auto-generated the same way the FG batch is.
+    scrap_warehouse = wo.scrap_warehouse or wo.fg_warehouse
     for s in scrap_items:
         s_qty = flt(s.get("qty"))
         if s_qty <= 0 or not s.get("item_code"):
             continue
-        se.append("items", {
-            "item_code": s["item_code"],
-            "qty": s_qty,
-            "t_warehouse": wo.scrap_warehouse or wo.fg_warehouse,
-        })
+        scrap_row = {"item_code": s["item_code"], "qty": s_qty, "t_warehouse": scrap_warehouse}
+        if frappe.db.get_value("Item", s["item_code"], "has_batch_no"):
+            s_batch_no = s.get("batch_no")
+            if not s_batch_no or not frappe.db.exists("Batch", s_batch_no):
+                new_scrap_batch = frappe.get_doc({
+                    "doctype": "Batch",
+                    "batch_no": s_batch_no or None,
+                    "item": s["item_code"],
+                    "warehouse": scrap_warehouse,
+                    "manufacturing_date": manufacturing_date or nowdate(),
+                })
+                new_scrap_batch.insert(ignore_permissions=True)
+                s_batch_no = new_scrap_batch.name
+            scrap_row["batch_no"] = s_batch_no
+        se.append("items", scrap_row)
 
     se.insert(ignore_permissions=True)
     se.submit()
@@ -459,6 +503,7 @@ def stop_work_order(work_order):
         frappe.throw(_("Work Order is already stopped."))
 
     wo.db_set("status", "Stopped")
+    _set_operations_status(wo, "Stopped")
     frappe.db.commit()
     return "Stopped"
 
@@ -479,5 +524,8 @@ def resume_work_order(work_order):
 
     resume_status = "In Process" if flt(wo.produced_qty) > 0 else "Submitted"
     wo.db_set("status", resume_status)
+    # Operation rows don't have a "Submitted" state (only Pending/In Process/
+    # Completed/Stopped) — Pending is the equivalent starting point.
+    _set_operations_status(wo, "In Process" if resume_status == "In Process" else "Pending")
     frappe.db.commit()
     return resume_status

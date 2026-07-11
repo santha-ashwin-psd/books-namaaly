@@ -28,32 +28,46 @@ class WorkOrder(Document):
 			frappe.throw(_("Produced Qty cannot exceed Qty to Manufacture."))
 
 	def set_items_and_operations_from_bom(self):
+		"""Safety net used only when a Work Order reaches validate() with a BOM
+		set but no Raw Material rows (e.g. created via the generic API without
+		the client calling get_bom_breakdown first). Delegates to
+		manufacturing.work_order_engine.get_bom_breakdown so Manufacturing,
+		Sub-Assembly, and Packing BOMs — including sub-assembly/phantom
+		explosion and duplicate-row merging — are all handled the same way
+		here as in the normal client-driven flow. A Packing BOM has no rows
+		in its own `items` table by design (its materials live in
+		`packing_items` + the bulk item), so reading bom.items directly here
+		would always come back empty and fail the "must have at least one Raw
+		Material row" check below.
+		"""
+		from zoho_books_clone.manufacturing.work_order_engine import get_bom_breakdown
+
 		bom = frappe.get_doc("BOM", self.bom)
 		if bom.docstatus != 1:
 			frappe.throw(_("Only a submitted BOM can be used on a Work Order."))
 
-		ratio = flt(self.qty) / flt(bom.quantity or 1)
+		breakdown = get_bom_breakdown(self.bom, self.qty)
 
 		self.set("items", [])
-		for row in bom.items:
+		for row in breakdown["items"]:
 			self.append("items", {
-				"item_code": row.item_code,
-				"item_name": row.item_name,
-				"required_qty": flt(row.qty) * ratio,
-				"uom": row.uom,
-				"rate": row.rate,
-				"amount": flt(row.rate) * flt(row.qty) * ratio,
-				"source_warehouse": self.source_warehouse,
+				"item_code": row["item_code"],
+				"item_name": row["item_name"],
+				"required_qty": row["required_qty"],
+				"uom": row["uom"],
+				"rate": row["rate"],
+				"amount": row["amount"],
+				"source_warehouse": row.get("source_warehouse") or self.source_warehouse,
 			})
 
 		self.set("operations", [])
-		for row in bom.operations:
+		for row in breakdown["operations"]:
 			self.append("operations", {
-				"operation": row.operation,
-				"workstation": row.workstation,
-				"planned_time_in_mins": row.time_in_mins,
-				"hour_rate": row.hour_rate,
-				"cost": row.cost,
+				"operation": row["operation"],
+				"workstation": row["workstation"],
+				"planned_time_in_mins": row["planned_time_in_mins"],
+				"hour_rate": row["hour_rate"],
+				"cost": row["cost"],
 			})
 
 	def on_submit(self):

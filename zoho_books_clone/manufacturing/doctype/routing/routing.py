@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 from zoho_books_clone.utils.access import assert_can
 
@@ -27,11 +28,13 @@ def get_routing_operations(routing):
     doc = frappe.get_doc("Routing", routing)
     rows = []
     for op in doc.operations:
+        time_in_mins = op.time_in_mins or 0
+        hour_rate = op.hour_rate or 0
         rows.append({
             "operation": op.operation,
             "workstation": op.workstation or "",
-            "time_in_mins": op.time_in_mins or 0,
-            "hour_rate": op.hour_rate or 0,
-            "cost": 0,
+            "time_in_mins": time_in_mins,
+            "hour_rate": hour_rate,
+            "cost": flt(time_in_mins) / 60.0 * flt(hour_rate),
         })
     return rows

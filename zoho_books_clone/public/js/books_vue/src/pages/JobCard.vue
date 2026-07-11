@@ -435,7 +435,7 @@ function icon(name, size) {
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
   --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }

@@ -11,6 +11,11 @@ class PackingSlip(Document):
             self.company = frappe.db.get_value("Work Order", self.work_order, "company") or ""
 
     def validate(self):
+        if not self.is_new():
+            prev_status = frappe.db.get_value("Packing Slip", self.name, "status")
+            if prev_status == "Cancelled":
+                frappe.throw(_("This Packing Slip is cancelled and cannot be edited."))
+
         if not self.packing_date:
             self.packing_date = nowdate()
         if not self.items:
@@ -33,10 +38,11 @@ class PackingSlip(Document):
             for r in (self.items or [])
         )
         any_packed = any(flt(r.packed_qty) > 0.0001 for r in (self.items or []))
-        new_status = self.status
         if all_packed:
             new_status = "Packed"
         elif any_packed:
             new_status = "In Progress"
+        else:
+            new_status = "Draft"
         if new_status != self.status:
             self.db_set("status", new_status)

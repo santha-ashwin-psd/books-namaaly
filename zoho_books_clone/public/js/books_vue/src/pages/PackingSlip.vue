@@ -300,7 +300,7 @@ const workOrderList = ref([]);
 const itemsList = ref([]);
 const uomList = ref([]);
 
-const readOnly = computed(() => !isNew.value && ps.value.status === "Packed");
+const readOnly = computed(() => !isNew.value && (ps.value.status === "Packed" || ps.value.status === "Cancelled"));
 const packedCount = computed(() =>
   (ps.value.items || []).filter(r => flt(r.packed_qty) >= flt(r.required_qty) - 0.0001 && flt(r.required_qty) > 0).length
 );
@@ -470,7 +470,7 @@ function icon(name, size) {
   --bx-red:#C92A2A; --bx-redS:#FFF5F5;
   --bx-amber:#E67700; --bx-amberS:#FFF3BF;
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
-  --bx-mfg:#B45309; --bx-mfgL:#D97706; --bx-mfgS:#FFFBEB; --bx-mfgB:#92400E;
+  --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
