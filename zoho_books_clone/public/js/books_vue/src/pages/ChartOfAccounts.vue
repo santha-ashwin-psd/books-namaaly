@@ -1010,7 +1010,6 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
   }
 
   .coa-mc-value--code {
-    font-family: 'Courier New', monospace;
     font-size: 12px;
     color: #6b7280;
     font-weight: 500;

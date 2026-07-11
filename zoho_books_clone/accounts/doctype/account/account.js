@@ -29,12 +29,12 @@ frappe.ui.form.on("Account", {
           frappe.msgprint(`
             <table style="width:100%;border-collapse:collapse;font-size:14px">
               <tr><td style="padding:8px;color:#666">Total Debit</td>
-                  <td style="padding:8px;text-align:right;font-family:monospace">${fmt(m.debit)}</td></tr>
+                  <td style="padding:8px;text-align:right;">${fmt(m.debit)}</td></tr>
               <tr><td style="padding:8px;color:#666">Total Credit</td>
-                  <td style="padding:8px;text-align:right;font-family:monospace">${fmt(m.credit)}</td></tr>
+                  <td style="padding:8px;text-align:right;">${fmt(m.credit)}</td></tr>
               <tr style="border-top:2px solid #3B5BDB">
                 <td style="padding:10px 8px;font-weight:600">Net Balance</td>
-                <td style="padding:10px 8px;text-align:right;font-weight:700;font-family:monospace;
+                <td style="padding:10px 8px;text-align:right;font-weight:700;
                            color:${m.balance>=0?"#2F9E44":"#C92A2A"}">${fmt(m.balance)}</td>
               </tr>
             </table>`, __("Balance — ") + frm.doc.account_name);
@@ -50,10 +50,10 @@ frappe.ui.form.on("Account", {
         const fmt = n => "₹"+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
         frm.dashboard.add_section(`
           <div style="padding:8px 0;display:flex;gap:24px;font-size:13px;flex-wrap:wrap">
-            <span><span style="color:#868E96">Debit: </span><b style="font-family:monospace">${fmt(m.debit)}</b></span>
-            <span><span style="color:#868E96">Credit: </span><b style="font-family:monospace">${fmt(m.credit)}</b></span>
+            <span><span style="color:#868E96">Debit: </span><b >${fmt(m.debit)}</b></span>
+            <span><span style="color:#868E96">Credit: </span><b >${fmt(m.credit)}</b></span>
             <span><span style="color:#868E96">Balance: </span>
-              <b style="font-family:monospace;color:${m.balance>=0?"#2F9E44":"#C92A2A"}">${fmt(m.balance)}</b></span>
+              <b style="color:${m.balance>=0?"#2F9E44":"#C92A2A"}">${fmt(m.balance)}</b></span>
           </div>`, __("Current Balance"));
       }
     });

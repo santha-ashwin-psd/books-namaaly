@@ -618,7 +618,7 @@ onMounted(load);
 }
 .iv-item-name  { font-size: 22px; font-weight: 800; color: #1a1d23; letter-spacing: -.3px; }
 .iv-item-meta  { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-.iv-mono       { font-family: monospace; font-size: 12px; color: #6b7280; }
+.iv-mono       { font-size: 12px; color: #6b7280; }
 .iv-sep        { color: #d1d5db; }
 .iv-group-badge { display: inline-flex; padding: 2px 8px; background: #eff6ff; color: #2563eb; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
 .iv-type-badge  { display: inline-flex; padding: 2px 8px; background: #f3f4f6; color: #374151; border-radius: 10px; font-size: 11.5px; font-weight: 600; }

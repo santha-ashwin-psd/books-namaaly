@@ -32,6 +32,7 @@ from frappe.utils import flt, nowdate
 
 from zoho_books_clone.utils.access import assert_can
 from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
+from zoho_books_clone.inventory.utils import get_valuation_rate
 
 
 def _get_work_order(work_order):
@@ -319,7 +320,7 @@ def issue_materials(work_order):
         row.db_set("transferred_qty", flt(row.required_qty), update_modified=False)
     if wo.status == "Submitted":
         wo.db_set("status", "In Process")
-    _set_operations_status(wo, "In Process")
+    _set_operations_status(wo, "In Process", skip_statuses={"Completed"})
     frappe.db.commit()
 
     return se.name
@@ -359,10 +360,21 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
 
+    # Lock the Work Order row for the rest of this transaction so two
+    # concurrent completions against the same Work Order can't both read
+    # produced_qty, both pass the over-production check, and both commit --
+    # the second call blocks here until the first one's transaction ends.
+    frappe.db.sql("SELECT name FROM `tabWork Order` WHERE name=%s FOR UPDATE", (wo.name,))
+    # Re-read produced_qty and process_loss_qty now that we hold the lock:
+    # the copies on `wo` (loaded before the lock) may be stale if we just
+    # waited behind another completion.
+    current_produced_qty = flt(frappe.db.get_value("Work Order", wo.name, "produced_qty"))
+    current_process_loss_qty = flt(frappe.db.get_value("Work Order", wo.name, "process_loss_qty"))
+
     ms = _get_mfg_settings()
     over_pct = flt(ms.get("over_production_allowance_pct", 0))
     max_allowed = flt(wo.qty) * (1.0 + over_pct / 100.0)
-    new_total = flt(wo.produced_qty) + qty_manufactured
+    new_total = current_produced_qty + qty_manufactured
     if new_total > max_allowed + 0.0001:
         if over_pct > 0:
             frappe.throw(_(
@@ -373,9 +385,15 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
             frappe.throw(_(
                 "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1}). "
                 "Increase Over-Production Allowance % in Manufacturing Settings to allow this."
-            ).format(qty_manufactured, flt(wo.qty) - flt(wo.produced_qty)))
+            ).format(qty_manufactured, flt(wo.qty) - current_produced_qty))
 
-    ratio = qty_manufactured / flt(wo.qty or 1)
+    # Raw materials are consumed for the FULL quantity that left the
+    # process -- both what became finished stock (qty_manufactured) and
+    # what was lost in-process (process_loss_qty, e.g. evaporation/trimming/
+    # spillage). Scaling consumption by qty_manufactured alone would under-
+    # consume raw material stock any time there's process loss, leaving
+    # material "in stock" on paper that was actually used up on the floor.
+    consumption_ratio = (qty_manufactured + process_loss_qty) / flt(wo.qty or 1)
 
     se = frappe.new_doc("Stock Entry")
     se.company = wo.company
@@ -388,8 +406,15 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # Source is the WIP warehouse if materials were staged there via
     # issue_materials; otherwise straight from each row's own source
     # warehouse (or the Work Order's default).
+    #
+    # Each row's rate is looked up and set explicitly here (rather than left
+    # for Stock Entry's own auto-fill) so we can total the real consumed
+    # cost and use it to value the finished good below -- Stock Entry's
+    # auto-fill only ever rates outgoing/consumption rows, never incoming
+    # ones, so without this the FG receipt has no cost basis to draw from.
+    total_consumed_cost = 0.0
     for row in wo.items:
-        consume_qty = flt(row.required_qty) * ratio
+        consume_qty = flt(row.required_qty) * consumption_ratio
         if consume_qty <= 0:
             continue
         s_wh = wo.wip_warehouse or row.source_warehouse or wo.source_warehouse
@@ -398,11 +423,42 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                 "Row for {0}: no Source Warehouse set (on the Work Order Item, "
                 "the Work Order's Default Source Warehouse, or a WIP Warehouse)."
             ).format(row.item_code))
+        rm_rate = get_valuation_rate(row.item_code, s_wh)
+        total_consumed_cost += consume_qty * rm_rate
         se.append("items", {
             "item_code": row.item_code,
             "qty": consume_qty,
             "s_warehouse": s_wh,
+            "basic_rate": rm_rate,
         })
+
+    # Recoverable scrap/by-products are valued first (at whatever rate the
+    # caller supplied, falling back to the item's current valuation rate in
+    # the scrap warehouse) and their value is credited OUT of the consumed
+    # cost before the remainder is spread across the finished good -- scrap
+    # that can be resold/reused shouldn't inflate the FG's cost.
+    scrap_warehouse = wo.scrap_warehouse or wo.fg_warehouse
+    total_scrap_value = 0.0
+    scrap_rows_to_append = []
+    for s in scrap_items:
+        s_qty = flt(s.get("qty"))
+        if s_qty <= 0 or not s.get("item_code"):
+            continue
+        s_rate = flt(s.get("rate"))
+        if not s_rate:
+            s_rate = get_valuation_rate(s["item_code"], scrap_warehouse)
+        total_scrap_value += s_qty * s_rate
+        scrap_rows_to_append.append((s, s_qty, s_rate))
+
+    # Whatever consumed cost is left after crediting out scrap value gets
+    # spread across the qty actually manufactured this run. This also
+    # absorbs the cost of any process_loss_qty (that material was consumed
+    # too, per consumption_ratio above, but never became stock of its own)
+    # into the finished good that did come out -- the standard costing
+    # treatment for in-process loss.
+    fg_unit_rate = 0.0
+    if qty_manufactured > 0:
+        fg_unit_rate = max(total_consumed_cost - total_scrap_value, 0.0) / qty_manufactured
 
     # Receive the finished good. If it's batch-tracked, pre-create the Batch
     # record first (same pattern the transaction pages use) so Stock Entry's
@@ -410,7 +466,12 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # Leaving batch_no blank lets Batch.autoname generate
     # {Item Code}-{Year}-{Sequence}, and leaving expiry_date blank lets
     # Batch.set_expiry_date_from_shelf_life derive it from Item.shelf_life_in_days.
-    fg_row = {"item_code": wo.production_item, "qty": qty_manufactured, "t_warehouse": wo.fg_warehouse}
+    fg_row = {
+        "item_code": wo.production_item,
+        "qty": qty_manufactured,
+        "t_warehouse": wo.fg_warehouse,
+        "basic_rate": fg_unit_rate,
+    }
     if frappe.db.get_value("Item", wo.production_item, "has_batch_no"):
         if not batch_no or not frappe.db.exists("Batch", batch_no):
             new_batch = frappe.get_doc({
@@ -429,15 +490,13 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # Recoverable scrap/by-products, if any. Mirror the FG handling above:
     # batch-tracked scrap items need a Batch pre-created before Stock Entry's
     # own validation (which requires the Batch to already exist) will let the
-    # row through. A caller can pass an explicit batch_no per scrap item via
-    # {"item_code": ..., "qty": ..., "batch_no": ...}; otherwise one is
-    # auto-generated the same way the FG batch is.
-    scrap_warehouse = wo.scrap_warehouse or wo.fg_warehouse
-    for s in scrap_items:
-        s_qty = flt(s.get("qty"))
-        if s_qty <= 0 or not s.get("item_code"):
-            continue
-        scrap_row = {"item_code": s["item_code"], "qty": s_qty, "t_warehouse": scrap_warehouse}
+    # row through. A caller can pass an explicit batch_no (and now rate) per
+    # scrap item via {"item_code": ..., "qty": ..., "rate": ..., "batch_no": ...};
+    # otherwise a batch is auto-generated the same way the FG batch is, and
+    # the rate falls back to the scrap warehouse's current valuation rate
+    # (computed above, before this row existed to skew that valuation).
+    for s, s_qty, s_rate in scrap_rows_to_append:
+        scrap_row = {"item_code": s["item_code"], "qty": s_qty, "t_warehouse": scrap_warehouse, "basic_rate": s_rate}
         if frappe.db.get_value("Item", s["item_code"], "has_batch_no"):
             s_batch_no = s.get("batch_no")
             if not s_batch_no or not frappe.db.exists("Batch", s_batch_no):
@@ -453,20 +512,34 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
             scrap_row["batch_no"] = s_batch_no
         se.append("items", scrap_row)
 
+
+
     se.insert(ignore_permissions=True)
     se.submit()
 
     for row in wo.items:
-        consume_qty = flt(row.required_qty) * ratio
+        consume_qty = flt(row.required_qty) * consumption_ratio
         if consume_qty > 0:
-            row.db_set("consumed_qty", flt(row.consumed_qty) + consume_qty, update_modified=False)
+            current_consumed_qty = flt(frappe.db.get_value("Work Order Item", row.name, "consumed_qty"))
+            row.db_set("consumed_qty", current_consumed_qty + consume_qty, update_modified=False)
 
-    new_produced_qty = flt(wo.produced_qty) + qty_manufactured
+    new_produced_qty = current_produced_qty + qty_manufactured
     wo.db_set("produced_qty", new_produced_qty)
-    wo.db_set("process_loss_qty", flt(wo.process_loss_qty) + process_loss_qty)
+    wo.db_set("process_loss_qty", current_process_loss_qty + process_loss_qty)
     is_complete = new_produced_qty >= flt(wo.qty) - 0.0001
     wo.db_set("status", "Completed" if is_complete else "In Process")
-    _set_operations_status(wo, "Completed" if is_complete else "In Process")
+    if is_complete:
+        # Work Order is fully done -- finalize every operation as Completed,
+        # even if a Job Card lagged behind (e.g. someone forgot to close the
+        # last Job Card). This is the one point where forcing the status is
+        # correct, since there's no more production left to track against it.
+        _set_operations_status(wo, "Completed")
+    else:
+        # Partial completion: still in progress. Bring not-yet-started rows
+        # up to "In Process" but never downgrade an operation a Job Card has
+        # already marked Completed -- that would erase real progress every
+        # time another partial completion is recorded.
+        _set_operations_status(wo, "In Process", skip_statuses={"Completed"})
 
     # If the Work Order is now fully completed and it belongs to a Production
     # Plan, check whether all linked WOs are also done — if so, close the plan.
@@ -479,11 +552,23 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     return se.name
 
 
-def _set_operations_status(wo, status):
-    """Bulk-update all Work Order Operation rows to the given status."""
+def _set_operations_status(wo, status, skip_statuses=None):
+    """Bulk-update Work Order Operation rows to the given status.
+
+    Each operation's status is also driven independently by its own Job
+    Card (see job_card.py's _sync_wo_operation_status), which can put a row
+    further ahead than this bulk update. Rows whose current status is in
+    skip_statuses are left untouched so this call never downgrades progress
+    that was already recorded elsewhere -- e.g. a Job Card marking an
+    operation Completed shouldn't get silently reset to "In Process" just
+    because materials were issued or another partial completion happened.
+    """
     if not wo.operations:
         return
+    skip_statuses = skip_statuses or set()
     for op in wo.operations:
+        if op.status in skip_statuses:
+            continue
         op.db_set("status", status, update_modified=False)
 
 
@@ -497,13 +582,16 @@ def stop_work_order(work_order):
 
     wo = _get_work_order(work_order)
     assert_doc_in_user_company(wo)
+    # Lock the row so a stop can't race a concurrent complete/resume call.
+    frappe.db.sql("SELECT name FROM `tabWork Order` WHERE name=%s FOR UPDATE", (wo.name,))
+    wo.reload()
     if wo.status in ("Completed", "Cancelled"):
         frappe.throw(_("Cannot stop a {0} Work Order.").format(wo.status))
     if wo.status == "Stopped":
         frappe.throw(_("Work Order is already stopped."))
 
     wo.db_set("status", "Stopped")
-    _set_operations_status(wo, "Stopped")
+    _set_operations_status(wo, "Stopped", skip_statuses={"Completed"})
     frappe.db.commit()
     return "Stopped"
 
@@ -519,13 +607,20 @@ def resume_work_order(work_order):
     wo = frappe.get_doc("Work Order", work_order)
     if wo.docstatus != 1:
         frappe.throw(_("Work Order must be submitted."))
+    # Lock the row so a resume can't race a concurrent stop/complete call.
+    frappe.db.sql("SELECT name FROM `tabWork Order` WHERE name=%s FOR UPDATE", (wo.name,))
+    wo.reload()
     if wo.status != "Stopped":
         frappe.throw(_("Work Order is not stopped."))
 
     resume_status = "In Process" if flt(wo.produced_qty) > 0 else "Submitted"
     wo.db_set("status", resume_status)
     # Operation rows don't have a "Submitted" state (only Pending/In Process/
-    # Completed/Stopped) — Pending is the equivalent starting point.
-    _set_operations_status(wo, "In Process" if resume_status == "In Process" else "Pending")
+    # Completed/Stopped) — Pending is the equivalent starting point. Either
+    # way, never downgrade a row a Job Card already marked Completed.
+    _set_operations_status(
+        wo, "In Process" if resume_status == "In Process" else "Pending",
+        skip_statuses={"Completed"},
+    )
     frappe.db.commit()
     return resume_status

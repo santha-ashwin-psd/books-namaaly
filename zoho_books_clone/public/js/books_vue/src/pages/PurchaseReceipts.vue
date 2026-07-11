@@ -1087,8 +1087,7 @@ onMounted(() => { load(); fetchVendors(""); fetchItems(""); fetchPOs(""); });
   .pr-mc-top { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px; }
   .pr-mc-docno { font-weight:700;font-size:13.5px;color:#1a6ef7; }
   .pr-mc-mid { font-weight:600;font-size:13px;color:#111827;margin-bottom:4px; }
-  .pr-mc-meta { display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:2px; }
-  .pr-mc-po { font-family:ui-monospace,monospace; }
+
   .pr-mc-footer { display:flex;gap:6px;margin-top:8px;flex-wrap:wrap; }
   .pr-mc-btn { background:#fff;border:1px solid #e2e8f0;color:#374151;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer; }
   .pr-mc-btn.pr-mc-warn { border-color:#fde68a;color:#d97706; }

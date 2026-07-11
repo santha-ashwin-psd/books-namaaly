@@ -332,7 +332,6 @@ function icon(name, size) {
 .aix-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .aix-two-col { grid-template-columns: 1fr; } }
 
-.mono { font-family: "DM Mono", ui-monospace, monospace; }
 
 /* ── List panel ── */
 .aix-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
@@ -383,7 +382,7 @@ function icon(name, size) {
 .aix-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; }
 .aix-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
 .aix-fi:disabled { background:#F8F9FC; color:var(--bx-muted); }
-.aix-fi-mono { font-family:"DM Mono",monospace; }
+
 select.aix-fi {
   appearance: none;
   -webkit-appearance: none;

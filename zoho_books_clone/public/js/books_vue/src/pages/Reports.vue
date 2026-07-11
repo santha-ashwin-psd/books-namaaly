@@ -501,7 +501,7 @@ const reports = [
 .bs-balance-check.bs-ok  { background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
 .bs-balance-check.bs-bad { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
 .bs-bc-icon { font-weight:800; }
-.bs-bc-eq { margin-left:auto; font-family:var(--mono,monospace); font-weight:500; opacity:.85; }
+.bs-bc-eq { margin-left:auto; font-weight:500; opacity:.85; }
 
 .cf-rows { display: flex; flex-direction: column; gap: 0; }
 .cf-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }

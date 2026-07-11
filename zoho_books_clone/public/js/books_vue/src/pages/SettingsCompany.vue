@@ -1061,7 +1061,6 @@ onMounted(load);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 11px;
-  font-family: monospace;
 }
 
 /* Logo area stacked variant (sidebar) */

@@ -2091,7 +2091,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
     background: #eff6ff; border: 1px solid #bfdbfe;
     border-radius: 5px; padding: 2px 8px;
   }
-  .bil-pay-mc-ref { font-size: 11.5px; color: #868e96; font-family: ui-monospace, monospace; }
+  .bil-pay-mc-ref { font-size: 11.5px; color: #868e96; }
 }
 
 /* ── View drawer header: keep buttons on one row ──────────────────── */

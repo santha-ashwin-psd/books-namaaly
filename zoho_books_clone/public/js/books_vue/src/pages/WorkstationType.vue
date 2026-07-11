@@ -285,7 +285,6 @@ function icon(name, size) {
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
 
-.mono { font-family: "DM Mono", ui-monospace, monospace; }
 
 /* ── List panel ── */
 .bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }

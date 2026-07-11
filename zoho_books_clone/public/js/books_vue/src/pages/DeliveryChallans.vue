@@ -1953,7 +1953,6 @@ onMounted(async () => {
   .dc-vic-code {
     font-size: 11px;
     color: #9ca3af;
-    font-family: monospace;
   }
   .dc-vic-desc {
     font-size: 12.5px;

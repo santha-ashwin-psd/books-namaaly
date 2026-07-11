@@ -1573,7 +1573,6 @@ onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
 }
 .vd-subtitle {
   font-size: 12px; color: #94a3b8; margin-top: 2px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
   font-weight: 500;
 }
 .vd-header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -1680,7 +1679,7 @@ onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
   text-align: right;
   display: inline !important; visibility: visible !important;
 }
-.vd-row-val--code { font-family: 'SF Mono','Fira Code',monospace; color: #2563eb !important; font-size: 12.5px !important; }
+.vd-row-val--code { color: #2563eb !important; font-size: 12.5px !important; }
 .vd-row-val--muted { color: #c4c9d4 !important; font-size: 13px !important; }
 
 /* Price grid */

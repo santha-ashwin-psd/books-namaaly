@@ -232,7 +232,7 @@
               <div class="et-preview-icon">📧</div>
               <div>
                 <div style="font-weight:600;font-size:13px;color:#1a1a2e">{{form.subject||'(no subject)'}}</div>
-                <div style="font-size:11px;color:#868e96;margin-top:1px">Live preview · <span v-pre style="color:#f59e0b;font-family:monospace">{{variable}}</span> placeholders highlighted</div>
+                <div style="font-size:11px;color:#868e96;margin-top:1px">Live preview · <span v-pre style="color:#f59e0b;">{{variable}}</span> placeholders highlighted</div>
               </div>
             </div>
             <div class="et-preview-body" v-html="previewHtml"></div>
@@ -319,7 +319,7 @@ const previewHtml = computed(() => {
   let h = form.response || "<p style='color:#868e96;font-style:italic'>Nothing to preview yet.</p>";
   h = h.replace(
     /\{\{(\w+)\}\}/g,
-    `<span style="display:inline-block;background:#fff3bf;color:#8b6914;padding:1px 6px;border-radius:4px;font-size:12px;font-weight:600;font-family:monospace">{{$1}}</span>`
+    `<span style="display:inline-block;background:#fff3bf;color:#8b6914;padding:1px 6px;border-radius:4px;font-size:12px;font-weight:600;">{{$1}}</span>`
   );
   return h;
 });
@@ -575,7 +575,6 @@ onMounted(load);
   background: #f0eeff; color: #5c3dc7;
   border: 1px solid #d4c4ff; cursor: pointer;
   transition: background .1s; white-space: nowrap;
-  font-family: "Courier New", monospace;
 }
 .et-varchip:hover { background: #e2d4ff; }
 
@@ -618,7 +617,6 @@ onMounted(load);
   border-radius: 8px;
   overflow: auto;
   background: #fff;
-  font-family: "Courier New", "Fira Code", monospace;
   font-size: 13px;
   min-height: 140px;
   resize: vertical;
@@ -648,7 +646,6 @@ onMounted(load);
   padding: 14px 14px;
   border: none; outline: none;
   font-size: 13px;
-  font-family: "Courier New", "Fira Code", monospace;
   line-height: 1.7;
   color: #1a1a2e;
   background: #fff;

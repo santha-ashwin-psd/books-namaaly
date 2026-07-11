@@ -391,7 +391,7 @@ onMounted(() => { load(); loadAttributeOptions(); });
 .iv-head-title { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 700; color: #111827; }
 .iv-count-chip { font-size: 12px; font-weight: 600; color: #4C6EF5; background: #EEF2FF; padding: 3px 10px; border-radius: 999px; }
 .iv-head-sub { margin-top: 5px; font-size: 13px; color: #6B7280; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.iv-code-badge { font-family: ui-monospace, monospace; font-size: 11.5px; background: #F3F4F6; color: #374151; padding: 2px 8px; border-radius: 5px; }
+.iv-code-badge { font-size: 11.5px; background: #F3F4F6; color: #374151; padding: 2px 8px; border-radius: 5px; }
 
 /* Cards */
 .iv-card, .iv-bulk, .iv-table-card { margin-bottom: 16px; }

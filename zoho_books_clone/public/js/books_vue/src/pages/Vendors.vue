@@ -2133,7 +2133,7 @@ onMounted(async () => {
 .cus-import-table td { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
 .cus-import-name { font-weight: 600; color: #111827; }
 .cus-import-sub  { font-size: 11px; color: #9ca3af; margin-top: 1px; }
-.cus-import-mono { font-family: monospace; font-size: 11.5px; color: #374151; }
+.cus-import-mono {font-size: 11.5px; color: #374151; }
 .cus-import-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 12px; }
 .cus-import-badge-new { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
 .cus-import-badge-upd { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }

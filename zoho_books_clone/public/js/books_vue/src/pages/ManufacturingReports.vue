@@ -389,7 +389,7 @@ onMounted(() => runReport());
 .mrx-kpi-grid { display:grid; gap:10px; margin-bottom:18px; }
 .mrx-kpi-cell { background:var(--bx-mfgS); border:1px solid rgba(180,83,9,.15); border-radius:var(--bx-rsm); padding:12px 14px; }
 .mrx-kpi-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-mfg); margin-bottom:4px; }
-.mrx-kpi-val { font-size:19px; font-weight:700; font-family:"DM Mono",monospace; color:var(--bx-text); }
+.mrx-kpi-val { font-size:19px; font-weight:700; color:var(--bx-text); }
 @media (max-width:900px) { .mrx-kpi-grid { grid-template-columns:1fr 1fr !important; } }
 
 /* ── Table ── */

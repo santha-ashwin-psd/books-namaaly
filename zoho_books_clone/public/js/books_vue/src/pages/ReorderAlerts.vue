@@ -637,7 +637,7 @@ onMounted(load);
 }
 .rm-item-name  { font-size: 13px; font-weight: 600; color: #1a1d23; }
 .rm-item-meta  { display: flex; justify-content: space-between; align-items: center; }
-.rm-item-code  { font-size: 11px; color: #9ca3af; font-family: monospace; }
+.rm-item-code  { font-size: 11px; color: #9ca3af; }
 .rm-item-stock { font-size: 12px; font-weight: 600; }
 .rm-item-auto-badge {
   display: inline-flex;
@@ -695,7 +695,7 @@ onMounted(load);
   margin-bottom: 16px;
 }
 .rm-ih-name { font-size: 17px; font-weight: 800; color: #1a1d23; }
-.rm-ih-code { font-size: 11px; color: #9ca3af; font-family: monospace; margin-top: 2px; }
+.rm-ih-code { font-size: 11px; color: #9ca3af; margin-top: 2px; }
 
 .rm-ih-metrics {
   display: flex;

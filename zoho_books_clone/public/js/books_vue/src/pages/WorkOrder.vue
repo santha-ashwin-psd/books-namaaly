@@ -293,12 +293,12 @@
                     <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped'">
                       {{ actionLoading==='issue' ? 'Issuing…' : (allTransferred ? 'Materials Issued' : 'Issue Materials to WIP') }}
                     </button>
-                    <button class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="remainingQty<=0 || wo.status==='Stopped'">
+                    <button class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped'">
                       Complete Work Order
                     </button>
                   </div>
                   <div class="bomx-field-hint" v-if="wo.status==='Stopped'" style="color:var(--bx-amber);margin-top:8px">Work Order is stopped — resume it to continue production.</div>
-                  <div class="bomx-field-hint" v-else-if="remainingQty<=0" style="margin-top:8px">Fully produced — no further completions possible.</div>
+                  <div class="bomx-field-hint" v-else-if="!canCompleteMore" style="margin-top:8px">Fully produced — no further completions possible.</div>
                 </div>
 
                 <div class="bomx-prod-card" v-if="qcInspections.length || qcLoading">
@@ -474,7 +474,7 @@ const list = ref([]);
 const search = ref("");
 const filterStatus = ref("");
 
-const statusOptions = ["Draft", "Submitted", "In Process", "Completed", "Cancelled"];
+const statusOptions = ["Draft", "Submitted", "In Process", "Stopped", "Completed", "Cancelled"];
 
 const selectedName = computed(() => (route.params.name && route.params.name !== "new") ? route.params.name : (route.params.name === "new" ? "new" : null));
 
@@ -909,6 +909,11 @@ const maxCompletableQty = computed(() => {
   const allowance = planned * (flt(overProductionAllowancePct.value) / 100);
   return Math.max(0, planned + allowance - flt(wo.value.produced_qty));
 });
+// Whether there's still any completable qty left, INCLUDING what the
+// over-production allowance opens up once produced_qty reaches the planned
+// qty. remainingQty alone hits 0 exactly at 100% produced and would lock
+// the button out even when the allowance still permits more.
+const canCompleteMore = computed(() => maxCompletableQty.value > 0.0001);
 const progressPct = computed(() => {
   const q = flt(wo.value.qty);
   if (!q) return 0;
@@ -1001,7 +1006,10 @@ function deriveScrapAndLoss(qtyMfg) {
 }
 
 function openCompleteModal() {
-  const qtyMfg = remainingQty.value > 0 ? remainingQty.value : 0;
+  // Prefer the plain remaining qty (the common case); once that's used up,
+  // fall back to whatever the over-production allowance still permits so
+  // the field isn't prefilled with 0 while completion is still possible.
+  const qtyMfg = remainingQty.value > 0 ? remainingQty.value : maxCompletableQty.value;
   const { derivedLoss, preScrap } = deriveScrapAndLoss(qtyMfg);
   completeForm.value = {
     qty_manufactured: qtyMfg,
@@ -1116,7 +1124,6 @@ function icon(name, size) {
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
 
-.mono { font-family: "DM Mono", ui-monospace, monospace; }
 
 /* ── List panel ── */
 .bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
@@ -1197,7 +1204,7 @@ function icon(name, size) {
 .bomx-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; }
 .bomx-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
 .bomx-fi:disabled { background:#F8F9FC; color:var(--bx-muted); }
-.bomx-fi-mono { font-family:"DM Mono",monospace; }
+
 select.bomx-fi {
   appearance: none;
   -webkit-appearance: none;

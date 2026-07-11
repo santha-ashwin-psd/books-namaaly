@@ -314,13 +314,13 @@ onMounted(load);
 .qcar-table td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
 .qcar-row { cursor:pointer; transition:background .12s; }
 .qcar-row:hover { background:#f8fafc; }
-.qcar-num { font-family:monospace; font-size:12px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px; }
+.qcar-num {  font-size:12px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px; }
 .qcar-act-btn { background:none; border:1px solid #e5e7eb; border-radius:6px; padding:4px 6px; cursor:pointer; color:#6b7280; }
 .qcar-act-btn:hover { background:#f3f4f6; }
 .qcar-empty { text-align:center; padding:40px 0; color:#6b7280; }
 .qcar-shimmer { height:32px; background:linear-gradient(90deg,#f3f4f6 25%,#e9ecef 50%,#f3f4f6 75%); background-size:200%; animation:shimmer 1.4s infinite; border-radius:4px; }
 @keyframes shimmer { 0%{background-position:200%} 100%{background-position:-200%} }
-.mono-sm { font-family:monospace; font-size:12px; }
+.mono-sm {  font-size:12px; }
 .text-muted { color:#9ca3af; }
 
 /* Status badges */

@@ -318,7 +318,6 @@ async function save() {
 /* ── Buttons / inputs ── */
 .msx-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; }
 .msx-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
-.msx-fi-mono { font-family:"DM Mono",monospace; }
 select.msx-fi {
   appearance: none;
   -webkit-appearance: none;

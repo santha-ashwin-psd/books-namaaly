@@ -246,9 +246,19 @@ class StockEntry(Document):
             row.amount = flt(row.qty) * flt(row.basic_rate)
 
     def _calculate_totals(self):
-        direction = SE_TYPE_DIRECTION.get(self.stock_entry_type, {})
-        outgoing = sum(flt(r.amount) for r in self.items if direction.get("s"))
-        incoming = sum(flt(r.amount) for r in self.items if direction.get("t"))
+        # Split by what's actually populated on EACH row, not by the entry
+        # type's direction flags. Manufacture (and any other s+t type) mixes
+        # rows that only have one side set on a single Stock Entry -- e.g. a
+        # raw-material consumption row (s_warehouse only) and a finished-good
+        # receipt row (t_warehouse only). Using the type-level flags counted
+        # every row into BOTH outgoing and incoming, which made
+        # total_outgoing_value == total_incoming_value (and value_difference
+        # == 0) for every single Manufacture entry by construction, hiding
+        # any real value created or lost in production. Material Transfer
+        # rows genuinely carry both warehouses on the same row and are
+        # unaffected by this change -- they still count in both sums.
+        outgoing = sum(flt(r.amount) for r in self.items if r.s_warehouse)
+        incoming = sum(flt(r.amount) for r in self.items if r.t_warehouse)
         self.total_outgoing_value = outgoing
         self.total_incoming_value = incoming
         self.value_difference = incoming - outgoing

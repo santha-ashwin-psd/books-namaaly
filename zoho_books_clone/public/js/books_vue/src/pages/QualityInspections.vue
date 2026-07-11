@@ -1029,13 +1029,13 @@ onMounted(load);
 .qc-table td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
 .qc-row { cursor:pointer; transition:background .12s; }
 .qc-row:hover { background:#f8fafc; }
-.qc-num { font-family:monospace; font-size:12px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px; }
+.qc-num {  font-size:12px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px; }
 .qc-type-badge { font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; }
 .qc-type-mini { font-size:10px; font-weight:600; padding:2px 6px; border-radius:10px; }
 .sortable { cursor:pointer; }
 .ta-r { text-align:right; }
 .text-muted { color:#9ca3af; }
-.mono-sm { font-family:monospace; font-size:12px; }
+.mono-sm { font-size:12px; }
 .qc-act-btn { background:none; border:1px solid #e5e7eb; border-radius:6px; padding:4px 6px; cursor:pointer; color:#6b7280; }
 .qc-act-btn:hover { background:#f3f4f6; }
 .qc-empty { text-align:center; padding:40px 0; color:#6b7280; }
@@ -1130,7 +1130,7 @@ onMounted(load);
 
   /* type + date */
   .qc-mob-row2 { display:flex; align-items:center; gap:8px; }
-  .qc-mob-date { font-size:11.5px; color:#9ca3af; font-family:monospace; margin-left:auto; }
+  .qc-mob-date { font-size:11.5px; color:#9ca3af;  margin-left:auto; }
 
   /* label-value rows */
   .qc-mob-item { display:flex; align-items:baseline; gap:6px; font-size:12.5px; }

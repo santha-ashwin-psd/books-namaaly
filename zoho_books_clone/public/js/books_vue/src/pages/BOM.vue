@@ -918,8 +918,6 @@ function icon(name, size) {
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
 
-.mono { font-family: "DM Mono", ui-monospace, monospace; }
-
 /* ── List panel ── */
 .bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
 .bomx-panel-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -992,7 +990,7 @@ function icon(name, size) {
 .bomx-cost-cell { background:#fff; border:1px solid rgba(180,83,9,.12); border-radius:var(--bx-rsm); padding:10px 12px; }
 .bomx-cost-cell-total { background:var(--bx-mfgS); border-color:rgba(180,83,9,.2); }
 .bomx-cost-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-mfg); margin-bottom:3px; }
-.bomx-cost-val { font-size:17px; font-weight:700; font-family:"DM Mono",monospace; color:var(--bx-mfgB); }
+.bomx-cost-val { font-size:17px; font-weight:700; color:var(--bx-mfgB); }
 
 /* ── Tree rows (materials / ops / scrap) ── */
 .bomx-tree-col-hdr { display:flex; align-items:center; padding:7px 10px 7px 12px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); margin-bottom:4px; gap:8px; }
@@ -1002,7 +1000,7 @@ function icon(name, size) {
 .bomx-tree-row:hover { background:#F5F6FF; }
 .bomx-tree-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 .bomx-tree-icon { font-size:14px; flex-shrink:0; }
-.bomx-tree-cost { font-family:"DM Mono",monospace; font-size:13px; font-weight:700; min-width:90px; text-align:right; }
+.bomx-tree-cost {font-size:13px; font-weight:700; min-width:90px; text-align:right; }
 .bomx-tree-actions { display:flex; gap:3px; }
 .bomx-fi-inline { width:100%; }
 .bomx-tree-qty-inp { width:60px; text-align:right; }
@@ -1049,7 +1047,7 @@ function icon(name, size) {
 .bomx-fi { border:1px solid #CDD5E0; border-radius:var(--bx-rsm); padding:7px 9px; font-size:13px; color:var(--bx-text); background:#fff; outline:none; }
 .bomx-fi:focus { border-color:var(--bx-mfg); box-shadow:0 0 0 3px rgba(180,83,9,.1); }
 .bomx-fi:disabled { background:#F8F9FC; color:var(--bx-muted); }
-.bomx-fi-mono { font-family:"DM Mono",monospace; }
+
 select.bomx-fi {
   appearance: none;
   -webkit-appearance: none;
