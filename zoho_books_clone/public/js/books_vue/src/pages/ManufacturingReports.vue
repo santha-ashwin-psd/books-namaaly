@@ -8,7 +8,7 @@
         <div class="mrx-hdr-title">📊 Manufacturing Reports</div>
         <div class="mrx-hdr-sub">{{ tabs.find(t => t.id === activeTab)?.desc }}</div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="mrx-hdr-actions">
         <button v-if="result" class="mrx-btn mrx-btn-light" @click="exportCSV">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Export CSV
@@ -122,6 +122,27 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.name" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.name}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link">{{ r.name }}</span>
+                <span class="mrx-badge" :class="statusClass(r.status)">{{ r.status }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.item_name }}</div>
+              <div class="mrx-sub">{{ r.production_item }} · BOM: {{ r.bom || '—' }}</div>
+              <div class="mrx-rcard-row">
+                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                  <div class="mrx-bar" style="flex:1;"><div class="mrx-bar-fill" :style="`width:${r.completion_pct}%;background:${r.completion_pct>=100?'var(--bx-green)':'var(--bx-blue)'};`"></div></div>
+                  <span class="mrx-sub">{{ r.completion_pct }}%</span>
+                </div>
+              </div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Planned</span>{{ fmt(r.qty) }}</div>
+                <div><span class="mrx-rcard-mlbl">Produced</span>{{ fmt(r.produced_qty) }}</div>
+                <div><span class="mrx-rcard-mlbl">Created</span>{{ r.creation?.slice(0,10) }}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ── Stock Requirement table ── -->
@@ -152,6 +173,22 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.item_code" class="mrx-rcard" :style="r.shortfall_qty > 0 ? 'background:var(--bx-redS);' : ''">
+              <div class="mrx-rcard-title">{{ r.item_code }}</div>
+              <div class="mrx-sub">{{ r.item_name }}</div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Required</span>{{ fmt(r.required_qty) }} {{ r.uom }}</div>
+                <div><span class="mrx-rcard-mlbl">On-Hand</span>{{ fmt(r.on_hand_qty) }}</div>
+                <div>
+                  <span class="mrx-rcard-mlbl">Shortfall</span>
+                  <span :style="r.shortfall_qty > 0 ? 'color:var(--bx-red);font-weight:700;' : 'color:var(--bx-green);'">{{ r.shortfall_qty > 0 ? fmt(r.shortfall_qty) : '✓' }}</span>
+                </div>
+                <div><span class="mrx-rcard-mlbl">Source WH</span>{{ r.source_warehouse || '—' }}</div>
+                <div><span class="mrx-rcard-mlbl">WOs</span>{{ r.work_order_count }}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ── BOM Cost Analysis table ── -->
@@ -195,6 +232,30 @@
               </tr>
             </tfoot>
           </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.name" class="mrx-rcard" @click="router.push(`/manufacturing/bom/${r.name}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link" style="font-size:12px;">{{ r.name }}</span>
+                <span class="mrx-badge badge-changed">{{ r.bom_type }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.item_name }}</div>
+              <div class="mrx-sub">{{ r.item }} {{ r.is_active ? '· ✓ Active' : '' }} {{ r.is_default ? '· ★ Default' : '' }}</div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Qty</span>{{ fmt(r.quantity) }}</div>
+                <div><span class="mrx-rcard-mlbl">RM Cost</span>{{ fmt(r.rm_cost) }}</div>
+                <div><span class="mrx-rcard-mlbl">Op Cost</span>{{ fmt(r.op_cost) }}</div>
+                <div><span class="mrx-rcard-mlbl">Scrap</span><span style="color:var(--bx-red);">{{ fmt(r.scrap_value) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Total</span><span style="font-weight:700;color:var(--bx-mfgB);">{{ fmt(r.total_cost) }}</span></div>
+              </div>
+            </div>
+            <div class="mrx-rcard mrx-rcard-totals">
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Total RM</span>{{ fmt(result.summary.total_rm) }}</div>
+                <div><span class="mrx-rcard-mlbl">Total Op</span>{{ fmt(result.summary.total_op) }}</div>
+                <div><span class="mrx-rcard-mlbl">Total Cost</span><span style="color:var(--bx-mfgB);">{{ fmt(result.summary.total_cost) }}</span></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ── Production Performance table ── -->
@@ -226,6 +287,23 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.name" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.name}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link">{{ r.name }}</span>
+                <span class="mrx-badge" :class="statusClass(r.status)">{{ r.status }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.item_name }}</div>
+              <div class="mrx-sub">{{ r.production_item }} · {{ r.creation?.slice(0,10) }}</div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Planned</span>{{ fmt(r.qty) }}</div>
+                <div><span class="mrx-rcard-mlbl">Produced</span>{{ fmt(r.produced_qty) }}</div>
+                <div><span class="mrx-rcard-mlbl">Loss</span><span style="color:var(--bx-red);">{{ fmt(r.process_loss_qty) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Yield</span><span :style="r.yield_pct < 90 ? 'color:var(--bx-red);font-weight:700;' : 'color:var(--bx-green);font-weight:700;'">{{ r.yield_pct }}%</span></div>
+                <div><span class="mrx-rcard-mlbl">Efficiency</span><span :style="r.efficiency_pct < 90 ? 'color:var(--bx-mfg);font-weight:700;' : ''">{{ r.efficiency_pct }}%</span></div>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -373,11 +451,12 @@ onMounted(() => runReport());
 }
 .mrx-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; min-height: calc(100vh - 32px); }
 
-.mrx-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.mrx-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .mrx-hdr-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
 .mrx-hdr-sub { font-size:12.5px; color:rgba(255,255,255,.75); }
+.mrx-hdr-actions { display:flex; gap:8px; flex-wrap:wrap; }
 
-.mrx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto; }
+.mrx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto;overflow-y:hidden; }
 .mrx-tab { display:flex; align-items:center; gap:6px; padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
 .mrx-tab-ic { font-size:13px; }
 .mrx-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
@@ -446,4 +525,36 @@ select.mrx-fi {
 
 .shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
 @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+/* ── Mobile report cards (hidden on desktop; swap in for tables below the breakpoint) ── */
+.mrx-cards-wrap { display:none; flex-direction:column; gap:10px; }
+.mrx-rcard { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-rsm); padding:12px 14px; cursor:pointer; transition:background .1s; }
+.mrx-rcard:hover { background:#FAFBFF; }
+.mrx-rcard-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.mrx-rcard-title { font-size:13.5px; font-weight:600; color:var(--bx-text); margin-bottom:2px; }
+.mrx-rcard-row { margin:8px 0; }
+.mrx-rcard-meta { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; font-size:12.5px; color:var(--bx-text); padding-top:8px; margin-top:8px; border-top:1px solid #F1F3F5; }
+.mrx-rcard-mlbl { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:1px; }
+.mrx-rcard-totals { background:var(--bx-mfgS); border-color:rgba(180,83,9,.15); cursor:default; }
+.mrx-rcard-totals:hover { background:var(--bx-mfgS); }
+
+@media (max-width:680px) {
+  .mrx-table-wrap > .mrx-table { display:none; }
+  .mrx-cards-wrap { display:flex; }
+}
+
+@media (max-width:600px) {
+  .mrx-page { padding:8px; }
+  .mrx-panel { min-height:calc(100vh - 16px); }
+  .mrx-hdr { padding:14px 16px; }
+  .mrx-hdr-title { font-size:16px; }
+  .mrx-btn { padding:8px 12px; font-size:12.5px; }
+  .mrx-tabs { padding:0 12px; }
+  .mrx-filters { padding:12px 14px; gap:10px; }
+  .mrx-fi { min-width:0; flex:1; }
+  .mrx-filters > div { flex:1; min-width:130px; }
+  .mrx-body { padding:14px; }
+  .mrx-kpi-grid { grid-template-columns:1fr 1fr !important; }
+  .mrx-rcard-meta { grid-template-columns:1fr 1fr; }
+}
 </style>

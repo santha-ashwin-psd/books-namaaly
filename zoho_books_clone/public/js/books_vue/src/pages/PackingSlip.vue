@@ -67,8 +67,8 @@
         <template v-else>
           <!-- Header -->
           <div class="psx-detail-hdr">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-              <div style="min-width:0">
+            <div class="psx-hdr-flex">
+              <div class="psx-hdr-info">
                 <div class="psx-detail-title">{{ isNew ? 'New Packing Slip' : (ps.production_item || ps.name) }}</div>
                 <div class="psx-detail-meta">
                   <span class="mono" v-if="!isNew">{{ ps.name }}</span>
@@ -78,7 +78,7 @@
                   <span class="psx-badge" :class="statusClass(ps.status)" style="font-size:11px">{{ ps.status }}</span>
                 </div>
               </div>
-              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+              <div class="psx-hdr-actions">
                 <button class="psx-btn psx-btn-ghost-inv" @click="goBackToList">Back</button>
                 <button v-if="!isNew && ps.status!=='Cancelled'" class="psx-btn psx-btn-light" style="color:#C92A2A" @click="cancelPS" :disabled="saving">
                   {{ saving ? 'Cancelling…' : 'Cancel' }}
@@ -159,41 +159,37 @@
               </div>
             </div>
 
-            <div class="psx-tree-col-hdr">
-              <span style="flex:1">Item</span>
-              <span style="width:100px;text-align:right">Required</span>
-              <span style="width:100px;text-align:right">Packed</span>
-              <span style="width:90px">UOM</span>
-              <span v-if="!readOnly" style="width:30px"></span>
-            </div>
-            <div class="psx-tree">
+            <div class="psx-item-cards">
               <div v-if="!ps.items || !ps.items.length" class="psx-tree-empty">No items. Select a Work Order and click "Reload from WO".</div>
-              <div v-for="(row, idx) in ps.items" :key="idx" class="psx-tree-row"
-                :style="flt(row.packed_qty) >= flt(row.required_qty) - 0.001 && flt(row.required_qty) > 0 ? 'background:var(--bx-greenS);' : ''">
-                <span style="flex:1;min-width:0">
-                  <select class="psx-fi psx-fi-inline" v-model="row.item_code" :disabled="readOnly">
+              <div v-for="(row, idx) in ps.items" :key="idx" class="psx-item-card"
+                :class="{ 'psx-item-card-done': flt(row.packed_qty) >= flt(row.required_qty) - 0.001 && flt(row.required_qty) > 0 }">
+                <div class="psx-item-card-hdr">
+                  <select class="psx-fi psx-fi-inline psx-item-card-title" v-model="row.item_code" :disabled="readOnly">
                     <option value="">— Select —</option>
                     <option v-for="i in itemsList" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                   </select>
-                </span>
-                <span style="width:100px">
-                  <input type="number" class="psx-fi psx-tree-qty-inp" v-model="row.required_qty" step="any" :disabled="readOnly" />
-                </span>
-                <span style="width:100px">
-                  <input type="number" class="psx-fi psx-tree-qty-inp" v-model="row.packed_qty" min="0" step="any"
-                    :style="flt(row.packed_qty) > flt(row.required_qty) ? 'border-color:var(--bx-red);' : ''" />
-                </span>
-                <span style="width:90px">
-                  <select class="psx-fi psx-tree-uom-inp" v-model="row.uom" :disabled="readOnly">
-                    <option value="">—</option>
-                    <option v-for="u in uomList" :key="u.name" :value="u.name">{{ u.name }}</option>
-                  </select>
-                </span>
-                <span v-if="!readOnly" style="width:30px;text-align:center">
-                  <button class="psx-btn-icon danger" @click="ps.items.splice(idx,1)">
+                  <button v-if="!readOnly" class="psx-btn-icon danger" @click="ps.items.splice(idx,1)">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
-                </span>
+                </div>
+                <div class="psx-item-card-body">
+                  <div class="psx-item-field">
+                    <label>Required</label>
+                    <input type="number" class="psx-fi psx-fi-mono" v-model="row.required_qty" step="any" :disabled="readOnly" />
+                  </div>
+                  <div class="psx-item-field">
+                    <label>Packed</label>
+                    <input type="number" class="psx-fi psx-fi-mono" v-model="row.packed_qty" min="0" step="any"
+                      :style="flt(row.packed_qty) > flt(row.required_qty) ? 'border-color:var(--bx-red);' : ''" />
+                  </div>
+                  <div class="psx-item-field">
+                    <label>UOM</label>
+                    <select class="psx-fi" v-model="row.uom" :disabled="readOnly">
+                      <option value="">—</option>
+                      <option v-for="u in uomList" :key="u.name" :value="u.name">{{ u.name }}</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -567,6 +563,15 @@ function icon(name, size) {
 
 .psx-detail-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); }
 .psx-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
+.psx-hdr-flex { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.psx-hdr-info { min-width:0; }
+.psx-hdr-actions { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+@media (max-width:640px) {
+  .psx-detail-hdr { padding:14px 16px; }
+  .psx-hdr-flex { flex-direction:column; align-items:stretch; }
+  .psx-hdr-actions { justify-content:flex-start; }
+  .psx-detail-title { font-size:16px; }
+}
 .psx-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
 .psx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
@@ -589,6 +594,19 @@ function icon(name, size) {
 .psx-lo-cell { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-rsm); padding:12px 16px; }
 .psx-link { color:var(--bx-mfg); font-weight:600; cursor:pointer; font-size:13px; }
 .psx-link:hover { text-decoration:underline; }
+
+/* ── Item cards (Items to Pack) ── */
+.psx-item-cards { display:flex; flex-direction:column; gap:10px; }
+.psx-item-card { background:#fff; border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; box-shadow:0 1px 3px rgba(16,24,40,.04); }
+.psx-item-card-done { border-color:var(--bx-green); background:var(--bx-greenS); }
+.psx-item-card-hdr { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
+.psx-item-card-done .psx-item-card-hdr { background:var(--bx-greenS); }
+.psx-item-card-title { flex:1; min-width:0; font-weight:600; }
+.psx-item-card-body { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; padding:12px 14px; }
+.psx-item-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.psx-item-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
+.psx-item-field .psx-fi { width:100%; }
+@media (max-width:480px) { .psx-item-card-body { grid-template-columns:1fr 1fr; } }
 
 .psx-footer { padding:12px 22px; border-top:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; justify-content:space-between; align-items:center; gap:8px; }
 

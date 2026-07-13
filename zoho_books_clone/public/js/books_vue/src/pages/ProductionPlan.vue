@@ -88,7 +88,7 @@
             <!-- ── TAB: Plan ── -->
             <template v-if="activeTab==='plan'">
               <div class="bomx-section-lbl">Plan Details</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr 1fr;margin-bottom:20px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Posting Date</div>
                   <input class="bomx-fi" type="date" v-model="pp.posting_date" :disabled="readOnly" style="width:100%"/>
@@ -96,7 +96,7 @@
               </div>
 
               <div class="bomx-section-lbl">Default Warehouses</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:8px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">Default Source Warehouse (Raw Materials)</div>
                   <select class="bomx-fi" v-model="pp.default_source_warehouse" :disabled="readOnly" style="width:100%">
@@ -113,7 +113,7 @@
                   </select>
                 </div>
               </div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:20px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Default Finished Goods Warehouse <span style="color:var(--bx-red)">*</span></div>
                   <select class="bomx-fi" v-model="pp.default_fg_warehouse" :disabled="readOnly" style="width:100%">
@@ -130,12 +130,12 @@
                 </div>
               </div>
 
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+                <div style="min-width:0">
                   <div class="bomx-section-lbl" style="margin-bottom:2px">Demand from Sales Orders</div>
                   <div class="bomx-field-hint" style="margin-top:0">Optional — pull pending qty from open Sales Orders as a starting point.</div>
                 </div>
-                <div style="display:flex;gap:8px;flex-shrink:0" v-if="!readOnly">
+                <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap" v-if="!readOnly">
                   <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="openSOPicker">
                     <span v-html="icon('plus',12)"></span> Add Sales Orders
                   </button>
@@ -161,7 +161,7 @@
                 </div>
               </div>
 
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
                 <span class="bomx-section-lbl" style="margin-bottom:0">Items to Manufacture</span>
                 <button v-if="!readOnly" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="addPOItem">
                   <span v-html="icon('plus',12)"></span> Add Row
@@ -811,6 +811,8 @@ function icon(name, size) {
 .bomx-tab--active { color:var(--bx-mfgB); border-bottom-color:var(--bx-mfg); }
 
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.bomx-hf-cols-1-1 { grid-template-columns:1fr 1fr; }
+.bomx-hf-cols-1 { grid-template-columns:1fr; }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
 
@@ -876,4 +878,26 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 
 .shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
 @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+/* ── Mobile responsive ── */
+@media (max-width:768px) {
+  .bomx-page { padding:10px; overflow-x:hidden; }
+  .bomx-two-col { gap:12px; }
+  .bomx-list { max-height:280px; }
+  .bomx-detail-panel { min-height:auto; }
+
+  .bomx-detail-hdr { padding:14px 16px; }
+  .bomx-detail-title { font-size:16px; }
+
+  .bomx-hdr-fields, .bomx-hf-cols-1-1 { grid-template-columns:1fr; padding:12px 16px; gap:10px; }
+  .bomx-tabs { padding:0 16px; }
+  .bomx-body { padding:14px 16px; }
+
+  .bomx-rm-card-body { grid-template-columns:1fr 1fr; }
+  .bomx-prod-card { padding:14px; }
+}
+
+@media (max-width:420px) {
+  .bomx-rm-card-body { grid-template-columns:1fr; }
+}
 </style>

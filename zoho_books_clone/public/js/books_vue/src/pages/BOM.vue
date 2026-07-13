@@ -63,8 +63,8 @@
         <template v-else>
           <!-- Header -->
           <div class="bomx-detail-hdr">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-              <div style="min-width:0">
+            <div class="bomx-hdr-flex">
+              <div class="bomx-hdr-info">
                 <div class="bomx-detail-title">{{ isNew ? 'New Bill of Materials' : (itemNameFor(bom.item) || bom.item) }}</div>
                 <div class="bomx-detail-meta">
                   <span class="mono" v-if="!isNew">{{ bom.name }}</span>
@@ -74,14 +74,14 @@
                   <span class="bomx-badge" :class="statusClass(bom)" style="font-size:11px">{{ statusLabel(bom) }}</span>
                 </div>
               </div>
-              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+              <div class="bomx-hdr-actions">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
                 <button v-if="!isNew && isLatestInChain && (bom.docstatus===1 || bom.docstatus===2)"
                         class="bomx-btn bomx-btn-light" @click="newVersion" :disabled="submitting">
                   {{ submitting ? 'Creating…' : '+ New Version' }}
                 </button>
                 <button v-if="!isNew && isLatestInChain && bom.docstatus===1"
-                        class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(255,255,255,.4)"
+                        class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(255,255,255,.4);background-color:white;"
                         @click="cancelBom" :disabled="submitting || cancelling">
                   {{ cancelling ? 'Cancelling…' : 'Cancel BOM' }}
                 </button>
@@ -315,7 +315,7 @@
                 <div class="bomx-tree-row" v-for="(op, idx) in bom.operations" :key="'op'+idx">
                   <div class="bomx-tree-dot" style="background:var(--bx-violet)"></div>
                   <span class="bomx-tree-icon">⚙️</span>
-                  <div style="flex:1;min-width:0;display:flex;gap:6px">
+                  <div class="bomx-tree-selects">
                     <select class="bomx-fi bomx-fi-inline" style="flex:1" v-model="op.operation" :disabled="readOnly">
                       <option value="">— Operation —</option>
                       <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
@@ -392,31 +392,35 @@
                 <div class="bomx-field-hint">Percentage of material permanently lost during production.</div>
               </div>
 
-              <div class="bomx-tree-col-hdr" style="margin-top:16px">
-                <div style="flex:1;padding-left:4px">Scrap Items</div>
-                <div style="min-width:60px;text-align:right">Qty</div>
-                <div style="min-width:80px;text-align:right">Rate (₹)</div>
-                <div style="min-width:90px;text-align:right">Amount (₹)</div>
-                <div style="width:36px"></div>
+              <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px;margin-top:16px">
+                Scrap Items <span class="bomx-count" v-if="bom.scrap_items && bom.scrap_items.length">({{ bom.scrap_items.length }})</span>
               </div>
-              <div class="bomx-tree">
+              <div class="bomx-rm-cards">
                 <div v-if="!bom.scrap_items || !bom.scrap_items.length" class="bomx-tree-empty">No scrap items added.</div>
-                <div class="bomx-tree-row" v-for="(sc, idx) in bom.scrap_items" :key="idx">
-                  <div class="bomx-tree-dot" style="background:var(--bx-red)"></div>
-                  <span class="bomx-tree-icon">🗑️</span>
-                  <div style="flex:1;min-width:0">
-                    <select class="bomx-fi bomx-fi-inline" v-model="sc.item_code" :disabled="readOnly">
+                <div class="bomx-rm-card" v-for="(sc, idx) in bom.scrap_items" :key="idx">
+                  <div class="bomx-rm-card-hdr">
+                    <span class="bomx-tree-icon">🗑️</span>
+                    <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="sc.item_code" :disabled="readOnly" :title="itemNameFor(sc.item_code) || sc.item_code">
                       <option value="">— Select item —</option>
                       <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                     </select>
-                  </div>
-                  <input class="bomx-fi bomx-fi-mono bomx-tree-qty-inp" type="number" v-model="sc.qty" min="0" step="any" :disabled="readOnly"/>
-                  <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="sc.rate" min="0" step="any" :disabled="readOnly"/>
-                  <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ INR((sc.qty||0)*(sc.rate||0)) }}</span>
-                  <div class="bomx-tree-actions">
-                    <button v-if="!readOnly" class="bomx-btn-icon danger" @click="removeScrap(idx)" title="Remove">
+                    <div class="bomx-rm-card-amt">
+                      <span class="bomx-rm-card-amt-lbl">Amount</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ INR((sc.qty||0)*(sc.rate||0)) }}</span>
+                    </div>
+                    <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeScrap(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
+                  </div>
+                  <div class="bomx-rm-card-body">
+                    <div class="bomx-rm-field">
+                      <label>Qty</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="sc.qty" min="0" step="any" :disabled="readOnly"/>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Rate (₹)</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="sc.rate" min="0" step="any" :disabled="readOnly"/>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1163,7 +1167,7 @@ function icon(name, size) {
 .bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
-.bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto; }
+.bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto;overflow-y:hidden; }
 .bomx-tab { padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
 .bomx-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
 .bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
@@ -1265,4 +1269,51 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 
 .shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
 @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+/* ── Header flex (was inline styles — now real classes so media queries can win) ── */
+.bomx-hdr-flex { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.bomx-hdr-info { min-width:0; }
+.bomx-hdr-actions { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+.bomx-tree-selects { flex:1; min-width:0; display:flex; gap:6px; }
+
+/* ── Mobile responsive ── */
+@media (max-width:768px) {
+  .bomx-page { padding:10px; }
+  .bomx-two-col { gap:12px; }
+  .bomx-list { max-height:280px; }
+  .bomx-detail-panel { min-height:auto; }
+
+  .bomx-detail-hdr { padding:14px 16px; }
+  .bomx-hdr-flex { flex-direction:column; align-items:stretch; }
+  .bomx-hdr-actions { justify-content:flex-start; }
+  .bomx-detail-title { font-size:16px; }
+
+  .bomx-hdr-fields { grid-template-columns:1fr 1fr; padding:12px 16px; gap:10px; }
+  .bomx-toggle-row { padding:10px 16px 12px; gap:12px; }
+  .bomx-tabs { padding:0 16px; }
+  .bomx-body { padding:14px 16px; }
+
+  .bomx-cost-grid { grid-template-columns:1fr 1fr; }
+  .bomx-rm-card-body { grid-template-columns:1fr 1fr; padding:10px 12px; }
+
+  /* Operations / scrap tree rows: stop them overflowing horizontally */
+  .bomx-tree-col-hdr { display:none; }
+  .bomx-tree-row { flex-wrap:wrap; row-gap:6px; }
+  .bomx-tree-selects { flex-basis:100%; order:1; }
+  .bomx-tree-rate-inp, .bomx-tree-qty-inp { flex:1; width:auto; min-width:0; order:2; }
+  .bomx-tree-cost { order:3; min-width:auto; margin-left:auto; }
+  .bomx-tree-actions { order:4; }
+  .bomx-tree-sa-inp { width:100%; }
+
+  .bomx-cost-table { font-size:12px; display:block; overflow-x:auto; white-space:nowrap; }
+
+  .bomx-footer { flex-direction:column; align-items:stretch; gap:10px; }
+  .bomx-btn { padding:8px 12px; }
+}
+
+@media (max-width:420px) {
+  .bomx-hdr-fields { grid-template-columns:1fr; }
+  .bomx-cost-grid { grid-template-columns:1fr; }
+  .bomx-rm-card-body { grid-template-columns:1fr; }
+}
 </style>

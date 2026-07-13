@@ -98,7 +98,7 @@
             <!-- ── TAB: Work Order ── -->
             <template v-if="activeTab==='details'">
               <div class="bomx-section-lbl">Production Item &amp; BOM</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:2fr 1fr;margin-bottom:8px">
+              <div class="bomx-hdr-fields bomx-hf-cols-2-1" style="padding:0;border:none;background:none;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">Production Item</div>
                   <select class="bomx-fi" v-model="selectedProductionItem" @change="onProductionItemChange" :disabled="readOnly" style="width:100%">
@@ -108,7 +108,7 @@
                   <div class="bomx-field-hint">Picking an item auto-suggests its BOM below — still overridable.</div>
                 </div>
               </div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:2fr 1fr;margin-bottom:8px">
+              <div class="bomx-hdr-fields bomx-hf-cols-2-1" style="padding:0;border:none;background:none;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">BOM <span style="color:var(--bx-red)">*</span></div>
                   <select class="bomx-fi" v-model="wo.bom" @change="onBomChange" :disabled="readOnly" style="width:100%">
@@ -134,7 +134,7 @@
               </div>
 
               <div class="bomx-section-lbl">Warehouses</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:20px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Default Source Warehouse (Raw Materials)</div>
                   <select class="bomx-fi" v-model="wo.source_warehouse" :disabled="readOnly" style="width:100%">
@@ -167,7 +167,7 @@
               </div>
 
               <div class="bomx-section-lbl">Schedule</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:8px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">Planned Start Date</div>
                   <input class="bomx-fi" type="date" v-model="wo.planned_start_date" :disabled="readOnly" style="width:100%"/>
@@ -209,7 +209,7 @@
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                   </div>
-                  <div class="bomx-rm-card-body" style="grid-template-columns:2fr 1fr 1fr">
+                  <div class="bomx-rm-card-body bomx-rm-card-body-3col">
                     <div class="bomx-rm-field bomx-rm-field-wide">
                       <label>Item Code</label>
                       <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly">
@@ -412,7 +412,7 @@
             <!-- ── TAB: More Information ── -->
             <template v-if="activeTab==='more'">
               <div class="bomx-section-lbl">More Information</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr;margin-bottom:20px">
+              <div class="bomx-hdr-fields bomx-hf-cols-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Sales Order</div>
                   <select class="bomx-fi" v-model="wo.sales_order" :disabled="readOnly" style="width:100%">
@@ -437,7 +437,7 @@
     <div class="bomx-modal" style="width:560px;max-width:94vw">
       <div class="bomx-modal-title">Complete Work Order</div>
       <div class="bomx-modal-body">
-        <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:14px">
+        <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:14px">
           <div>
             <div class="bomx-hf-label">Qty Manufactured <span style="color:var(--bx-red)">*</span></div>
             <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="maxCompletableQty" step="any" style="width:100%"/>
@@ -449,7 +449,7 @@
           </div>
         </div>
         <template v-if="productionItemHasBatch">
-          <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:14px">
+          <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:14px">
             <div>
               <div class="bomx-hf-label">Batch No</div>
               <input class="bomx-fi" type="text" v-model="completeForm.batch_no" placeholder="Leave blank to auto-generate" style="width:100%"/>
@@ -472,7 +472,7 @@
         </div>
         <div class="bomx-rm-cards" style="margin-bottom:8px" v-if="completeForm.scrap_items.length">
           <div class="bomx-rm-card" v-for="(s, idx) in completeForm.scrap_items" :key="idx">
-            <div class="bomx-rm-card-body" style="grid-template-columns:2fr 1fr auto;align-items:end">
+            <div class="bomx-rm-card-body bomx-rm-card-body-2-1-auto">
               <div class="bomx-rm-field">
                 <label>Item</label>
                 <select class="bomx-fi" v-model="s.item_code">
@@ -1405,6 +1405,14 @@ function icon(name, size) {
 .bomx-tab--active { color:var(--bx-mfgB); border-bottom-color:var(--bx-mfg); }
 
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.bomx-hf-cols-2-1 { grid-template-columns:2fr 1fr; }
+.bomx-hf-cols-1-1 { grid-template-columns:1fr 1fr; }
+.bomx-hf-cols-1 { grid-template-columns:1fr; }
+.bomx-rm-card-body-2-1-auto { grid-template-columns:2fr 1fr auto; align-items:end; }
+@media (max-width:640px) {
+  .bomx-hf-cols-2-1, .bomx-hf-cols-1-1 { grid-template-columns:1fr; }
+  .bomx-rm-card-body-2-1-auto { grid-template-columns:1fr; align-items:stretch; }
+}
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
 .bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
@@ -1426,6 +1434,15 @@ function icon(name, size) {
 .bomx-rm-card-title { flex:1; min-width:0; font-weight:600; }
 .bomx-rm-card-rm { flex-shrink:0; }
 .bomx-rm-card-body { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 14px; }
+.bomx-rm-card-body-3col { grid-template-columns:2fr 1fr 1fr; }
+@media (max-width:768px) {
+  .bomx-rm-card-body-3col { grid-template-columns:1fr 1fr; }
+  .bomx-rm-card-body-3col .bomx-rm-field-wide { grid-column:1 / -1; }
+}
+@media (max-width:420px) {
+  .bomx-rm-card-body-3col { grid-template-columns:1fr; }
+  .bomx-rm-card-body-3col .bomx-rm-field-wide { grid-column:auto; }
+}
 .bomx-rm-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .bomx-rm-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
 .bomx-rm-field .bomx-fi { width:100%; }

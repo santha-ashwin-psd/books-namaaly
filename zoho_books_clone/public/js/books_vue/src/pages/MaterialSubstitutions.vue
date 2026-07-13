@@ -84,6 +84,33 @@
       </table>
     </div>
 
+    <!-- Mobile card list (shown instead of the table below the qcar-cards-wrap breakpoint) -->
+    <div class="qcar-cards-wrap">
+      <template v-if="loading">
+        <div v-for="n in 4" :key="n" class="qcar-card qcar-mcard"><div class="qcar-shimmer" style="height:70px"></div></div>
+      </template>
+      <template v-else>
+        <div v-for="r in filtered" :key="r.name" class="qcar-card qcar-mcard" @click="openView(r)">
+          <div class="qcar-mcard-top">
+            <span class="qcar-num">{{ r.name }}</span>
+            <span class="qcar-status-badge" :class="statusClass(r.approval_status)">{{ r.approval_status }}</span>
+          </div>
+          <div class="qcar-mcard-sub">{{ r.original_item_code }} → {{ r.alternative_item_code }}</div>
+          <div class="qcar-mcard-hint">{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</div>
+          <div class="qcar-mcard-meta">
+            <span style="color:#2563eb;font-weight:600">{{ r.work_order }}</span>
+            <span>{{ shortUser(r.requested_by) }}</span>
+            <span class="mono-sm text-muted">{{ fmtDate(r.request_date) }}</span>
+          </div>
+        </div>
+        <div v-if="!filtered.length" class="qcar-card qcar-empty">
+          <div style="font-size:32px;margin-bottom:8px">🔀</div>
+          <div style="font-weight:600;margin-bottom:4px">No Material Substitutions found</div>
+          <div style="font-size:13px;color:#9ca3af">Logs appear when a raw material is substituted on a Work Order</div>
+        </div>
+      </template>
+    </div>
+
     <div v-if="viewOpen" class="qcar-overlay" @click.self="viewOpen=false"></div>
     <div class="qcar-drawer" :class="{open: viewOpen}">
       <template v-if="viewDoc">
@@ -135,7 +162,7 @@
             <div style="display:flex;flex-direction:column;gap:8px">
               <textarea v-model="actionRemarks" class="qcar-input" rows="2" placeholder="Remarks (optional for approve, required for reject)…"></textarea>
               <textarea v-if="showRejectReason" v-model="rejectReason" class="qcar-input" rows="2" placeholder="Rejection reason (required)…" style="border-color:#fca5a5"></textarea>
-              <div style="display:flex;gap:8px">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button class="qcar-btn-approve" :disabled="actionSaving" @click="doApprove">
                   <span v-html="icon('check',13)"></span>{{ actionSaving && actionMode==='approve' ? 'Approving…' : 'Approve' }}
                 </button>
@@ -312,6 +339,19 @@ onMounted(load);
 .mono-sm {  font-size:12px; }
 .text-muted { color:#9ca3af; }
 
+/* ── Mobile card list (hidden on desktop; swaps in for the table on small screens) ── */
+.qcar-cards-wrap { display:none; flex-direction:column; gap:10px; }
+.qcar-mcard { padding:12px 14px; cursor:pointer; transition:background .12s; overflow:visible; }
+.qcar-mcard:hover { background:#f8fafc; }
+.qcar-mcard-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.qcar-mcard-sub { font-size:13px; font-weight:600; color:#111827; margin-bottom:2px; }
+.qcar-mcard-hint { font-size:11px; color:#9ca3af; margin-bottom:8px; }
+.qcar-mcard-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:#6b7280; padding-top:8px; border-top:1px solid #f3f4f6; }
+@media (max-width:680px) {
+  .qcar-table-wrap { display:none; }
+  .qcar-cards-wrap { display:flex; }
+}
+
 .qcar-status-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
 .qcar-status-approved { background:#dcfce7; color:#15803d; }
 .qcar-status-rejected { background:#fee2e2; color:#dc2626; }
@@ -349,5 +389,13 @@ onMounted(load);
   .qcar-page { padding:10px 8px; gap:10px; }
   .qcar-kpi-strip { grid-template-columns:repeat(2,1fr); }
   .qcar-drawer { width:100%; }
+  .qcar-dheader { padding:16px 16px 14px; }
+  .qcar-dh-top { flex-wrap:wrap; }
+  .qcar-dh-title { font-size:15px; word-break:break-word; }
+  .qcar-dbody { padding:14px 16px; gap:12px; }
+  .qcar-info-grid { grid-template-columns:1fr; gap:12px; padding:12px; }
+  .qcar-dfooter { padding:12px 16px; flex-direction:column-reverse; }
+  .qcar-dfooter .qcar-btn-ghost { width:100%; justify-content:center; }
+  .qcar-btn-approve, .qcar-btn-reject { flex:1; justify-content:center; }
 }
 </style>

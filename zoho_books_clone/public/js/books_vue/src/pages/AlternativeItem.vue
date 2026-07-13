@@ -64,8 +64,8 @@
         <template v-else>
           <!-- Header -->
           <div class="aix-detail-hdr">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-              <div style="min-width:0">
+            <div class="aix-hdr-flex">
+              <div class="aix-hdr-info">
                 <div class="aix-detail-title">{{ isNew ? 'New Alternative Item' : (itemNameFor(rec.item_code) || rec.item_code) }}</div>
                 <div class="aix-detail-meta">
                   <span class="mono" v-if="!isNew">{{ rec.name }}</span>
@@ -75,7 +75,7 @@
                   <span v-if="rec.is_default" class="aix-badge badge-active" style="font-size:11px">Default</span>
                 </div>
               </div>
-              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+              <div class="aix-hdr-actions">
                 <button class="aix-btn aix-btn-ghost-inv" @click="goBackToList">Back</button>
                 <button v-if="!isNew" class="aix-btn aix-btn-light" style="color:#C92A2A" @click="deleteRec" :disabled="saving">
                   {{ saving ? 'Deleting…' : 'Delete' }}
@@ -364,6 +364,15 @@ function icon(name, size) {
 
 .aix-detail-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); }
 .aix-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
+.aix-hdr-flex { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.aix-hdr-info { min-width:0; }
+.aix-hdr-actions { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+@media (max-width:640px) {
+  .aix-detail-hdr { padding:14px 16px; }
+  .aix-hdr-flex { flex-direction:column; align-items:stretch; }
+  .aix-hdr-actions { justify-content:flex-start; }
+  .aix-detail-title { font-size:16px; }
+}
 .aix-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
 .aix-body { padding:20px 22px; overflow-y:auto; flex:1; }

@@ -498,4 +498,25 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 
 .shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
 @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+/* ── Mobile responsive ── */
+@media (max-width:768px) {
+  .bomx-page { padding:10px; overflow-x:hidden; }
+  .bomx-two-col { gap:12px; }
+  .bomx-list { max-height:280px; }
+  .bomx-detail-panel { min-height:auto; }
+
+  .bomx-detail-hdr { padding:14px 16px; }
+  .bomx-detail-title { font-size:16px; }
+
+  .bomx-hdr-fields { grid-template-columns:1fr; padding:12px 16px; gap:10px; }
+  .bomx-toggle-row { padding:10px 16px; }
+  .bomx-body { padding:14px 16px; }
+
+  .bomx-rm-card-body { grid-template-columns:1fr 1fr; }
+}
+
+@media (max-width:420px) {
+  .bomx-rm-card-body { grid-template-columns:1fr; }
+}
 </style>
