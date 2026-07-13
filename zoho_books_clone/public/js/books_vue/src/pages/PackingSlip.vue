@@ -58,7 +58,7 @@
         <div class="psx-empty-icon">📄</div>
         <div class="psx-empty-title">Select a Packing Slip</div>
         <div class="psx-empty-sub">Choose a Packing Slip from the list to view or edit its details, or create a new one.</div>
-        <button class="psx-btn psx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Packing Slip</button>
+        <button class="psx-btn psx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Packing Slip</button>
       </div>
 
       <template v-else>

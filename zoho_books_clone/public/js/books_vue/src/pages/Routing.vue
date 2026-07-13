@@ -41,7 +41,7 @@
         <div class="bomx-empty-icon">🧭</div>
         <div class="bomx-empty-title">Select a Routing</div>
         <div class="bomx-empty-sub">Choose a Routing from the list to view or edit its operation sequence.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Routing</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Routing</button>
       </div>
 
       <template v-else>

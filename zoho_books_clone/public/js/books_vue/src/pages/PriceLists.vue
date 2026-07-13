@@ -153,7 +153,7 @@
         <div class="pl-es-title">No Price Lists Yet</div>
         <div class="pl-es-sub">Create your first price list to start managing item prices</div>
         <button class="b-btn b-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" style="margin-top:16px" @click="openNewListDialog">
-          <span v-html="icon('plus', 13)"></span> Create First Price List
+          <span v-html="icon('plus', 13)"></span> Create Price List
         </button>
       </template>
 

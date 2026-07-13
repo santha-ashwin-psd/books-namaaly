@@ -45,7 +45,7 @@
         <div class="bomx-empty-icon">⚙️</div>
         <div class="bomx-empty-title">Select an Operation</div>
         <div class="bomx-empty-sub">Choose an Operation from the list to view its settings and sub-operations.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Operation</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Operation</button>
       </div>
 
       <template v-else>

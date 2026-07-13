@@ -54,7 +54,7 @@
         <div class="bomx-empty-icon">📄</div>
         <div class="bomx-empty-title">Select a BOM</div>
         <div class="bomx-empty-sub">Choose a Bill of Materials from the list to view components, costs, and versions.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First BOM</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create BOM</button>
       </div>
 
       <template v-else>

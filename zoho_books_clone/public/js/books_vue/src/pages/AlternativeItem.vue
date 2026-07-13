@@ -55,7 +55,7 @@
         <div class="aix-empty-icon">🔀</div>
         <div class="aix-empty-title">Select an Alternative Item</div>
         <div class="aix-empty-sub">Choose a mapping from the list to view or edit it, or create a new substitute item mapping.</div>
-        <button class="aix-btn aix-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Mapping</button>
+        <button class="aix-btn aix-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Mapping</button>
       </div>
 
       <template v-else>

@@ -48,7 +48,7 @@
         <div class="bomx-empty-icon">🗂️</div>
         <div class="bomx-empty-title">Select a Job Card</div>
         <div class="bomx-empty-sub">Choose a Job Card from the list to view schedule, time logs, and status.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Job Card</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Job Card</button>
       </div>
 
       <template v-else>

@@ -43,7 +43,7 @@
         <div class="bomx-empty-icon">⚙️</div>
         <div class="bomx-empty-title">Select a Workstation</div>
         <div class="bomx-empty-sub">Choose a Workstation from the list to view or edit its details.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Workstation</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Workstation</button>
       </div>
 
       <template v-else>

@@ -43,7 +43,7 @@
         <div class="bomx-empty-icon">🏗️</div>
         <div class="bomx-empty-title">Select a Work Order</div>
         <div class="bomx-empty-sub">Choose a Work Order from the list to view or edit it.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Work Order</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Work Order</button>
       </div>
 
       <template v-else>

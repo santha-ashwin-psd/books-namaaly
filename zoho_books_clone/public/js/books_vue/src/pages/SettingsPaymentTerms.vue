@@ -19,7 +19,7 @@
     <div style="font-size:36px;margin-bottom:10px">💳</div>
     <div style="font-size:14px;font-weight:600;margin-bottom:4px">No payment terms yet</div>
     <div style="font-size:12.5px">Create payment terms like "Net 30", "Immediate" or "2/10 Net 30"</div>
-    <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:16px">Create First Term</button>
+    <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:16px">Create Term</button>
   </div>
 
   <div v-else style="display:grid;gap:10px">

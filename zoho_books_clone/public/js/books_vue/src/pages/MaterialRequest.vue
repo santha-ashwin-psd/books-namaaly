@@ -45,7 +45,7 @@
         <div class="bomx-empty-icon">📦</div>
         <div class="bomx-empty-title">Select a Material Request</div>
         <div class="bomx-empty-sub">Choose a Material Request from the list to view or edit its items.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Material Request</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Material Request</button>
       </div>
 
       <template v-else>

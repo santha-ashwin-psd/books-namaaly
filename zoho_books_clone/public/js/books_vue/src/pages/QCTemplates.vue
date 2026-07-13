@@ -148,7 +148,7 @@
                   Templates define the parameters inspectors check during a QC Inspection
                 </div>
                 <button class="qct-btn-primary" @click="openCreate">
-                  <span v-html="icon('plus', 13)"></span> Create First Template
+                  <span v-html="icon('plus', 13)"></span> Create Template
                 </button>
               </td>
             </tr>
@@ -168,7 +168,7 @@
         <div style="font-size:32px;margin-bottom:8px">📋</div>
         <div style="font-weight:700;margin-bottom:6px;font-size:14px">No QC Templates found</div>
         <div style="font-size:12px;color:#9ca3af;margin-bottom:14px">Templates define the parameters inspectors check during a QC Inspection</div>
-        <button class="qct-btn-primary" @click="openCreate"><span v-html="icon('plus', 13)"></span> Create First Template</button>
+        <button class="qct-btn-primary" @click="openCreate"><span v-html="icon('plus', 13)"></span> Create Template</button>
       </div>
       <!-- cards -->
       <div v-else v-for="t in paginated" :key="t.name" class="qct-mob-card" @click="openView(t)">

@@ -42,7 +42,7 @@
         <div class="bomx-empty-icon">📅</div>
         <div class="bomx-empty-title">Select a Production Plan</div>
         <div class="bomx-empty-sub">Choose a Production Plan from the list to view demand, raw materials, and Work Orders.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create First Production Plan</button>
+        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Production Plan</button>
       </div>
 
       <template v-else>

@@ -46,7 +46,7 @@
     <div style="font-size:36px;margin-bottom:10px">🧾</div>
     <div style="font-size:14px;font-weight:600;margin-bottom:4px">No tax templates found</div>
     <div style="font-size:12.5px">Create GST templates for CGST+SGST (intra-state) or IGST (inter-state)</div>
-    <button class="nim-btn nim-btn-primary" @click="openAdd" style="margin-top:16px">Create First Template</button>
+    <button class="nim-btn nim-btn-primary" @click="openAdd" style="margin-top:16px">Create Template</button>
   </div>
 
   <!-- ── Template cards ────────────────────────────────────────────── -->
