@@ -66,10 +66,10 @@ export const NAV = [
   { path: "/inventory/batches",             label: "Batch Tracking",   icon: "qr",         module: "inventory"  },
   { path: "/inventory/settings",            label: "Settings",         icon: "gear",       module: "inventory"  },
 
-  // { section: "Quality" },
-  // { path: "/quality/inspections",           label: "Inspections",      icon: "shield",     module: "inventory"  },
-  // { path: "/quality/templates",             label: "QC Templates",     icon: "file",       module: "inventory"  },
-  // { path: "/quality/approvals",             label: "QC Approvals",     icon: "check",      module: "inventory"  },
+  { section: "Quality" },
+  { path: "/quality/inspections",           label: "Inspections",      icon: "shield",     module: "inventory"  },
+  { path: "/quality/templates",             label: "QC Templates",     icon: "file",       module: "inventory"  },
+  { path: "/quality/approvals",             label: "QC Approvals",     icon: "check",      module: "inventory"  },
 
   { section: "Manufacturing" },
   // { path: "/manufacturing",                    label: "Dashboard",        icon: "grid",       module: "inventory" },

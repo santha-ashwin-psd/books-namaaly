@@ -58,6 +58,17 @@ def create_qc_approval_request(inspection_name: str, reason: str = "") -> dict:
 
     qci = frappe.get_doc("QC Inspection", inspection_name)
 
+    # Guard: only submitted (docstatus=1) inspections that resolved to "Fail"
+    # are eligible for a QC Approval Request — mirrors the UI's button visibility.
+    if qci.docstatus != 1:
+        frappe.throw(
+            _("QC Approval Request can only be raised for a submitted QC Inspection.")
+        )
+    if qci.status != "Fail":
+        frappe.throw(
+            _("QC Approval Request can only be raised for a QC Inspection with status 'Fail'.")
+        )
+
     # Idempotency — return existing pending/open request
     existing = frappe.db.get_value(
         "QC Approval Request",

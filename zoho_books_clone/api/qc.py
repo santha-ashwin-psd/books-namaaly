@@ -10,7 +10,11 @@ Endpoints:
   GET  get_inspection_detail(inspection_name)
   GET  get_templates()
   GET  get_template_detail(template_name)
+  GET  check_template_usage(template_name)   -- count of QC Inspections referencing a template
+  POST update_template(template_name, ...)   -- atomic parent+parameters save
   POST create_qc_inspection(reference_type, reference_name, item_code, inspection_type)
+  POST update_qc_inspection(inspection_name, ...)  -- edit a Draft inspection's header fields
+  POST apply_qc_template(inspection_name, template_name=None) -- (re-)attach a template + rebuild readings for a Draft
   POST save_qc_readings(inspection_name, readings_json)
   POST submit_qc_inspection(inspection_name)
   POST cancel_qc_inspection(inspection_name)
@@ -31,6 +35,8 @@ from zoho_books_clone.quality.qc_engine import (
     get_linked_qc_status,
     _DOCTYPE_TO_INSPECTION_TYPE,
     _ITEM_FLAG_FOR_INSPECTION_TYPE,
+    _resolve_template,
+    _populate_readings_from_template,
 )
 
 
@@ -163,6 +169,74 @@ def get_template_detail(template_name: str) -> dict:
     return doc.as_dict()
 
 
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def check_template_usage(template_name: str) -> dict:
+    """Return how many QC Inspections reference this template, so the UI can
+    warn before (or block) deletion."""
+    count = frappe.db.count(
+        "QC Inspection", filters={"qc_inspection_template": template_name}
+    )
+    return {"template_name": template_name, "inspection_count": count}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def update_template(
+    template_name: str,
+    template_name_new: str = None,
+    item: str = None,
+    item_group: str = None,
+    inspection_type: str = "All",
+    description: str = None,
+    parameters_json: str = "[]",
+) -> dict:
+    """
+    Update a QC Inspection Template's parent fields and fully replace its
+    parameter child table in a single atomic save.
+
+    Loads the doc via frappe.get_doc() (rather than accepting a client-built
+    doc dict for frappe.client.save) so `modified` always matches the DB row
+    — a client-cached dict never carries a current `modified` value, which
+    otherwise trips Frappe's TimestampMismatchError on every edit, not just
+    genuinely stale ones.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("QC Inspection Template", template_name):
+        frappe.throw(_("QC Inspection Template {0} does not exist.").format(template_name))
+
+    doc = frappe.get_doc("QC Inspection Template", template_name)
+
+    new_name = (template_name_new or "").strip()
+    if new_name:
+        doc.template_name = new_name
+    doc.item = (item or "").strip() or None
+    doc.item_group = (item_group or "").strip() or None
+    doc.inspection_type = inspection_type or "All"
+    doc.description = (description or "").strip() or None
+
+    try:
+        parameters = json.loads(parameters_json) if isinstance(parameters_json, str) else (parameters_json or [])
+    except Exception:
+        frappe.throw(_("Invalid parameters payload."))
+
+    doc.set("parameters", [])
+    for p in parameters:
+        ptype = p.get("parameter_type") or "Numeric"
+        doc.append("parameters", {
+            "parameter": p.get("parameter"),
+            "parameter_type": ptype,
+            "min_value": p.get("min_value") if ptype == "Numeric" else None,
+            "max_value": p.get("max_value") if ptype == "Numeric" else None,
+            "acceptance_criteria_value": p.get("acceptance_criteria_value") if ptype == "Non-Numeric" else None,
+            "formula": p.get("formula") if ptype == "Formula" else None,
+        })
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return doc.as_dict()
+
+
 # ─── Create / Edit / Submit ───────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -218,6 +292,115 @@ def create_qc_inspection(
 
     doc = frappe.get_doc("QC Inspection", inspection_name)
     return {"inspection_name": inspection_name, "created": True, "doc": doc.as_dict()}
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def update_qc_inspection(
+    inspection_name: str,
+    inspection_type: str = None,
+    reference_type: str = None,
+    reference_name: str = None,
+    item_code: str = None,
+    sample_size: float = 1,
+    inspection_date: str = None,
+    remarks: str = "",
+) -> dict:
+    """
+    Update the header fields of a draft QC Inspection (Inspection Type,
+    Reference Doc, Item, Sample Size, Inspection Date, Remarks). Readings are
+    edited separately via save_qc_readings(). Only Draft (docstatus 0)
+    inspections can be edited — a submitted document is immutable.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("QC Inspection", inspection_name):
+        frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
+
+    doc = frappe.get_doc("QC Inspection", inspection_name)
+
+    if doc.docstatus != 0:
+        frappe.throw(_("Only draft QC Inspections can be edited."))
+
+    if reference_type and reference_name:
+        if not frappe.db.exists(reference_type, reference_name):
+            frappe.throw(
+                _("Reference document {0} {1} does not exist.").format(reference_type, reference_name)
+            )
+        doc.reference_type = reference_type
+        doc.reference_name = reference_name
+
+    if item_code:
+        if not frappe.db.exists("Item", item_code):
+            frappe.throw(_("Item {0} does not exist.").format(item_code))
+        doc.item = item_code
+        doc.item_name = frappe.db.get_value("Item", item_code, "item_name") or item_code
+
+    if inspection_type:
+        doc.inspection_type = inspection_type
+    if inspection_date:
+        doc.inspection_date = inspection_date
+    doc.sample_size = flt(sample_size) or 1
+    doc.remarks = remarks or None
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"inspection_name": doc.name, "doc": doc.as_dict()}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def apply_qc_template(inspection_name: str, template_name: str = None) -> dict:
+    """
+    (Re-)attach a QC Inspection Template to a Draft QC Inspection and rebuild
+    its Readings table from that template's parameters.
+
+    Template resolution normally only runs once, at creation time (see
+    create_qc_inspection_for_item / _resolve_template). If no matching
+    template existed yet at that moment, the inspection is stuck permanently
+    with an empty readings table -- editing header fields via
+    update_qc_inspection() never re-resolves or re-populates it. This
+    endpoint lets the user manually pick a template (or ask the system to
+    re-resolve one automatically by omitting template_name) for an existing
+    Draft inspection.
+
+    Only Draft (docstatus 0) inspections can be modified, matching the same
+    rule enforced for header edits and reading edits.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("QC Inspection", inspection_name):
+        frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
+
+    doc = frappe.get_doc("QC Inspection", inspection_name)
+
+    if doc.docstatus != 0:
+        frappe.throw(_("Only draft QC Inspections can have their template changed."))
+
+    template_name = (template_name or "").strip()
+    if not template_name:
+        template_name = _resolve_template(doc.item, doc.inspection_type)
+        if not template_name:
+            frappe.throw(
+                _("No matching QC Inspection Template was found for this item/inspection type. Please select one manually.")
+            )
+
+    if not frappe.db.exists("QC Inspection Template", template_name):
+        frappe.throw(_("QC Inspection Template {0} does not exist.").format(template_name))
+
+    # Wipe any existing readings and rebuild from the (possibly new) template.
+    # Previously entered reading values are intentionally discarded -- they
+    # were captured against a different (or no) parameter set and can't be
+    # meaningfully carried over to the new one.
+    doc.set("readings", [])
+    doc.qc_inspection_template = template_name
+    _populate_readings_from_template(doc, template_name)
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {"inspection_name": doc.name, "doc": doc.as_dict()}
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -457,6 +640,13 @@ def generate_coa(inspection_name: str) -> dict:
         frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
 
     doc = frappe.get_doc("QC Inspection", inspection_name)
+
+    if doc.docstatus != 1:
+        status_label = {0: _("Draft"), 2: _("Cancelled")}.get(doc.docstatus, str(doc.docstatus))
+        frappe.throw(_(
+            "Cannot generate a Certificate of Analysis for QC Inspection {0} — "
+            "it is <b>{1}</b>. Only submitted QC Inspections can produce a COA."
+        ).format(inspection_name, status_label))
 
     # Company name
     company_name = ""

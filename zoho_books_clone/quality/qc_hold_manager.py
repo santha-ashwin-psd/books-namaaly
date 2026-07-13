@@ -5,8 +5,20 @@ QC Hold Manager — zoho_books_clone.quality.qc_hold_manager
 Manages the quarantine / QC hold lifecycle for items that fail QC Inspection.
 
 When a QC Inspection is submitted with status=Fail, this module:
-  1. Flags the item with qc_hold=1 on the Item master
+  1. Flags the hold on the QC Inspection itself (qc_hold=1) — this is the
+     authoritative, batch-scoped record of the hold (a QC Inspection is
+     always scoped to one reference_name/item/batch_no).
   2. Optionally creates a Stock Entry to transfer stock to a quarantine warehouse
+  3. Recomputes Item.qc_hold as a derived roll-up: true if ANY batch of that
+     item currently has an active hold. This roll-up is a convenience flag
+     for list views/reports only — it is never the source of truth, so
+     placing/releasing a hold on one batch never affects other batches of
+     the same item.
+
+When a QC Inspection is cancelled (status was Fail), handle_qc_cancel
+reverses everything the above set up: cancels the quarantine Stock Entry,
+voids any still-Pending QC Approval Request, clears this inspection's own
+hold flag, and recomputes the Item-level roll-up.
 
 When QC Hold is released:
   - Disposition = "Release to Stock"  -> Stock Entry: quarantine -> original warehouse
@@ -16,6 +28,7 @@ When QC Hold is released:
 Public surface
 --------------
 handle_qc_result(doc, method=None)           -- on_submit hook on QC Inspection
+handle_qc_cancel(doc, method=None)           -- on_cancel hook on QC Inspection
 validate_approval_request(doc, method=None)  -- validate hook on QC Approval Request
 place_on_hold(inspection_name, quarantine_warehouse, hold_reason) -> dict
 release_from_hold(inspection_name, disposition, target_warehouse)  -> dict
@@ -62,8 +75,11 @@ def handle_qc_result(doc, method=None):
         pass
 
     if not quarantine_wh:
-        # No quarantine warehouse configured — just flag the item
-        _flag_item_on_hold(doc.item, True)
+        # No quarantine warehouse configured — still stamp the hold on this
+        # inspection (the authoritative, batch-scoped record) and roll it
+        # up to the item-level convenience flag.
+        _stamp_qc_hold_fields(doc.name, "", "Auto-hold: no quarantine warehouse configured", on_hold=True)
+        _flag_item_on_hold(doc.item)
         frappe.msgprint(
             _("QC Inspection Failed for {0}. Item flagged for QC Hold. "
               "Configure 'Default Quarantine Warehouse' in Books Settings "
@@ -95,6 +111,69 @@ def handle_qc_result(doc, method=None):
         )
 
 
+# --- on_cancel hook -------------------------------------------------------------
+
+def handle_qc_cancel(doc, method=None):
+    """
+    Called on_cancel of QC Inspection. Reverses everything handle_qc_result /
+    place_on_hold set up for a Fail result:
+      1. Cancels the auto-created quarantine Stock Entry, if it's still
+         submitted (only when this inspection's hold is still active —
+         i.e. it was never released, so nothing has moved out of quarantine yet).
+      2. Clears this inspection's own qc_hold flag and recomputes the
+         item-level roll-up flag (other batches of the same item may still
+         legitimately be on hold).
+      3. Voids the auto-created QC Approval Request if it's still Pending —
+         no QA decision was ever made, so it's cancelled rather than rejected.
+    Every step is best-effort and non-fatal: a QC Inspection must always be
+    cancellable even if some downstream cleanup fails; failures are logged
+    instead of blocking the cancel.
+    """
+    if doc.status != "Fail":
+        return  # Nothing was auto-triggered for a Pass/Pending inspection
+
+    if doc.get("qc_hold"):
+        se_name = doc.get("quarantine_stock_entry")
+        if se_name:
+            try:
+                se = frappe.get_doc("Stock Entry", se_name)
+                if se.docstatus == 1:
+                    se.cancel()
+            except Exception:
+                frappe.log_error(
+                    title=f"Failed to reverse quarantine Stock Entry {se_name} on cancel of {doc.name}",
+                    message=frappe.get_traceback(),
+                )
+
+        _stamp_qc_hold_fields(doc.name, "", "", on_hold=False)
+        _flag_item_on_hold(doc.item)
+
+    try:
+        req_name = frappe.db.get_value(
+            "QC Approval Request",
+            {"qc_inspection": doc.name, "approval_status": "Pending"},
+            "name",
+        )
+        if req_name:
+            frappe.db.set_value(
+                "QC Approval Request", req_name, "approval_status", "Cancelled",
+                update_modified=False,
+            )
+    except Exception:
+        frappe.log_error(
+            title=f"Failed to void QC Approval Request for cancelled {doc.name}",
+            message=frappe.get_traceback(),
+        )
+
+    frappe.msgprint(
+        _("QC Inspection {0} cancelled — quarantine hold and any pending "
+          "approval request have been reversed.").format(doc.name),
+        indicator="orange",
+        title=_("QC Hold Reversed"),
+        alert=True,
+    )
+
+
 # --- place_on_hold ------------------------------------------------------------
 
 @frappe.whitelist()
@@ -105,9 +184,10 @@ def place_on_hold(
 ) -> dict:
     """
     Place an item on QC Hold after a failed QC Inspection.
-    1. Flags Item.qc_hold = 1
-    2. Updates QC Inspection with qc_hold=1, quarantine_warehouse, hold_reason
-    3. Creates a Stock Entry to move stock to quarantine warehouse (if source warehouse known)
+    1. Creates a Stock Entry to move stock to quarantine warehouse (if source warehouse known)
+    2. Updates this QC Inspection with qc_hold=1, quarantine_warehouse, hold_reason,
+       quarantine_stock_entry — the authoritative, batch-scoped hold record
+    3. Recomputes the Item.qc_hold roll-up flag (does not affect other batches)
     Returns: {"status": "ok", "stock_entry": name_or_None, "message": "..."}
     """
     qci = frappe.get_doc("QC Inspection", inspection_name)
@@ -115,14 +195,18 @@ def place_on_hold(
     if qci.status not in ("Fail", "Pending"):
         frappe.throw(_("QC Hold can only be placed on Failed or Pending inspections."))
 
-    # Flag the item
-    _flag_item_on_hold(qci.item, True)
-
-    # Stamp the QC Inspection (if fields exist)
-    _stamp_qc_hold_fields(inspection_name, quarantine_warehouse, hold_reason, on_hold=True)
-
-    # Try to create a quarantine Stock Entry
+    # Try to create a quarantine Stock Entry first so its name can be stamped
     se_name = _create_quarantine_stock_entry(qci, quarantine_warehouse, hold_reason)
+
+    # Stamp this inspection's own hold state — the authoritative,
+    # batch-scoped record (if fields exist)
+    _stamp_qc_hold_fields(
+        inspection_name, quarantine_warehouse, hold_reason,
+        on_hold=True, quarantine_stock_entry=se_name,
+    )
+
+    # Recompute the item-level roll-up flag from QC Inspection hold state
+    _flag_item_on_hold(qci.item)
 
     msg = _("Item {0} placed on QC Hold. Stock moved to quarantine warehouse: {1}.").format(
         qci.item, quarantine_warehouse
@@ -222,9 +306,11 @@ def release_from_hold(
             "content": f"QC Hold Released — Disposition: Return to Supplier. Item: {item_code}.",
         }).insert(ignore_permissions=True)
 
-    # Clear the hold flag
-    _flag_item_on_hold(item_code, False)
+    # Clear this inspection's own hold flag first (authoritative, batch-scoped),
+    # then recompute the item-level roll-up — other batches of this item may
+    # still legitimately be on hold, so it must be derived, not blindly cleared.
     _stamp_qc_hold_fields(inspection_name, quarantine_wh or "", "", on_hold=False)
+    _flag_item_on_hold(item_code)
 
     frappe.db.commit()
 
@@ -237,27 +323,38 @@ def release_from_hold(
 @frappe.whitelist()
 def get_quarantine_summary() -> list:
     """
-    Return all items currently on QC Hold.
+    Return items currently on QC Hold (qc_hold=1) — i.e. still in quarantine.
+    A Fail inspection that has since been released or cancelled must not
+    appear here even though its overall status remains "Fail".
     Returns list of dicts with item, quarantine_warehouse, inspection, reason, date.
     """
     try:
+        has_qc_hold = frappe.db.has_column("QC Inspection", "qc_hold")
+        has_qwh     = frappe.db.has_column("QC Inspection", "quarantine_warehouse")
+
+        filters = {"docstatus": 1, "status": "Fail"}
+        if has_qc_hold:
+            # qc_hold is the authoritative "still in quarantine" flag —
+            # filter at the query level rather than fetching every
+            # historical Fail inspection and inspecting it after the fact.
+            filters["qc_hold"] = 1
+
         rows = frappe.get_all(
             "QC Inspection",
-            filters={"docstatus": 1, "status": "Fail"},
+            filters=filters,
             fields=["name", "item", "item_name", "inspection_date", "reference_type",
                     "reference_name", "inspected_by"],
             order_by="inspection_date desc",
             ignore_permissions=True,
         )
-        # Enrich with qc_hold field if it exists
+
         result = []
-        has_qc_hold = frappe.db.has_column("QC Inspection", "qc_hold")
-        has_qwh     = frappe.db.has_column("QC Inspection", "quarantine_warehouse")
         for r in rows:
-            if has_qc_hold:
-                r["on_hold"] = bool(frappe.db.get_value("QC Inspection", r["name"], "qc_hold"))
-            else:
-                r["on_hold"] = True  # Assume hold for all failed inspections
+            # has_qc_hold is True for every row here since it was already
+            # filtered on qc_hold=1 above; when the column doesn't exist at
+            # all we have no way to know which Fail inspections are still
+            # held, so conservatively report all of them as on hold.
+            r["on_hold"] = True
             if has_qwh:
                 r["quarantine_warehouse"] = frappe.db.get_value(
                     "QC Inspection", r["name"], "quarantine_warehouse"
@@ -298,7 +395,6 @@ def _create_quarantine_stock_entry(qci, quarantine_warehouse: str, reason: str) 
         })
         se.insert(ignore_permissions=True)
         se.submit()
-        frappe.db.commit()
         return se.name
     except Exception:
         frappe.log_error(
@@ -345,7 +441,6 @@ def _create_release_stock_entry(
         })
         se.insert(ignore_permissions=True)
         se.submit()
-        frappe.db.commit()
         return se.name
     except Exception:
         frappe.log_error(
@@ -399,12 +494,28 @@ def _get_item_qty_from_reference(qci) -> float:
 
 # --- Item flag helpers --------------------------------------------------------
 
-def _flag_item_on_hold(item_code: str, on_hold: bool):
-    """Set/clear the qc_hold custom field on the Item master."""
+def _flag_item_on_hold(item_code: str):
+    """
+    Recompute (never blindly set) the Item.qc_hold roll-up flag.
+
+    A QC Inspection is scoped to one (reference_name, item, batch_no) —
+    that per-inspection qc_hold field is the authoritative, batch-level
+    record of a hold. Item.qc_hold is only a convenience aggregate for
+    list views/reports: True if this item has ANY submitted QC Inspection
+    currently on hold, False otherwise. Always recomputing it this way
+    (instead of toggling True/False for a single batch) means placing a
+    hold on one batch doesn't quarantine every batch of the item, and
+    releasing one hold doesn't clear holds still active on other batches.
+    """
     try:
-        if frappe.db.has_column("Item", "qc_hold"):
-            frappe.db.set_value("Item", item_code, "qc_hold", 1 if on_hold else 0,
-                                update_modified=False)
+        if not frappe.db.has_column("Item", "qc_hold"):
+            return
+        has_active_hold = bool(frappe.db.exists(
+            "QC Inspection",
+            {"item": item_code, "docstatus": 1, "qc_hold": 1},
+        ))
+        frappe.db.set_value("Item", item_code, "qc_hold", 1 if has_active_hold else 0,
+                            update_modified=False)
     except Exception:
         pass
 
@@ -414,8 +525,14 @@ def _stamp_qc_hold_fields(
     quarantine_warehouse: str,
     hold_reason: str,
     on_hold: bool,
+    quarantine_stock_entry: str | None = None,
 ):
-    """Stamp qc_hold, quarantine_warehouse, hold_reason on QC Inspection (if fields exist)."""
+    """
+    Stamp qc_hold, quarantine_warehouse, hold_reason, quarantine_stock_entry
+    on QC Inspection (if fields exist). This is the authoritative,
+    batch-scoped hold record — see _flag_item_on_hold for the derived
+    item-level roll-up.
+    """
     try:
         update = {}
         if frappe.db.has_column("QC Inspection", "qc_hold"):
@@ -424,6 +541,8 @@ def _stamp_qc_hold_fields(
             update["quarantine_warehouse"] = quarantine_warehouse
         if hold_reason and frappe.db.has_column("QC Inspection", "hold_reason"):
             update["hold_reason"] = hold_reason
+        if quarantine_stock_entry and frappe.db.has_column("QC Inspection", "quarantine_stock_entry"):
+            update["quarantine_stock_entry"] = quarantine_stock_entry
         if update:
             frappe.db.set_value("QC Inspection", inspection_name, update, update_modified=False)
     except Exception:

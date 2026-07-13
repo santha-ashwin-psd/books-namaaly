@@ -355,6 +355,14 @@
                   <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
                 </select>
               </div>
+              <!-- Price List -->
+              <div style="margin-top:14px">
+                <label class="inv-lbl">Price List</label>
+                <select v-model="form.price_list" class="inv-fi" @change="onPriceListChange(form.price_list)">
+                  <option value="">Select price list (optional)</option>
+                  <option v-for="pl in priceLists" :key="pl.value" :value="pl.value">{{ pl.label }}</option>
+                </select>
+              </div>
               <!-- Sales Person -->
               <div style="margin-top:14px">
                 <label class="inv-lbl">Sales Person</label>
@@ -534,7 +542,7 @@
                       <div class="po-item-num-row">
                         <div class="po-item-field">
                           <label>Qty</label>
-                          <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="calcLine(line)"/>
+                          <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/>
                         </div>
                         <div class="po-item-field">
                           <label>Rate ({{ currencySymbol }})</label>
@@ -986,9 +994,15 @@
                 <span style="color:#6b7280;font-weight:600">Sales Person:</span>
                 <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;border-radius:5px;padding:2px 10px;font-weight:600">{{ salesPersonLabel(viewInv.sales_person) }}</span>
               </div>
-              <div v-if="viewInv.set_warehouse" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
-                <span style="color:#6b7280;font-weight:600">Dispatch Warehouse:</span>
-                <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:5px;padding:2px 10px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span v-html="icon('warehouse',12)"></span>{{ viewInv.set_warehouse }}</span>
+              <div v-if="viewInv.set_warehouse||viewInv.price_list" style="margin-top:10px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12.5px">
+                <template v-if="viewInv.set_warehouse">
+                  <span style="color:#6b7280;font-weight:600">Dispatch Warehouse:</span>
+                  <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:5px;padding:2px 10px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span v-html="icon('warehouse',12)"></span>{{ viewInv.set_warehouse }}</span>
+                </template>
+                <template v-if="viewInv.price_list">
+                  <span style="color:#6b7280;font-weight:600">Price List:</span>
+                  <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;border-radius:5px;padding:2px 10px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span v-html="icon('badge',12)"></span>{{ viewInv.price_list }}</span>
+                </template>
               </div>
             </template>
           </div>
@@ -1537,6 +1551,7 @@ const loading      = ref(false);
 const viewMode     = ref("table"); // "table" | "grid"
 const customers    = ref([]);
 const salesPersons = ref([]);
+const priceLists = ref([]);
 const items        = ref([]);
 const activeFilter = ref("all");
 const search       = ref("");
@@ -1570,6 +1585,7 @@ const form = reactive({
   billing_address_name:"", shipping_address:"", shipping_address_name:"",
   terms:"", remarks:"", docstatus:0,
   currency:"INR", exchange_rate:1, gst_treatment:"",
+  price_list:"",
   update_stock:1, set_warehouse:"",
   logo:"",
   cost_center:"", sales_person:"",
@@ -2004,6 +2020,77 @@ async function loadCustomers() {
 async function loadSalesPersons() {
   try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:500,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
 }
+async function loadPriceLists() {
+  try {
+    const r=await apiList("Price List",{fields:["name","price_list_name","currency","selling"],filters:[["enabled","=",1],["selling","=",1]],limit:100,order:"price_list_name asc"})||[];
+    priceLists.value=r.map(x=>({...x,value:x.name,label:x.price_list_name||x.name}));
+  } catch { priceLists.value=[]; }
+}
+// Item Price tiers are cached per (item_code, price_list) pair for the life
+// of the drawer session, since the same item/price-list combo is re-resolved
+// on every line edit, qty change, and price-list switch. Each price list can
+// have multiple tiers for the same item, keyed by packing_unit (= "Min Qty"
+// in the Price List editor) — the correct tier is the highest packing_unit
+// that is <= the line's qty, falling back to the lowest tier available.
+const _itemPriceTierCache = new Map();
+async function fetchItemPriceTiers(item_code, price_list) {
+  const key = `${item_code}||${price_list}`;
+  if (_itemPriceTierCache.has(key)) return _itemPriceTierCache.get(key);
+  let tiers = [];
+  try {
+    const r = await apiList("Item Price", {
+      fields: ["price_list_rate", "packing_unit"],
+      filters: [["item_code","=",item_code],["price_list","=",price_list]],
+      limit: 50,
+    }) || [];
+    tiers = r
+      .map(x => ({ min_qty: flt(x.packing_unit) || 0, rate: flt(x.price_list_rate) }))
+      .sort((a, b) => a.min_qty - b.min_qty);
+  } catch { tiers = []; }
+  _itemPriceTierCache.set(key, tiers);
+  return tiers;
+}
+async function fetchItemPriceRate(item_code, price_list, qty) {
+  if (!item_code || !price_list) return null;
+  const tiers = await fetchItemPriceTiers(item_code, price_list);
+  if (!tiers.length) return null;
+  const q = flt(qty) || 0;
+  // Only tiers whose min_qty the ordered qty actually meets are eligible;
+  // among those, the one with the highest min_qty wins. If qty doesn't meet
+  // any tier's minimum (e.g. tier requires 5+ but qty is 1), there's no
+  // price-list override — the item's standard rate applies instead.
+  let best = null;
+  for (const t of tiers) {
+    if (t.min_qty <= q && (best === null || t.min_qty > best.min_qty)) best = t;
+  }
+  return best ? best.rate : null;
+}
+// Re-resolve rates for every line already on the invoice when the Price
+// List selection changes, so existing lines pick up the new list's pricing
+// (falling back to whatever rate they already had if the new list has no
+// Item Price entry for that item).
+async function onPriceListChange() {
+  _itemPriceTierCache.clear();
+  for (const line of lines.value) {
+    if (!line.item_code) continue;
+    const rate = form.price_list ? await fetchItemPriceRate(line.item_code, form.price_list, line.qty) : null;
+    line.rate = (rate !== null && rate > 0) ? rate : (line._standardRate ?? line.rate);
+    calcLine(line);
+  }
+}
+// Re-resolve a single line's rate when its qty changes, so quantity-based
+// price-list tiers (e.g. "5+ units get a lower rate") kick in as the user
+// types, not just when the item or price list is first chosen. If qty drops
+// back below every tier's minimum, the rate reverts to the item's standard
+// rate rather than keeping the stale tiered rate.
+async function onLineQtyChange(line) {
+  calcLine(line);
+  if (line.item_code && form.price_list) {
+    const rate = await fetchItemPriceRate(line.item_code, form.price_list, line.qty);
+    line.rate = (rate !== null && rate > 0) ? rate : (line._standardRate ?? line.rate);
+    calcLine(line);
+  }
+}
 function salesPersonLabel(id) {
   const sp = salesPersons.value.find(p => p.name === id);
   return sp ? sp.label : id;
@@ -2064,6 +2151,7 @@ async function onItemChange(line) {
   if (it) {
     line.item_name=it.item_name||it.name;
     line.rate=flt(it.standard_rate);
+    line._standardRate=flt(it.standard_rate);
     line.uom=it.stock_uom||"Nos";
     if (it.description) line.description=it.description;
     if (it.hsn_code) line.hsn_code=it.hsn_code;
@@ -2075,11 +2163,20 @@ async function onItemChange(line) {
       if (doc?.item_name) line.item_name=doc.item_name;
       if (doc?.description) line.description=doc.description;
       if (doc?.hsn_code) line.hsn_code=doc.hsn_code;
-      if (!flt(line.rate)&&doc?.standard_rate) line.rate=flt(doc.standard_rate);
+      if (!flt(line.rate)&&doc?.standard_rate) { line.rate=flt(doc.standard_rate); line._standardRate=flt(doc.standard_rate); }
       if (doc?.stock_uom) line.uom=doc.stock_uom;
       if (doc?.tax_code) line.tax_code=doc.tax_code;
       calcLine(line);
     } catch {}
+  }
+  // Price List override: when a Price List is selected on the invoice and it
+  // has an explicit Item Price for this item, that rate takes priority over
+  // the Item's standard_rate looked up above. If the current qty doesn't meet
+  // any tier's minimum, fetchItemPriceRate returns null and the standard rate
+  // (already set above) is left in place.
+  if (line.item_code && form.price_list) {
+    const plRate = await fetchItemPriceRate(line.item_code, form.price_list, line.qty);
+    if (plRate !== null && plRate > 0) { line.rate = plRate; calcLine(line); }
   }
 }
 
@@ -2205,7 +2302,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2213,7 +2310,7 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
   fetchWarehouses("");
@@ -2230,6 +2327,7 @@ async function openEdit(inv) {
       shipping_address:doc.shipping_address||"",shipping_address_name:doc.shipping_address_name||"",
       terms:doc.terms||"",remarks:doc.remarks||"",docstatus:doc.docstatus||0,
       currency:doc.currency||"INR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
+      price_list:doc.price_list||"",
       update_stock:doc.update_stock||0,set_warehouse:doc.set_warehouse||"",
       logo:doc.logo||"",cost_center:doc.cost_center||"",sales_person:doc.sales_person||"",
       discount_type:doc.discount_type||"Percentage",
@@ -2304,7 +2402,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
 
@@ -2708,7 +2806,7 @@ function printViewInvoice() {
 
 onMounted(async () => {
   await load();
-  loadCustomers(); loadSalesPersons(); loadItems(); loadTaxAccount(); loadBranding();
+  loadCustomers(); loadSalesPersons(); loadItems(); loadTaxAccount(); loadBranding(); loadPriceLists();
   try { setCompany(window.__booksCompany || await resolveCompany()); } catch {}
 
   // Cross-document deep link: /invoices?open=INV-...

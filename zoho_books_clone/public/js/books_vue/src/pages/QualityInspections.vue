@@ -384,15 +384,25 @@
         </div>
         <div class="qc-dfooter">
           <button class="qc-btn-ghost" @click="viewOpen=false">Close</button>
-          <!-- Request Approval button: shown for any non-cancelled inspection -->
+          <!-- Request Approval button: only for submitted inspections that failed QC -->
           <button
-            v-if="viewDoc.docstatus !== 2"
+            v-if="viewDoc.docstatus === 1 && viewDoc.status === 'Fail'"
             class="qc-btn-approval"
             :disabled="approvalSending"
             @click="requestApproval(viewDoc.name)"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
             {{ approvalSending ? 'Requesting…' : 'Request Approval' }}
+          </button>
+          <!-- Certificate of Analysis: available for any submitted inspection -->
+          <button
+            v-if="viewDoc.docstatus === 1"
+            class="qc-btn-ghost"
+            :disabled="coaSending"
+            @click="printCOA(viewDoc.name)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+            {{ coaSending ? 'Generating…' : 'Print / Download COA' }}
           </button>
           <button v-if="viewDoc.docstatus===0" class="qc-btn-edit" @click="openEdit(viewDoc);viewOpen=false">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -473,6 +483,28 @@
             <label class="qc-label">Remarks</label>
             <textarea v-model="editForm.remarks" rows="2" class="qc-input" placeholder="Optional observations…"></textarea>
           </div>
+          <div class="qc-field" style="grid-column:1/-1">
+            <label class="qc-label">QC Template</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select v-model="editForm.qc_inspection_template" class="qc-select-full" style="flex:1">
+                <option value="">— No template —</option>
+                <option v-for="t in editTemplates" :key="t.name" :value="t.name">
+                  {{ t.template_name }} ({{ t.parameter_count }} param{{ t.parameter_count===1?'':'s' }})
+                </option>
+              </select>
+              <button
+                type="button"
+                class="qc-btn-ghost"
+                :disabled="applyingTemplate || !editForm.qc_inspection_template"
+                @click="applyTemplate"
+              >
+                {{ applyingTemplate ? 'Applying…' : 'Apply Template' }}
+              </button>
+            </div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+              Applying a template rebuilds the Readings table from its parameters. Any previously entered reading values will be cleared. Only available on Draft inspections.
+            </div>
+          </div>
         </div>
       </div>
       <div class="qc-dfooter">
@@ -488,7 +520,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, nextTick, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiCall, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
@@ -507,10 +539,14 @@ const drawerOpen  = ref(false);
 const drawerSaving = ref(false);
 const editOpen    = ref(false);
 const editSaving  = ref(false);
+const editTemplates     = ref([]);
+const editTemplateLoading = ref(false);
+const applyingTemplate  = ref(false);
 const viewOpen    = ref(false);
 const viewDoc     = ref(null);
 const viewLoading = ref(false);
 const approvalSending = ref(false);
+const coaSending  = ref(false);
 const saving      = ref(false);
 const isDirty     = ref(false);
 const search      = ref("");
@@ -534,9 +570,13 @@ const editForm = reactive({
   sample_size:     1,
   inspection_date: "",
   remarks:         "",
+  qc_inspection_template: "",
 });
 const editRefDocs  = ref([]);
 const editRefLoading = ref(false);
+// Guards the reference_type watcher below from clearing reference_name while
+// openEdit() is hydrating the form from an existing record (see openEdit()).
+const suppressEditRefWatch = ref(false);
 
 const refTypes = ["Purchase Invoice", "Sales Invoice", "Stock Entry"];
 
@@ -779,6 +819,31 @@ async function requestApproval(inspectionName) {
   }
 }
 
+async function printCOA(inspectionName) {
+  if (!inspectionName) return;
+  coaSending.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.generate_coa", {
+      inspection_name: inspectionName,
+    });
+    const data = res?.message || res || {};
+    if (!data.html) throw new Error("Certificate of Analysis returned no content");
+    // Open in a new tab so the browser's own print/save-as-PDF affordances are available.
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Pop-up blocked — please allow pop-ups to view the Certificate of Analysis.");
+      return;
+    }
+    win.document.open();
+    win.document.write(data.html);
+    win.document.close();
+  } catch (e) {
+    toast.error(e.message || "Failed to generate Certificate of Analysis");
+  } finally {
+    coaSending.value = false;
+  }
+}
+
 function openNew() {
   Object.assign(form, {
     inspection_type: "Incoming",
@@ -822,12 +887,14 @@ async function fetchEditRefDocs(q = "") {
 }
 
 watch(() => editForm.reference_type, (newType) => {
+  if (suppressEditRefWatch.value) return;
   editForm.reference_name = "";
   if (newType) fetchEditRefDocs("");
   else editRefDocs.value = [];
 });
 
 function openEdit(r) {
+  suppressEditRefWatch.value = true;
   Object.assign(editForm, {
     _name:           r.name || "",
     inspection_type: r.inspection_type || "Incoming",
@@ -837,11 +904,53 @@ function openEdit(r) {
     sample_size:     r.sample_size     || 1,
     inspection_date: r.inspection_date || new Date().toISOString().slice(0, 10),
     remarks:         r.remarks         || "",
+    qc_inspection_template: r.qc_inspection_template || "",
   });
+  // Let the reference_type watcher run (and skip clearing) before re-enabling it
+  // for genuine user-driven Reference Doc Type changes.
+  nextTick(() => { suppressEditRefWatch.value = false; });
   // Load current ref docs and items for dropdowns
   fetchItems("");
   if (r.reference_type) fetchEditRefDocs("");
+  fetchEditTemplates();
   editOpen.value = true;
+}
+
+// Load all available templates so the user can manually (re-)attach one to
+// a Draft inspection whose readings never got populated (see
+// applyTemplate()). Intentionally unfiltered -- a matching template may not
+// have existed for this item/inspection_type at creation time, but the user
+// may still want to pick a close match manually.
+async function fetchEditTemplates() {
+  editTemplateLoading.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.get_templates", {});
+    editTemplates.value = res?.message || res || [];
+  } catch { editTemplates.value = []; }
+  finally { editTemplateLoading.value = false; }
+}
+
+// (Re-)attach the selected template to this Draft inspection and rebuild its
+// Readings table from the template's parameters. This is the fix for
+// inspections created before a matching template existed -- template
+// resolution otherwise only ever runs once, at creation time.
+async function applyTemplate() {
+  if (!editForm.qc_inspection_template) return;
+  applyingTemplate.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.apply_qc_template", {
+      inspection_name: editForm._name,
+      template_name: editForm.qc_inspection_template,
+    });
+    const data = res?.message || res;
+    const count = data?.doc?.readings?.length || 0;
+    toast.success(`Template applied — ${count} reading${count === 1 ? "" : "s"} generated`);
+    editOpen.value = false;
+    await load();
+    if (data?.doc) openView(data.doc);
+  } catch (e) {
+    toast.error(e.message || "Failed to apply template");
+  } finally { applyingTemplate.value = false; }
 }
 
 async function updateInspection() {

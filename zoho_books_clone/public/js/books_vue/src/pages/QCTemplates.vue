@@ -341,7 +341,8 @@
             <template v-else>
               <div class="qct-field" style="grid-column:1/-1">
                 <label class="qct-label">Formula</label>
-                <input v-model="p.formula" class="qct-input qct-input-sm" placeholder="e.g. (reading_1 + reading_2) / 2 < 5" />
+                <input v-model="p.formula" class="qct-input qct-input-sm" placeholder="e.g. reading >= 4.5 and reading <= 5.5" />
+                <span style="font-size:11px;color:#6b7280;margin-top:2px">Only the variable <code>reading</code> and <code>flt(...)</code> are available — no other parameter names, e.g. <code>flt(reading) &gt; 0</code>.</span>
               </div>
             </template>
           </div>
@@ -560,7 +561,8 @@
             <template v-else>
               <div class="qct-field" style="grid-column:1/-1">
                 <label class="qct-label">Formula</label>
-                <input v-model="p.formula" class="qct-input qct-input-sm" placeholder="e.g. (reading_1 + reading_2) / 2 < 5" />
+                <input v-model="p.formula" class="qct-input qct-input-sm" placeholder="e.g. reading >= 4.5 and reading <= 5.5" />
+                <span style="font-size:11px;color:#6b7280;margin-top:2px">Only the variable <code>reading</code> and <code>flt(...)</code> are available — no other parameter names, e.g. <code>flt(reading) &gt; 0</code>.</span>
               </div>
             </template>
           </div>
@@ -699,7 +701,7 @@ async function load() {
     const res = await apiCall("zoho_books_clone.api.qc.get_templates", {});
     const templates = res?.message || res || [];
     // Fetch parameter counts in one pass via detail calls (or use the count from list)
-    list.value = templates.map(t => ({ ...t, parameter_count: t.parameter_count || null }));
+    list.value = templates.map(t => ({ ...t, parameter_count: t.parameter_count ?? null }));
   } catch (e) {
     toast.error(e.message || "Failed to load QC Templates");
   } finally {
@@ -812,6 +814,19 @@ async function saveTemplate() {
 
 async function deleteTemplate(t) {
   const name = t.name || t.template_name;
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.check_template_usage", { template_name: name });
+    const usage = res?.message || res || {};
+    const count = usage.inspection_count || 0;
+    if (count > 0) {
+      return toast.error(
+        `Cannot delete "${t.template_name}" — it is used by ${count} QC Inspection${count === 1 ? "" : "s"}.`
+      );
+    }
+  } catch (e) {
+    // If the usage check itself fails, don't silently allow an unchecked delete.
+    return toast.error(e.message || "Failed to verify template usage before delete");
+  }
   if (!confirm(`Delete template "${t.template_name}"? This cannot be undone.`)) return;
   try {
     await apiCall("frappe.client.delete", { doctype: "QC Inspection Template", name });
@@ -879,40 +894,27 @@ async function updateTemplate() {
   editSaving.value = true;
   try {
     const docName = editForm._name;
-    // Update the parent doc fields
-    await apiCall("frappe.client.set_value", {
-      doctype: "QC Inspection Template",
-      name: docName,
-      fieldname: JSON.stringify({
-        template_name:  editForm.template_name.trim(),
-        item:           editForm.item.trim()        || null,
-        item_group:     editForm.item_group.trim()  || null,
-        inspection_type: editForm.inspection_type,
-        description:    editForm.description.trim() || null,
-      }),
-    });
-    // Replace all parameters by saving full doc
-    await apiCall("frappe.client.save", {
-      doc: {
-        doctype:        "QC Inspection Template",
-        name:           docName,
-        template_name:  editForm.template_name.trim(),
-        item:           editForm.item.trim()        || null,
-        item_group:     editForm.item_group.trim()  || null,
-        inspection_type: editForm.inspection_type,
-        description:    editForm.description.trim() || null,
-        parameters: editForm.parameters.map((p, i) => ({
-          doctype:                  "QC Inspection Template Parameter",
-          name:                     p.name || undefined,
-          idx:                      i + 1,
-          parameter:                p.parameter,
-          parameter_type:           p.parameter_type,
-          min_value:                p.parameter_type === "Numeric"     ? (p.min_value ?? null) : null,
-          max_value:                p.parameter_type === "Numeric"     ? (p.max_value ?? null) : null,
-          acceptance_criteria_value: p.parameter_type === "Non-Numeric" ? p.acceptance_criteria_value : null,
-          formula:                  p.parameter_type === "Formula"     ? p.formula : null,
-        })),
-      },
+    // Single atomic backend call — loads the doc via frappe.get_doc() so its
+    // `modified` timestamp always matches the DB row (avoids a
+    // TimestampMismatchError, which a client-built doc dict sent through
+    // frappe.client.save would trip on every save) and updates parent
+    // fields + the full parameter child table together (no partial,
+    // un-rolled-back update if validation fails).
+    await apiCall("zoho_books_clone.api.qc.update_template", {
+      template_name: docName,
+      template_name_new: editForm.template_name.trim(),
+      item: editForm.item.trim() || null,
+      item_group: editForm.item_group.trim() || null,
+      inspection_type: editForm.inspection_type,
+      description: editForm.description.trim() || null,
+      parameters_json: editForm.parameters.map(p => ({
+        parameter:                 p.parameter,
+        parameter_type:            p.parameter_type,
+        min_value:                 p.parameter_type === "Numeric"     ? (p.min_value ?? null) : null,
+        max_value:                 p.parameter_type === "Numeric"     ? (p.max_value ?? null) : null,
+        acceptance_criteria_value: p.parameter_type === "Non-Numeric" ? p.acceptance_criteria_value : null,
+        formula:                   p.parameter_type === "Formula"     ? p.formula : null,
+      })),
     });
     toast.success(`Template "${editForm.template_name}" updated`);
     editOpen.value = false;

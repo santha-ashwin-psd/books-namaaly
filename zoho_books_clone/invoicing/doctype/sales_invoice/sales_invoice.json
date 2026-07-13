@@ -111,6 +111,12 @@
    "precision": "6"
   },
   {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "options": "Price List"
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },

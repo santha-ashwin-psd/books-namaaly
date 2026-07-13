@@ -216,8 +216,14 @@ function onDoc(e) {
   }
 }
 
-function onScrollOrResize() {
-  if (open.value) open.value = false;
+function onScrollOrResize(e) {
+  if (!open.value) return;
+  // Ignore scrolls that originate inside the dropdown itself (e.g. scrolling
+  // the options list or the search input) — only close on scroll of the
+  // page/ancestor containers behind the teleported dropdown.
+  const drop = document.querySelector(".ss-drop-teleport");
+  if (drop && e.target && drop.contains(e.target)) return;
+  open.value = false;
 }
 
 onMounted(() => {

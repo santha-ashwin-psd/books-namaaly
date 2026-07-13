@@ -54,7 +54,7 @@ doc_events = {
     "Stock Entry":      {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_stock_entry", "on_submit": f"{_QC}.check_qc_before_stock_link", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     "Bank Transaction": {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # QC Inspection — auto-handle hold/quarantine on submit
-    "QC Inspection":    {"on_submit": f"{_QH}.handle_qc_result"},
+    "QC Inspection":    {"on_submit": f"{_QH}.handle_qc_result", "on_cancel": f"{_QH}.handle_qc_cancel"},
     # Phase 3: pre-sales and GST docs wired so Books lock date + fiscal-year
     # period lock are enforced on these document types too.
     "Sales Order":      {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},

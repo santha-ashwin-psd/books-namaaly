@@ -9,7 +9,13 @@ validate():  Auto-evaluates every reading row → Accepted/Rejected.
              Computes summary counts: total_readings, accepted_readings, rejected_readings.
 
 on_submit(): Logs the inspection event to Frappe Activity Log.
-on_cancel(): Clears any ignore_qc_warning flags on the parent reference doc.
+on_cancel(): Logs the cancellation to Frappe Activity Log and stamps the
+             parent reference doc's qc_status (if present) as "Cancelled".
+             Quarantine/hold reversal — cancelling the auto-created
+             quarantine Stock Entry, clearing qc_hold, voiding a Pending
+             QC Approval Request — is handled separately by
+             qc_hold_manager.handle_qc_cancel, wired via hooks.py
+             doc_events on_cancel for QC Inspection.
 """
 
 import ast
