@@ -96,13 +96,6 @@
               <div class="bomx-hf-label">Required By <span style="color:var(--bx-red)">*</span></div>
               <input class="bomx-fi" type="date" v-model="mr.posting_date" :disabled="readOnly" style="width:100%"/>
             </div>
-            <div>
-              <div class="bomx-hf-label">Company</div>
-              <select class="bomx-fi" v-model="mr.company" :disabled="readOnly" style="width:100%">
-                <option value="">— Select —</option>
-                <option v-for="c in companiesList" :key="c.name" :value="c.name">{{ c.name }}</option>
-              </select>
-            </div>
           </div>
           <div class="bomx-toggle-row" v-if="mr.production_plan">
             <div class="bomx-field-hint" style="margin:0">

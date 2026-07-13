@@ -412,14 +412,7 @@
             <!-- ── TAB: More Information ── -->
             <template v-if="activeTab==='more'">
               <div class="bomx-section-lbl">More Information</div>
-              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr 1fr;margin-bottom:20px">
-                <div>
-                  <div class="bomx-hf-label">Company</div>
-                  <select class="bomx-fi" v-model="wo.company" :disabled="readOnly" style="width:100%">
-                    <option value="">— Select Company —</option>
-                    <option v-for="c in companiesList" :key="c.name" :value="c.name">{{ c.name }}</option>
-                  </select>
-                </div>
+              <div class="bomx-hdr-fields" style="padding:0;border:none;background:none;grid-template-columns:1fr;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Sales Order</div>
                   <select class="bomx-fi" v-model="wo.sales_order" :disabled="readOnly" style="width:100%">

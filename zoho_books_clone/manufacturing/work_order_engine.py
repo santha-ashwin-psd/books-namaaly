@@ -705,3 +705,146 @@ def resume_work_order(work_order):
     )
     frappe.db.commit()
     return resume_status
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def reverse_material_issue(work_order, stock_entry):
+    """Undo a Material Transfer created by issue_materials(): cancels the
+    Stock Entry (reversing the WIP stock movement) and rolls back
+    transferred_qty on the affected Work Order Item rows so they go back
+    to being "pending" for a future issue.
+
+    Only allowed if none of the transferred material has been consumed yet
+    (consumed_qty == 0 on every affected row) -- otherwise the WIP stock
+    this transfer put in place may already be gone into a Manufacture
+    entry, and reversing it here would leave that completion unbacked.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Stock Entry", "cancel")
+
+    wo = frappe.get_doc("Work Order", work_order)
+    if wo.docstatus != 1:
+        frappe.throw(_("Work Order must be submitted."))
+    assert_doc_in_user_company(wo)
+
+    se = frappe.get_doc("Stock Entry", stock_entry)
+    if se.docstatus != 1:
+        frappe.throw(_("Stock Entry {0} is not submitted.").format(se.name))
+    if se.stock_entry_type != "Material Transfer" or se.work_order != wo.name:
+        frappe.throw(_(
+            "Stock Entry {0} is not a Material Transfer linked to Work Order {1}."
+        ).format(se.name, wo.name))
+
+    frappe.db.sql("SELECT name FROM `tabWork Order` WHERE name=%s FOR UPDATE", (wo.name,))
+    wo.reload()
+
+    affected = [row for row in se.items if row.t_warehouse == wo.wip_warehouse]
+    for row in affected:
+        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
+        if wo_item and flt(wo_item.consumed_qty) > 0:
+            frappe.throw(_(
+                "Cannot reverse: {0} transferred by this entry has already been "
+                "partly or fully consumed against this Work Order."
+            ).format(row.item_code))
+
+    se.flags.ignore_manufacturing_guard = True
+    se.cancel()
+
+    for row in affected:
+        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
+        if wo_item:
+            new_transferred = max(flt(wo_item.transferred_qty) - flt(row.qty), 0)
+            wo_item.db_set("transferred_qty", new_transferred, update_modified=False)
+
+    still_transferred = any(
+        flt(frappe.db.get_value("Work Order Item", r.name, "transferred_qty")) > 0
+        for r in wo.items
+    )
+    if wo.status == "In Process" and flt(wo.produced_qty) <= 0 and not still_transferred:
+        wo.db_set("status", "Submitted")
+        _set_operations_status(wo, "Pending", skip_statuses={"Completed"})
+
+    frappe.db.commit()
+    return "Reversed"
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def reverse_manufacture_entry(work_order, stock_entry):
+    """Undo a completion recorded by complete_work_order(): cancels the
+    Manufacture Stock Entry (reversing both the raw-material consumption
+    and the finished-goods/scrap receipt) and rolls back produced_qty and
+    each affected row's consumed_qty on the Work Order.
+
+    Only the most recent Manufacture Stock Entry for this Work Order can be
+    reversed -- reversing an earlier one out of order would leave
+    produced_qty/consumed_qty inconsistent with completions recorded after
+    it. Reverse later completions first if there are any.
+
+    process_loss_qty is not rolled back: it never moved any stock (it's a
+    reporting-only figure for material that was consumed but never became
+    stock), so leaving it as-is doesn't desync anything against the stock
+    ledger.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Stock Entry", "cancel")
+
+    wo = frappe.get_doc("Work Order", work_order)
+    if wo.docstatus != 1:
+        frappe.throw(_("Work Order must be submitted."))
+    assert_doc_in_user_company(wo)
+
+    se = frappe.get_doc("Stock Entry", stock_entry)
+    if se.docstatus != 1:
+        frappe.throw(_("Stock Entry {0} is not submitted.").format(se.name))
+    if se.stock_entry_type != "Manufacture" or se.work_order != wo.name:
+        frappe.throw(_(
+            "Stock Entry {0} is not a Manufacture entry linked to Work Order {1}."
+        ).format(se.name, wo.name))
+
+    frappe.db.sql("SELECT name FROM `tabWork Order` WHERE name=%s FOR UPDATE", (wo.name,))
+    wo.reload()
+
+    later = frappe.get_all(
+        "Stock Entry",
+        filters={
+            "work_order": wo.name,
+            "stock_entry_type": "Manufacture",
+            "docstatus": 1,
+            "creation": [">", se.creation],
+        },
+        limit=1,
+    )
+    if later:
+        frappe.throw(_(
+            "A later completion ({0}) exists for this Work Order. Reverse it first."
+        ).format(later[0].name))
+
+    qty_manufactured = sum(
+        flt(r.qty) for r in se.items
+        if r.item_code == wo.production_item and r.t_warehouse
+    )
+    consumption_rows = [r for r in se.items if r.s_warehouse]
+
+    se.flags.ignore_manufacturing_guard = True
+    se.cancel()
+
+    for row in consumption_rows:
+        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
+        if wo_item:
+            new_consumed = max(flt(wo_item.consumed_qty) - flt(row.qty), 0)
+            wo_item.db_set("consumed_qty", new_consumed, update_modified=False)
+
+    new_produced_qty = max(flt(wo.produced_qty) - qty_manufactured, 0)
+    wo.db_set("produced_qty", new_produced_qty)
+
+    still_transferred = any(flt(r.transferred_qty) > 0 for r in wo.items)
+    new_status = "In Process" if (new_produced_qty > 0 or still_transferred) else "Submitted"
+    wo.db_set("status", new_status)
+    _set_operations_status(
+        wo, "In Process" if new_status == "In Process" else "Pending",
+        skip_statuses={"Completed"},
+    )
+
+    frappe.db.commit()
+    return "Reversed"

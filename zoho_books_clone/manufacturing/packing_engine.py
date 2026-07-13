@@ -237,3 +237,40 @@ def post_packing_consumption(packing_slip, batch_no=None, manufacturing_date=Non
     frappe.db.commit()
 
     return se.name
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def reverse_packing_consumption(packing_slip):
+    """Undo the Manufacture Stock Entry posted by post_packing_consumption():
+    cancels that Stock Entry (reversing the bulk/packing-material
+    consumption and the packed-item receipt) and clears the Packing Slip's
+    stock_entry/target_warehouse/posted_batch_no so it's unlocked and can
+    be corrected or reposted.
+
+    packed_qty and status on the slip's item rows are left untouched --
+    they describe physical packing progress, which reversing the stock
+    posting doesn't undo.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Stock Entry", "cancel")
+
+    ps = frappe.get_doc("Packing Slip", packing_slip)
+    assert_doc_in_user_company(ps)
+
+    if ps.status == "Cancelled":
+        frappe.throw(_("This Packing Slip is cancelled."))
+    if not ps.stock_entry:
+        frappe.throw(_("No stock has been posted for this Packing Slip yet."))
+
+    se = frappe.get_doc("Stock Entry", ps.stock_entry)
+    if se.docstatus != 1:
+        frappe.throw(_("Linked Stock Entry {0} is not submitted.").format(se.name))
+
+    se.flags.ignore_manufacturing_guard = True
+    se.cancel()
+
+    ps.db_set("stock_entry", "")
+    ps.db_set("target_warehouse", "")
+    ps.db_set("posted_batch_no", "")
+
+    frappe.db.commit()
+    return "Reversed"

@@ -596,7 +596,54 @@ class StockEntry(Document):
 
     # ── Cancel ────────────────────────────────────────────────────────────────
 
+    def _guard_manufacturing_links(self):
+        """Block direct cancellation of a Stock Entry that a Work Order or
+        Packing Slip depends on.
+
+        Reversing this Stock Entry's SLEs alone would correctly undo the
+        stock movement, but nothing here rolls back the Work Order's
+        produced_qty/consumed_qty/transferred_qty/status, or a Packing
+        Slip's stock_entry/status — those fields would be left claiming
+        production/consumption that no longer exists in the stock ledger.
+        Rather than reconcile all of that from a generic Stock Entry cancel,
+        route the person to the manufacturing doc's own reversal flow.
+        """
+        if self.flags.get("ignore_manufacturing_guard"):
+            # Set by work_order_engine.reverse_manufacture_entry /
+            # reverse_material_issue / packing_engine.reverse_packing_consumption
+            # once they've already rolled back the Work Order / Packing Slip
+            # fields that depend on this Stock Entry. Cancelling directly
+            # (bypassing this guard) is only safe when called from there.
+            return
+
+        if self.stock_entry_type not in ("Manufacture", "Material Transfer"):
+            return
+
+        if self.work_order:
+            wo_status = frappe.db.get_value("Work Order", self.work_order, "status")
+            frappe.throw(_(
+                "This Stock Entry was generated from Work Order {0} (currently {1}) "
+                "and cannot be cancelled directly — cancelling it here would reverse "
+                "the stock movement without updating the Work Order's produced/"
+                "consumed/transferred quantities and status, leaving them out of "
+                "sync with the stock ledger. Use the Work Order's own actions "
+                "(Stop/reverse production there) instead."
+            ).format(self.work_order, wo_status))
+
+        linked_packing_slip = frappe.db.get_value(
+            "Packing Slip", {"stock_entry": self.name}, "name"
+        )
+        if linked_packing_slip:
+            frappe.throw(_(
+                "This Stock Entry was generated from Packing Slip {0} and cannot "
+                "be cancelled directly — cancelling it here would reverse the "
+                "stock movement without clearing the Packing Slip's stock_entry/"
+                "status, leaving it permanently locked out of sync with the stock "
+                "ledger. Reverse the consumption from the Packing Slip instead."
+            ).format(linked_packing_slip))
+
     def on_cancel(self):
+        self._guard_manufacturing_links()
         self._reverse_sle()
         # Reverse GL entries that were posted on submit
         try:
