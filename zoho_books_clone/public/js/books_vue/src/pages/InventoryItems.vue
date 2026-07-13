@@ -645,7 +645,7 @@
             <div class="ad-field" v-if="form.item_type === 'Finished Good' || form.item_type === 'Work In Progress'">
               <label class="ad-label">Default BOM</label>
               <select class="ad-input" v-model="form.default_bom" :disabled="drawerMode !== 'edit'">
-                <option value="">— None —</option>
+                <option value="">— Select —</option>
                 <option v-for="b in bomOptions" :key="b.name" :value="b.name">{{ b.name }}{{ b.is_default ? ' (default)' : '' }}</option>
               </select>
               <div class="ad-toggle-sub" style="margin-top:4px" v-if="drawerMode !== 'edit'">Save the item first, then reopen it to link an active BOM here.</div>

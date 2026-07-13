@@ -416,7 +416,7 @@
                 <div>
                   <div class="bomx-hf-label">Sales Order</div>
                   <select class="bomx-fi" v-model="wo.sales_order" :disabled="readOnly" style="width:100%">
-                    <option value="">— None —</option>
+                    <option value="">— Select —</option>
                     <option v-for="s in salesOrdersList" :key="s.name" :value="s.name">{{ s.name }}</option>
                   </select>
                 </div>

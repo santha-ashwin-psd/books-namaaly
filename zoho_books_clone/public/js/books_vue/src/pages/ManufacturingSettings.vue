@@ -43,7 +43,7 @@
           <div>
             <div class="msx-hf-label">Default Source Warehouse</div>
             <select class="msx-fi" v-model="s.default_source_warehouse" style="width:100%">
-              <option value="">— None —</option>
+              <option value="">— Select —</option>
               <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.name }}</option>
             </select>
             <div class="msx-hint">Raw materials are drawn from here by default.</div>
@@ -51,7 +51,7 @@
           <div>
             <div class="msx-hf-label">Default WIP Warehouse</div>
             <select class="msx-fi" v-model="s.default_wip_warehouse" style="width:100%">
-              <option value="">— None —</option>
+              <option value="">— Select —</option>
               <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.name }}</option>
             </select>
             <div class="msx-hint">Set this to enable the "Issue Materials" transfer step.</div>
@@ -59,7 +59,7 @@
           <div>
             <div class="msx-hf-label">Default Finished Goods Warehouse</div>
             <select class="msx-fi" v-model="s.default_fg_warehouse" style="width:100%">
-              <option value="">— None —</option>
+              <option value="">— Select —</option>
               <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.name }}</option>
             </select>
             <div class="msx-hint">Manufactured goods are received here by default.</div>
@@ -67,7 +67,7 @@
           <div>
             <div class="msx-hf-label">Default Scrap Warehouse</div>
             <select class="msx-fi" v-model="s.default_scrap_warehouse" style="width:100%">
-              <option value="">— None —</option>
+              <option value="">— Select —</option>
               <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.name }}</option>
             </select>
             <div class="msx-hint">Recoverable scrap / by-products go here.</div>

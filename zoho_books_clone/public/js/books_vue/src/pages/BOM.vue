@@ -120,7 +120,7 @@
             <div>
               <div class="bomx-hf-label">Routing</div>
               <select class="bomx-fi" v-model="bom.routing" :disabled="readOnly" @change="onRoutingChange" style="width:100%">
-                <option value="">— None —</option>
+                <option value="">— Select —</option>
                 <option v-for="r in routingsList" :key="r.name" :value="r.name">{{ r.name }}</option>
               </select>
             </div>
@@ -236,7 +236,7 @@
                     <div class="bomx-rm-field bomx-rm-field-wide">
                       <label>Sub-Assembly BOM</label>
                       <select class="bomx-fi" v-model="rm.sub_assembly_bom" :disabled="readOnly">
-                        <option value="">— None —</option>
+                        <option value="">— Select —</option>
                         <option v-for="b in bomsList.filter(b => b.item === rm.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
                       </select>
                       <div class="bomx-field-hint" v-if="rm.item_code && !bomsList.some(b => b.item === rm.item_code)">No submitted BOM exists yet for this item — it can't be used as a sub-assembly until one is created.</div>

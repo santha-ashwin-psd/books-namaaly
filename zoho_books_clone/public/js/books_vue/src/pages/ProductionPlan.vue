@@ -108,7 +108,7 @@
                 <div>
                   <div class="bomx-hf-label">Default Work-in-Progress Warehouse</div>
                   <select class="bomx-fi" v-model="pp.default_wip_warehouse" :disabled="readOnly" style="width:100%">
-                    <option value="">— None —</option>
+                    <option value="">— Select —</option>
                     <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                   </select>
                 </div>

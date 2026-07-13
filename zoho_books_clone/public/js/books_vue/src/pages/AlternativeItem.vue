@@ -118,7 +118,7 @@
               <div>
                 <div class="aix-hf-label">UOM</div>
                 <select class="aix-fi" v-model="rec.uom" style="width:100%">
-                  <option value="">— None —</option>
+                  <option value="">— Select —</option>
                   <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                 </select>
               </div>

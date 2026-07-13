@@ -144,7 +144,7 @@
                   <div class="bomx-rm-field" style="grid-column:span 2">
                     <label>Warehouse</label>
                     <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
-                      <option value="">— None —</option>
+                      <option value="">— Select —</option>
                       <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                     </select>
                   </div>
