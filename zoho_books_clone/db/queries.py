@@ -439,6 +439,101 @@ def get_item_wise_sales(company: str, from_date: str, to_date: str) -> list[dict
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
 
+@frappe.whitelist()
+def get_customer_wise_sales(company: str, from_date: str, to_date: str) -> list[dict]:
+    """Customer-wise sales summary: invoice count, revenue, discount and outstanding per customer for a period."""
+    return frappe.db.sql("""
+        SELECT
+            si.customer                        AS customer,
+            si.customer_name                   AS customer_name,
+            COUNT(si.name)                     AS invoice_count,
+            SUM(si.net_total)                  AS net_total,
+            SUM(si.additional_discount_amount) AS total_discount,
+            SUM(si.total_tax)                  AS total_tax,
+            SUM(si.grand_total)                AS total_amount,
+            SUM(si.outstanding_amount)         AS outstanding_amount,
+            CASE WHEN COUNT(si.name) != 0
+                 THEN SUM(si.grand_total) / COUNT(si.name)
+                 ELSE 0 END                    AS avg_invoice_value
+        FROM `tabSales Invoice` si
+        WHERE si.company      = %(company)s
+          AND si.docstatus    = 1
+          AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+        GROUP BY si.customer, si.customer_name
+        ORDER BY total_amount DESC
+    """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
+
+
+@frappe.whitelist()
+def get_profit_wise_report(company: str, from_date: str, to_date: str) -> list[dict]:
+    """
+    Item-wise gross profit for a period: revenue vs. estimated cost and margin %.
+
+    Cost basis: current average valuation rate per item, computed from the
+    `Bin` table (SUM(stock_value) / SUM(actual_qty) across sellable
+    warehouses), falling back to the item's `standard_buying_rate` when
+    there's no stock/Bin data (e.g. service items or items with no remaining
+    stock history). This is a current-cost estimate rather than a
+    historical/FIFO cost at the time of each sale, since Sales Invoice Item
+    does not itself store a cost field.
+
+    WIP warehouses are deliberately excluded from the average: they hold
+    in-process stock (raw materials staged for manufacture, partially
+    finished goods) rather than sellable inventory, and blending their
+    valuation in skews the cost of goods that were actually sold.
+    """
+    wip_warehouses = set(
+        frappe.get_all(
+            "Work Order",
+            filters={"wip_warehouse": ["is", "set"]},
+            pluck="wip_warehouse",
+        )
+    )
+    default_wip = frappe.db.get_single_value("Manufacturing Settings", "default_wip_warehouse")
+    if default_wip:
+        wip_warehouses.add(default_wip)
+
+    wip_cond = ""
+    params = {"company": company, "from_date": from_date, "to_date": to_date}
+    if wip_warehouses:
+        wip_cond = "AND b.warehouse NOT IN %(wip_warehouses)s"
+        params["wip_warehouses"] = tuple(wip_warehouses)
+
+    return frappe.db.sql(f"""
+        SELECT
+            sii.item_code                        AS item_code,
+            sii.item_name                        AS item_name,
+            sii.uom                              AS uom,
+            COUNT(DISTINCT sii.parent)           AS invoice_count,
+            SUM(sii.qty)                         AS qty_sold,
+            SUM(sii.amount)                      AS revenue,
+            COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS cost_rate,
+            SUM(sii.qty) * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS total_cost,
+            SUM(sii.amount) - SUM(sii.qty) * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS profit,
+            CASE WHEN SUM(sii.amount) != 0
+                 THEN (SUM(sii.amount) - SUM(sii.qty) * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0))
+                      / SUM(sii.amount) * 100
+                 ELSE 0 END                      AS margin_pct
+        FROM `tabSales Invoice Item` sii
+        JOIN `tabSales Invoice` si ON si.name = sii.parent AND sii.parenttype = 'Sales Invoice'
+        JOIN `tabItem` i ON i.name = sii.item_code
+        LEFT JOIN (
+            SELECT b.item_code,
+                   CASE WHEN SUM(b.actual_qty) > 0
+                        THEN SUM(b.stock_value) / SUM(b.actual_qty)
+                        ELSE 0 END AS avg_valuation_rate
+            FROM `tabBin` b
+            WHERE 1 = 1 {wip_cond}
+            GROUP BY b.item_code
+        ) ic ON ic.item_code = sii.item_code
+        WHERE si.company      = %(company)s
+          AND si.docstatus    = 1
+          AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+        GROUP BY sii.item_code, sii.item_name, sii.uom, ic.avg_valuation_rate, i.standard_buying_rate
+        ORDER BY profit DESC
+    """, params, as_dict=True)
+
+
 # ── Inventory ─────────────────────────────────────────────────────────────────
 def get_stock_movement_summary(
     company: str,

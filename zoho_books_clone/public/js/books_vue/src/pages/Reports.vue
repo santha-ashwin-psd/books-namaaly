@@ -38,6 +38,16 @@
         @click="exportItemSalesCSV">
         Export CSV
       </button>
+      <button v-if="activeReport === 'customers' && customerSales.length"
+        class="books-btn" style="background:#EBFBEE;color:#2F9E44;border:1px solid #8CE99A"
+        @click="exportCustomerSalesCSV">
+        Export CSV
+      </button>
+      <button v-if="activeReport === 'profit' && profitReport.length"
+        class="books-btn" style="background:#EBFBEE;color:#2F9E44;border:1px solid #8CE99A"
+        @click="exportProfitCSV">
+        Export CSV
+      </button>
     </div>
 
     <!-- P&L -->
@@ -371,6 +381,116 @@
       <div v-else class="empty-msg">{{itemsRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
     </div>
 
+    <!-- Customer-wise Sales -->
+    <div v-if="activeReport === 'customers'" class="books-card report-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="books-card-title" style="margin:0">Customer-wise Sales</div>
+        <div v-if="customerSales.length" style="font-size:12.5px;color:#868E96">
+          Total: <span style="font-weight:700;color:#2F9E44">₹{{fmtN(customerSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
+        </div>
+      </div>
+      <template v-if="customersLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
+      <template v-else-if="customerSales.length">
+        <table class="books-table aging-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th class="ta-r">Invoices</th>
+              <th class="ta-r">Net Total</th>
+              <th class="ta-r">Discount</th>
+              <th class="ta-r">Tax</th>
+              <th class="ta-r">Avg Invoice</th>
+              <th class="ta-r">Outstanding</th>
+              <th class="ta-r">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in customerSales" :key="row.customer">
+              <td>{{ row.customer_name || row.customer }}</td>
+              <td class="ta-r mono-sm">{{ row.invoice_count }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.net_total) }}</td>
+              <td class="ta-r mono-sm red">{{ row.total_discount ? fmtAmt(row.total_discount) : '—' }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.total_tax) }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.avg_invoice_value) }}</td>
+              <td class="ta-r mono-sm" :class="row.outstanding_amount>0?'text-danger':''">{{ row.outstanding_amount ? fmtAmt(row.outstanding_amount) : '—' }}</td>
+              <td class="ta-r mono-sm fw-700 green">{{ fmtAmt(row.total_amount) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="aging-totals-row">
+              <td class="fw-700">TOTAL</td>
+              <td class="ta-r fw-700">{{ fmtN(customerSales.reduce((s,r)=>s+Number(r.invoice_count||0),0)) }}</td>
+              <td class="ta-r fw-700">{{ fmtAmt(customerSales.reduce((s,r)=>s+Number(r.net_total||0),0)) }}</td>
+              <td class="ta-r fw-700 red">{{ fmtAmt(customerSales.reduce((s,r)=>s+Number(r.total_discount||0),0)) }}</td>
+              <td class="ta-r fw-700">{{ fmtAmt(customerSales.reduce((s,r)=>s+Number(r.total_tax||0),0)) }}</td>
+              <td></td>
+              <td class="ta-r fw-700 text-danger">{{ fmtAmt(customerSales.reduce((s,r)=>s+Number(r.outstanding_amount||0),0)) }}</td>
+              <td class="ta-r fw-700 green">{{ fmtAmt(customerSales.reduce((s,r)=>s+Number(r.total_amount||0),0)) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </template>
+      <div v-else class="empty-msg">{{customersRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
+    </div>
+
+    <!-- Profit-wise Report -->
+    <div v-if="activeReport === 'profit'" class="books-card report-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="books-card-title" style="margin:0">Profit-wise Report (by Item)</div>
+        <div v-if="profitReport.length" style="font-size:12.5px;color:#868E96">
+          Total Profit: <span style="font-weight:700" :class="profitTotal>=0?'green':'red'">{{ fmtAmt(profitTotal) }}</span>
+        </div>
+      </div>
+      <div v-if="profitReport.length" style="font-size:11.5px;color:#94a3b8;margin-bottom:12px">
+        Cost is estimated from current average valuation rate per item (excluding WIP warehouses); margins are indicative, not historical FIFO cost.
+      </div>
+      <template v-if="profitLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
+      <template v-else-if="profitReport.length">
+        <table class="books-table aging-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="ta-r">Qty Sold</th>
+              <th class="ta-r">Revenue</th>
+              <th class="ta-r">Cost Rate</th>
+              <th class="ta-r">Total Cost</th>
+              <th class="ta-r">Profit</th>
+              <th class="ta-r">Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in profitReport" :key="row.item_code">
+              <td>
+                {{ row.item_name || row.item_code }}
+                <span v-if="!row.cost_rate" class="badge badge-muted" style="margin-left:6px;font-size:10px" title="No valuation or standard buying rate found for this item — margin below is not meaningful">no cost data</span>
+              </td>
+              <td class="ta-r mono-sm">{{ fmtN(row.qty_sold) }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.revenue) }}</td>
+              <td class="ta-r mono-sm">{{ row.cost_rate ? fmtAmt(row.cost_rate) : '—' }}</td>
+              <td class="ta-r mono-sm red">{{ row.total_cost ? fmtAmt(row.total_cost) : '—' }}</td>
+              <td class="ta-r mono-sm fw-700" :class="row.profit>=0?'green':'red'">{{ row.cost_rate ? fmtAmt(row.profit) : '—' }}</td>
+              <td class="ta-r mono-sm" :class="row.margin_pct>=0?'green':'red'">{{ row.cost_rate ? Number(row.margin_pct||0).toFixed(1)+'%' : '—' }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="aging-totals-row">
+              <td class="fw-700">TOTAL</td>
+              <td class="ta-r fw-700">{{ fmtN(profitReport.reduce((s,r)=>s+Number(r.qty_sold||0),0)) }}</td>
+              <td class="ta-r fw-700">{{ fmtAmt(profitReport.reduce((s,r)=>s+Number(r.revenue||0),0)) }}</td>
+              <td></td>
+              <td class="ta-r fw-700 red">{{ fmtAmt(profitReport.filter(r=>r.cost_rate).reduce((s,r)=>s+Number(r.total_cost||0),0)) }}</td>
+              <td class="ta-r fw-700" :class="profitTotal>=0?'green':'red'">{{ fmtAmt(profitTotal) }}</td>
+              <td class="ta-r fw-700" :class="profitMarginTotal>=0?'green':'red'">{{ profitMarginTotal.toFixed(1) }}%</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div v-if="noCostDataCount" style="font-size:11.5px;color:#94a3b8;margin-top:10px">
+          {{ noCostDataCount }} item{{noCostDataCount>1?'s':''}} excluded from the profit/margin totals above — no valuation or standard buying rate found (see "no cost data" tag).
+        </div>
+      </template>
+      <div v-else class="empty-msg">{{profitRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
+    </div>
+
     <!-- Trial Balance -->
     <div v-if="activeReport === 'tb'" class="books-card report-card">
       <div class="books-card-title">Trial Balance</div>
@@ -441,6 +561,14 @@ const itemSales   = ref([]);
 const itemsLoading = ref(false);
 const itemsRan     = ref(false);
 
+const customerSales   = ref([]);
+const customersLoading = ref(false);
+const customersRan     = ref(false);
+
+const profitReport   = ref([]);
+const profitLoading  = ref(false);
+const profitRan      = ref(false);
+
 const bsBalanced = computed(() => {
   if (!bs.value) return false;
   const a = Number(bs.value.total_assets) || 0;
@@ -450,6 +578,15 @@ const bsBalanced = computed(() => {
 });
 const maxMonthlyVal = computed(() => Math.max(...plMonthly.value.flatMap(m => [m.income||0, m.expense||0]), 1));
 function barH(v) { return Math.round((Math.max(0,v) / maxMonthlyVal.value) * 80); }
+
+const profitTotal = computed(() => profitReport.value.filter(r => r.cost_rate).reduce((s,r) => s + Number(r.profit||0), 0));
+const profitMarginTotal = computed(() => {
+  const priced = profitReport.value.filter(r => r.cost_rate);
+  const revenue = priced.reduce((s,r) => s + Number(r.revenue||0), 0);
+  const profit = priced.reduce((s,r) => s + Number(r.profit||0), 0);
+  return revenue !== 0 ? (profit / revenue) * 100 : 0;
+});
+const noCostDataCount = computed(() => profitReport.value.filter(r => !r.cost_rate).length);
 
 async function runReport() {
   const company = await resolveCompany();
@@ -482,6 +619,18 @@ async function runReport() {
     catch { itemSales.value = []; }
     itemsLoading.value = false;
   }
+  if (activeReport.value === "customers") {
+    customersLoading.value = true; customersRan.value = true;
+    try { customerSales.value = await apiGET("zoho_books_clone.db.queries.get_customer_wise_sales", args) || []; }
+    catch { customerSales.value = []; }
+    customersLoading.value = false;
+  }
+  if (activeReport.value === "profit") {
+    profitLoading.value = true; profitRan.value = true;
+    try { profitReport.value = await apiGET("zoho_books_clone.db.queries.get_profit_wise_report", args) || []; }
+    catch { profitReport.value = []; }
+    profitLoading.value = false;
+  }
 }
 
 function exportItemSalesCSV() {
@@ -495,6 +644,36 @@ function exportItemSalesCSV() {
   const a = document.createElement("a");
   a.href = url;
   a.download = "item_wise_sales_" + fromDate.value + "_to_" + toDate.value + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCustomerSalesCSV() {
+  const header = ["Customer","Invoices","Net Total","Discount","Tax","Avg Invoice","Outstanding","Total Amount"].join(",");
+  const lines = customerSales.value.map(r =>
+    [r.customer_name || r.customer, r.invoice_count, r.net_total, r.total_discount || 0, r.total_tax, r.avg_invoice_value, r.outstanding_amount || 0, r.total_amount].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "customer_wise_sales_" + fromDate.value + "_to_" + toDate.value + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportProfitCSV() {
+  const header = ["Item","Qty Sold","Revenue","Cost Rate","Total Cost","Profit","Margin %"].join(",");
+  const lines = profitReport.value.map(r =>
+    [r.item_name || r.item_code, r.qty_sold, r.revenue, r.cost_rate, r.total_cost, r.profit, Number(r.margin_pct||0).toFixed(1)].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "profit_wise_report_" + fromDate.value + "_to_" + toDate.value + ".csv";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -525,6 +704,8 @@ const reports = [
   { key: "cf",  label: "Cash Flow",      icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>` },
   { key: "gst", label: "GST Summary",    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
   { key: "items", label: "Item-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>` },
+  { key: "customers", label: "Customer-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
+  { key: "profit", label: "Profit-wise", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>` },
   { key: "ar",  label: "AR Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
   { key: "ap",  label: "AP Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>` },
   { key: "tb",  label: "Trial Balance",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },
