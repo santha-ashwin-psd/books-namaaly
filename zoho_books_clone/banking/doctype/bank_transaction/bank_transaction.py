@@ -57,16 +57,28 @@ class BankTransaction(Document):
 
         company = frappe.db.get_value("Bank Account", self.bank_account, "company") or ""
 
-        # Counterpart account: use the mapped_account if set, else a suspense/cash account
+        # Counterpart account: use the mapped_account (user-categorized Income/
+        # Expense/etc account) if set, else a dedicated bank suspense account.
+        # NOTE: Stock Adjustment is an inventory-valuation account and must
+        # NEVER be used as a bank-transaction contra account.
         contra = (
             getattr(self, "mapped_account", None)
             or frappe.db.get_value(
                 "Account",
-                {"account_type": ["in", ["Temporary", "Stock Adjustment"]], "is_group": 0, "company": company},
+                {"account_type": "Temporary", "is_group": 0, "company": company},
                 "name"
             )
-            or bank_account
         )
+
+        if not contra:
+            frappe.throw(
+                _(
+                    "Bank Transaction {0}: no 'Categorize To' account set and no "
+                    "suspense account (account_type = Temporary) found for company "
+                    "{1}. Please set 'Categorize To' on the transaction, or create "
+                    "a Temporary-type suspense account."
+                ).format(self.name, company)
+            )
 
         credit_amt = flt(self.credit)
         debit_amt  = flt(self.debit)
