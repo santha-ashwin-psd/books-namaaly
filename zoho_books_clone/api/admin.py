@@ -669,7 +669,135 @@ def save_company_settings(**kwargs):
     return {"success": True}
 
 
-# ─── Books Lock Date (per-company) ───────────────────────────────────────────
+# ─── Company rename ──────────────────────────────────────────────────────────
+#
+# Why this needs its own endpoint instead of a plain field edit:
+# Books Company autonames on the company_name field (autoname: "field:company_name"),
+# so the docname itself IS the company name text. Editing company_name via a normal
+# doc.save() does NOT rename the document — Frappe only applies "field:" autoname on
+# insert, never on update — so the docname (and therefore every place that stored
+# the old name) silently keeps the stale value forever, which is exactly the "edit
+# doesn't stick" symptom.
+#
+# On top of that, most doctypes in this app store `company` as a plain Data field
+# (a copied string), not a real Link to Books Company — see Purchase/Sales Invoice,
+# Payment Entry, Journal Entry, Account, GL Entry, Fiscal Year, Cost Center, Bank
+# Account, Warehouse, Stock Entry/Ledger, Quotation, Sales/Purchase Order, Expense,
+# Credit Note, E-Way Bill, Tax Template, Expense Claim, Bin. frappe.rename_doc()
+# only cascades to real Link fields (Books Company Member, Purchase Receipt,
+# Delivery Note, TDS Entry, Material Request, Job Card, Packing Slip, Work Order,
+# BOM, Production Plan already use a proper Link and are handled automatically).
+# Every Data-field table below has to be bulk-updated by hand, or those records
+# silently keep pointing at a company name that no longer exists.
+_COMPANY_DATA_FIELD_DOCTYPES = [
+    "Tax Template", "Expense Claim", "Credit Note", "Quotation", "E Way Bill",
+    "Purchase Invoice", "Sales Invoice", "Purchase Order", "Sales Order", "Expense",
+    "Warehouse", "Stock Ledger Entry", "Stock Entry", "Bin", "Payment Entry",
+    "Cost Center", "Account", "General Ledger Entry", "Journal Entry",
+    "Fiscal Year", "Bank Account",
+]
+
+
+@frappe.whitelist(methods=["POST"])
+def rename_company(old_name=None, new_name=None):
+    """Rename a Books Company end-to-end: renames the doc itself, then cascades
+    the new name into every table that stores `company` as a plain string field
+    (see _COMPANY_DATA_FIELD_DOCTYPES) plus Books Settings.default_company.
+    Real Link fields to Books Company are handled by frappe.rename_doc() itself.
+    """
+    _require_admin()
+
+    old_name = (old_name or "").strip()
+    new_name = (new_name or "").strip()
+    if not old_name or not new_name:
+        frappe.throw(_("Both the current and new company name are required."))
+    if old_name == new_name:
+        frappe.throw(_("New name is the same as the current name."))
+    if not frappe.db.exists("Books Company", old_name):
+        frappe.throw(_("Company '{0}' not found.").format(old_name))
+    if frappe.db.exists("Books Company", new_name):
+        frappe.throw(_("A company named '{0}' already exists.").format(new_name))
+
+    # 1) Rename the document itself. merge=False since new_name must not already
+    # exist (checked above). This also cascades to genuine Link fields pointing
+    # at Books Company (Delivery Note, Purchase Receipt, TDS Entry, Material
+    # Request, Job Card, Packing Slip, Work Order, BOM, Production Plan,
+    # Books Company Member).
+    frappe.rename_doc("Books Company", old_name, new_name, force=True)
+
+    # 2) Resync the naming field itself — rename_doc changes the docname but
+    # doesn't guarantee company_name is re-saved to match on every version.
+    frappe.db.set_value("Books Company", new_name, "company_name", new_name, update_modified=False)
+
+    # 3) Bulk-fix every plain-Data "company" column across the app. Direct SQL
+    # since these are just string fields, not links — no doc events need to fire.
+    updated = {}
+    for doctype in _COMPANY_DATA_FIELD_DOCTYPES:
+        table = "tab" + doctype
+        if not frappe.db.table_exists(doctype):
+            continue
+        frappe.db.sql(
+            f"UPDATE `{table}` SET `company` = %s WHERE `company` = %s",
+            (new_name, old_name),
+        )
+        updated[doctype] = True
+
+    # 4) Books Settings.default_company is also a plain string, not a Link.
+    # IMPORTANT: Books Settings is a Single doctype, and Frappe caches Single
+    # values aggressively. A raw frappe.db.set_value() writes the row correctly
+    # but does NOT reliably invalidate that cache, so frappe.client.get_value
+    # (which resolveCompany() on the frontend calls) keeps serving the stale
+    # old name to every page indefinitely. Go through the real document API —
+    # doc.save() properly busts the cache — instead of a direct SQL write.
+    if frappe.db.exists("Books Settings", "Books Settings"):
+        settings_doc = frappe.get_single("Books Settings")
+        settings_doc.default_company = new_name
+        settings_doc.save(ignore_permissions=True)
+
+    # Belt-and-braces: explicitly clear every cache layer that could still be
+    # holding the old name, for this request's cache and any other worker's.
+    frappe.clear_document_cache("Books Settings", "Books Settings")
+    frappe.clear_document_cache("Books Company", new_name)
+    frappe.clear_document_cache("Books Company", old_name)
+    frappe.clear_cache(doctype="Books Settings")
+
+    # 5) Frappe's own defaults system, in case anything ever set it.
+    try:
+        if frappe.db.get_default("company") == old_name:
+            frappe.db.set_default("company", new_name)
+    except Exception:
+        pass
+
+    # 6) Per-user defaults. Signup/invite flows (auth.py, admin.py) call
+    # frappe.defaults.set_user_default("company", ...) to snapshot the company
+    # name onto each individual user at the time they joined. That snapshot is
+    # a plain string on the DefaultValue doctype, completely independent of
+    # the Books Company doc, so frappe.rename_doc() above has no way to touch
+    # it. Crucially, _get_company() in session.py checks THIS value FIRST —
+    # before Books Company Member and before Books Settings.default_company —
+    # so leaving it stale means every existing user keeps resolving to the
+    # old company name forever after a rename, regardless of what the
+    # frontend caches. Walk every user whose default still points at the old
+    # name and re-point it via the public API (which also clears their
+    # defaults cache), rather than a raw SQL write.
+    try:
+        stale_users = frappe.db.sql(
+            """SELECT parent FROM `tabDefaultValue`
+               WHERE defkey = %s AND defvalue = %s AND parenttype = %s""",
+            ("company", old_name, "__default"),
+            as_dict=True,
+        )
+        for row in stale_users:
+            if row.parent:
+                frappe.defaults.set_user_default("company", new_name, user=row.parent)
+    except Exception:
+        frappe.log_error(title="rename_company: per-user default fixup failed")
+
+    frappe.db.commit()
+    return {"success": True, "old_name": old_name, "new_name": new_name, "updated_doctypes": list(updated.keys())}
+
+
+
 
 @frappe.whitelist()
 def get_books_lock_date():

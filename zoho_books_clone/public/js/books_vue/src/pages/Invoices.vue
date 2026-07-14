@@ -551,6 +551,12 @@
                       </div>
                       <div class="po-item-num-row">
                         <div class="po-item-field">
+                          <label>MRP ({{ currencySymbol }})</label>
+                          <input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/>
+                        </div>
+                      </div>
+                      <div class="po-item-num-row">
+                        <div class="po-item-field">
                           <label>Discount %</label>
                           <input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/>
                         </div>
@@ -1430,6 +1436,7 @@ async function fetchCompanyGstin() {
   companyGstinLoading.value = true;
   try {
     const co = await resolveCompany();
+    console.log("[BooksCompany][Invoices.vue] fetchCompanyGstin() resolveCompany() ->", co);
     const cd = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Books Company", name: co });
     companyGstin.value = cd?.gstin || "";
   } catch { companyGstin.value = ""; }
@@ -1581,7 +1588,7 @@ const moreActionsOpen = ref(false);
 const collapsed = reactive({ branding: false, details: false, billing: true, lines: false, notes: true });
 const form = reactive({
   customer:"", posting_date:"", due_date:"", po_no:"",
-  payment_terms:"", place_of_supply:"", billing_address:"",
+  payment_terms:"", place_of_supply:"33-Tamil Nadu", billing_address:"",
   billing_address_name:"", shipping_address:"", shipping_address_name:"",
   terms:"", remarks:"", docstatus:0,
   currency:"INR", exchange_rate:1, gst_treatment:"",
@@ -2101,6 +2108,7 @@ async function loadItems() {
 async function loadTaxAccount() {
   try {
     const co=await resolveCompany();
+    console.log("[BooksCompany][Invoices.vue] loadTaxAccount() resolveCompany() (Account lookup) ->", co);
     const r=await apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Tax"],["is_group","=",0]],limit:1});
     taxAccountHead.value=r[0]?.name||"";
   } catch {}
@@ -2123,6 +2131,7 @@ async function loadTaxAccount() {
   // Company GST state + Output GST accounts for intra/inter split.
   try {
     const co=await resolveCompany();
+    console.log("[BooksCompany][Invoices.vue] loadTaxAccount() resolveCompany() (GST state lookup) ->", co);
     const bc=await apiGet("Books Company",co);
     companyGstState.value=bc?.gst_state||bc?.state||"";
     gstAccounts.value=await apiGET("zoho_books_clone.api.gst.get_gst_accounts",{company:co})||{};
@@ -2302,7 +2311,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2310,7 +2319,7 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
   fetchWarehouses("");
@@ -2336,6 +2345,15 @@ async function openEdit(inv) {
     });
     lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
     if (!lines.value.length) addLine();
+    // Base Price is a read-only reference showing the Item's own standard_rate
+    // (independent of whatever rate/discount ended up on the saved line), so
+    // it needs to be resolved from the Item master rather than the invoice row.
+    await Promise.all(lines.value.map(async (line) => {
+      if (!line.item_code) return;
+      const it = items.value.find(i => i.name === line.item_code);
+      if (it) { line._standardRate = flt(it.standard_rate); return; }
+      try { const idoc = await apiGet("Item", line.item_code); line._standardRate = flt(idoc?.standard_rate) || 0; } catch { line._standardRate = 0; }
+    }));
   }
 }
 async function openView(inv) {
@@ -2805,6 +2823,7 @@ function printViewInvoice() {
 }
 
 onMounted(async () => {
+  console.log("[BooksCompany][Invoices.vue] onMounted() start, window.__booksCompany =", window.__booksCompany);
   await load();
   loadCustomers(); loadSalesPersons(); loadItems(); loadTaxAccount(); loadBranding(); loadPriceLists();
   try { setCompany(window.__booksCompany || await resolveCompany()); } catch {}

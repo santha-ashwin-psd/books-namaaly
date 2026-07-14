@@ -41,6 +41,33 @@ def make_gl_entries(gl_map: list[dict], cancel: bool = False) -> None:
         _update_account_balance(account)
 
 
+def set_voucher_gl_suspended(voucher_type: str, voucher_no: str, suspended: bool) -> None:
+    """
+    Toggle whether an already-posted voucher's GL entries count toward
+    account balances, without touching the entries themselves.
+
+    Used for reconciliation-style linking — e.g. matching a Bank Transaction
+    to a Payment Entry — where the same real-world cash movement must not be
+    counted twice. The linked voucher's own entries are suspended
+    (is_cancelled=1) while the match holds, and restored (is_cancelled=0) if
+    the match is later undone. Unlike reverse_voucher(), this doesn't write
+    audit-trail reversal rows and is safe to call repeatedly in either
+    direction as a match is made and unmade.
+    """
+    frappe.db.sql("""
+        UPDATE `tabGeneral Ledger Entry`
+        SET is_cancelled = %s
+        WHERE voucher_type = %s AND voucher_no = %s AND is_reversal = 0
+    """, (1 if suspended else 0, voucher_type, voucher_no))
+
+    affected = frappe.db.sql("""
+        SELECT DISTINCT account FROM `tabGeneral Ledger Entry`
+        WHERE voucher_type = %s AND voucher_no = %s AND is_reversal = 0
+    """, (voucher_type, voucher_no), as_dict=True)
+    for row in affected:
+        _update_account_balance(row.account)
+
+
 def recompute_outstanding_from_gl(doctype: str, docname: str) -> float:
     """
     Compute the true outstanding amount for an invoice by comparing

@@ -489,7 +489,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiGET, apiPOST } from "../api/client.js";
+import { apiGET, apiPOST, setBooksCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { COUNTRIES, statesFor, stateFromGstin } from "../composables/useCountryState.js";
 import { GSTIN_REGEX } from "../composables/useValidation.js";
@@ -509,6 +509,7 @@ const form = reactive({
   lock_date: "",
 });
 const saving = ref(false);
+const loadedCompanyName = ref("");
 
 const TABS = [
   { k: "profile",   l: "Company Profile" },
@@ -555,12 +556,37 @@ async function load() {
   try {
     const d = await apiGET("zoho_books_clone.api.admin.get_company_settings");
     Object.assign(form, d);
+    loadedCompanyName.value = d.default_company || "";
   } catch (e) { toast("Could not load settings", "error"); }
 }
 
 async function save() {
+  const newName = (form.default_company || "").trim();
+  if (!newName) { toast("Company name is required", "error"); return; }
+
   saving.value = true;
   try {
+    // Renaming is a distinct, higher-stakes operation: it changes the document's
+    // own identity (Books Company autonames on this field) and has to cascade to
+    // every place the old name was copied as plain text. Handle it first, via its
+    // own endpoint, before saving the rest of the form.
+    if (loadedCompanyName.value && newName !== loadedCompanyName.value) {
+      await apiPOST("zoho_books_clone.api.admin.rename_company", {
+        old_name: loadedCompanyName.value,
+        new_name: newName,
+      });
+      loadedCompanyName.value = newName;
+      // Company resolution is cached in window.__booksCompany and sysdefaults.
+      // Update that cache immediately so anything that reads it before the
+      // reload finishes (or if the reload is ever removed) sees the new name
+      // right away instead of a stale one.
+      setBooksCompany(newName);
+      toast("Company renamed — reloading…");
+      await apiPOST("zoho_books_clone.api.admin.save_company_settings", { ...form, default_company: newName });
+      window.location.reload();
+      return;
+    }
+
     await apiPOST("zoho_books_clone.api.admin.save_company_settings", { ...form });
     toast("Settings saved");
   } catch (e) { toast(e.message, "error"); }

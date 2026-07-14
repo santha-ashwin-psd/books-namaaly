@@ -20,6 +20,7 @@ def _get_company(user: str) -> str:
     try:
         val = frappe.defaults.get_user_default("company", user)
         if val:
+            print(f"[BooksCompany][session.py] _get_company({user}) resolved from PER-USER DEFAULT: {val}")
             return val
     except Exception:
         pass
@@ -27,6 +28,7 @@ def _get_company(user: str) -> str:
     try:
         val = frappe.db.get_value("Books Company Member", {"user": user}, "company")
         if val:
+            print(f"[BooksCompany][session.py] _get_company({user}) resolved from Books Company Member: {val}")
             return val
     except Exception:
         pass
@@ -34,10 +36,12 @@ def _get_company(user: str) -> str:
     try:
         val = frappe.db.get_single_value("Books Settings", "default_company")
         if val:
+            print(f"[BooksCompany][session.py] _get_company({user}) resolved from Books Settings.default_company: {val}")
             return val
     except Exception:
         pass
 
+    print(f"[BooksCompany][session.py] _get_company({user}) resolved to EMPTY STRING (no source matched)")
     return ""
 
 

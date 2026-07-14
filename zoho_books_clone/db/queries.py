@@ -414,8 +414,32 @@ def get_gst_summary(company: str, from_date: str, to_date: str) -> list[dict]:
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
 
-# ── Inventory ─────────────────────────────────────────────────────────────────
+@frappe.whitelist()
+def get_item_wise_sales(company: str, from_date: str, to_date: str) -> list[dict]:
+    """Item-wise sales summary: qty sold, revenue, and avg rate per item for a period."""
+    return frappe.db.sql("""
+        SELECT
+            sii.item_code                    AS item_code,
+            sii.item_name                    AS item_name,
+            sii.uom                          AS uom,
+            COUNT(DISTINCT sii.parent)       AS invoice_count,
+            SUM(sii.qty)                     AS qty_sold,
+            SUM(sii.amount)                  AS total_amount,
+            SUM(sii.discount_amount)         AS total_discount,
+            CASE WHEN SUM(sii.qty) != 0
+                 THEN SUM(sii.amount) / SUM(sii.qty)
+                 ELSE 0 END                  AS avg_rate
+        FROM `tabSales Invoice Item` sii
+        JOIN `tabSales Invoice` si ON si.name = sii.parent AND sii.parenttype = 'Sales Invoice'
+        WHERE si.company      = %(company)s
+          AND si.docstatus    = 1
+          AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+        GROUP BY sii.item_code, sii.item_name, sii.uom
+        ORDER BY total_amount DESC
+    """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
+
+# ── Inventory ─────────────────────────────────────────────────────────────────
 def get_stock_movement_summary(
     company: str,
     from_date: str,

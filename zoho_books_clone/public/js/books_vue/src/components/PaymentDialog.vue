@@ -50,11 +50,17 @@
               <input v-model="form.ref" class="pmd-input" placeholder="Cheque / Txn #" />
             </div>
             <div class="pmd-field pmd-full">
-              <label class="pmd-lbl">{{ state.direction === "pay" ? "Paid From" : "Deposit To" }} (Bank)</label>
+              <label class="pmd-lbl">
+                {{ accountFieldLabel }}
+                <span class="pmd-hint">({{ isCashMode ? "Cash-in-Hand ledger" : "Bank ledger" }})</span>
+              </label>
               <select v-model="form.bank" class="pmd-input">
                 <option value="">— Select —</option>
-                <option v-for="b in bankAccounts" :key="b" :value="b">{{ b }}</option>
+                <option v-for="a in filteredAccounts" :key="a.name" :value="a.name">{{ a.name }}</option>
               </select>
+              <div v-if="!filteredAccounts.length" class="pmd-warn">
+                No {{ isCashMode ? "Cash" : "Bank" }} account found for this company. Set one up under Accounts first.
+              </div>
             </div>
             <div class="pmd-field">
               <label class="pmd-lbl">Bank Charges</label>
@@ -95,7 +101,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from "vue";
+import { reactive, ref, watch, computed } from "vue";
 import { apiGET, apiPOST } from "../api/client.js";
 import { usePaymentDialog } from "../composables/usePaymentDialog.js";
 import { useToast } from "../composables/useToast.js";
@@ -104,8 +110,31 @@ const { state, complete, cancel } = usePaymentDialog();
 const { toast } = useToast();
 
 const saving = ref(false);
-const bankAccounts = ref([]);
+// Full account objects: [{ name, account_type: "Cash" | "Bank" }, ...]
+const allAccounts = ref([]);
 const form = reactive({ amount: 0, date: "", mode: "Cash", ref: "", bank: "", charges: 0, notes: "" });
+
+// Only "Cash" mode maps to the Cash-in-Hand ledger bucket; every other mode
+// (Cheque, Bank Transfer, UPI, NEFT, RTGS, IMPS, Credit/Debit Card, DD) is a
+// bank-clearing instrument and must map to a Bank ledger. This is the guard
+// that stops a cash receipt from ever posting straight to Bank (or vice versa).
+const isCashMode = computed(() => form.mode === "Cash");
+const filteredAccounts = computed(() =>
+  allAccounts.value.filter(a => a.account_type === (isCashMode.value ? "Cash" : "Bank"))
+);
+const accountFieldLabel = computed(() => {
+  if (state.direction === "pay") return isCashMode.value ? "Paid From" : "Paid From";
+  return isCashMode.value ? "Received Into" : "Deposit To";
+});
+
+// Whenever Mode switches (e.g. Cash -> UPI), re-point the selected account to
+// the matching bucket so a stale Bank/Cash selection can't linger under the
+// wrong mode.
+watch(() => form.mode, () => {
+  if (!filteredAccounts.value.some(a => a.name === form.bank)) {
+    form.bank = filteredAccounts.value[0]?.name || "";
+  }
+});
 
 watch(() => state.open, async (open) => {
   if (!open) return;
@@ -114,16 +143,21 @@ watch(() => state.open, async (open) => {
     date: new Date().toISOString().slice(0, 10),
     mode: "Cash", ref: "", bank: "", charges: 0, notes: "",
   });
-  bankAccounts.value = [];
+  allAccounts.value = [];
   if (state.getDefaultsEndpoint) {
     try {
       const params = { [state.paramKey]: state.name };
       const d = await apiGET(state.getDefaultsEndpoint, params);
       if (d?.bank_accounts) {
-        bankAccounts.value = d.bank_accounts.map(a => a.name || a);
-        if (bankAccounts.value[0]) form.bank = bankAccounts.value[0];
+        // Normalize: backend returns {name, account_type}; tolerate plain strings too.
+        allAccounts.value = d.bank_accounts.map(a =>
+          typeof a === "string" ? { name: a, account_type: "Bank" } : a
+        );
       }
       if (d?.payment_modes && d.payment_modes[0]) form.mode = d.payment_modes[0];
+      // Select the account matching the (possibly just-set) mode, not just index 0.
+      const bucket = isCashMode.value ? "Cash" : "Bank";
+      form.bank = allAccounts.value.find(a => a.account_type === bucket)?.name || "";
     } catch {}
   }
 });
@@ -134,6 +168,16 @@ function fmt(v) {
 
 async function onSave() {
   if (!form.amount || form.amount <= 0) { toast("Amount must be > 0", "error"); return; }
+  if (!form.bank) { toast(`Select a ${isCashMode.value ? "Cash" : "Bank"} account`, "error"); return; }
+  // Belt-and-braces: never let a Cash-mode payment post to a Bank ledger, or
+  // a Bank-mode payment post to Cash-in-Hand, even if the selection got out
+  // of sync with the dropdown (e.g. stale prop update).
+  const chosen = allAccounts.value.find(a => a.name === form.bank);
+  const expectedType = isCashMode.value ? "Cash" : "Bank";
+  if (chosen && chosen.account_type !== expectedType) {
+    toast(`Mode is "${form.mode}" but the selected account is a ${chosen.account_type} account. Please pick a ${expectedType} account.`, "error");
+    return;
+  }
   saving.value = true;
   try {
     const payload = {
@@ -202,6 +246,8 @@ function onCancel() {
 .pmd-full { grid-column: 1 / -1; }
 .pmd-lbl { font-size: 12px; font-weight: 600; color: #374151; }
 .pmd-req { color: #ef4444; margin-left: 2px; }
+.pmd-hint { font-weight: 500; color: #6b7280; font-size: 11px; margin-left: 2px; }
+.pmd-warn { font-size: 11.5px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 8px; margin-top: 4px; }
 .pmd-input {
   width: 100%; box-sizing: border-box;
   border: 1px solid #e5e7eb; border-radius: 6px; padding: 7px 10px;

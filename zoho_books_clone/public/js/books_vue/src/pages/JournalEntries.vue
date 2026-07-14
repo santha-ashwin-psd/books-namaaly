@@ -251,17 +251,7 @@
         </div>
         <div class="coa-dbody">
 
-          <span class="coa-sec-lbl" style="margin-top:0;border-top:none;padding-top:0">Quick Template <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></span>
-          <div class="jen-tpl-grid">
-            <div v-for="tpl in JE_TEMPLATES" :key="tpl.id"
-              class="jen-tpl-card" :class="{selected:selectedTpl===tpl.id}"
-              @click="applyTemplate(tpl.id)">
-              <div class="jen-tpl-name">{{tpl.name}}</div>
-              <div class="jen-tpl-desc">{{tpl.desc}}</div>
-            </div>
-          </div>
-
-          <span class="coa-sec-lbl">Entry Details</span>
+          <span class="coa-sec-lbl" style="margin-top:0;border-top:none;padding-top:0">Entry Details</span>
           <div class="coa-fg jen-fg4">
             <div>
               <label class="coa-lbl">Date <span style="color:#c92a2a">*</span></label>
@@ -322,8 +312,7 @@
               <thead>
                 <tr>
                   <th style="width:28%">Account <span style="color:#c92a2a">*</span></th>
-                  <th style="width:20%">Party (Customer/Vendor)</th>
-                  <th style="width:15%">Cost Center</th>
+                  <th style="width:20%">Cost Center</th>
                   <th style="width:13%;text-align:right">Debit (Dr)</th>
                   <th style="width:13%;text-align:right">Credit (Cr)</th>
                   <th style="width:7%">Type</th>
@@ -333,27 +322,26 @@
               <tbody>
                 <tr v-for="line in lines" :key="line.id">
                   <td>
-                    <SearchableSelect v-model="line.account" :options="accounts" placeholder="— Select Account —" :compact="true" class="ss-cell-wrap"/>
+                    <SearchableSelect :modelValue="line.account" @update:modelValue="v => onAccountChange(line, v)" :options="accounts" placeholder="— Select Account —" :compact="true" class="ss-cell-wrap"/>
                   </td>
-                  <td><input v-model="line.party" class="jen-ci" placeholder="Optional"/></td>
                   <td>
                     <select v-model="line.cost_center" class="jen-ci">
                       <option value="">—</option>
                       <option v-for="cc in costCenters" :key="cc" :value="cc">{{cc}}</option>
                     </select>
                   </td>
-                  <td><input v-model="line.dr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" @input="line.cr=''"/></td>
-                  <td><input v-model="line.cr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" @input="line.dr=''"/></td>
+                  <td><input v-model="line.dr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" :disabled="normalSide(line.account)==='Credit'" @input="line.cr=''"/></td>
+                  <td><input v-model="line.cr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" :disabled="normalSide(line.account)==='Debit'" @input="line.dr=''"/></td>
                   <td style="font-size:11px;color:#868e96;padding:0 6px">{{flt(line.dr)>0?'Dr':flt(line.cr)>0?'Cr':'—'}}</td>
                   <td style="padding:4px 6px">
                     <button @click="removeLine(line.id)" class="b-icon-btn danger" style="padding:3px 5px"><span v-html="icon('x',12)"></span></button>
                   </td>
                 </tr>
                 <tr v-if="!lines.length">
-                  <td colspan="7" style="text-align:center;padding:20px;color:#868e96;font-size:13px">No lines — click Debit Row or Credit Row to add</td>
+                  <td colspan="6" style="text-align:center;padding:20px;color:#868e96;font-size:13px">No lines — click Debit Row or Credit Row to add</td>
                 </tr>
                 <tr class="jen-total-row">
-                  <td colspan="3" style="padding:8px 10px;font-size:12px;font-weight:700;color:#868e96;text-transform:uppercase;letter-spacing:.04em">Totals</td>
+                  <td colspan="2" style="padding:8px 10px;font-size:12px;font-weight:700;color:#868e96;text-transform:uppercase;letter-spacing:.04em">Totals</td>
                   <td style="text-align:right;padding:8px 10px;font-weight:700;color:#c92a2a">₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
                   <td style="text-align:right;padding:8px 10px;font-weight:700;color:#2f9e44">₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
                   <td colspan="2"></td>
@@ -389,13 +377,7 @@
               <!-- Account select -->
               <div class="jen-lmc-field">
                 <label class="jen-lmc-lbl">Account <span style="color:#c92a2a">*</span></label>
-                <SearchableSelect v-model="line.account" :options="accounts" placeholder="— Select Account —" :compact="true" class="ss-cell-wrap jen-lmc-ss"/>
-              </div>
-
-              <!-- Party field -->
-              <div class="jen-lmc-field">
-                <label class="jen-lmc-lbl">Party (Customer/Vendor)</label>
-                <input v-model="line.party" class="jen-lmc-input" placeholder="Optional"/>
+                <SearchableSelect :modelValue="line.account" @update:modelValue="v => onAccountChange(line, v)" :options="accounts" placeholder="— Select Account —" :compact="true" class="ss-cell-wrap jen-lmc-ss"/>
               </div>
 
               <!-- Cost center -->
@@ -413,12 +395,14 @@
                   <label class="jen-lmc-amount-lbl">Debit (Dr)</label>
                   <input v-model="line.dr" type="number" min="0" step="0.01"
                     class="jen-lmc-amount-input jen-lmc-amount-input--dr"
+                    :disabled="normalSide(line.account)==='Credit'"
                     placeholder="0.00" @input="line.cr=''"/>
                 </div>
                 <div class="jen-lmc-amount-cell jen-lmc-amount-cell--cr">
                   <label class="jen-lmc-amount-lbl">Credit (Cr)</label>
                   <input v-model="line.cr" type="number" min="0" step="0.01"
                     class="jen-lmc-amount-input jen-lmc-amount-input--cr"
+                    :disabled="normalSide(line.account)==='Debit'"
                     placeholder="0.00" @input="line.dr=''"/>
                 </div>
               </div>
@@ -528,7 +512,6 @@
                 :style="'display:grid;grid-template-columns:1fr 130px 130px;padding:10px 14px;font-size:13px;border-bottom:1px solid #f1f3f5;background:'+(i%2===1?'#fafafa':'#fff')">
                 <div style="font-weight:500;color:#1a1d23">
                   {{l.account}}
-                  <span v-if="l.party" style="color:#868e96;font-size:11px;margin-left:6px">· {{l.party}}</span>
                 </div>
                 <div style="text-align:right;font-weight:600;color:#c92a2a">{{flt(l.dr)>0?fmtINR(l.dr):'—'}}</div>
                 <div style="text-align:right;font-weight:600;color:#2f9e44">{{flt(l.cr)>0?fmtINR(l.cr):'—'}}</div>
@@ -550,7 +533,6 @@
                 <!-- account name -->
                 <div class="jen-vlmc-account">
                   {{l.account}}
-                  <span v-if="l.party" class="jen-vlmc-party">· {{l.party}}</span>
                 </div>
                 <!-- dr / cr amounts -->
                 <div class="jen-vlmc-amounts">
@@ -610,25 +592,30 @@ import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
 
-const JE_TEMPLATES = [
-  { id: "depreciation", name: "Depreciation",       desc: "Monthly asset depreciation posting",
-    lines: [{ account: "Depreciation", dr: 0, cr: 0, type: "Debit" }, { account: "Accumulated Depreciation", dr: 0, cr: 0, type: "Credit" }] },
-  { id: "salary",       name: "Salary Accrual",     desc: "Record salary expense before payment",
-    lines: [{ account: "Salaries & Wages", dr: 0, cr: 0, type: "Debit" }, { account: "Salary Payable", dr: 0, cr: 0, type: "Credit" }] },
-  { id: "bank-charge",  name: "Bank Charges",       desc: "Bank processing / service fee",
-    lines: [{ account: "Bank Charges", dr: 0, cr: 0, type: "Debit" }, { account: "HDFC Current Account", dr: 0, cr: 0, type: "Credit" }] },
-  { id: "gst-payment",  name: "GST Payment",         desc: "Pay GST liability to government",
-    lines: [{ account: "CGST Payable", dr: 0, cr: 0, type: "Debit" }, { account: "SGST Payable", dr: 0, cr: 0, type: "Debit" }, { account: "HDFC Current Account", dr: 0, cr: 0, type: "Credit" }] },
-  { id: "prepaid",      name: "Prepaid Expense",    desc: "Advance payment treated as asset",
-    lines: [{ account: "Prepaid Expenses", dr: 0, cr: 0, type: "Debit" }, { account: "HDFC Current Account", dr: 0, cr: 0, type: "Credit" }] },
-  { id: "provision",    name: "Bad Debt Provision", desc: "Provision for doubtful receivables",
-    lines: [{ account: "Bad Debt Expense", dr: 0, cr: 0, type: "Debit" }, { account: "Provision for Bad Debts", dr: 0, cr: 0, type: "Credit" }] },
-];
 const JE_TYPE_COLOR   = { "Journal Entry": "je-type-info", Depreciation: "je-type-muted", Accrual: "je-type-info", Prepaid: "je-type-info", Provision: "je-type-muted", Contra: "je-type-muted", Rectification: "je-type-muted", "Opening Entry": "je-type-info" };
 const JE_STATUS_COLOR = { Draft: "je-s-draft", Submitted: "je-s-submitted", Cancelled: "je-s-cancelled" };
 
 const allEntries  = ref([]);
 const accounts    = ref([]);
+const accountTypeMap = ref({}); // { accountName: account_type }
+
+// Which side (Debit/Credit) an account's balance normally moves on. Accounts
+// not listed here (Tax, Stock Adjustment, Temporary — types that can
+// legitimately swing either way depending on the transaction) are left
+// unrestricted rather than guessed.
+const NORMAL_BALANCE = {
+  Asset: "Debit", Bank: "Debit", Cash: "Debit", Expense: "Debit", "Cost of Goods Sold": "Debit",
+  Liability: "Credit", Income: "Credit", Equity: "Credit",
+};
+function normalSide(accountName) {
+  return NORMAL_BALANCE[accountTypeMap.value[accountName]] || null;
+}
+function onAccountChange(line, value) {
+  line.account = value;
+  const side = normalSide(value);
+  if (side === "Debit") line.cr = "";
+  else if (side === "Credit") line.dr = "";
+}
 const costCenters = ref([]);
 const loading     = ref(true);
 const currentFilter = ref("all");
@@ -639,7 +626,6 @@ const dateTo      = ref("");
 const drawerOpen   = ref(false);
 const editingName  = ref(null);
 const drawerSaving = ref(false);
-const selectedTpl  = ref("");
 const form = reactive({ date: "", type: "Journal Entry", ref: "", cheque_date: "", narration: "", cost_center: "", status: "Draft" });
 const lines = ref([]);
 
@@ -714,7 +700,14 @@ async function load() {
     }
     try {
       const accts = await apiList("Account", { fields: ["name", "account_name", "account_type"], filters: [["is_group", "=", 0], ["disabled", "=", 0]], limit: 500 });
-      accounts.value = accts.map((a) => a.name || a.account_name);
+      // Receivable / Payable / Stock are control accounts whose balances must
+      // stay tied to a Customer/Supplier/Item via Invoices, Bills, and Stock
+      // Entries — posting to them directly from a Journal Entry would silently
+      // break those sub-ledgers, so they're excluded here.
+      const RESTRICTED_TYPES = ["Receivable", "Payable", "Stock"];
+      const usable = accts.filter((a) => !RESTRICTED_TYPES.includes(a.account_type));
+      accounts.value = usable.map((a) => a.name || a.account_name);
+      accountTypeMap.value = Object.fromEntries(usable.map((a) => [a.name || a.account_name, a.account_type]));
     } catch { accounts.value = []; }
     try {
       const cc = await apiList("Cost Center", { fields: ["name"], filters: [["is_group", "=", 0]], limit: 100 });
@@ -725,10 +718,9 @@ async function load() {
 
 function openAdd() {
   editingName.value = null;
-  selectedTpl.value = "";
   lines.value = [
-    { id: Date.now(),     account: "", party: "", cost_center: "", dr: "", cr: "", type: "Debit" },
-    { id: Date.now() + 1, account: "", party: "", cost_center: "", dr: "", cr: "", type: "Credit" },
+    { id: Date.now(),     account: "", cost_center: "", dr: "", cr: "", type: "Debit" },
+    { id: Date.now() + 1, account: "", cost_center: "", dr: "", cr: "", type: "Credit" },
   ];
   Object.assign(form, { date: todayStr(), type: "Journal Entry", ref: "", cheque_date: "", narration: "", cost_center: "", status: "Draft" });
   drawerOpen.value = true;
@@ -738,13 +730,12 @@ function openEdit(name) {
   const e = allEntries.value.find((x) => x.name === name);
   if (!e || e.status !== "Draft") return;
   editingName.value = name;
-  selectedTpl.value = "";
   Object.assign(form, { date: e.date || todayStr(), type: e.type || "Journal Entry", ref: e.cheque_no || e.ref || "", cheque_date: e.cheque_date || "", narration: e.narration || "", cost_center: e.cost_center || "", status: e.status || "Draft" });
   lines.value = (e.lines && e.lines.length)
     ? e.lines.map((l, i) => ({ ...l, id: Date.now() + i }))
     : [
-        { id: Date.now(),     account: "", party: "", cost_center: "", dr: "", cr: "", type: "Debit" },
-        { id: Date.now() + 1, account: "", party: "", cost_center: "", dr: "", cr: "", type: "Credit" },
+        { id: Date.now(),     account: "", cost_center: "", dr: "", cr: "", type: "Debit" },
+        { id: Date.now() + 1, account: "", cost_center: "", dr: "", cr: "", type: "Credit" },
       ];
   drawerOpen.value = true;
 }
@@ -767,7 +758,7 @@ async function openView(name) {
         status: doc.docstatus === 1 ? "Submitted" : doc.docstatus === 2 ? "Cancelled" : "Draft",
         source: "frappe",
         lines: (doc.accounts || []).map((a) => ({
-          account: a.account, party: a.party || "", dr: a.debit || 0, cr: a.credit || 0,
+          account: a.account, dr: a.debit || 0, cr: a.credit || 0,
         })),
       };
     }
@@ -775,21 +766,8 @@ async function openView(name) {
   viewLoading.value = false;
 }
 
-function applyTemplate(tplId) {
-  const tpl = JE_TEMPLATES.find((t) => t.id === tplId);
-  if (!tpl) return;
-  selectedTpl.value = selectedTpl.value === tplId ? "" : tplId;
-  if (selectedTpl.value) {
-    lines.value = tpl.lines.map((l, i) => ({
-      id: Date.now() + i, account: l.account, party: "", cost_center: "",
-      dr: l.type === "Debit" ? l.dr : "", cr: l.type === "Credit" ? l.cr : "", type: l.type,
-    }));
-    form.narration = tpl.name + " — " + new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-  }
-}
-
 function addLine(type) {
-  lines.value.push({ id: Date.now(), account: "", party: "", cost_center: "", dr: type === "Debit" ? "0" : "", cr: type === "Credit" ? "0" : "", type });
+  lines.value.push({ id: Date.now(), account: "", cost_center: "", dr: type === "Debit" ? "0" : "", cr: type === "Credit" ? "0" : "", type });
 }
 
 function removeLine(id) {
@@ -816,7 +794,6 @@ async function saveEntry(status) {
       accounts: lines.value.filter((l) => l.account).map((l) => ({
         doctype: "Journal Entry Account",
         account: l.account,
-        party: l.party || null,
         cost_center: l.cost_center || form.cost_center || null,
         debit: flt(l.dr),
         credit: flt(l.cr),

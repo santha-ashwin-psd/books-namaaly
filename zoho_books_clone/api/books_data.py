@@ -534,6 +534,154 @@ def record_payment(
         "amount":        amount_received,
     }
 
+
+# ─── Stage 2: Cash-in-Hand → Bank deposit (Contra) ────────────────────────────
+#
+# Accounting flow this implements:
+#   Stage 1 (already handled by record_payment / BankCash.vue "New Cash Entry"):
+#       Dr Cash-in-Hand   /   Cr Accounts Receivable   (customer pays cash)
+#   Stage 2 (this section):
+#       Dr Bank           /   Cr Cash-in-Hand          (cash physically banked)
+#
+# Every submitted, undeposited "Receive" Payment Entry whose mode_of_payment
+# resolves to a Cash-type account is eligible. Selected entries are bundled
+# into a single Journal Entry (Contra) so one bank deposit slip = one JE, and
+# each Payment Entry is flagged custom_deposited_to_bank so it can never be
+# bundled into a second deposit and the Cash-in-Hand ledger always reconciles
+# to "receipts − payments − deposits" = physical cash actually on hand.
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_undeposited_cash(company=None):
+    """List submitted cash-receipt Payment Entries not yet deposited to bank."""
+    company = company or frappe.db.get_default("company")
+    if not company:
+        frappe.throw("No company context found.")
+
+    cash_accounts = frappe.db.sql(
+        """SELECT name FROM `tabAccount`
+           WHERE account_type = 'Cash' AND is_group = 0 AND LOWER(company) = LOWER(%s)""",
+        (company,), as_dict=True
+    )
+    cash_account_names = [c["name"] for c in cash_accounts]
+    if not cash_account_names:
+        return {"entries": [], "total": 0, "cash_accounts": [], "bank_accounts": []}
+
+    rows = frappe.db.sql(
+        """SELECT name, party_name, party, payment_date, paid_amount, reference_no, paid_to
+           FROM `tabPayment Entry`
+           WHERE docstatus = 1
+             AND payment_type = 'Receive'
+             AND paid_to IN %(cash_accounts)s
+             AND LOWER(company) = LOWER(%(company)s)
+             AND IFNULL(custom_deposited_to_bank, 0) = 0
+           ORDER BY payment_date ASC, name ASC""",
+        {"cash_accounts": cash_account_names, "company": company}, as_dict=True
+    )
+
+    bank_accounts = frappe.db.sql(
+        """SELECT name FROM `tabAccount`
+           WHERE account_type = 'Bank' AND is_group = 0 AND disabled = 0 AND LOWER(company) = LOWER(%s)
+           ORDER BY name""",
+        (company,), as_dict=True
+    )
+
+    total = sum(flt(r["paid_amount"]) for r in rows)
+    return {
+        "entries": rows,
+        "total": total,
+        "cash_accounts": cash_account_names,
+        "bank_accounts": [b["name"] for b in bank_accounts],
+        "company": company,
+    }
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def deposit_cash_to_bank(payment_entries, bank_account, deposit_date=None, notes=None, company=None):
+    """Bundle selected undeposited cash Payment Entries into one Contra
+    Journal Entry (Dr Bank / Cr Cash-in-Hand) and flag them as deposited.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking", write=True)
+
+    if isinstance(payment_entries, str):
+        payment_entries = json.loads(payment_entries)
+    if not payment_entries:
+        frappe.throw("Select at least one cash entry to deposit.")
+    if not bank_account:
+        frappe.throw("Select a Bank account to deposit into.")
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    deposit_date = deposit_date or nowdate()
+    company = company or frappe.db.get_default("company")
+
+    bank_company = frappe.db.get_value("Account", bank_account, "company")
+    if not bank_company:
+        frappe.throw(f"Bank account '{bank_account}' not found.")
+    company = bank_company  # canonical company, same pattern as record_payment
+
+    validate_fiscal_year(deposit_date, company)
+
+    # Re-fetch + lock down the selected entries server-side — never trust the
+    # amounts/eligibility sent from the client.
+    placeholders = ", ".join(["%s"] * len(payment_entries))
+    rows = frappe.db.sql(
+        f"""SELECT name, paid_amount, paid_to, docstatus, custom_deposited_to_bank
+            FROM `tabPayment Entry` WHERE name IN ({placeholders})""",
+        tuple(payment_entries), as_dict=True
+    )
+    found_names = {r["name"] for r in rows}
+    missing = set(payment_entries) - found_names
+    if missing:
+        frappe.throw(f"Payment Entries not found: {', '.join(missing)}")
+
+    cash_account = None
+    for r in rows:
+        if r["docstatus"] != 1:
+            frappe.throw(f"{r['name']} is not submitted and cannot be deposited.")
+        if int(r["custom_deposited_to_bank"] or 0) == 1:
+            frappe.throw(f"{r['name']} has already been deposited.")
+        acct_type = frappe.db.get_value("Account", r["paid_to"], "account_type")
+        if acct_type != "Cash":
+            frappe.throw(f"{r['name']} is not a Cash receipt and cannot go through a bank deposit.")
+        if cash_account and cash_account != r["paid_to"]:
+            frappe.throw("Selected entries span more than one Cash account. Deposit each Cash account separately.")
+        cash_account = r["paid_to"]
+
+    total_amount = sum(flt(r["paid_amount"]) for r in rows)
+    if total_amount <= 0:
+        frappe.throw("Total deposit amount must be greater than 0.")
+
+    je = frappe.new_doc("Journal Entry")
+    je.naming_series = "JV-.YYYY.-"
+    je.voucher_type  = "Contra Entry"
+    je.company       = company
+    je.posting_date  = deposit_date
+    je.remark        = notes or f"Cash deposited to bank ({len(rows)} entr{'y' if len(rows)==1 else 'ies'}): " + ", ".join(sorted(found_names))
+    je.append("accounts", {"account": bank_account, "debit": total_amount, "credit": 0})
+    je.append("accounts", {"account": cash_account, "debit": 0, "credit": total_amount})
+    je.insert(ignore_permissions=True)
+    je.flags.ignore_permissions = True
+    je.submit()
+
+    # Flag each Payment Entry as deposited, linked to this Journal Entry, so
+    # it can never be selected into a second deposit.
+    for r in rows:
+        frappe.db.set_value("Payment Entry", r["name"], {
+            "custom_deposited_to_bank": 1,
+            "custom_deposit_journal": je.name,
+        }, update_modified=False)
+
+    frappe.db.commit()
+
+    return {
+        "journal_entry": je.name,
+        "bank_account": bank_account,
+        "cash_account": cash_account,
+        "amount": total_amount,
+        "deposited": sorted(found_names),
+    }
+
 # ─── AI Assistant — Books AI with live DB queries (Tiers 1-3) ────────────────
 
 def _ai_parse_period(period):

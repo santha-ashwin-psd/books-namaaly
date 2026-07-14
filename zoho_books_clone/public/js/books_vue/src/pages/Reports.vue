@@ -33,6 +33,11 @@
         @click="exportAgingCSV">
         Export CSV
       </button>
+      <button v-if="activeReport === 'items' && itemSales.length"
+        class="books-btn" style="background:#EBFBEE;color:#2F9E44;border:1px solid #8CE99A"
+        @click="exportItemSalesCSV">
+        Export CSV
+      </button>
     </div>
 
     <!-- P&L -->
@@ -319,6 +324,53 @@
       <div v-else class="empty-msg">{{apRan ? 'No outstanding payables as of this date.' : 'Run the report to see results.'}}</div>
     </div>
 
+    <!-- Item-wise Sales -->
+    <div v-if="activeReport === 'items'" class="books-card report-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="books-card-title" style="margin:0">Item-wise Sales</div>
+        <div v-if="itemSales.length" style="font-size:12.5px;color:#868E96">
+          Total: <span style="font-weight:700;color:#2F9E44">₹{{fmtN(itemSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
+        </div>
+      </div>
+      <template v-if="itemsLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
+      <template v-else-if="itemSales.length">
+        <table class="books-table aging-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>UOM</th>
+              <th class="ta-r">Invoices</th>
+              <th class="ta-r">Qty Sold</th>
+              <th class="ta-r">Avg Rate</th>
+              <th class="ta-r">Discount</th>
+              <th class="ta-r">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in itemSales" :key="row.item_code">
+              <td>{{ row.item_name || row.item_code }}</td>
+              <td>{{ row.uom || '—' }}</td>
+              <td class="ta-r mono-sm">{{ row.invoice_count }}</td>
+              <td class="ta-r mono-sm">{{ fmtN(row.qty_sold) }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.avg_rate) }}</td>
+              <td class="ta-r mono-sm red">{{ row.total_discount ? fmtAmt(row.total_discount) : '—' }}</td>
+              <td class="ta-r mono-sm fw-700 green">{{ fmtAmt(row.total_amount) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="aging-totals-row">
+              <td colspan="3" class="fw-700">TOTAL</td>
+              <td class="ta-r fw-700">{{ fmtN(itemSales.reduce((s,r)=>s+Number(r.qty_sold||0),0)) }}</td>
+              <td></td>
+              <td class="ta-r fw-700 red">{{ fmtAmt(itemSales.reduce((s,r)=>s+Number(r.total_discount||0),0)) }}</td>
+              <td class="ta-r fw-700 green">{{ fmtAmt(itemSales.reduce((s,r)=>s+Number(r.total_amount||0),0)) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </template>
+      <div v-else class="empty-msg">{{itemsRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
+    </div>
+
     <!-- Trial Balance -->
     <div v-if="activeReport === 'tb'" class="books-card report-card">
       <div class="books-card-title">Trial Balance</div>
@@ -385,6 +437,10 @@ const apLoading = ref(false);
 const arRan = ref(false);
 const apRan = ref(false);
 
+const itemSales   = ref([]);
+const itemsLoading = ref(false);
+const itemsRan     = ref(false);
+
 const bsBalanced = computed(() => {
   if (!bs.value) return false;
   const a = Number(bs.value.total_assets) || 0;
@@ -420,6 +476,27 @@ async function runReport() {
     catch { apAging.value = []; }
     apLoading.value = false;
   }
+  if (activeReport.value === "items") {
+    itemsLoading.value = true; itemsRan.value = true;
+    try { itemSales.value = await apiGET("zoho_books_clone.db.queries.get_item_wise_sales", args) || []; }
+    catch { itemSales.value = []; }
+    itemsLoading.value = false;
+  }
+}
+
+function exportItemSalesCSV() {
+  const header = ["Item","UOM","Invoices","Qty Sold","Avg Rate","Discount","Total Amount"].join(",");
+  const lines = itemSales.value.map(r =>
+    [r.item_name || r.item_code, r.uom || "", r.invoice_count, r.qty_sold, r.avg_rate, r.total_discount || 0, r.total_amount].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "item_wise_sales_" + fromDate.value + "_to_" + toDate.value + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportAgingCSV() {
@@ -447,6 +524,7 @@ const reports = [
   { key: "bs",  label: "Balance Sheet",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="8" y1="3" x2="8" y2="21"/></svg>` },
   { key: "cf",  label: "Cash Flow",      icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>` },
   { key: "gst", label: "GST Summary",    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
+  { key: "items", label: "Item-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>` },
   { key: "ar",  label: "AR Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
   { key: "ap",  label: "AP Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>` },
   { key: "tb",  label: "Trial Balance",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },

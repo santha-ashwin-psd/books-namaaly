@@ -4124,7 +4124,15 @@ def get_bank_reconciliation(bank_account, from_date, to_date):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def reconcile_bank_transaction(bank_transaction_name, payment_entry_name=None):
-    """Mark a Bank Transaction as reconciled, optionally linking a Payment Entry."""
+    """Mark a Bank Transaction as reconciled, optionally linking a Payment Entry.
+
+    When linked to a Payment Entry, the Bank Transaction's own GL posting is
+    suspended — the Payment Entry already recorded the real accounting impact
+    of this cash movement, so keeping both live double-counts it on the
+    Bank/Cash ledger. The Bank Transaction becomes a reconciliation record
+    confirming the bank feed agrees with the Payment Entry, not a second
+    independent posting.
+    """
     from zoho_books_clone.utils.access import require_module
     require_module("banking", write=True)
     if frappe.session.user == "Guest":
@@ -4134,6 +4142,14 @@ def reconcile_bank_transaction(bank_transaction_name, payment_entry_name=None):
         updates["payment_entry"] = payment_entry_name
     for k, v in updates.items():
         frappe.db.set_value("Bank Transaction", bank_transaction_name, k, v, update_modified=True)
+
+    linked_payment = payment_entry_name or frappe.db.get_value(
+        "Bank Transaction", bank_transaction_name, "payment_entry"
+    )
+    if linked_payment:
+        from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import set_voucher_gl_suspended
+        set_voucher_gl_suspended("Bank Transaction", bank_transaction_name, True)
+
     frappe.db.commit()
     return {"bank_transaction": bank_transaction_name, "status": "Reconciled",
             "payment_entry": payment_entry_name}
@@ -4143,10 +4159,19 @@ def reconcile_bank_transaction(bank_transaction_name, payment_entry_name=None):
 def unreconcile_bank_transaction(bank_transaction_name):
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+    had_payment_entry = frappe.db.get_value("Bank Transaction", bank_transaction_name, "payment_entry")
     frappe.db.set_value("Bank Transaction", bank_transaction_name, "status",
                         "Unreconciled", update_modified=True)
     frappe.db.set_value("Bank Transaction", bank_transaction_name, "payment_entry",
                         None, update_modified=True)
+
+    # If matching a Payment Entry had suspended this transaction's own GL
+    # posting, restore it now that the two are no longer linked — otherwise
+    # this cash movement would vanish from the ledger entirely.
+    if had_payment_entry:
+        from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import set_voucher_gl_suspended
+        set_voucher_gl_suspended("Bank Transaction", bank_transaction_name, False)
+
     frappe.db.commit()
     return {"bank_transaction": bank_transaction_name, "status": "Unreconciled"}
 

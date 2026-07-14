@@ -114,6 +114,7 @@ export async function apiGET(method, params) {
     method: "GET",
     credentials: "same-origin",
     headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   let json;
   try { json = await r.json(); }
@@ -250,6 +251,10 @@ export async function apiList(dt, opts = {}) {
   const filters = [...(opts.filters || [])];
   const co = window.__booksCompany || "";
 
+  if ((_CO_SCOPED.has(dt) || _BOOKS_CO_SCOPED.has(dt))) {
+    console.log("[BooksCompany][client.js] apiList(", dt, ") using window.__booksCompany =", co);
+  }
+
   if (co && _CO_SCOPED.has(dt)) {
     if (!filters.some(f => Array.isArray(f) && f[0] === "company"))
       filters.push(["company", "=", co]);
@@ -301,7 +306,10 @@ export async function apiCall(method, args = {}) {
 
 // Resolves the current company. Mirrors books.js:258-271.
 export async function resolveCompany() {
-  if (window.__booksCompany) return window.__booksCompany;
+  if (window.__booksCompany) {
+    console.log("[BooksCompany][client.js] resolveCompany() returning CACHED value:", window.__booksCompany);
+    return window.__booksCompany;
+  }
   try {
     const r = await apiGET("frappe.client.get_value", {
       doctype:   "Books Settings",
@@ -309,8 +317,26 @@ export async function resolveCompany() {
       fieldname: JSON.stringify(["default_company"]),
     });
     const c = r?.default_company || "";
+    console.log("[BooksCompany][client.js] resolveCompany() FETCHED from server (Books Settings.default_company):", c);
     window.__booksCompany = c;
     if (window.frappe?.boot?.sysdefaults) window.frappe.boot.sysdefaults.company = c;
     return c;
-  } catch { return window.__booksCompany || ""; }
+  } catch (e) {
+    console.log("[BooksCompany][client.js] resolveCompany() FAILED, falling back to cached value:", window.__booksCompany, e);
+    return window.__booksCompany || "";
+  }
+}
+
+// Explicitly updates the cached company (window.__booksCompany + sysdefaults)
+// without a round-trip to the server. Call this the moment the app knows the
+// company name has changed (e.g. right after a rename succeeds) so every
+// subsequent apiList/resolveCompany call in this session picks up the new
+// name immediately instead of waiting on a page reload.
+export function setBooksCompany(name) {
+  const c = name || "";
+  console.log("[BooksCompany][client.js] setBooksCompany() called with", name, "| previous value was", window.__booksCompany);
+  window.__booksCompany = c;
+  if (window.frappe?.boot?.sysdefaults) window.frappe.boot.sysdefaults.company = c;
+  console.log("[BooksCompany][client.js] window.__booksCompany is now", window.__booksCompany);
+  return c;
 }

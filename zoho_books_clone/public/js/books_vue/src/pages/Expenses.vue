@@ -35,7 +35,6 @@
             <th @click="sort('name')" class="sortable">Expense # <span v-html="sortArrow('name')"></span></th>
             <th @click="sort('expense_type')" class="sortable">Category <span v-html="sortArrow('expense_type')"></span></th>
             <th @click="sort('posting_date')" class="sortable">Date <span v-html="sortArrow('posting_date')"></span></th>
-            <th @click="sort('employee_name')" class="sortable">Employee <span v-html="sortArrow('employee_name')"></span></th>
             <th>Status</th>
             <th @click="sort('total_claimed_amount')" class="sortable ta-r">Amount <span v-html="sortArrow('total_claimed_amount')"></span></th>
             <th style="width:50px"></th>
@@ -43,7 +42,7 @@
         </thead>
         <tbody>
           <template v-if="loading">
-            <tr v-for="n in 8" :key="n"><td colspan="8"><div class="shimmer"></div></td></tr>
+            <tr v-for="n in 8" :key="n"><td colspan="7"><div class="shimmer"></div></td></tr>
           </template>
           <template v-else>
             <tr v-for="e in paged" :key="e.name" class="inv-row" :class="{selected:selected.has(e.name)}">
@@ -51,7 +50,6 @@
               <td @click="openView(e)"><span class="inv-link">{{ e.name }}</span></td>
               <td @click="openView(e)">{{ e.expense_type||'—' }}</td>
               <td @click="openView(e)">{{ fmtDate(e.posting_date) }}</td>
-              <td @click="openView(e)">{{ e.employee_name||e.employee||'—' }}</td>
               <td @click="openView(e)"><span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
               <td @click="openView(e)" class="ta-r mono-sm">{{ fmtCur(e.total_claimed_amount||e.grand_total) }}</td>
               <td style="display:flex;gap:4px;justify-content:flex-end">
@@ -59,7 +57,7 @@
                 <button v-if="e.docstatus===0" class="inv-act-btn" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
               </td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="8" class="exp-empty">No expenses found</td></tr>
+            <tr v-if="!sorted.length"><td colspan="7" class="exp-empty">No expenses found</td></tr>
           </template>
         </tbody>
       </table>
@@ -88,7 +86,6 @@
               <span>{{ fmtDate(e.posting_date) }}</span>
               <span class="exp-mc-amount">{{ fmtCur(e.total_claimed_amount || e.grand_total) }}</span>
             </div>
-            <div v-if="e.employee_name || e.employee" class="exp-mc-sub">{{ e.employee_name || e.employee }}</div>
             <div class="exp-mc-footer">
               <button class="exp-mc-btn" @click.stop="openView(e)">View</button>
               <button v-if="e.docstatus===0" class="exp-mc-btn" @click.stop="openEdit(e)">Edit</button>
@@ -134,13 +131,6 @@
           </div>
           <div class="add-card-body" :class="{collapsed:expCollapsed.basic}">
             <div class="inv-fg inv-fg2">
-              <div style="grid-column:1/-1">
-                <label class="inv-lbl">Vendor / Supplier <span class="inv-req">*</span></label>
-                <SearchableSelect v-model="form.employee_name" :options="vendorOptions"
-                  placeholder="Search supplier…" @search="fetchVendors" @open="fetchVendors('')"
-                  :createable="true" createDoctype="Supplier"
-                  @select="opt => { form.employee_name = opt?.value ?? opt; fetchVendors(''); }" />
-              </div>
               <div>
                 <label class="inv-lbl">Expense Date <span class="inv-req">*</span></label>
                 <input v-model="form.posting_date" type="date" class="inv-fi" />
@@ -263,7 +253,7 @@
             <div class="exp-view-head-icon"><span v-html="icon('indianrupee',18)"></span></div>
             <div>
               <div class="exp-view-num">{{ viewDoc.name }}</div>
-              <div class="exp-view-sub">{{ viewDoc.expense_type||'Expense' }} · {{ viewDoc.employee_name||viewDoc.vendor||'—' }}</div>
+              <div class="exp-view-sub">{{ viewDoc.expense_type||'Expense' }}</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
@@ -287,10 +277,6 @@
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">Date</span>
                 <span class="ew-kv-val mono-sm">{{ fmtDate(viewDoc.posting_date) }}</span>
-              </div>
-              <div class="ew-kv-row">
-                <span class="ew-kv-lbl">Vendor / Supplier</span>
-                <span class="ew-kv-val" style="font-weight:600;color:#111827">{{ viewDoc.employee_name||viewDoc.vendor||'—' }}</span>
               </div>
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">Category</span>
@@ -379,18 +365,9 @@ const receiptFile=ref(null);
 function onReceiptChange(e){const f=e.target.files[0];if(f)receiptFile.value=f;e.target.value="";}
 const sortCol=ref("posting_date"),sortDir=ref("desc");
 let _id=1;
-const vendorOptions          = ref([]);
 const expenseAccountOptions  = ref([]);
 const paidThroughOptions     = ref([]);
 
-async function fetchVendors(q = "") {
-  try {
-    const filters = [["disabled", "=", 0]];
-    if (q) filters.push(["supplier_name", "like", `%${q}%`]);
-    const rows = await apiList("Supplier", { fields: ["name", "supplier_name"], filters, limit: 30, order: "supplier_name asc" });
-    vendorOptions.value = rows.map(r => ({ label: r.supplier_name || r.name, value: r.name }));
-  } catch { vendorOptions.value = []; }
-}
 async function fetchExpenseAccounts(q = "") {
   try {
     const company = await resolveCompany();
@@ -409,7 +386,7 @@ async function fetchPaidThroughAccounts(q = "") {
     paidThroughOptions.value = rows.map(r => ({ label: r.name, value: r.name }));
   } catch { paidThroughOptions.value = []; }
 }
-const form=reactive({posting_date:new Date().toISOString().slice(0,10),employee_name:"",expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
+const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
 const costCenters=ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
 
@@ -419,7 +396,7 @@ async function load(){
     const co=await resolveCompany();
     const raw=await apiList("Expense",{
       fields:["name","posting_date","expense_type","description","amount","tax_amount",
-              "total_amount","vendor","status","docstatus","expense_account","paid_through","attach","notes"],
+              "total_amount","status","docstatus","expense_account","paid_through","attach","notes"],
       filters:[["company","=",co]],
       limit:200,
       order: "posting_date desc, creation desc",
@@ -427,17 +404,8 @@ async function load(){
     // Map to legacy shape so the rest of the template doesn't need to change.
     list.value=raw.map(e=>({
       ...e,
-      // template uses these field names — provide compatibility aliases:
-      employee_name: e.vendor||"",   // resolved below
       total_claimed_amount: e.total_amount||e.amount||0,
     }));
-    // Resolve vendor display names client-side (Expense doctype has no vendor_name column)
-    const missingVendors = [...new Set(list.value.filter(e => e.employee_name && !e._vendor_name).map(e => e.employee_name))];
-    if (missingVendors.length) {
-      const sups = await apiList("Supplier", { fields: ["name","supplier_name"], filters: [["name","in",missingVendors]], limit: missingVendors.length }).catch(()=>[]);
-      const nameMap = Object.fromEntries(sups.map(s => [s.name, s.supplier_name || s.name]));
-      list.value = list.value.map(e => ({ ...e, employee_name: nameMap[e.employee_name] || e.employee_name }));
-    }
   }catch(e){toast.error(e.message||"Failed to load expenses");}
   finally{loading.value=false;}
 }
@@ -461,7 +429,7 @@ const expTrends = computed(()=>({
   draft:     _exTr(list.value.filter(e=>e.docstatus===0).length, list.value.filter(e=>(e.posting_date||'').startsWith(_exLYM())&&e.docstatus===0).length),
 }));
 function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
-const filtered=computed(()=>{let r=list.value;if(activeTab.value==="draft")r=r.filter(e=>e.docstatus===0);if(activeTab.value==="submitted")r=r.filter(e=>e.docstatus===1);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(x=>(x.name||"").toLowerCase().includes(q)||(x.employee_name||"").toLowerCase().includes(q)||(x.expense_type||"").toLowerCase().includes(q));}return r;});
+const filtered=computed(()=>{let r=list.value;if(activeTab.value==="draft")r=r.filter(e=>e.docstatus===0);if(activeTab.value==="submitted")r=r.filter(e=>e.docstatus===1);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(x=>(x.name||"").toLowerCase().includes(q)||(x.expense_type||"").toLowerCase().includes(q));}return r;});
 const sorted=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "expenses" });
 function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"desc":"asc";else{sortCol.value=col;sortDir.value="asc";}}
@@ -469,18 +437,17 @@ function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db
 const allChecked=computed(()=>sorted.value.length>0&&sorted.value.every(e=>selected.value.has(e.name)));
 function toggle(n){const s=new Set(selected.value);s.has(n)?s.delete(n):s.add(n);selected.value=s;}
 function toggleAll(e){selected.value=e.target.checked?new Set(sorted.value.map(x=>x.name)):new Set();}
-function openNew(){editingName.value="";receiptFile.value=null;Object.assign(form,{posting_date:new Date().toISOString().slice(0,10),employee_name:"",expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});Object.assign(expCollapsed,{basic:false,payment:false,notes:true});drawerOpen.value=true;}
+function openNew(){editingName.value="";receiptFile.value=null;Object.assign(form,{posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});Object.assign(expCollapsed,{basic:false,payment:false,notes:true});drawerOpen.value=true;}
 async function openEdit(e){
   editingName.value=e.name;
   receiptFile.value=null;
   // Reset to blanks first so a failed/partial fetch below can never leave
   // stale account/cost-center values from a previously edited expense.
-  Object.assign(form,{posting_date:"",employee_name:"",expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
+  Object.assign(form,{posting_date:"",expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
   try{
     const doc=await apiGet("Expense",e.name);
     Object.assign(form,{
       posting_date: doc.posting_date||"",
-      employee_name: doc.vendor||"",   // template uses "Employee Name" label, we map it to vendor
       expense_account: doc.expense_account||"",
       paid_through:    doc.paid_through||"",
       cost_center:     doc.cost_center||"",
@@ -499,7 +466,6 @@ async function openEdit(e){
     // tell the user so they can re-check before saving.
     Object.assign(form,{
       posting_date:e.posting_date||"",
-      employee_name:e.vendor||e.employee_name||"",
       expense_type:e.expense_type||"",
       total_claimed_amount:flt(e.amount ?? e.total_amount ?? e.total_claimed_amount),
       currency:"INR",
@@ -518,12 +484,11 @@ async function openView(e) {
   // Fetch full doc to get expense_account, paid_through, attach, notes
   try {
     const full = await apiGet("Expense", e.name);
-    if (full) viewDoc.value = { ...e, ...full, employee_name: e.employee_name || full.vendor || "" };
+    if (full) viewDoc.value = { ...e, ...full };
   } catch {}
 }
 
 async function saveExpense(submit){
-  if(!form.employee_name)             return toast.error("Vendor / Supplier is required");
   if(!flt(form.total_claimed_amount)) return toast.error("Enter an amount");
   if(flt(form.total_claimed_amount) > 999999999.99) return toast.error("Amount cannot exceed ₹99,99,99,999.99");
   if(!form.expense_type)              return toast.error("Category is required");
@@ -544,7 +509,6 @@ async function saveExpense(submit){
       amount:amt,
       tax_amount:0,
       total_amount:amt,
-      vendor:form.employee_name||"",
       expense_account: form.expense_account,
       paid_through:    form.paid_through,
       cost_center:     form.cost_center||"",
@@ -607,7 +571,7 @@ async function uploadAttachment(file, doctype, docname) {
   const data = await res.json();
   return data?.message?.file_url || data?.file_url || null;
 }
-onMounted(() => { load(); fetchVendors(""); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); });
+onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); });
 </script>
 
 <style scoped>

@@ -45,10 +45,11 @@
           <th @click="sort('party')" class="sortable">Party <span v-html="sortArrow('party')"></span></th>
           <th @click="sort('payment_date')" class="sortable">Date <span v-html="sortArrow('payment_date')"></span></th>
           <th>Type</th>
+          <th>Status</th>
           <th @click="sort('paid_amount')" class="sortable ta-r">Amount <span v-html="sortArrow('paid_amount')"></span></th>
         </tr></thead>
         <tbody>
-          <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="6"><div class="cash-shimmer"></div></td></tr></template>
+          <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="7"><div class="cash-shimmer"></div></td></tr></template>
           <template v-else>
             <tr v-for="p in paged" :key="p.name" class="cash-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
@@ -56,9 +57,10 @@
               <td>{{ p.party_name||p.party||'—' }}</td>
               <td class="mono-sm text-muted">{{ fmtDate(p.payment_date) }}</td>
               <td><span class="cash-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Cash In':'Cash Out' }}</span></td>
+              <td><span v-if="p.payment_type==='Receive'" class="cash-badge" :class="p.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ p.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span><span v-else class="text-muted">—</span></td>
               <td class="ta-r mono-sm">{{ fmtCur(p.paid_amount) }}</td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="6" class="cash-empty">{{ list.length ? 'No entries match this filter' : 'No cash entries found' }}</td></tr>
+            <tr v-if="!sorted.length"><td colspan="7" class="cash-empty">{{ list.length ? 'No entries match this filter' : 'No cash entries found' }}</td></tr>
           </template>
         </tbody>
       </table>
@@ -85,6 +87,7 @@
             <div class="cash-mc-mid">{{ p.party_name || p.party || '—' }}</div>
             <div class="cash-mc-meta">
               <span>{{ fmtDate(p.payment_date) }}</span>
+              <span v-if="p.payment_type==='Receive'" class="cash-badge" :class="p.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ p.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span>
               <span class="cash-mc-amount" :class="p.payment_type==='Receive'?'cash-mc-pos':'cash-mc-neg'">{{ fmtCur(p.paid_amount) }}</span>
             </div>
           </div>
@@ -144,6 +147,86 @@
       </div>
     </div>
 
+    <!-- Deposit to Bank Drawer -->
+    <div v-if="depositOpen" class="cash-overlay" @click.self="!depositSaving && (depositOpen=false)"></div>
+    <div class="cash-drawer" :class="{open:depositOpen}">
+      <div class="cash-dheader">
+        <button class="cash-dclose cash-dclose-abs" @click="!depositSaving && (depositOpen=false)"><span v-html="icon('x',16)"></span></button>
+        <div class="cash-dh-top">
+          <div class="cash-dh-ico"><span v-html="icon('bank',20)"></span></div>
+          <div>
+            <div class="cash-dh-title">Deposit to Bank</div>
+            <div class="cash-dh-sub">{{ singleDeposit ? `Move ${singleDeposit.name} into a bank account` : 'Move undeposited cash receipts into a bank account' }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="cash-dbody">
+        <div v-if="depositLoading" class="cash-empty" style="padding:32px 0">Loading undeposited cash…</div>
+        <template v-else>
+          <div v-if="!undeposited.length" class="cash-empty" style="padding:32px 0">
+            {{ singleDeposit ? 'This entry has already been deposited.' : 'No undeposited cash receipts. Every Cash-In receipt has already been deposited to the bank.' }}
+          </div>
+          <template v-else>
+            <div class="cash-field">
+              <label class="cash-label">Deposit To (Bank) <span class="req">*</span></label>
+              <select v-model="depositForm.bank_account" class="cash-input">
+                <option value="">— Select bank account —</option>
+                <option v-for="b in depositBankAccounts" :key="b" :value="b">{{ b }}</option>
+              </select>
+              <div v-if="!depositBankAccounts.length" class="pmd-warn" style="margin-top:4px">
+                No Bank account found — set one up under Accounts first.
+              </div>
+            </div>
+            <div class="cash-field">
+              <label class="cash-label">Deposit Date <span class="req">*</span></label>
+              <input v-model="depositForm.date" type="date" class="cash-input" />
+            </div>
+
+            <div class="cash-section-hdr" style="margin-top:8px">
+              <span v-html="icon('cash',13)"></span> {{ singleDeposit ? 'Cash Receipt' : 'Undeposited Cash Receipts' }}
+              <span v-if="!singleDeposit" class="cash-dep-count">{{ depositSelected.size }} of {{ undeposited.length }} selected</span>
+            </div>
+            <div class="cash-dep-list">
+              <label v-if="!singleDeposit" class="cash-dep-row cash-dep-row--hdr">
+                <input type="checkbox" ref="selectAllRef" :checked="depositAllSelected" @change="toggleDepositSelectAll" />
+                <span class="cash-dep-col-main">Select all</span>
+                <span class="cash-dep-col-amt">Amount</span>
+              </label>
+              <label v-for="e in undeposited" :key="e.name" class="cash-dep-row" :class="{selected: depositSelected.has(e.name)}">
+                <input type="checkbox" :checked="depositSelected.has(e.name)" :disabled="!!singleDeposit" @change="toggleDepositSelect(e.name)" />
+                <span class="cash-dep-col-main">
+                  <span class="cash-num">{{ e.name }}</span>
+                  <span class="cash-dep-sub">{{ e.party_name || e.party || '—' }} · {{ fmtDate(e.payment_date) }}</span>
+                </span>
+                <span class="cash-dep-col-amt mono-sm">{{ fmtCur(e.paid_amount) }}</span>
+              </label>
+            </div>
+
+            <div class="cash-dep-total" :class="{'cash-dep-total--empty': !depositSelected.size}">
+              <span>Selected for deposit</span>
+              <strong>{{ fmtCur(depositSelectedTotal) }}</strong>
+            </div>
+
+            <div class="cash-field">
+              <label class="cash-label">Notes</label>
+              <textarea v-model="depositForm.notes" rows="2" class="cash-input" placeholder="Optional — deposit slip #, branch, etc."></textarea>
+            </div>
+          </template>
+        </template>
+      </div>
+      <div class="cash-dfooter">
+        <button class="cash-btn-ghost" :disabled="depositSaving" @click="depositOpen=false">Cancel</button>
+        <button
+          class="cash-btn-primary"
+          :disabled="depositSaving || !depositSelected.size || !depositForm.bank_account || !depositForm.date"
+          @click="saveDeposit"
+        >
+          <span v-html="icon('check',13)"></span>
+          {{ depositSaving ? "Depositing…" : `Deposit ${fmtCur(depositSelectedTotal)}` }}
+        </button>
+      </div>
+    </div>
+
     <!-- View Drawer -->
     <div v-if="viewOpen" class="cash-overlay" @click.self="viewOpen=false"></div>
     <div class="cash-drawer cash-view-drawer" :class="{open:viewOpen}">
@@ -169,6 +252,7 @@
             <div><div class="cash-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.payment_date) }}</div></div>
             <div><div class="cash-meta-lbl">{{ viewDoc.payment_type==='Receive'?'Customer':'Vendor/Employee' }}</div><div>{{ viewDoc.party_name||viewDoc.party||'—' }}</div></div>
             <div><div class="cash-meta-lbl">Type</div><div>{{ viewDoc.payment_type==='Receive'?'Cash In':'Cash Out' }}</div></div>
+            <div v-if="viewDoc.payment_type==='Receive' && viewDoc._dt==='Payment Entry'"><div class="cash-meta-lbl">Status</div><div><span class="cash-badge" :class="viewDoc.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ viewDoc.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span></div></div>
             <div><div class="cash-meta-lbl">Mode</div><div>Cash</div></div>
             <div v-if="viewDoc.payment_type==='Receive'"><div class="cash-meta-lbl">Purpose</div><div>{{ viewDoc.custom_purpose||'—' }}</div></div>
             <div v-else><div class="cash-meta-lbl">Expense Category</div><div>{{ viewDoc.custom_expense_category||'—' }}</div></div>
@@ -180,6 +264,13 @@
         </div>
         <div class="cash-dfooter">
           <button class="cash-btn-danger-ghost" @click="deleteEntry(viewDoc)" :disabled="actionBusy"><span v-html="icon('trash',13)"></span> Delete</button>
+          <button
+            v-if="viewDoc.payment_type==='Receive' && viewDoc._dt==='Payment Entry' && !viewDoc.custom_deposited_to_bank"
+            class="cash-btn-ghost"
+            :disabled="!$canWrite('banking')"
+            :title="!$canWrite('banking') ? 'Read-only access' : ''"
+            @click="openDeposit(viewDoc)"
+          ><span v-html="icon('bank',13)"></span> Deposit to Bank</button>
           <div style="margin-left:auto"><button class="cash-btn-ghost" @click="viewOpen=false">Close</button></div>
         </div>
       </template>
@@ -188,7 +279,7 @@
 </template>
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
-import { apiList, apiSave, apiSubmit, apiCancel, apiDelete, resolveCompany } from "../api/client.js";
+import { apiList, apiSave, apiSubmit, apiCancel, apiDelete, resolveCompany, apiGET, apiPOST } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
@@ -199,13 +290,18 @@ import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 const { toast } = useToast();
 const { confirm } = useConfirm();
-const cashAccount=ref(""),receivableAccount=ref(""),payableAccount=ref(""),companyCurrency=ref("INR");
-async function loadAccounts(){try{const co=await resolveCompany();const[cashAcc,recvAcc,payAcc,comp]=await Promise.all([apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Cash"],["is_group","=",0]],limit:1}),apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Receivable"],["is_group","=",0]],limit:1}),apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Payable"],["is_group","=",0]],limit:1}),apiList("Books Company",{fields:["currency"],filters:[["name","=",co]],limit:1})]);cashAccount.value=cashAcc[0]?.name||"";receivableAccount.value=recvAcc[0]?.name||"";payableAccount.value=payAcc[0]?.name||"";companyCurrency.value=comp[0]?.currency||"INR";}catch(e){console.error("Failed to load accounts",e);}}
+const cashAccount=ref(""),cashAccounts=ref([]),receivableAccount=ref(""),payableAccount=ref(""),companyCurrency=ref("INR");
+async function loadAccounts(){try{const co=await resolveCompany();const[cashAccs,recvAcc,payAcc,comp]=await Promise.all([apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Cash"],["is_group","=",0]]}),apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Receivable"],["is_group","=",0]],limit:1}),apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Payable"],["is_group","=",0]],limit:1}),apiList("Books Company",{fields:["currency"],filters:[["name","=",co]],limit:1})]);cashAccounts.value=cashAccs.map(a=>a.name);cashAccount.value=cashAccounts.value[0]||"";receivableAccount.value=recvAcc[0]?.name||"";payableAccount.value=payAcc[0]?.name||"";companyCurrency.value=comp[0]?.currency||"INR";}catch(e){console.error("Failed to load accounts",e);}}
 const activeTab=ref("all");
 const tabs=[{key:"all",label:"All"},{key:"Receive",label:"Cash In"},{key:"Pay",label:"Cash Out"}];
 const list=ref([]),loading=ref(false),search=ref("");
 const drawerOpen=ref(false),drawerSaving=ref(false),actionBusy=ref(false),bulkBusy=ref(false);
 const viewOpen=ref(false),viewDoc=ref(null);
+const depositOpen=ref(false),depositLoading=ref(false),depositSaving=ref(false);
+const undeposited=ref([]),depositBankAccounts=ref([]),depositSelected=ref(new Set());
+const singleDeposit=ref(null);
+const depositForm=reactive({bank_account:"",date:new Date().toISOString().slice(0,10),notes:""});
+const undepositedCount=ref(0);
 const selected=ref(new Set());
 const partyOptions=ref([]);
 const expenseCategoryOptions=ref([]);
@@ -221,7 +317,39 @@ async function fetchExpenseCategories(q=""){
 }
 const sortCol=ref("payment_date"),sortDir=ref("desc");
 const form=reactive({payment_type:"Receive",payment_date:new Date().toISOString().slice(0,10),paid_amount:0,party:"",custom_purpose:"",custom_expense_category:"",remarks:""});
-async function load(){loading.value=true;try{const co=await resolveCompany();list.value=await apiList("Payment Entry",{fields:["name","party","party_name","payment_type","payment_date","paid_amount","remarks","custom_purpose","custom_expense_category","docstatus"],filters:[["company","=",co],["mode_of_payment","=","Cash"],["docstatus","=",1]],limit:200,order: "payment_date desc, creation desc"});selected.value=new Set();}catch(e){toast.error(e.message||"Failed to load cash entries");}finally{loading.value=false;}}
+async function load(){
+  loading.value=true;
+  try{
+    const co=await resolveCompany();
+    // Resolve Cash accounts inline (not via mode_of_payment label) so this
+    // list always matches the same source of truth as get_undeposited_cash:
+    // the actual GL account money is sitting in, not a free-text mode field
+    // that can drift out of sync with where the entry really posted.
+    const cashAccs = cashAccounts.value.length ? cashAccounts.value
+      : (await apiList("Account",{fields:["name"],filters:[["company","=",co],["account_type","=","Cash"],["is_group","=",0]]})).map(a=>a.name);
+    if(!cashAccs.length){ list.value=[]; selected.value=new Set(); return; }
+    const [cashIn, cashOutPE, cashOut] = await Promise.all([
+      // Cash In: real Payment Entries (Dr Cash / Cr Accounts Receivable).
+      apiList("Payment Entry",{fields:["name","party","party_name","payment_type","payment_date","paid_amount","remarks","custom_purpose","custom_expense_category","docstatus","custom_deposited_to_bank"],filters:[["company","=",co],["paid_to","in",cashAccs],["payment_type","=","Receive"],["docstatus","=",1]],limit:200,order:"payment_date desc, creation desc"}),
+      // Cash Out: real Payment Entries (Dr Payable / Cr Cash) — bill payments made in cash.
+      apiList("Payment Entry",{fields:["name","party","party_name","payment_type","payment_date","paid_amount","remarks","custom_purpose","custom_expense_category","docstatus"],filters:[["company","=",co],["paid_from","in",cashAccs],["payment_type","=","Pay"],["docstatus","=",1]],limit:200,order:"payment_date desc, creation desc"}),
+      // Cash Out: Journal Entries (Dr Expense / Cr Cash-in-Hand) tagged by this page — cash expenses with no vendor bill.
+      apiList("Journal Entry",{fields:["name","posting_date","total_debit","remark","custom_expense_category","custom_party","custom_party_name","docstatus"],filters:[["company","=",co],["custom_cash_out_entry","=",1],["docstatus","=",1]],limit:200,order:"posting_date desc, creation desc"}),
+    ]);
+    const normalizedOut = cashOut.map(j=>({
+      name:j.name, _dt:"Journal Entry",
+      party:j.custom_party||"", party_name:j.custom_party_name||j.custom_party||"",
+      payment_type:"Pay", payment_date:j.posting_date, paid_amount:j.total_debit,
+      remarks:j.remark||"", custom_purpose:"", custom_expense_category:j.custom_expense_category||"",
+      docstatus:j.docstatus,
+    }));
+    const normalizedOutPE = cashOutPE.map(p=>({...p,_dt:"Payment Entry"}));
+    const normalizedIn = cashIn.map(p=>({...p,_dt:"Payment Entry"}));
+    list.value=[...normalizedIn,...normalizedOutPE,...normalizedOut];
+    selected.value=new Set();
+  }catch(e){toast.error(e.message||"Failed to load cash entries");}
+  finally{loading.value=false;}
+}
 const filtered=computed(()=>{let r=list.value;if(activeTab.value!=="all")r=r.filter(p=>p.payment_type===activeTab.value);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(p=>(p.party_name||p.party||"").toLowerCase().includes(q)||(p.name||"").toLowerCase().includes(q)||(p.remarks||"").toLowerCase().includes(q));}return r;});
 const sorted=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
 // Selection/export act on the full filtered+sorted set (all pages); only the
@@ -261,7 +389,7 @@ async function bulkDelete(){
   const ok=await confirm({title:`Delete ${rows.length} cash entr${rows.length>1?'ies':'y'}?`,body:"This cancels and deletes the selected entries, reversing their ledger impact. This cannot be undone.",okLabel:"Delete",okStyle:"danger"});
   if(!ok)return;
   bulkBusy.value=true;let done=0;
-  try{for(const p of rows){try{await apiCancel("Payment Entry",p.name);}catch{}try{await apiDelete("Payment Entry",p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await load();}
+  try{for(const p of rows){const dt=p._dt||"Payment Entry";try{await apiCancel(dt,p.name);}catch{}try{await apiDelete(dt,p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await load();}
   finally{bulkBusy.value=false;}
 }
 
@@ -297,11 +425,35 @@ async function saveCash(){
     const selectedParty = partyOptions.value.find(
       o => o.value === form.party
     );
-
     const partyName = selectedParty?.party_name || form.party;
-    const doc={doctype:"Payment Entry",company,payment_type:form.payment_type,party_type:isCashIn?"Customer":"Supplier",party:form.party,party_name: partyName,mode_of_payment:"Cash",paid_from:isCashIn?(receivableAccount.value||cashAccount.value):cashAccount.value,paid_to:isCashIn?cashAccount.value:(payableAccount.value||cashAccount.value),paid_from_account_currency:companyCurrency.value,paid_to_account_currency:companyCurrency.value,source_exchange_rate:1,target_exchange_rate:1,paid_amount:flt(form.paid_amount),received_amount:flt(form.paid_amount),payment_date:form.payment_date,custom_purpose:isCashIn?form.custom_purpose:"",custom_expense_category:isCashIn?"":form.custom_expense_category,remarks:form.remarks||""};
-    const saved=await apiSave(doc);await apiSubmit("Payment Entry",saved.name);
-    toast.success(`Cash entry ${saved?.name||""} created`);drawerOpen.value=false;await load();
+
+    if(isCashIn){
+      // Dr Cash-in-Hand / Cr Accounts Receivable (customer pays cash).
+      const doc={doctype:"Payment Entry",company,payment_type:"Receive",party_type:"Customer",party:form.party,party_name: partyName,mode_of_payment:"Cash",paid_from:receivableAccount.value||cashAccount.value,paid_to:cashAccount.value,paid_from_account_currency:companyCurrency.value,paid_to_account_currency:companyCurrency.value,source_exchange_rate:1,target_exchange_rate:1,paid_amount:flt(form.paid_amount),received_amount:flt(form.paid_amount),payment_date:form.payment_date,custom_purpose:form.custom_purpose,custom_expense_category:"",remarks:form.remarks||""};
+      const saved=await apiSave(doc);await apiSubmit("Payment Entry",saved.name);
+      toast.success(`Cash entry ${saved?.name||""} created`);
+    }else{
+      // Direct cash expense (no vendor bill being settled) — must be a Journal
+      // Entry: Dr [selected Expense account] / Cr Cash-in-Hand. A Payment
+      // Entry can't be used here because its "Pay" leg is hard-locked to a
+      // Payable account, which would silently misbook this as settling a
+      // vendor bill that doesn't exist and never touch the expense ledger.
+      const amt=flt(form.paid_amount);
+      const doc={
+        doctype:"Journal Entry", company, posting_date:form.payment_date,
+        voucher_type:"Journal Entry", naming_series:"JV-.YYYY.-",
+        remark: form.remarks || `Cash expense — ${partyName}`,
+        custom_cash_out_entry:1, custom_expense_category:form.custom_expense_category,
+        custom_party:form.party, custom_party_name:partyName,
+        accounts:[
+          {doctype:"Journal Entry Account", account:form.custom_expense_category, party_type:"Supplier", party:form.party, debit:amt, credit:0},
+          {doctype:"Journal Entry Account", account:cashAccount.value, debit:0, credit:amt},
+        ],
+      };
+      const saved=await apiSave(doc);await apiSubmit("Journal Entry",saved.name);
+      toast.success(`Cash entry ${saved?.name||""} created`);
+    }
+    drawerOpen.value=false;await load();
   }catch(e){toast.error(e.message||"Failed to save");}finally{drawerSaving.value=false;}
 }
 
@@ -309,11 +461,68 @@ async function deleteEntry(p){
   const ok=await confirm({title:"Delete cash entry?",body:`This cancels and deletes ${p.name}, reversing its ledger impact.`,okLabel:"Delete",okStyle:"danger"});
   if(!ok)return;
   actionBusy.value=true;
-  try{try{await apiCancel("Payment Entry",p.name);}catch{}await apiDelete("Payment Entry",p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await load();}
+  const dt=p._dt||"Payment Entry";
+  try{try{await apiCancel(dt,p.name);}catch{}await apiDelete(dt,p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await load();}
   catch(e){toast.error(e.message||"Failed to delete");}finally{actionBusy.value=false;}
 }
 
-onMounted(()=>{load();loadAccounts();});
+async function refreshUndepositedCount(){
+  try{const co=await resolveCompany();const d=await apiGET("zoho_books_clone.api.books_data.get_undeposited_cash",{company:co});undepositedCount.value=(d?.entries||[]).length;}
+  catch{undepositedCount.value=0;}
+}
+
+async function openDeposit(entry=null){
+  singleDeposit.value=entry||null;
+  depositOpen.value=true;depositLoading.value=true;depositSelected.value=new Set();
+  Object.assign(depositForm,{bank_account:"",date:new Date().toISOString().slice(0,10),notes:""});
+  viewOpen.value=false;
+  try{
+    const co=await resolveCompany();
+    const d=await apiGET("zoho_books_clone.api.books_data.get_undeposited_cash",{company:co});
+    const allEntries=d?.entries||[];
+    undeposited.value=entry ? allEntries.filter(e=>e.name===entry.name) : allEntries;
+    depositBankAccounts.value=d?.bank_accounts||[];
+    if(depositBankAccounts.value.length===1)depositForm.bank_account=depositBankAccounts.value[0];
+    // Default to selecting everything shown — user can uncheck to do a partial deposit (bulk mode only).
+    depositSelected.value=new Set(undeposited.value.map(e=>e.name));
+    undepositedCount.value=allEntries.length;
+  }catch(e){toast.error(e.message||"Failed to load undeposited cash");undeposited.value=[];}
+  finally{depositLoading.value=false;}
+}
+
+function toggleDepositSelect(name){const s=new Set(depositSelected.value);if(s.has(name))s.delete(name);else s.add(name);depositSelected.value=s;}
+const depositAllSelected=computed(()=>undeposited.value.length>0&&undeposited.value.every(e=>depositSelected.value.has(e.name)));
+function toggleDepositSelectAll(){if(depositAllSelected.value){depositSelected.value=new Set();}else{depositSelected.value=new Set(undeposited.value.map(e=>e.name));}}
+const depositSelectedTotal=computed(()=>undeposited.value.filter(e=>depositSelected.value.has(e.name)).reduce((s,e)=>s+flt(e.paid_amount),0));
+const selectAllRef=ref(null);
+watch([depositSelected,undeposited],()=>{
+  if(!selectAllRef.value)return;
+  const some=depositSelected.value.size>0 && depositSelected.value.size<undeposited.value.length;
+  selectAllRef.value.indeterminate=some;
+},{deep:true});
+
+async function saveDeposit(){
+  if(!depositSelected.value.size)return toast.error("Select at least one cash entry to deposit");
+  if(!depositForm.bank_account)return toast.error("Select a bank account");
+  if(!depositForm.date)return toast.error("Deposit date is required");
+  depositSaving.value=true;
+  try{
+    const co=await resolveCompany();
+    const res=await apiPOST("zoho_books_clone.api.books_data.deposit_cash_to_bank",{
+      payment_entries:JSON.stringify(Array.from(depositSelected.value)),
+      bank_account:depositForm.bank_account,
+      deposit_date:depositForm.date,
+      notes:depositForm.notes||"",
+      company:co,
+    });
+    toast.success(`Deposited ${fmtCur(res?.amount||depositSelectedTotal.value)} via ${res?.journal_entry||"Journal Entry"}`);
+    depositOpen.value=false;
+    await Promise.all([load(),refreshUndepositedCount()]);
+  }catch(e){toast.error(e.message||"Deposit failed");}
+  finally{depositSaving.value=false;}
+}
+
+onMounted(()=>{load();loadAccounts();refreshUndepositedCount();});
 </script>
 <style scoped>
 .cash-page{display:flex;flex-direction:column;gap:16px;padding:24px;}
@@ -322,6 +531,24 @@ onMounted(()=>{load();loadAccounts();});
 .cash-search-input{border:none;background:transparent;outline:none;font:inherit;color:#111827;width:100%;font-size:13px;}
 .cash-btn-primary{display:inline-flex;align-items:center;gap:6px;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;}
 .cash-btn-primary:hover{background:#1d4ed8;}.cash-btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.cash-dep-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fef3c7;color:#b45309;font-size:10.5px;font-weight:700;margin-left:2px;}
+.cash-dep-count{margin-left:auto;font-size:11px;font-weight:600;color:#64748b;text-transform:none;letter-spacing:0;}
+.cash-dep-list{display:flex;flex-direction:column;border:1px solid #e5e7eb;border-radius:8px;}
+.cash-dep-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;font-size:12.5px;cursor:pointer;transition:background .12s;}
+.cash-dep-row:last-child{border-bottom:none;}.cash-dep-row:hover{background:#f9fafb;}
+.cash-dep-row.selected{background:#eff6ff;}
+.cash-dep-row.selected:hover{background:#e0f0ff;}
+.cash-dep-row input[type=checkbox]{flex-shrink:0;width:15px;height:15px;accent-color:#2563eb;cursor:pointer;}
+.cash-dep-row--hdr{position:sticky;top:0;z-index:1;background:#f9fafb;font-weight:600;color:#475569;cursor:default;}
+.cash-dep-row--hdr:hover{background:#f9fafb;}
+.cash-dep-col-main{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0;}
+.cash-dep-sub{font-size:11px;color:#94a3b8;}
+.cash-dep-col-amt{flex-shrink:0;width:88px;text-align:right;font-weight:600;color:#0f172a;}
+.cash-dep-total{display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;font-size:13px;color:#166534;transition:background .15s,border-color .15s,color .15s;}
+.cash-dep-total strong{font-size:15px;}
+.cash-dep-total--empty{background:#f8fafc;border-color:#e5e7eb;color:#94a3b8;}
+.cash-dep-total--empty strong{color:#94a3b8;}
+.pmd-warn{font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;}
 .cash-btn-ghost{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:#334155;cursor:pointer;}
 .cash-btn-ghost:hover:not(:disabled){background:#f8fafc;border-color:#cbd5e1;}.cash-btn-ghost:disabled{opacity:.5;cursor:not-allowed;}
 .cash-btn-danger-ghost{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:13px;color:#dc2626;cursor:pointer;}
@@ -358,7 +585,7 @@ onMounted(()=>{load();loadAccounts();});
 .cash-num{font-size:13px;color:#2563eb;font-weight:600;}
 .mono-sm{font-size:13px;}.text-muted{color:#6b7280;}
 .cash-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:600;}
-.badge-green{background:#dcfce7;color:#16a34a;}.badge-red{background:#fee2e2;color:#dc2626;}
+.badge-green{background:#dcfce7;color:#16a34a;}.badge-red{background:#fee2e2;color:#dc2626;}.badge-amber{background:#fef3c7;color:#b45309;}
 .cash-empty{text-align:center;color:#9ca3af;padding:48px!important;cursor:default!important;}
 .cash-shimmer{height:13px;background:linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 50%,#f3f4f6 75%);border-radius:4px;animation:shimmer 1.2s infinite;background-size:200% 100%;}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
