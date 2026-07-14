@@ -11,6 +11,7 @@
   "qty",
   "uom",
   "rate",
+  "mrp",
   "amount",
   "income_account",
   "tax_code",
@@ -60,6 +61,11 @@
    "in_list_view": 1,
    "label": "Rate",
    "reqd": 1
+  },
+  {
+   "fieldname": "mrp",
+   "fieldtype": "Currency",
+   "label": "MRP"
   },
   {
    "fieldname": "amount",

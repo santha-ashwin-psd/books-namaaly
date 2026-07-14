@@ -924,6 +924,7 @@
                       <th style="width:36px">#</th>
                       <th>Item &amp; Description</th>
                       <th>HSN/SAC</th>
+                      <th class="th-r">MRP (₹)</th>
                       <th class="th-r">Qty</th>
                       <th class="th-r">Rate (₹)</th>
                       <th class="th-r">Discount (₹)</th>
@@ -938,6 +939,7 @@
                         <div v-if="it.description" class="inv-item-desc">{{ it.description }}</div>
                       </td>
                       <td class="inv-dash">{{ it.hsn_code || '—' }}</td>
+                      <td class="td-r inv-dash">{{ flt(it.mrp) ? fmtN(it.mrp) : '—' }}</td>
                       <td class="td-r" >{{ flt(it.qty) }}</td>
                       <td class="td-r" >{{ fmtN(it.rate) }}</td>
                       <td class="td-r inv-dash">{{ lineDiscount(it) ? fmtN(lineDiscount(it)) : '—' }}</td>
@@ -2343,7 +2345,7 @@ async function openEdit(inv) {
       additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
       additional_discount_amount:flt(doc.additional_discount_amount)||0,
     });
-    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
+    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
     if (!lines.value.length) addLine();
     // Base Price is a read-only reference showing the Item's own standard_rate
     // (independent of whatever rate/discount ended up on the saved line), so
@@ -2405,7 +2407,7 @@ async function saveInvoice(docstatus, andNew = false) {
   drawerSaving.value=true;
   try {
     const company=await resolveCompany();
-    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||""}));
+    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||""}));
     const taxes=computeTaxRows(discountedLines.value.filter(l=>l.item_code), taxTemplates.value, {
       companyState: companyGstState.value,
       placeOfSupply: form.place_of_supply,
