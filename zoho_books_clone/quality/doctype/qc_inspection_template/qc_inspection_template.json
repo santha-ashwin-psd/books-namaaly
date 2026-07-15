@@ -43,10 +43,11 @@
   },
   {
    "fieldname": "item_group",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Item Group (Optional)",
    "in_list_view": 1,
-   "description": "Fallback if no item-specific template exists"
+   "description": "Fallback if no item- or dosage-form-specific template exists. Must match the item's Item Group exactly (this is now a Link field to prevent typo/casing mismatches that used to silently break template resolution).",
+   "options": "Item Group"
   },
   {
    "fieldname": "dosage_form",
@@ -54,7 +55,7 @@
    "label": "Dosage Form (Ayurvedic)",
    "options": "\nChurna\nKwath\nArishta\nAsava\nTablet\nCapsule\nTaila\nGhrita\nLeha\nSyrup\nOintment\nOther",
    "in_list_view": 1,
-   "description": "Ayurvedic dosage form — used for template resolution when no item-specific template is found"
+   "description": "Ayurvedic dosage form \u2014 used for template resolution when no item-specific template is found"
   },
   {
    "fieldname": "inspection_type",
@@ -83,9 +84,53 @@
   }
  ],
  "permissions": [
-  {"role": "Books Admin",    "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
-  {"role": "Books Manager",  "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
-  {"role": "Accountant",     "read": 1, "write": 1, "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1},
-  {"role": "Books Viewer",   "read": 1, "write": 0, "create": 0, "delete": 0, "email": 0, "export": 1, "print": 1, "report": 1, "share": 0}
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  }
  ]
 }

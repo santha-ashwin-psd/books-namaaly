@@ -4,6 +4,13 @@
       <div class="cash-search-wrap"><span v-html="icon('search',13)" style="color:#9ca3af;flex-shrink:0"></span><input v-model="search" placeholder="Search cash transactions…" class="cash-search-input" /></div>
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="cash-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
+        <button
+          class="cash-btn-ghost"
+          v-if="totalUndeposited>0"
+          :disabled="!$canWrite('banking')"
+          :title="!$canWrite('banking') ? 'Read-only access' : ''"
+          @click="openDeposit"
+        ><span v-html="icon('bank',14)"></span> Deposit <span class="cash-dep-count" style="margin-left:4px">{{ fmtCur(totalUndeposited) }}</span></button>
         <button class="cash-btn-primary" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Cash Entry</button>
       </div>
     </div>
@@ -45,11 +52,10 @@
           <th @click="sort('party')" class="sortable">Party <span v-html="sortArrow('party')"></span></th>
           <th @click="sort('payment_date')" class="sortable">Date <span v-html="sortArrow('payment_date')"></span></th>
           <th>Type</th>
-          <th>Status</th>
           <th @click="sort('paid_amount')" class="sortable ta-r">Amount <span v-html="sortArrow('paid_amount')"></span></th>
         </tr></thead>
         <tbody>
-          <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="7"><div class="cash-shimmer"></div></td></tr></template>
+          <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="6"><div class="cash-shimmer"></div></td></tr></template>
           <template v-else>
             <tr v-for="p in paged" :key="p.name" class="cash-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
@@ -57,10 +63,9 @@
               <td>{{ p.party_name||p.party||'—' }}</td>
               <td class="mono-sm text-muted">{{ fmtDate(p.payment_date) }}</td>
               <td><span class="cash-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Cash In':'Cash Out' }}</span></td>
-              <td><span v-if="p.payment_type==='Receive'" class="cash-badge" :class="p.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ p.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span><span v-else class="text-muted">—</span></td>
               <td class="ta-r mono-sm">{{ fmtCur(p.paid_amount) }}</td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="7" class="cash-empty">{{ list.length ? 'No entries match this filter' : 'No cash entries found' }}</td></tr>
+            <tr v-if="!sorted.length"><td colspan="6" class="cash-empty">{{ list.length ? 'No entries match this filter' : 'No cash entries found' }}</td></tr>
           </template>
         </tbody>
       </table>
@@ -87,7 +92,6 @@
             <div class="cash-mc-mid">{{ p.party_name || p.party || '—' }}</div>
             <div class="cash-mc-meta">
               <span>{{ fmtDate(p.payment_date) }}</span>
-              <span v-if="p.payment_type==='Receive'" class="cash-badge" :class="p.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ p.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span>
               <span class="cash-mc-amount" :class="p.payment_type==='Receive'?'cash-mc-pos':'cash-mc-neg'">{{ fmtCur(p.paid_amount) }}</span>
             </div>
           </div>
@@ -155,61 +159,60 @@
         <div class="cash-dh-top">
           <div class="cash-dh-ico"><span v-html="icon('bank',20)"></span></div>
           <div>
-            <div class="cash-dh-title">Deposit to Bank</div>
-            <div class="cash-dh-sub">{{ singleDeposit ? `Move ${singleDeposit.name} into a bank account` : 'Move undeposited cash receipts into a bank account' }}</div>
+            <div class="cash-dh-title">Deposit</div>
+            <div class="cash-dh-sub">Move undeposited cash to a bank account or another cash account</div>
           </div>
         </div>
       </div>
       <div class="cash-dbody">
         <div v-if="depositLoading" class="cash-empty" style="padding:32px 0">Loading undeposited cash…</div>
         <template v-else>
-          <div v-if="!undeposited.length" class="cash-empty" style="padding:32px 0">
-            {{ singleDeposit ? 'This entry has already been deposited.' : 'No undeposited cash receipts. Every Cash-In receipt has already been deposited to the bank.' }}
+          <div v-if="totalUndeposited<=0 && !depositForm.destination_account" class="cash-empty" style="padding:32px 0">
+            No undeposited cash. Every cash receipt has already been deposited.
           </div>
           <template v-else>
             <div class="cash-field">
-              <label class="cash-label">Deposit To (Bank) <span class="req">*</span></label>
-              <select v-model="depositForm.bank_account" class="cash-input">
-                <option value="">— Select bank account —</option>
-                <option v-for="b in depositBankAccounts" :key="b" :value="b">{{ b }}</option>
+              <label class="cash-label">Deposit To <span class="req">*</span></label>
+              <select v-model="depositForm.destination_account" class="cash-input" @change="onDestinationChange">
+                <option value="">— Select account —</option>
+                <optgroup label="Bank Account" v-if="bankDestinations.length">
+                  <option v-for="b in bankDestinations" :key="b.name" :value="b.name">{{ b.name }}</option>
+                </optgroup>
+                <optgroup label="Cash Account" v-if="cashDestinations.length">
+                  <option v-for="c in cashDestinations" :key="c.name" :value="c.name">{{ c.name }}</option>
+                </optgroup>
               </select>
-              <div v-if="!depositBankAccounts.length" class="pmd-warn" style="margin-top:4px">
-                No Bank account found — set one up under Accounts first.
+              <div v-if="!bankDestinations.length && !cashDestinations.length" class="pmd-warn" style="margin-top:4px">
+                No Bank or other Cash account found — set one up under Accounts first.
               </div>
             </div>
+
+            <div class="cash-dep-total" style="margin-bottom:4px">
+              <span>Yet to deposit</span>
+              <strong>{{ fmtCur(totalUndeposited) }}</strong>
+            </div>
+
+            <div class="cash-field">
+              <label class="cash-label">Amount to Deposit <span class="req">*</span></label>
+              <input v-model.number="depositForm.amount" type="number" min="0.01" :max="totalUndeposited" step="0.01" class="cash-input" />
+              <div class="pmd-warn" v-if="depositForm.amount>totalUndeposited" style="margin-top:4px">
+                Cannot deposit more than the undeposited balance ({{ fmtCur(totalUndeposited) }}).
+              </div>
+            </div>
+
             <div class="cash-field">
               <label class="cash-label">Deposit Date <span class="req">*</span></label>
               <input v-model="depositForm.date" type="date" class="cash-input" />
             </div>
 
-            <div class="cash-section-hdr" style="margin-top:8px">
-              <span v-html="icon('cash',13)"></span> {{ singleDeposit ? 'Cash Receipt' : 'Undeposited Cash Receipts' }}
-              <span v-if="!singleDeposit" class="cash-dep-count">{{ depositSelected.size }} of {{ undeposited.length }} selected</span>
-            </div>
-            <div class="cash-dep-list">
-              <label v-if="!singleDeposit" class="cash-dep-row cash-dep-row--hdr">
-                <input type="checkbox" ref="selectAllRef" :checked="depositAllSelected" @change="toggleDepositSelectAll" />
-                <span class="cash-dep-col-main">Select all</span>
-                <span class="cash-dep-col-amt">Amount</span>
-              </label>
-              <label v-for="e in undeposited" :key="e.name" class="cash-dep-row" :class="{selected: depositSelected.has(e.name)}">
-                <input type="checkbox" :checked="depositSelected.has(e.name)" :disabled="!!singleDeposit" @change="toggleDepositSelect(e.name)" />
-                <span class="cash-dep-col-main">
-                  <span class="cash-num">{{ e.name }}</span>
-                  <span class="cash-dep-sub">{{ e.party_name || e.party || '—' }} · {{ fmtDate(e.payment_date) }}</span>
-                </span>
-                <span class="cash-dep-col-amt mono-sm">{{ fmtCur(e.paid_amount) }}</span>
-              </label>
-            </div>
-
-            <div class="cash-dep-total" :class="{'cash-dep-total--empty': !depositSelected.size}">
-              <span>Selected for deposit</span>
-              <strong>{{ fmtCur(depositSelectedTotal) }}</strong>
-            </div>
-
             <div class="cash-field">
               <label class="cash-label">Notes</label>
               <textarea v-model="depositForm.notes" rows="2" class="cash-input" placeholder="Optional — deposit slip #, branch, etc."></textarea>
+            </div>
+
+            <div class="cash-dep-total">
+              <span>Remaining after this deposit</span>
+              <strong>{{ fmtCur(Math.max(totalUndeposited - (depositForm.amount||0), 0)) }}</strong>
             </div>
           </template>
         </template>
@@ -218,11 +221,11 @@
         <button class="cash-btn-ghost" :disabled="depositSaving" @click="depositOpen=false">Cancel</button>
         <button
           class="cash-btn-primary"
-          :disabled="depositSaving || !depositSelected.size || !depositForm.bank_account || !depositForm.date"
+          :disabled="depositSaving || !depositForm.amount || depositForm.amount<=0 || depositForm.amount>totalUndeposited || !depositForm.destination_account || !depositForm.date"
           @click="saveDeposit"
         >
           <span v-html="icon('check',13)"></span>
-          {{ depositSaving ? "Depositing…" : `Deposit ${fmtCur(depositSelectedTotal)}` }}
+          {{ depositSaving ? "Depositing…" : `Deposit ${fmtCur(depositForm.amount||0)}` }}
         </button>
       </div>
     </div>
@@ -252,7 +255,6 @@
             <div><div class="cash-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.payment_date) }}</div></div>
             <div><div class="cash-meta-lbl">{{ viewDoc.payment_type==='Receive'?'Customer':'Vendor/Employee' }}</div><div>{{ viewDoc.party_name||viewDoc.party||'—' }}</div></div>
             <div><div class="cash-meta-lbl">Type</div><div>{{ viewDoc.payment_type==='Receive'?'Cash In':'Cash Out' }}</div></div>
-            <div v-if="viewDoc.payment_type==='Receive' && viewDoc._dt==='Payment Entry'"><div class="cash-meta-lbl">Status</div><div><span class="cash-badge" :class="viewDoc.custom_deposited_to_bank?'badge-green':'badge-amber'">{{ viewDoc.custom_deposited_to_bank?'Deposited':'Undeposited' }}</span></div></div>
             <div><div class="cash-meta-lbl">Mode</div><div>Cash</div></div>
             <div v-if="viewDoc.payment_type==='Receive'"><div class="cash-meta-lbl">Purpose</div><div>{{ viewDoc.custom_purpose||'—' }}</div></div>
             <div v-else><div class="cash-meta-lbl">Expense Category</div><div>{{ viewDoc.custom_expense_category||'—' }}</div></div>
@@ -264,13 +266,6 @@
         </div>
         <div class="cash-dfooter">
           <button class="cash-btn-danger-ghost" @click="deleteEntry(viewDoc)" :disabled="actionBusy"><span v-html="icon('trash',13)"></span> Delete</button>
-          <button
-            v-if="viewDoc.payment_type==='Receive' && viewDoc._dt==='Payment Entry' && !viewDoc.custom_deposited_to_bank"
-            class="cash-btn-ghost"
-            :disabled="!$canWrite('banking')"
-            :title="!$canWrite('banking') ? 'Read-only access' : ''"
-            @click="openDeposit(viewDoc)"
-          ><span v-html="icon('bank',13)"></span> Deposit to Bank</button>
           <div style="margin-left:auto"><button class="cash-btn-ghost" @click="viewOpen=false">Close</button></div>
         </div>
       </template>
@@ -298,10 +293,11 @@ const list=ref([]),loading=ref(false),search=ref("");
 const drawerOpen=ref(false),drawerSaving=ref(false),actionBusy=ref(false),bulkBusy=ref(false);
 const viewOpen=ref(false),viewDoc=ref(null);
 const depositOpen=ref(false),depositLoading=ref(false),depositSaving=ref(false);
-const undeposited=ref([]),depositBankAccounts=ref([]),depositSelected=ref(new Set());
-const singleDeposit=ref(null);
-const depositForm=reactive({bank_account:"",date:new Date().toISOString().slice(0,10),notes:""});
-const undepositedCount=ref(0);
+const depositDestinations=ref([]); // [{name, account_type}]
+const totalUndeposited=ref(0);
+const depositForm=reactive({amount:0,destination_account:"",date:new Date().toISOString().slice(0,10),notes:""});
+const bankDestinations=computed(()=>depositDestinations.value.filter(d=>d.account_type==="Bank"));
+const cashDestinations=computed(()=>depositDestinations.value.filter(d=>d.account_type==="Cash"));
 const selected=ref(new Set());
 const partyOptions=ref([]);
 const expenseCategoryOptions=ref([]);
@@ -467,55 +463,67 @@ async function deleteEntry(p){
 }
 
 async function refreshUndepositedCount(){
-  try{const co=await resolveCompany();const d=await apiGET("zoho_books_clone.api.books_data.get_undeposited_cash",{company:co});undepositedCount.value=(d?.entries||[]).length;}
-  catch{undepositedCount.value=0;}
-}
-
-async function openDeposit(entry=null){
-  singleDeposit.value=entry||null;
-  depositOpen.value=true;depositLoading.value=true;depositSelected.value=new Set();
-  Object.assign(depositForm,{bank_account:"",date:new Date().toISOString().slice(0,10),notes:""});
-  viewOpen.value=false;
   try{
     const co=await resolveCompany();
     const d=await apiGET("zoho_books_clone.api.books_data.get_undeposited_cash",{company:co});
-    const allEntries=d?.entries||[];
-    undeposited.value=entry ? allEntries.filter(e=>e.name===entry.name) : allEntries;
-    depositBankAccounts.value=d?.bank_accounts||[];
-    if(depositBankAccounts.value.length===1)depositForm.bank_account=depositBankAccounts.value[0];
-    // Default to selecting everything shown — user can uncheck to do a partial deposit (bulk mode only).
-    depositSelected.value=new Set(undeposited.value.map(e=>e.name));
-    undepositedCount.value=allEntries.length;
-  }catch(e){toast.error(e.message||"Failed to load undeposited cash");undeposited.value=[];}
+    totalUndeposited.value=flt(d?.total_undeposited||0);
+  }catch{totalUndeposited.value=0;}
+}
+
+async function loadDepositPool(excludeAccount){
+  const co=await resolveCompany();
+  const params={company:co};
+  if(excludeAccount)params.exclude_account=excludeAccount;
+  const d=await apiGET("zoho_books_clone.api.books_data.get_undeposited_cash",params);
+  totalUndeposited.value=flt(d?.total_undeposited||0);
+  depositDestinations.value=d?.destination_accounts||[];
+  return d;
+}
+
+async function openDeposit(){
+  depositOpen.value=true;depositLoading.value=true;
+  Object.assign(depositForm,{amount:0,destination_account:"",date:new Date().toISOString().slice(0,10),notes:""});
+  viewOpen.value=false;
+  try{
+    await loadDepositPool();
+    // Default to depositing the full pooled balance — user can edit down for a partial deposit.
+    depositForm.amount=totalUndeposited.value;
+  }catch(e){toast.error(e.message||"Failed to load undeposited cash");totalUndeposited.value=0;}
   finally{depositLoading.value=false;}
 }
 
-function toggleDepositSelect(name){const s=new Set(depositSelected.value);if(s.has(name))s.delete(name);else s.add(name);depositSelected.value=s;}
-const depositAllSelected=computed(()=>undeposited.value.length>0&&undeposited.value.every(e=>depositSelected.value.has(e.name)));
-function toggleDepositSelectAll(){if(depositAllSelected.value){depositSelected.value=new Set();}else{depositSelected.value=new Set(undeposited.value.map(e=>e.name));}}
-const depositSelectedTotal=computed(()=>undeposited.value.filter(e=>depositSelected.value.has(e.name)).reduce((s,e)=>s+flt(e.paid_amount),0));
-const selectAllRef=ref(null);
-watch([depositSelected,undeposited],()=>{
-  if(!selectAllRef.value)return;
-  const some=depositSelected.value.size>0 && depositSelected.value.size<undeposited.value.length;
-  selectAllRef.value.indeterminate=some;
-},{deep:true});
+async function onDestinationChange(){
+  // If the destination is itself a Cash account (e.g. Petty Cash), the pool
+  // must exclude that account's own balance — money can't move from an
+  // account into itself. Re-fetch the pool total accordingly.
+  const dest=depositDestinations.value.find(d=>d.name===depositForm.destination_account);
+  const excludeAccount = dest && dest.account_type==="Cash" ? dest.name : null;
+  depositLoading.value=true;
+  try{
+    const prevAmount=depositForm.amount;
+    const prevWasFull = prevAmount>=totalUndeposited.value; // was the user depositing "everything"?
+    await loadDepositPool(excludeAccount);
+    depositForm.amount = prevWasFull ? totalUndeposited.value : Math.min(prevAmount, totalUndeposited.value);
+  }catch(e){toast.error(e.message||"Failed to refresh balance");}
+  finally{depositLoading.value=false;}
+}
 
 async function saveDeposit(){
-  if(!depositSelected.value.size)return toast.error("Select at least one cash entry to deposit");
-  if(!depositForm.bank_account)return toast.error("Select a bank account");
+  if(!depositForm.amount||depositForm.amount<=0)return toast.error("Enter an amount to deposit");
+  if(depositForm.amount>totalUndeposited.value)return toast.error("Amount exceeds the undeposited balance");
+  if(!depositForm.destination_account)return toast.error("Select where to deposit the cash");
   if(!depositForm.date)return toast.error("Deposit date is required");
   depositSaving.value=true;
   try{
     const co=await resolveCompany();
     const res=await apiPOST("zoho_books_clone.api.books_data.deposit_cash_to_bank",{
-      payment_entries:JSON.stringify(Array.from(depositSelected.value)),
-      bank_account:depositForm.bank_account,
+      amount:depositForm.amount,
+      destination_account:depositForm.destination_account,
       deposit_date:depositForm.date,
       notes:depositForm.notes||"",
       company:co,
     });
-    toast.success(`Deposited ${fmtCur(res?.amount||depositSelectedTotal.value)} via ${res?.journal_entry||"Journal Entry"}`);
+    toast.success(`Deposited ${fmtCur(res?.amount||depositForm.amount)} to ${depositForm.destination_account} via ${res?.journal_entry||"Journal Entry"}`);
     depositOpen.value=false;
     await Promise.all([load(),refreshUndepositedCount()]);
   }catch(e){toast.error(e.message||"Deposit failed");}

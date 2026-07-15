@@ -156,7 +156,8 @@ def create_default_accounts():
     coa = [
         ("Assets",                "Asset",     None,                 1),
         ("Current Assets",        "Asset",     "Assets",             1),
-        ("Cash",                  "Cash",      "Current Assets",     0),
+        ("Cash in Hand",          "Cash",      "Current Assets",     1),
+        ("Petty Cash",            "Cash",      "Cash in Hand",       0),
         ("Bank Accounts",         "Bank",      "Current Assets",     1),
         ("Accounts Receivable",   "Receivable","Current Assets",     0),
         ("Fixed Assets",          "Asset",     "Assets",             1),

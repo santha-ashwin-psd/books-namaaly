@@ -100,6 +100,29 @@
    "in_list_view": 0
   },
   {
+   "fieldname": "col_break_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inspected_qty",
+   "fieldtype": "Float",
+   "label": "Inspected Qty",
+   "read_only": 1,
+   "description": "Fetched from the reference document's row for this item. The full quantity under inspection."
+  },
+  {
+   "fieldname": "accepted_qty",
+   "fieldtype": "Float",
+   "label": "Accepted Qty",
+   "description": "Quantity that passes and stays/moves as normal stock. Defaults to the full inspected qty on Pass, 0 on Fail — adjust for a partial accept/reject split."
+  },
+  {
+   "fieldname": "rejected_qty",
+   "fieldtype": "Float",
+   "label": "Rejected Qty",
+   "description": "Quantity that fails and is moved to quarantine. accepted_qty + rejected_qty must equal inspected_qty."
+  },
+  {
    "fieldname": "sec_inspection",
    "fieldtype": "Section Break",
    "label": "Inspection Details"

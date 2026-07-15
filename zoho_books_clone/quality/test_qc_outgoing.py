@@ -20,9 +20,12 @@ import frappe
 
 class _MockItem:
     """Minimal mock for a document item row."""
-    def __init__(self, item_code: str, qty: float = 1.0):
+    def __init__(self, item_code: str, qty: float = 1.0, quality_inspection: str = None):
         self.item_code = item_code
         self.qty = qty
+        self.quality_inspection = quality_inspection
+        # No .doctype/.name — mirrors a plain mock row that isn't a real
+        # Frappe child doc; qc_engine's row-link stamping guards for this.
 
 
 class _MockDoc:
@@ -78,7 +81,8 @@ class TestOutgoingQCAutoCreate(unittest.TestCase):
             qc_engine.auto_create_qc_for_delivery_note(doc)
 
         mock_create.assert_called_once_with(
-            "Delivery Note", "DN-TEST-00001", "ITEM-001", "Outgoing"
+            "Delivery Note", "DN-TEST-00001", "ITEM-001", "Outgoing",
+            batch_no=None, inspected_qty=1.0,
         )
 
     def test_delivery_note_skips_when_inspection_not_required(self):
@@ -102,20 +106,19 @@ class TestOutgoingQCAutoCreate(unittest.TestCase):
 
     def test_delivery_note_skips_existing_inspection(self):
         """
-        When a QC Inspection already exists for the item+doc, no duplicate is created.
+        When the row already has a non-cancelled QC Inspection linked
+        (row.quality_inspection), no duplicate is created.
         """
         from zoho_books_clone.quality import qc_engine
 
-        doc = _MockDoc("Delivery Note", "DN-TEST-00003", [_MockItem("ITEM-003")])
-
-        call_count = [0]
+        doc = _MockDoc("Delivery Note", "DN-TEST-00003",
+                        [_MockItem("ITEM-003", quality_inspection="QCI-EXISTING-001")])
 
         def mock_get_value(dt, *args, **kwargs):
-            call_count[0] += 1
             if dt == "Item":
                 return 1  # inspection required
             if dt == "QC Inspection":
-                return "QCI-EXISTING-001"  # already exists
+                return 1  # docstatus of the linked inspection: submitted, not cancelled
             return None
 
         with patch.object(
@@ -154,7 +157,8 @@ class TestOutgoingQCAutoCreate(unittest.TestCase):
             qc_engine.auto_create_qc_for_sales_invoice(doc)
 
         mock_create.assert_called_once_with(
-            "Sales Invoice", "SINV-TEST-00001", "ITEM-004", "Outgoing"
+            "Sales Invoice", "SINV-TEST-00001", "ITEM-004", "Outgoing",
+            batch_no=None, inspected_qty=1.0,
         )
 
     def test_sales_invoice_skips_when_master_switch_off(self):

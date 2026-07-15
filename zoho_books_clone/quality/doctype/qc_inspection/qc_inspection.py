@@ -38,6 +38,7 @@ class QCInspection(Document):
         self._evaluate_readings()
         self._compute_status()
         self._compute_summary_counts()
+        self._compute_qty_split()
 
     def on_submit(self):
         self._log_activity("Submitted")
@@ -47,6 +48,7 @@ class QCInspection(Document):
     def on_cancel(self):
         self._log_activity("Cancelled")
         self._stamp_reference_status(cancelled=True)
+        self._clear_row_link()
 
     def before_submit(self):
         if not self.readings:
@@ -64,6 +66,8 @@ class QCInspection(Document):
                 "submitted document cannot be edited afterwards."
             ).format(len(pending_rows)))
 
+        self._enforce_second_signoff()
+
     # ──────────────────────────────────────────────────────────────────────────
     # Core: reading evaluation
     # ──────────────────────────────────────────────────────────────────────────
@@ -71,6 +75,48 @@ class QCInspection(Document):
     def _set_inspection_date(self):
         if not self.inspection_date:
             self.inspection_date = nowdate()
+
+    def _enforce_second_signoff(self):
+        """
+        If this inspection's company has 'Require Second Sign-off on QC
+        Inspections' enabled (Books Company.qc_require_second_signoff),
+        Verified By must be set to a user distinct from Inspected By
+        before submit. verified_by has existed on this doctype (and is
+        already read into the COA context as the '2nd sign-off') but was
+        never actually required anywhere -- a single inspector could
+        always submit alone even at a company that expects dual
+        sign-off on QC records. Fails open (no enforcement) if the
+        company can't be resolved -- same as every other company-scoped
+        QC setting in this app (see qc_hold_manager._get_company_qc_setting).
+        """
+        try:
+            from zoho_books_clone.quality.qc_hold_manager import _get_inspection_company
+            company = _get_inspection_company(self)
+        except Exception:
+            company = None
+
+        if not company:
+            return
+
+        try:
+            required = frappe.db.get_value("Books Company", company, "qc_require_second_signoff")
+        except Exception:
+            required = None
+
+        if not required:
+            return
+
+        if not self.verified_by:
+            frappe.throw(_(
+                "This company requires a second sign-off on QC Inspections. "
+                "Please set 'Verified By' before submitting."
+            ))
+
+        if self.verified_by == self.inspected_by:
+            frappe.throw(_(
+                "'Verified By' must be a different user from 'Inspected By' -- "
+                "second sign-off requires two distinct reviewers."
+            ))
 
     def _evaluate_readings(self):
         """Evaluate each reading row against its template parameter criteria."""
@@ -103,6 +149,51 @@ class QCInspection(Document):
         self.accepted_readings = sum(1 for r in readings if r.status == "Accepted")
         self.rejected_readings = sum(1 for r in readings if r.status == "Rejected")
 
+    def _compute_qty_split(self):
+        """
+        Accepted/rejected qty (ERPNext-style partial pass/fail per row,
+        rather than the previous whole-document-fails-entirely behaviour).
+
+        - If inspected_qty isn't known (older records, or a reference
+          doctype whose rows don't carry qty), skip entirely — nothing to
+          split, and the whole-qty quarantine fallback in qc_hold_manager
+          still applies.
+        - If the inspector hasn't set a split yet (both 0/unset — the state
+          left by qc_engine when it doesn't seed a qty), default it from the
+          overall status: Fail -> all rejected, Pass/Pending -> all accepted.
+          This keeps the common case (whole batch passes or whole batch
+          fails) a no-op for the inspector.
+        - If a split has been entered, just validate it sums to inspected_qty
+          rather than silently overwriting a deliberate partial accept/reject.
+        """
+        if not flt(self.inspected_qty):
+            return
+
+        accepted = flt(self.accepted_qty)
+        rejected = flt(self.rejected_qty)
+
+        if not accepted and not rejected:
+            if self.status == "Fail":
+                self.rejected_qty = flt(self.inspected_qty)
+                self.accepted_qty = 0
+            else:
+                self.accepted_qty = flt(self.inspected_qty)
+                self.rejected_qty = 0
+            return
+
+        if flt(accepted + rejected) != flt(self.inspected_qty):
+            frappe.throw(_(
+                "Accepted Qty ({0}) + Rejected Qty ({1}) must equal "
+                "Inspected Qty ({2})."
+            ).format(accepted, rejected, self.inspected_qty))
+
+        if rejected and self.status != "Fail":
+            frappe.throw(_(
+                "Rejected Qty is set but the overall inspection status is "
+                "'{0}', not 'Fail'. A rejected quantity requires at least "
+                "one Rejected reading."
+            ).format(self.status))
+
     # ──────────────────────────────────────────────────────────────────────────
     # Activity log
     # ──────────────────────────────────────────────────────────────────────────
@@ -111,8 +202,8 @@ class QCInspection(Document):
         try:
             frappe.get_doc({
                 "doctype":          "Activity Log",
+                "subject":          f"QC Inspection {operation}: {self.name}",
                 "user":             frappe.session.user,
-                "operation":        operation,
                 "status":           "Success",
                 "reference_doctype": self.doctype,
                 "reference_name":   self.name,
@@ -148,6 +239,26 @@ class QCInspection(Document):
                 self.reference_type, self.reference_name,
                 "qc_status", new_status, update_modified=False
             )
+        except Exception:
+            pass
+
+    def _clear_row_link(self):
+        """
+        Clear this inspection from any reference doc row's quality_inspection
+        Link field so cancelling frees that row up for a fresh inspection
+        (qc_engine's row-level "already covered" check keys off this link).
+        Best-effort across every row on the reference doc since the
+        inspection itself doesn't record which specific row it was
+        stamped onto.
+        """
+        if not (self.reference_type and self.reference_name):
+            return
+        try:
+            ref_doc = frappe.get_doc(self.reference_type, self.reference_name)
+            for row in (getattr(ref_doc, "items", []) or []):
+                if getattr(row, "quality_inspection", None) == self.name:
+                    frappe.db.set_value(row.doctype, row.name, "quality_inspection", "",
+                                         update_modified=False)
         except Exception:
             pass
 

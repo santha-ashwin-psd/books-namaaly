@@ -666,15 +666,41 @@
               </div>
             </div>
 
-            <div class="ad-toggle-row" style="margin-top:16px">
-              <div class="ad-toggle-left">
-                <div class="ad-toggle-title">Quality Inspection Required</div>
-                <div class="ad-toggle-sub">Flag this item for QC before receipt/consumption (no QC workflow enforced yet)</div>
+            <div style="margin-top:16px">
+              <div class="ad-toggle-title" style="margin-bottom:8px">Quality Inspection Required</div>
+
+              <div class="ad-toggle-row">
+                <div class="ad-toggle-left">
+                  <div class="ad-toggle-title">Before Purchase (Incoming)</div>
+                  <div class="ad-toggle-sub">Require QC Inspection when this item is received (e.g. Purchase Receipt).</div>
+                </div>
+                <label class="ad-switch">
+                  <input type="checkbox" :checked="!!form.inspection_required_before_purchase" @change="form.inspection_required_before_purchase=($event.target.checked?1:0)"/>
+                  <span class="ad-switch-track ad-switch-track--green"></span>
+                </label>
               </div>
-              <label class="ad-switch">
-                <input type="checkbox" :checked="!!form.quality_inspection_required" @change="form.quality_inspection_required=($event.target.checked?1:0)"/>
-                <span class="ad-switch-track ad-switch-track--green"></span>
-              </label>
+
+              <div class="ad-toggle-row" style="margin-top:8px">
+                <div class="ad-toggle-left">
+                  <div class="ad-toggle-title">Before Delivery (Outgoing)</div>
+                  <div class="ad-toggle-sub">Require QC Inspection before this item leaves (e.g. Delivery Note).</div>
+                </div>
+                <label class="ad-switch">
+                  <input type="checkbox" :checked="!!form.inspection_required_before_delivery" @change="form.inspection_required_before_delivery=($event.target.checked?1:0)"/>
+                  <span class="ad-switch-track ad-switch-track--green"></span>
+                </label>
+              </div>
+
+              <div class="ad-toggle-row" style="margin-top:8px">
+                <div class="ad-toggle-left">
+                  <div class="ad-toggle-title">Before Manufacture (In Process)</div>
+                  <div class="ad-toggle-sub">Require QC Inspection when this item is produced via a manufacturing/stock entry.</div>
+                </div>
+                <label class="ad-switch">
+                  <input type="checkbox" :checked="!!form.inspection_required_before_manufacture" @change="form.inspection_required_before_manufacture=($event.target.checked?1:0)"/>
+                  <span class="ad-switch-track ad-switch-track--green"></span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -798,6 +824,8 @@ const form = reactive({
   is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0, opening_stock: 0,
   default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
+  inspection_required_before_purchase: 0, inspection_required_before_delivery: 0,
+  inspection_required_before_manufacture: 0,
   has_variants: 0,
 });
 
@@ -896,7 +924,7 @@ async function load() {
   loading.value = true;
   try {
     const rows = await apiList("Item", {
-      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation","default_bom","quality_inspection_required","min_order_qty","lead_time_days"],
+      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation","default_bom","quality_inspection_required","inspection_required_before_purchase","inspection_required_before_delivery","inspection_required_before_manufacture","min_order_qty","lead_time_days"],
       order: "item_name asc", limit: 500,
     });
     list.value = rows || [];
@@ -1193,6 +1221,8 @@ function openAdd(presetType) {
     default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
     default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
+    inspection_required_before_purchase: 0, inspection_required_before_delivery: 0,
+    inspection_required_before_manufacture: 0,
   });
   // Auto-select warehouse matching type
   if (d.warehouse_type && warehouses.value.length) {
@@ -1238,6 +1268,9 @@ async function openEdit(row) {
       has_variants:         full.has_variants ? 1 : 0,
       default_bom:                 full.default_bom                 || "",
       quality_inspection_required: full.quality_inspection_required ? 1 : 0,
+      inspection_required_before_purchase:    full.inspection_required_before_purchase    ? 1 : 0,
+      inspection_required_before_delivery:    full.inspection_required_before_delivery    ? 1 : 0,
+      inspection_required_before_manufacture: full.inspection_required_before_manufacture ? 1 : 0,
       min_order_qty:                flt(full.min_order_qty),
       lead_time_days:                full.lead_time_days ? parseInt(full.lead_time_days) : 0,
     });
@@ -1306,7 +1339,11 @@ async function saveItem({ close = true } = {}) {
       reorder_qty: flt(form.reorder_qty), opening_stock: openingQty,
       has_variants: form.has_variants ? 1 : 0, attributes,
       default_bom: (form.item_type === "Finished Good" || form.item_type === "Work In Progress") ? (form.default_bom || "") : "",
-      quality_inspection_required: form.quality_inspection_required ? 1 : 0,
+      inspection_required_before_purchase:    form.inspection_required_before_purchase    ? 1 : 0,
+      inspection_required_before_delivery:    form.inspection_required_before_delivery    ? 1 : 0,
+      inspection_required_before_manufacture: form.inspection_required_before_manufacture ? 1 : 0,
+      // Legacy field kept in sync (OR of the three) so any older reports/filters relying on it still work.
+      quality_inspection_required: (form.inspection_required_before_purchase || form.inspection_required_before_delivery || form.inspection_required_before_manufacture) ? 1 : 0,
       min_order_qty: flt(form.min_order_qty),
       lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : 0,
     };

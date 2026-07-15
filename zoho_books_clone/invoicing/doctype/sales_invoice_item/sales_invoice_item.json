@@ -101,6 +101,16 @@
    "fieldtype": "Currency",
    "label": "Discount Amount",
    "read_only": 1
+  },
+  {
+   "fieldname": "quality_inspection",
+   "fieldtype": "Link",
+   "label": "Quality Inspection",
+   "options": "QC Inspection",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 0,
+   "description": "Auto-stamped: the QC Inspection covering this specific row (item + batch), if any. Row-level so the same item across multiple rows/batches on one document is tracked independently."
   }
  ],
  "istable": 1,

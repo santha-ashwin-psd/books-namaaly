@@ -21,9 +21,13 @@ voids any still-Pending QC Approval Request, clears this inspection's own
 hold flag, and recomputes the Item-level roll-up.
 
 When QC Hold is released:
-  - Disposition = "Release to Stock"  -> Stock Entry: quarantine -> original warehouse
-  - Disposition = "Scrap"             -> Stock Entry: quarantine -> scrap warehouse
-  - Disposition = "Return to Supplier" -> records return note (manual process)
+  - Disposition = "Release to Stock"   -> Stock Entry: quarantine -> target warehouse
+  - Disposition = "Scrap"              -> Stock Entry (Material Issue): written off from quarantine
+  - Disposition = "Return to Supplier" -> Stock Entry: quarantine -> target (returns/outbound staging) warehouse
+Every disposition requires the exact quantity that was quarantined for that
+specific QC Inspection (never a warehouse-wide balance), so releasing one
+batch never touches stock belonging to a different batch still on hold in
+the same quarantine warehouse.
 
 Public surface
 --------------
@@ -38,6 +42,37 @@ get_quarantine_summary() -> list
 import frappe
 from frappe import _
 from frappe.utils import nowdate, flt
+
+
+# --- Company-scoped settings helpers ------------------------------------------
+#
+# Books Settings is a single global doctype and is NOT company-enforced —
+# every tenant in this multi-company app would silently share one
+# quarantine/scrap warehouse and one hard-block flag if we read from it.
+# Quarantine/scrap warehouses and the QC hard-block flag live on Books
+# Company (per-tenant) instead, resolved from the QC Inspection's reference
+# document's `company` field.
+
+def _get_inspection_company(qci_or_name) -> str | None:
+    """Resolve the owning company for a QC Inspection via its reference doc."""
+    try:
+        qci = (qci_or_name if hasattr(qci_or_name, "reference_type")
+               else frappe.get_doc("QC Inspection", qci_or_name))
+        if not (qci.reference_type and qci.reference_name):
+            return None
+        return frappe.db.get_value(qci.reference_type, qci.reference_name, "company")
+    except Exception:
+        return None
+
+
+def _get_company_qc_setting(company: str | None, fieldname: str):
+    """Read a QC-related field from Books Company for the given company."""
+    if not company:
+        return None
+    try:
+        return frappe.db.get_value("Books Company", company, fieldname)
+    except Exception:
+        return None
 
 
 # --- validate hook on QC Approval Request ------------------------------------
@@ -67,12 +102,11 @@ def handle_qc_result(doc, method=None):
     if doc.status != "Fail":
         return
 
-    # Read default quarantine warehouse from Books Settings
-    quarantine_wh = None
-    try:
-        quarantine_wh = frappe.db.get_single_value("Books Settings", "default_quarantine_warehouse")
-    except Exception:
-        pass
+    # Read default quarantine warehouse from the inspection's own company
+    # (Books Company), not the global Books Settings singleton — quarantine
+    # warehouses are company-specific in a multi-tenant setup.
+    company = _get_inspection_company(doc)
+    quarantine_wh = _get_company_qc_setting(company, "default_quarantine_warehouse")
 
     if not quarantine_wh:
         # No quarantine warehouse configured — still stamp the hold on this
@@ -82,8 +116,8 @@ def handle_qc_result(doc, method=None):
         _flag_item_on_hold(doc.item)
         frappe.msgprint(
             _("QC Inspection Failed for {0}. Item flagged for QC Hold. "
-              "Configure 'Default Quarantine Warehouse' in Books Settings "
-              "to enable automatic stock transfer to quarantine.").format(doc.item),
+              "Configure 'Default Quarantine Warehouse' in this company's "
+              "Books Company settings to enable automatic stock transfer to quarantine.").format(doc.item),
             indicator="red",
             title=_("QC Failed — Item on Hold"),
         )
@@ -234,9 +268,15 @@ def release_from_hold(
     """
     Release an item from QC Hold.
     disposition options:
-      - "Release to Stock"    -> Stock Entry: quarantine -> target_warehouse
-      - "Scrap"               -> Stock Entry: quarantine -> scrap (no target)
-      - "Return to Supplier"  -> Records note; no stock entry (manual process)
+      - "Release to Stock"    -> Stock Entry (Material Transfer): quarantine -> target_warehouse (required)
+      - "Scrap"               -> Stock Entry (Material Issue): written off from quarantine.
+                                  Requires default_scrap_warehouse to be configured (used for
+                                  audit/reporting only — stock is issued out, not moved there).
+      - "Return to Supplier"  -> Stock Entry (Material Transfer): quarantine -> target_warehouse
+                                  (required — a returns/outbound staging warehouse)
+
+    All three move exactly the quantity that was quarantined for this
+    specific QC Inspection, never a warehouse-wide balance.
 
     Returns: {"status": "ok", "stock_entry": name_or_None, "message": "..."}
     """
@@ -262,6 +302,11 @@ def release_from_hold(
 
     qci = frappe.get_doc("QC Inspection", inspection_name)
     item_code = qci.item
+    batch_no  = qci.get("batch_no") or None
+
+    # Exact qty quarantined for THIS inspection/batch — see
+    # _get_quarantined_qty for why this must not be a Bin-wide lookup.
+    quarantined_qty = _get_quarantined_qty(qci)
 
     # Get quarantine warehouse from QC Inspection
     quarantine_wh = None
@@ -270,11 +315,10 @@ def release_from_hold(
     except Exception:
         pass
 
+    company = _get_inspection_company(qci)
+
     if not quarantine_wh:
-        try:
-            quarantine_wh = frappe.db.get_single_value("Books Settings", "default_quarantine_warehouse")
-        except Exception:
-            pass
+        quarantine_wh = _get_company_qc_setting(company, "default_quarantine_warehouse")
 
     se_name = None
 
@@ -282,28 +326,65 @@ def release_from_hold(
         if not target_warehouse:
             frappe.throw(_("Target warehouse is required for 'Release to Stock'."))
         if quarantine_wh:
-            se_name = _create_release_stock_entry(item_code, quarantine_wh, target_warehouse, inspection_name)
+            se_name = _create_release_stock_entry(
+                item_code, quarantine_wh, target_warehouse, inspection_name,
+                qty=quarantined_qty, batch_no=batch_no,
+            )
 
     elif disposition == "Scrap":
-        scrap_wh = None
-        try:
-            scrap_wh = frappe.db.get_single_value("Books Settings", "default_scrap_warehouse")
-        except Exception:
-            pass
-        if quarantine_wh and scrap_wh:
-            se_name = _create_release_stock_entry(item_code, quarantine_wh, scrap_wh, inspection_name,
-                                                   purpose="Material Transfer", note="Scrapped after QC Fail")
+        # A Material Transfer to a "scrap warehouse" leaves the stock on
+        # the books as an asset in a different location — it never
+        # actually gets written off. Scrap must reduce inventory, so this
+        # issues the stock out via a Material Issue instead. The
+        # configured default_scrap_warehouse is still required (keeps the
+        # existing "you must set this up before Scrap is allowed" gate,
+        # and is recorded for audit purposes), but it is no longer used
+        # as a stock-holding location.
+        scrap_wh = _get_company_qc_setting(company, "default_scrap_warehouse")
+        if not scrap_wh:
+            frappe.throw(_(
+                "Cannot dispose as Scrap: no 'Default Scrap Warehouse' is configured "
+                "for this company's Books Company settings."
+            ))
+        if quarantine_wh:
+            se_name = _create_scrap_write_off_entry(
+                item_code, quarantine_wh, inspection_name,
+                qty=quarantined_qty, batch_no=batch_no,
+                note=f"Scrapped after QC Fail (scrap category: {scrap_wh})",
+            )
 
     elif disposition == "Return to Supplier":
-        # Record-keeping only — actual return is a manual process
+        # Previously this only wrote an Activity Log entry and cleared the
+        # hold flag — the stock never actually left the quarantine
+        # warehouse, so the system reported "released" while the batch
+        # was still physically (and in the stock ledger) sitting in
+        # quarantine. A target warehouse (a returns / outbound staging
+        # area) is now required, and the stock is moved there just like
+        # 'Release to Stock', so quarantine is genuinely emptied before
+        # the physical hand-off to the supplier's carrier happens.
+        if not target_warehouse:
+            frappe.throw(_(
+                "Target warehouse is required for 'Return to Supplier' — stock "
+                "must be moved to a returns/outbound staging warehouse before "
+                "the physical hand-off to the supplier."
+            ))
+        if quarantine_wh:
+            se_name = _create_release_stock_entry(
+                item_code, quarantine_wh, target_warehouse, inspection_name,
+                qty=quarantined_qty, batch_no=batch_no,
+                note="Return to Supplier after QC Fail",
+            )
         frappe.get_doc({
             "doctype": "Activity Log",
+            "subject": f"QC Hold Released — Return to Supplier: {inspection_name}",
             "user": frappe.session.user,
-            "operation": "Update",
+            # NOTE: Activity Log.operation is a restricted Select
+            # ("", "Login", "Logout", "Impersonate" only) — "Update" is invalid.
             "status": "Success",
             "reference_doctype": "QC Inspection",
             "reference_name": inspection_name,
-            "content": f"QC Hold Released — Disposition: Return to Supplier. Item: {item_code}.",
+            "content": f"QC Hold Released — Disposition: Return to Supplier. Item: {item_code}. "
+                       f"Stock moved to {target_warehouse}: {se_name or 'not moved (see error log)'}.",
         }).insert(ignore_permissions=True)
 
     # Clear this inspection's own hold flag first (authoritative, batch-scoped),
@@ -311,8 +392,6 @@ def release_from_hold(
     # still legitimately be on hold, so it must be derived, not blindly cleared.
     _stamp_qc_hold_fields(inspection_name, quarantine_wh or "", "", on_hold=False)
     _flag_item_on_hold(item_code)
-
-    frappe.db.commit()
 
     msg = _("QC Hold released for {0}. Disposition: {1}.").format(item_code, disposition)
     return {"status": "ok", "stock_entry": se_name, "message": msg}
@@ -377,8 +456,15 @@ def _create_quarantine_stock_entry(qci, quarantine_warehouse: str, reason: str) 
         if not source_wh:
             return None
 
-        # Get qty from reference doc item row
-        qty = _get_item_qty_from_reference(qci)
+        # Prefer the inspection's own rejected_qty (the accept/reject split
+        # entered by the inspector) — only that portion should physically
+        # move to quarantine, not the whole received/produced/dispatched
+        # qty. Fall back to the full row qty for older QC Inspections
+        # created before this field existed, or where inspected_qty was
+        # never seeded (e.g. reference doctypes whose rows don't carry qty).
+        qty = flt(qci.get("rejected_qty"))
+        if not qty:
+            qty = _get_item_qty_from_reference(qci)
         if not flt(qty):
             return None
 
@@ -386,13 +472,19 @@ def _create_quarantine_stock_entry(qci, quarantine_warehouse: str, reason: str) 
         se.stock_entry_type = "Material Transfer"
         se.purpose          = "Material Transfer"
         se.remarks          = f"QC Hold: {reason} | QC Inspection: {qci.name}"
-        se.append("items", {
+        item_row = {
             "item_code":     qci.item,
             "qty":           qty,
             "s_warehouse":   source_wh,
             "t_warehouse":   quarantine_warehouse,
             "basic_rate":    frappe.db.get_value("Item", qci.item, "last_purchase_rate") or 0,
-        })
+        }
+        # Batch traceability must survive the move into quarantine — without
+        # this, a batch-tracked item's quarantine transfer is untraceable
+        # back to the batch that failed QC.
+        if qci.get("batch_no"):
+            item_row["batch_no"] = qci.get("batch_no")
+        se.append("items", item_row)
         se.insert(ignore_permissions=True)
         se.submit()
         return se.name
@@ -404,27 +496,56 @@ def _create_quarantine_stock_entry(qci, quarantine_warehouse: str, reason: str) 
         return None
 
 
+def _get_quarantined_qty(qci) -> float:
+    """
+    Return the exact quantity that was moved into quarantine for THIS QC
+    Inspection, read from its own quarantine Stock Entry — never from the
+    warehouse-wide Bin balance. Multiple batches of the same item can be
+    on hold in the same quarantine warehouse at once (each with its own
+    QC Inspection), so a Bin-level balance is the combined total across
+    every batch and is not safe to use when releasing just one of them.
+    Falls back to 0 (caller skips the stock movement) if no quarantine
+    Stock Entry was ever recorded for this inspection, e.g. because no
+    quarantine warehouse was configured at the time it failed.
+    """
+    se_name = qci.get("quarantine_stock_entry")
+    if not se_name:
+        return 0.0
+    qty = frappe.db.get_value(
+        "Stock Entry Detail",
+        {"parent": se_name, "item_code": qci.item},
+        "qty",
+    )
+    return flt(qty)
+
+
 def _create_release_stock_entry(
     item_code: str,
     from_warehouse: str,
     to_warehouse: str,
     inspection_name: str,
+    qty: float,
+    batch_no: str | None = None,
     purpose: str = "Material Transfer",
     note: str = "",
 ) -> str | None:
-    """Create a Stock Entry to release stock from quarantine."""
+    """
+    Create a Stock Entry to release stock from quarantine.
+
+    `qty` must be the quantity actually quarantined for THIS QC Inspection
+    (see _get_quarantined_qty) — not the warehouse-wide Bin balance, which
+    can include stock belonging to other batches/inspections still
+    legitimately on hold in the same quarantine warehouse. Releasing one
+    batch must never move stock that belongs to a different, still-failed
+    batch.
+    """
     try:
-        # Get qty from quarantine stock (actual available qty)
-        qty = flt(frappe.db.get_value(
-            "Bin",
-            {"item_code": item_code, "warehouse": from_warehouse},
-            "actual_qty",
-        ))
-        if not qty:
+        if not flt(qty):
             frappe.msgprint(
-                _("No stock found in quarantine warehouse {0} for item {1}.").format(
-                    from_warehouse, item_code
-                ),
+                _("No recorded quarantine quantity found for QC Inspection {0} — "
+                  "nothing to move. This can happen if the item was flagged on "
+                  "hold without a quarantine Stock Entry (no quarantine "
+                  "warehouse was configured at the time).").format(inspection_name),
                 indicator="orange",
             )
             return None
@@ -433,18 +554,70 @@ def _create_release_stock_entry(
         se.stock_entry_type = purpose
         se.purpose          = purpose
         se.remarks = f"QC Hold Release | QC Inspection: {inspection_name}" + (f" | {note}" if note else "")
-        se.append("items", {
+        item_row = {
             "item_code":   item_code,
             "qty":         qty,
             "s_warehouse": from_warehouse,
             "t_warehouse": to_warehouse,
-        })
+        }
+        if batch_no:
+            item_row["batch_no"] = batch_no
+        se.append("items", item_row)
         se.insert(ignore_permissions=True)
         se.submit()
         return se.name
     except Exception:
         frappe.log_error(
             title="QC Hold Release Stock Entry failed",
+            message=frappe.get_traceback(),
+        )
+        return None
+
+
+def _create_scrap_write_off_entry(
+    item_code: str,
+    from_warehouse: str,
+    inspection_name: str,
+    qty: float,
+    batch_no: str | None = None,
+    note: str = "",
+) -> str | None:
+    """
+    Write off scrapped stock via a Material Issue Stock Entry — deducts it
+    from `from_warehouse` and books it out through the stock adjustment
+    account, rather than a Material Transfer (which would just relocate it
+    to another warehouse and leave it sitting on the books as an asset).
+    Material Issue only needs a source warehouse, no target.
+    """
+    try:
+        if not flt(qty):
+            frappe.msgprint(
+                _("No recorded quarantine quantity found for QC Inspection {0} — "
+                  "nothing to write off.").format(inspection_name),
+                indicator="orange",
+            )
+            return None
+
+        se = frappe.new_doc("Stock Entry")
+        se.stock_entry_type = "Material Issue"
+        se.purpose          = "Material Issue"
+        se.remarks = f"QC Hold Release — Scrap write-off | QC Inspection: {inspection_name}" + (
+            f" | {note}" if note else ""
+        )
+        item_row = {
+            "item_code":   item_code,
+            "qty":         qty,
+            "s_warehouse": from_warehouse,
+        }
+        if batch_no:
+            item_row["batch_no"] = batch_no
+        se.append("items", item_row)
+        se.insert(ignore_permissions=True)
+        se.submit()
+        return se.name
+    except Exception:
+        frappe.log_error(
+            title="QC Scrap Write-off Stock Entry failed",
             message=frappe.get_traceback(),
         )
         return None

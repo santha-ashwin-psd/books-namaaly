@@ -240,7 +240,8 @@
             <SearchableSelect
               v-model="form.item"
               :options="items"
-              :placeholder="itemsLoading ? 'Loading…' : 'Search item code…'"
+              :placeholder="!form.reference_name ? 'Select a Reference Document first…' : (itemsLoading ? 'Loading…' : 'Search item code…')"
+              :disabled="!form.reference_name"
               value-key="value"
               label-key="label"
             />
@@ -365,6 +366,38 @@
             <div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px">No readings recorded yet</div>
           </div>
 
+          <!-- Accept/Reject Qty split -->
+          <div class="qc-view-section" v-if="viewDoc.inspected_qty">
+            <div class="qc-view-sec-lbl">Accepted / Rejected Qty</div>
+            <div v-if="viewDoc.docstatus===0" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+              <div>
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Inspected Qty</label>
+                <div style="font-size:13px;font-weight:600;padding:6px 0">{{ viewDoc.inspected_qty }}</div>
+              </div>
+              <div>
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Accepted Qty</label>
+                <input type="number" min="0" step="0.001" class="qc-input" style="width:110px"
+                       v-model.number="viewDoc.accepted_qty"
+                       @change="onAcceptedQtyChange" />
+              </div>
+              <div>
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Rejected Qty</label>
+                <input type="number" min="0" step="0.001" class="qc-input" style="width:110px"
+                       v-model.number="viewDoc.rejected_qty"
+                       @change="onRejectedQtyChange" />
+              </div>
+              <div v-if="Number(viewDoc.accepted_qty||0)+Number(viewDoc.rejected_qty||0) !== Number(viewDoc.inspected_qty||0)"
+                   style="font-size:11.5px;color:#dc2626">
+                Must sum to {{ viewDoc.inspected_qty }}
+              </div>
+            </div>
+            <div v-else style="display:flex;gap:16px;flex-wrap:wrap">
+              <div><span class="qc-meta-lbl">Inspected</span><div style="font-size:12.5px;margin-top:2px">{{ viewDoc.inspected_qty }}</div></div>
+              <div><span class="qc-meta-lbl">Accepted</span><div style="font-size:12.5px;margin-top:2px;color:#16a34a;font-weight:600">{{ viewDoc.accepted_qty || 0 }}</div></div>
+              <div><span class="qc-meta-lbl">Rejected</span><div style="font-size:12.5px;margin-top:2px;color:#dc2626;font-weight:600">{{ viewDoc.rejected_qty || 0 }}</div></div>
+            </div>
+          </div>
+
           <!-- Remarks -->
           <div class="qc-view-section" v-if="viewDoc.remarks">
             <div class="qc-view-sec-lbl">Remarks</div>
@@ -466,7 +499,8 @@
             <SearchableSelect
               v-model="editForm.item"
               :options="items"
-              :placeholder="itemsLoading ? 'Loading…' : 'Search item code…'"
+              :placeholder="!editForm.reference_name ? 'Select a Reference Document first…' : (itemsLoading ? 'Loading…' : 'Search item code…')"
+              :disabled="!editForm.reference_name"
               value-key="value"
               label-key="label"
             />
@@ -621,6 +655,12 @@ watch(() => form.reference_type, (newType) => {
   else refDocs.value = [];
 });
 
+// Fetch items scoped to the chosen reference document whenever it changes
+watch(() => form.reference_name, (newName) => {
+  form.item = "";
+  fetchItems(form.reference_type, newName);
+});
+
 // ── Type config ────────────────────────────────────────────────────────────────
 const TYPE_META = {
   "Incoming":   { color: "#0891b2", grad: "linear-gradient(135deg,#0c4a6e,#0891b2)" },
@@ -756,6 +796,24 @@ async function openView(r) {
 
 function markDirty() { isDirty.value = true; }
 
+function onAcceptedQtyChange() {
+  if (!viewDoc.value?.inspected_qty) return;
+  const inspected = Number(viewDoc.value.inspected_qty) || 0;
+  const accepted = Math.max(0, Math.min(inspected, Number(viewDoc.value.accepted_qty) || 0));
+  viewDoc.value.accepted_qty = accepted;
+  viewDoc.value.rejected_qty = +(inspected - accepted).toFixed(3);
+  markDirty();
+}
+
+function onRejectedQtyChange() {
+  if (!viewDoc.value?.inspected_qty) return;
+  const inspected = Number(viewDoc.value.inspected_qty) || 0;
+  const rejected = Math.max(0, Math.min(inspected, Number(viewDoc.value.rejected_qty) || 0));
+  viewDoc.value.rejected_qty = rejected;
+  viewDoc.value.accepted_qty = +(inspected - rejected).toFixed(3);
+  markDirty();
+}
+
 async function saveReadings() {
   if (!viewDoc.value) return;
   saving.value = true;
@@ -768,6 +826,8 @@ async function saveReadings() {
     const res = await apiCall("zoho_books_clone.api.qc.save_qc_readings", {
       inspection_name: viewDoc.value.name,
       readings_json: JSON.stringify(readings),
+      accepted_qty: viewDoc.value.inspected_qty ? viewDoc.value.accepted_qty : undefined,
+      rejected_qty: viewDoc.value.inspected_qty ? viewDoc.value.rejected_qty : undefined,
     });
     const data = res?.message || res;
     if (data) {
@@ -776,6 +836,8 @@ async function saveReadings() {
       viewDoc.value.rejected_readings = data.rejected;
       viewDoc.value.total_readings = data.total;
       if (data.readings) viewDoc.value.readings = data.readings;
+      if (data.accepted_qty !== undefined) viewDoc.value.accepted_qty = data.accepted_qty;
+      if (data.rejected_qty !== undefined) viewDoc.value.rejected_qty = data.rejected_qty;
     }
     isDirty.value = false;
     toast.success("Readings saved");
@@ -855,8 +917,7 @@ function openNew() {
     remarks: "",
   });
   refDocs.value = [];
-  // Pre-fetch items when drawer opens
-  fetchItems("");
+  items.value   = [];
   drawerOpen.value = true;
 }
 
@@ -893,6 +954,12 @@ watch(() => editForm.reference_type, (newType) => {
   else editRefDocs.value = [];
 });
 
+watch(() => editForm.reference_name, (newName) => {
+  if (suppressEditRefWatch.value) return;
+  editForm.item = "";
+  fetchItems(editForm.reference_type, newName);
+});
+
 function openEdit(r) {
   suppressEditRefWatch.value = true;
   Object.assign(editForm, {
@@ -910,7 +977,7 @@ function openEdit(r) {
   // for genuine user-driven Reference Doc Type changes.
   nextTick(() => { suppressEditRefWatch.value = false; });
   // Load current ref docs and items for dropdowns
-  fetchItems("");
+  fetchItems(r.reference_type, r.reference_name);
   if (r.reference_type) fetchEditRefDocs("");
   fetchEditTemplates();
   editOpen.value = true;
@@ -1053,19 +1120,20 @@ async function fetchRefDocs(q = "") {
   finally { refDocsLoading.value = false; }
 }
 
-// Fetch Items
-async function fetchItems(q = "") {
+// Fetch Items — scoped to the selected Reference Document. The Item
+// dropdown must only ever offer items that actually appear on that
+// document (see get_reference_doc_items), not every Item in the system.
+async function fetchItems(referenceType, referenceName) {
+  if (!referenceType || !referenceName) { items.value = []; return; }
   itemsLoading.value = true;
   try {
-    const rows = await apiList("Item", {
-      fields:  ["name", "item_name"],
-      filters: [["disabled", "=", 0], ...(q ? [["name", "like", `%${q}%`]] : [])],
-      limit:   50,
-      order:   "item_name asc",
+    const rows = await apiCall("zoho_books_clone.api.qc.get_reference_doc_items", {
+      reference_type: referenceType,
+      reference_name: referenceName,
     });
-    items.value = rows.map(r => ({
-      value: r.name,
-      label: r.item_name && r.item_name !== r.name ? `${r.name} — ${r.item_name}` : r.name,
+    items.value = (rows || []).map(r => ({
+      value: r.item_code,
+      label: r.item_name && r.item_name !== r.item_code ? `${r.item_code} — ${r.item_name}` : r.item_code,
     }));
   } catch { items.value = []; }
   finally { itemsLoading.value = false; }

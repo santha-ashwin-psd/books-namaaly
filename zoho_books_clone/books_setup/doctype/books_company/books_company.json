@@ -469,6 +469,42 @@
    "idx": 61
   },
   {
+   "fieldname": "sec_qc",
+   "fieldtype": "Section Break",
+   "label": "Quality Control"
+  },
+  {
+   "fieldname": "default_quarantine_warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse",
+   "label": "Default Quarantine Warehouse",
+   "description": "Stock from failed QC Inspections is auto-transferred here for this company."
+  },
+  {
+   "fieldname": "default_scrap_warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse",
+   "label": "Default Scrap Warehouse"
+  },
+  {
+   "fieldname": "col_qc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qc_hard_block",
+   "fieldtype": "Check",
+   "label": "Hard Block on QC Failure",
+   "description": "If checked, submission is blocked outright on QC failure instead of allowing an override.",
+   "default": "0"
+  },
+  {
+   "fieldname": "qc_require_second_signoff",
+   "fieldtype": "Check",
+   "label": "Require Second Sign-off on QC Inspections",
+   "description": "If checked, a QC Inspection cannot be submitted unless 'Verified By' is set to a different user than 'Inspected By' -- enforces a dual-signature review before a batch's QC result is finalised.",
+   "default": "0"
+  },
+  {
    "fieldname": "sec_lock",
    "fieldtype": "Section Break",
    "idx": 62,

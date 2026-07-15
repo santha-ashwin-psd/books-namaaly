@@ -280,7 +280,7 @@
 
     <!-- ── Create / Edit Drawer ── -->
     <div v-if="drawerOpen" class="inv-drawer-bg" @click.self="!editingName ? null : drawerOpen=false">
-      <div class="inv-drawer-panel" :class="{'inv-split':showPreview, 'is-add':!editingName}">
+      <div class="inv-drawer-panel inv-new-drawer" :class="{'inv-split':showPreview, 'is-add':!editingName}">
 
         <!-- ── Header ── -->
         <div class="inv-dh">
@@ -347,38 +347,40 @@
                   </select>
                 </div>
               </div>
-              <!-- Cost Center -->
-              <div style="margin-top:14px">
-                <label class="inv-lbl">Cost Center</label>
-                <select v-model="form.cost_center" class="inv-fi">
-                  <option value="">— Select —</option>
-                  <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
-                </select>
-              </div>
-              <!-- Price List -->
-              <div style="margin-top:14px">
-                <label class="inv-lbl">Price List</label>
-                <select v-model="form.price_list" class="inv-fi" @change="onPriceListChange(form.price_list)">
-                  <option value="">Select price list (optional)</option>
-                  <option v-for="pl in priceLists" :key="pl.value" :value="pl.value">{{ pl.label }}</option>
-                </select>
-              </div>
-              <!-- Sales Person -->
-              <div style="margin-top:14px">
-                <label class="inv-lbl">Sales Person</label>
-                <SearchableSelect v-model="form.sales_person" :options="salesPersons"
-                  placeholder="Select sales person"/>
-              </div>
-              <!-- Place of supply -->
-              <div style="margin-top:14px">
-                <label class="inv-lbl">Place of Supply</label>
-                <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
-                  <span>🌐</span> Outside India — Not applicable for export invoices
+              <!-- Cost Center | Price List -->
+              <div class="inv-details-2col">
+                <div>
+                  <label class="inv-lbl">Cost Center</label>
+                  <select v-model="form.cost_center" class="inv-fi">
+                    <option value="">— Select —</option>
+                    <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
+                  </select>
                 </div>
-                <select v-else v-model="form.place_of_supply" class="inv-fi">
-                  <option value="">— Select State —</option>
-                  <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
-                </select>
+                <div>
+                  <label class="inv-lbl">Price List</label>
+                  <select v-model="form.price_list" class="inv-fi" @change="onPriceListChange(form.price_list)">
+                    <option value="">Select price list (optional)</option>
+                    <option v-for="pl in priceLists" :key="pl.value" :value="pl.value">{{ pl.label }}</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Sales Person | Place of supply -->
+              <div class="inv-details-2col">
+                <div>
+                  <label class="inv-lbl">Sales Person</label>
+                  <SearchableSelect v-model="form.sales_person" :options="salesPersons"
+                    placeholder="Select sales person"/>
+                </div>
+                <div>
+                  <label class="inv-lbl">Place of Supply</label>
+                  <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
+                    <span>🌐</span> Outside India — Not applicable for export invoices
+                  </div>
+                  <select v-else v-model="form.place_of_supply" class="inv-fi">
+                    <option value="">— Select State —</option>
+                    <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
               </div>
               <!-- Inventory toggle -->
               <div style="margin-top:14px">
@@ -491,95 +493,75 @@
                 <div><strong>SEZ Supply — Zero Rated</strong><br/>Apply IGST @ 0% or supply under LUT/Bond without payment of tax.</div>
               </div>
 
-              <div class="po-item-cards">
-                <div v-for="(line, idx) in lines" :key="line.id" class="po-item-card">
-                  <div class="po-item-card-header" @click="line.collapsed=!line.collapsed">
-                    <span class="po-item-card-num">#{{ idx + 1 }}</span>
-                    <span class="po-item-card-title">{{ line.item_code || 'Line Item' }}</span>
-                    <div class="po-item-card-subtotal">
-                      <span class="po-item-card-subtotal-label">SUBTOTAL</span>
-                      <span class="po-item-card-amount">{{ fmtAmt(line.amount) }}</span>
-                      <span v-if="lineTaxTotal(line)" style="font-size:11px;color:#6b7280;margin-top:2px">+GST {{ fmtAmt(lineTaxTotal(line)) }} = {{ fmtAmt(lineAmountWithTax(line)) }}</span>
-                    </div>
-                    <span class="po-item-card-chevron" :class="{collapsed:line.collapsed}">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                    </span>
-                    <button @click.stop="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button>
-                  </div>
-                  <div class="po-item-card-body" v-show="!line.collapsed">
-                    <div class="po-item-col po-item-col--left">
-                      <div class="po-item-field">
-                        <label>Item Name <span class="inv-req">*</span></label>
+              <div class="po-items-table-wrap">
+                <table class="po-items-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">#</th>
+                      <th class="th-item">ITEM NAME &amp; DESCRIPTION</th>
+                      <th class="th-hsn">HSN/SAC</th>
+                      <th class="th-uom">UOM</th>
+                      <th class="th-qty">QTY</th>
+                      <th class="th-rate">RATE ({{ currencySymbol }})</th>
+                      <th class="th-mrp">MRP ({{ currencySymbol }})</th>
+                      <th class="th-disc">DISCOUNT %</th>
+                      <th class="th-tax">TAX TEMPLATE</th>
+                      <th class="th-subtotal">SUBTOTAL</th>
+                      <th class="th-rm"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(line, idx) in lines" :key="line.id">
+                    <tr class="po-items-row">
+                      <td class="td-num"><span class="po-row-num">#{{ idx + 1 }}</span></td>
+                      <td class="td-item">
                         <SearchableSelect v-model="line.item_code" :options="items"
                           placeholder="Search item or service"
                           :createable="true" createDoctype="Item"
                           @update:modelValue="onItemChange(line)"/>
-                      </div>
-                      <div class="po-item-field" style="margin-top:14px">
-                        <label>Description</label>
-                        <textarea v-model="line.description" class="inv-fi po-item-desc-ta" rows="4" maxlength="500" placeholder="Enter item description…"></textarea>
+                        <textarea v-model="line.description" class="inv-fi po-row-desc-ta" rows="2" maxlength="500" placeholder="Enter item description…"></textarea>
                         <div class="exp-field-hint" :class="{'exp-field-hint-err': (line.description||'').length >= 500}">{{ (line.description||'').length }}/500</div>
-                      </div>
-                    </div>
-                    <div class="po-item-col po-item-col--right">
-                      <div class="po-item-num-row">
-                        <div class="po-item-field">
-                          <label>HSN/SAC</label>
-                          <input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/>
+                      </td>
+                      <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
+                      <td class="td-uom">
+                        <select v-model="line.uom" class="inv-fi">
+                          <option value="Nos">Nos</option>
+                          <option value="Kg">Kg</option>
+                          <option value="Ltr">Ltr</option>
+                          <option value="Hrs">Hrs</option>
+                          <option value="Pcs">Pcs</option>
+                          <option value="Box">Box</option>
+                        </select>
+                      </td>
+                      <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/></td>
+                      <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/></td>
+                      <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
+                      <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
+                      <td class="td-tax">
+                        <select v-model="line.tax_code" class="inv-fi">
+                          <option value="">— No Tax —</option>
+                          <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
+                        </select>
+                      </td>
+                      <td class="td-subtotal">
+                        <span class="po-row-subtotal-label">SUBTOTAL</span>
+                        <span class="po-row-subtotal-amt">{{ fmtAmt(line.amount) }}</span>
+                        <span v-if="lineTaxTotal(line)" class="po-row-subtotal-tax">+GST {{ fmtAmt(lineTaxTotal(line)) }} = {{ fmtAmt(lineAmountWithTax(line)) }}</span>
+                      </td>
+                      <td class="td-rm"><button @click="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button></td>
+                    </tr>
+                    <tr v-if="lineTaxBreakup(line).length" class="po-items-tax-row">
+                      <td></td>
+                      <td colspan="10">
+                        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#374151;padding:6px 0">
+                          <span v-for="t in lineTaxBreakup(line)" :key="t.tax_type+t.rate">{{ t.tax_type }} @ {{ t.rate }}% <strong>{{ fmtAmt(t.amount) }}</strong></span>
+                          <span style="margin-left:auto;color:#1a1d23;font-weight:700">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
                         </div>
-                        <div class="po-item-field">
-                          <label>UOM</label>
-                          <select v-model="line.uom" class="inv-fi">
-                            <option value="Nos">Nos</option>
-                            <option value="Kg">Kg</option>
-                            <option value="Ltr">Ltr</option>
-                            <option value="Hrs">Hrs</option>
-                            <option value="Pcs">Pcs</option>
-                            <option value="Box">Box</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="po-item-num-row">
-                        <div class="po-item-field">
-                          <label>Qty</label>
-                          <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/>
-                        </div>
-                        <div class="po-item-field">
-                          <label>Rate ({{ currencySymbol }})</label>
-                          <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/>
-                        </div>
-                      </div>
-                      <div class="po-item-num-row">
-                        <div class="po-item-field">
-                          <label>MRP ({{ currencySymbol }})</label>
-                          <input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/>
-                        </div>
-                      </div>
-                      <div class="po-item-num-row">
-                        <div class="po-item-field">
-                          <label>Discount %</label>
-                          <input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/>
-                        </div>
-                        <div class="po-item-field">
-                          <label>Tax Template</label>
-                          <select v-model="line.tax_code" class="inv-fi">
-                            <option value="">— No Tax —</option>
-                            <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div v-if="lineTaxBreakup(line).length" class="po-item-num-row" style="margin-top:2px">
-                        <div class="po-item-field" style="grid-column:1/-1">
-                          <label>GST</label>
-                          <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#374151;padding:6px 0">
-                            <span v-for="t in lineTaxBreakup(line)" :key="t.tax_type+t.rate">{{ t.tax_type }} @ {{ t.rate }}% <strong>{{ fmtAmt(t.amount) }}</strong></span>
-                            <span style="margin-left:auto;color:#1a1d23;font-weight:700">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      </td>
+                    </tr>
+                    </template>
+                  </tbody>
+                </table>
               </div>
 
               <button class="inv-add-line-btn" style="margin-top:12px" @click="addLine">
@@ -3011,6 +2993,8 @@ watch(() => route.query, (q) => {
 .inv-fg2 { grid-template-columns:1fr 1fr; } .inv-fg3 { grid-template-columns:1fr 1fr 1fr; }
 .inv-lbl { display:block; font-size:11.5px; font-weight:600; color:#495057; margin-bottom:5px; }
 .inv-fi { width:100%; border:1px solid #e2e8f0; border-radius:6px; padding:7px 10px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; }
+.inv-details-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 14px; }
+@media (max-width: 700px) { .inv-details-2col { grid-template-columns: 1fr; } }
 .inv-inv-block { border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:12px; transition:background .2s,border-color .2s; }
 .inv-inv-block.inv-on  { background:#eff6ff; border:1.5px solid #93c5fd; }
 .inv-inv-block.inv-off { background:#f9fafb; border:1.5px solid #e5e7eb; }
@@ -3028,6 +3012,41 @@ watch(() => route.query, (q) => {
 .inv-inv-switch input:checked + .inv-inv-slider { background:#2563eb; }
 .inv-inv-switch input:checked + .inv-inv-slider:before { transform:translateX(18px); }
 .inv-fi:focus { border-color:#1a6ef7; box-shadow:0 0 0 3px rgba(26,110,247,.08); }
+
+/* ── Line items table (row) layout ── */
+.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: auto; }
+.po-items-table { width: 100%; min-width: 1180px; border-collapse: collapse; }
+.po-items-table thead th {
+  background: #f8fafc; border-bottom: 1px solid #e5e7eb;
+  font-size: 10.5px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+  letter-spacing: .04em; text-align: left; padding: 10px 12px; white-space: nowrap;
+}
+.po-items-table .th-num { width: 34px; }
+.po-items-table .th-item { min-width: 260px; }
+.po-items-table .th-hsn { width: 120px; }
+.po-items-table .th-uom { width: 90px; }
+.po-items-table .th-qty { width: 90px; }
+.po-items-table .th-rate { width: 110px; }
+.po-items-table .th-mrp { width: 100px; }
+.po-items-table .th-disc { width: 100px; }
+.po-items-table .th-tax { width: 140px; }
+.po-items-table .th-subtotal { width: 120px; text-align: right; }
+.po-items-table .th-rm { width: 36px; }
+.po-items-row { border-bottom: 1px solid #f0f2f8; }
+.po-items-row:hover { background: #fafbfe; }
+.po-items-row td { padding: 12px; vertical-align: top; }
+.po-items-row .td-num { padding-top: 16px; }
+.po-row-num { font-size: 11px; font-weight: 800; color: #4f46e5; background: #e0e7ff; border-radius: 5px; padding: 3px 8px; letter-spacing: .02em; white-space: nowrap; }
+.po-row-desc-ta { resize: vertical; min-height: 46px; font-size: 12.5px; line-height: 1.4; margin-top: 8px; }
+.po-items-row .td-subtotal { text-align: right; white-space: nowrap; }
+.po-row-subtotal-label { display: block; font-size: 9.5px; font-weight: 700; color: #9ca3af; letter-spacing: .08em; }
+.po-row-subtotal-amt { display: block; font-size: 16px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.po-row-subtotal-tax { display: block; font-size: 10.5px; color: #6b7280; margin-top: 2px; }
+.po-items-row .td-rm { text-align: center; padding-top: 14px; }
+.po-items-tax-row td { padding: 0 12px 10px; border-bottom: 1px solid #f0f2f8; }
+@media (max-width: 900px) {
+  .po-items-table-wrap { -webkit-overflow-scrolling: touch; }
+}
 .inv-add-line-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(26,110,247,.3); background:#eaf1ff; color:#1a6ef7; border-radius:6px; padding:5px 12px; font-size:12.5px; font-weight:600; cursor:pointer; }
 .inv-copy-btn { background:#f0fdf4; border-color:rgba(5,150,105,.3); color:#059669; }
 
@@ -3262,4 +3281,5 @@ watch(() => route.query, (q) => {
 .inv-brand-settings-hint { font-size: 11.5px; color: #9ca3af; display: flex; align-items: center; gap: 5px; margin-top: 4px; }
 .inv-brand-settings-link { color: #2563eb; text-decoration: none; font-weight: 500; }
 .inv-brand-settings-link:hover { text-decoration: underline; }
+.inv-new-drawer{width:1020px !important;right:-1020px!important;}
 </style>

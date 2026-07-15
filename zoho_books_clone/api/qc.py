@@ -85,6 +85,42 @@ def get_inspection_detail(inspection_name: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_reference_doc_items(reference_type: str, reference_name: str) -> list:
+    """
+    Return every item row on the given reference document, regardless of
+    whether inspection_required_* is set on the Item master.
+
+    Used to populate the Item dropdown on the manual "New QC Inspection"
+    form once a Reference Document has been chosen — the dropdown must be
+    scoped to items that actually appear on that document, not every Item
+    in the system (see get_items_requiring_qc, which is deliberately
+    narrower: it only returns QC-flagged items, for the "Create QC" button
+    surfaced automatically off an invoice/entry).
+    """
+    if not (reference_type and reference_name):
+        return []
+
+    try:
+        doc = frappe.get_doc(reference_type, reference_name)
+    except Exception:
+        return []
+
+    result = []
+    seen = set()
+    for row in (getattr(doc, "items", []) or []):
+        item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
+        if not item_code or item_code in seen:
+            continue
+        seen.add(item_code)
+        result.append({
+            "item_code": item_code,
+            "item_name": frappe.db.get_value("Item", item_code, "item_name") or item_code,
+            "qty":       getattr(row, "qty", 0),
+        })
+    return result
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_items_requiring_qc(reference_type: str, reference_name: str) -> list:
     """
     Return a list of items on the document that have inspection_required_* set.
@@ -205,11 +241,24 @@ def update_template(
     if not frappe.db.exists("QC Inspection Template", template_name):
         frappe.throw(_("QC Inspection Template {0} does not exist.").format(template_name))
 
-    doc = frappe.get_doc("QC Inspection Template", template_name)
-
     new_name = (template_name_new or "").strip()
-    if new_name:
-        doc.template_name = new_name
+
+    # QC Inspection Template is named `autoname: field:template_name` — the
+    # docname literally IS the template_name value. Just setting
+    # doc.template_name and calling doc.save() does NOT rename the
+    # document (Frappe only derives the name from that field on insert),
+    # so the docname would silently drift out of sync with the displayed
+    # name, and every qc_inspection_template Link across the app would
+    # keep pointing at the stale old name. frappe.rename_doc() renames the
+    # document itself and updates every Link/Dynamic Link field that
+    # references it.
+    if new_name and new_name != template_name:
+        if frappe.db.exists("QC Inspection Template", new_name):
+            frappe.throw(_("A QC Inspection Template named {0} already exists.").format(new_name))
+        frappe.rename_doc("QC Inspection Template", template_name, new_name, force=True)
+        template_name = new_name
+
+    doc = frappe.get_doc("QC Inspection Template", template_name)
     doc.item = (item or "").strip() or None
     doc.item_group = (item_group or "").strip() or None
     doc.inspection_type = inspection_type or "All"
@@ -233,7 +282,6 @@ def update_template(
         })
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
     return doc.as_dict()
 
 
@@ -263,24 +311,49 @@ def create_qc_inspection(
     if not frappe.db.exists("Item", item_code):
         frappe.throw(_("Item {0} does not exist.").format(item_code))
 
-    # Check if one already exists (non-cancelled)
-    existing = frappe.db.get_value(
-        "QC Inspection",
-        {
-            "reference_type": reference_type,
-            "reference_name": reference_name,
-            "item": item_code,
-            "docstatus": ["!=", 2],
-        },
-        "name",
+    # Find the reference doc row for this item. Prefer a row that doesn't
+    # already have a QC Inspection linked — this endpoint only receives
+    # item_code (not a row identifier), so when the same item appears on
+    # multiple rows (different batches, a split receipt) this picks the
+    # first row still needing inspection rather than always the first row
+    # overall, which would otherwise make a second row impossible to
+    # inspect independently.
+    target_row = None
+    try:
+        ref_doc = frappe.get_doc(reference_type, reference_name)
+        candidate_rows = [
+            row for row in (getattr(ref_doc, "items", []) or [])
+            if (getattr(row, "item_code", None) or getattr(row, "item", None)) == item_code
+        ]
+        for row in candidate_rows:
+            existing_link = getattr(row, "quality_inspection", None)
+            if not existing_link or frappe.db.get_value("QC Inspection", existing_link, "docstatus") == 2:
+                target_row = row
+                break
+        if not target_row and candidate_rows:
+            target_row = candidate_rows[0]
+    except Exception:
+        pass
+
+    if target_row is not None:
+        existing = getattr(target_row, "quality_inspection", None)
+        if existing and frappe.db.get_value("QC Inspection", existing, "docstatus") != 2:
+            return {"inspection_name": existing, "created": False, "message": "Inspection already exists"}
+
+    batch_no = getattr(target_row, "batch_no", None) if target_row is not None else None
+    inspected_qty = (
+        (getattr(target_row, "qty", None) or getattr(target_row, "received_qty", None))
+        if target_row is not None else None
     )
-    if existing:
-        return {"inspection_name": existing, "created": False, "message": "Inspection already exists"}
 
     try:
         inspection_name = create_qc_inspection_for_item(
-            reference_type, reference_name, item_code, inspection_type
+            reference_type, reference_name, item_code, inspection_type,
+            batch_no=batch_no, inspected_qty=inspected_qty,
         )
+        if target_row is not None and frappe.db.has_column(target_row.doctype, "quality_inspection"):
+            frappe.db.set_value(target_row.doctype, target_row.name, "quality_inspection",
+                                 inspection_name, update_modified=False)
     except Exception as e:
         frappe.log_error(
             title="create_qc_inspection failed",
@@ -344,7 +417,6 @@ def update_qc_inspection(
     doc.remarks = remarks or None
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
 
     return {"inspection_name": doc.name, "doc": doc.as_dict()}
 
@@ -398,17 +470,21 @@ def apply_qc_template(inspection_name: str, template_name: str = None) -> dict:
     _populate_readings_from_template(doc, template_name)
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
 
     return {"inspection_name": doc.name, "doc": doc.as_dict()}
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
-def save_qc_readings(inspection_name: str, readings_json: str) -> dict:
+def save_qc_readings(inspection_name: str, readings_json: str,
+                      accepted_qty: float = None, rejected_qty: float = None) -> dict:
     """
     Save reading values for a draft QC Inspection.
     readings_json: JSON array of {idx, reading_value, remarks}
     Status is auto-computed by the controller's validate().
+    accepted_qty/rejected_qty are optional: when given, they set the
+    partial accept/reject split (validated by the controller to sum to
+    inspected_qty). When omitted, the controller's own default (all
+    accepted on Pass, all rejected on Fail) applies.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -419,15 +495,44 @@ def save_qc_readings(inspection_name: str, readings_json: str) -> dict:
     if doc.docstatus != 0:
         frappe.throw(_("Only draft QC Inspections can be edited."))
 
-    # Update reading values by idx or order
+    # Update reading values by idx. Every update must carry a valid idx
+    # (1-based, matching an existing reading row on this inspection) --
+    # previously a missing or zero idx silently no-op'd for that one row
+    # (idx - 1 = -1 fails the bounds check without raising anything), so a
+    # malformed payload from the frontend could report success while
+    # actually dropping some readings. All idx values are validated before
+    # any update is applied, so a bad payload is rejected outright rather
+    # than partially saved.
+    resolved = []
+    bad_idx = []
     for upd in readings:
-        idx = int(upd.get("idx", 0)) - 1
+        raw_idx = upd.get("idx")
+        try:
+            idx = int(raw_idx) - 1
+        except (TypeError, ValueError):
+            bad_idx.append(raw_idx)
+            continue
         if 0 <= idx < len(doc.readings):
-            doc.readings[idx].reading_value = upd.get("reading_value", "")
-            doc.readings[idx].remarks = upd.get("remarks", "")
+            resolved.append((idx, upd))
+        else:
+            bad_idx.append(raw_idx)
+
+    if bad_idx:
+        frappe.throw(_(
+            "Cannot save readings — invalid or out-of-range row index: {0}. "
+            "No changes were saved."
+        ).format(bad_idx))
+
+    for idx, upd in resolved:
+        doc.readings[idx].reading_value = upd.get("reading_value", "")
+        doc.readings[idx].remarks = upd.get("remarks", "")
+
+    if accepted_qty is not None:
+        doc.accepted_qty = accepted_qty
+    if rejected_qty is not None:
+        doc.rejected_qty = rejected_qty
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
 
     return {
         "inspection_name": inspection_name,
@@ -436,6 +541,9 @@ def save_qc_readings(inspection_name: str, readings_json: str) -> dict:
         "rejected":        doc.rejected_readings,
         "total":           doc.total_readings,
         "readings":        [r.as_dict() for r in doc.readings],
+        "inspected_qty":   doc.inspected_qty,
+        "accepted_qty":    doc.accepted_qty,
+        "rejected_qty":    doc.rejected_qty,
     }
 
 
@@ -451,7 +559,6 @@ def submit_qc_inspection(inspection_name: str) -> dict:
 
     doc.flags.ignore_permissions = True
     doc.submit()
-    frappe.db.commit()
 
     return {
         "inspection_name": inspection_name,
@@ -465,9 +572,13 @@ def submit_qc_inspection(inspection_name: str) -> dict:
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def cancel_qc_inspection(inspection_name: str) -> dict:
     """Cancel a submitted QC Inspection (Books Admin only)."""
-    roles = set(frappe.get_roles(frappe.session.user))
-    if not (roles & {"Books Admin", "System Manager", "Administrator"}):
-        frappe.throw(_("Only Books Admin can cancel a QC Inspection."), frappe.PermissionError)
+    # "Administrator" is a user, not a role name (see api/qc_approval.py's
+    # _require_approver for the same fix) — check it directly instead of
+    # including it in the role set.
+    if frappe.session.user != "Administrator":
+        roles = set(frappe.get_roles(frappe.session.user))
+        if not (roles & {"Books Admin", "System Manager"}):
+            frappe.throw(_("Only Books Admin can cancel a QC Inspection."), frappe.PermissionError)
 
     doc = frappe.get_doc("QC Inspection", inspection_name)
     if doc.docstatus != 1:
@@ -475,7 +586,6 @@ def cancel_qc_inspection(inspection_name: str) -> dict:
 
     doc.flags.ignore_permissions = True
     doc.cancel()
-    frappe.db.commit()
     return {"inspection_name": inspection_name, "docstatus": 2, "status": "Cancelled"}
 
 
@@ -647,6 +757,16 @@ def generate_coa(inspection_name: str) -> dict:
             "Cannot generate a Certificate of Analysis for QC Inspection {0} — "
             "it is <b>{1}</b>. Only submitted QC Inspections can produce a COA."
         ).format(inspection_name, status_label))
+
+    # A Certificate of Analysis certifies that a batch conforms to
+    # specification — it must never be generated for a batch that failed
+    # (or is still Pending) QC, regardless of submission state.
+    if doc.status != "Pass":
+        frappe.throw(_(
+            "Cannot generate a Certificate of Analysis for QC Inspection {0} — "
+            "its result is <b>{1}</b>, not Pass. A COA can only be issued for "
+            "a batch that has passed QC."
+        ).format(inspection_name, doc.status))
 
     # Company name
     company_name = ""

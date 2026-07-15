@@ -543,40 +543,80 @@ def record_payment(
 #   Stage 2 (this section):
 #       Dr Bank           /   Cr Cash-in-Hand          (cash physically banked)
 #
-# Every submitted, undeposited "Receive" Payment Entry whose mode_of_payment
-# resolves to a Cash-type account is eligible. Selected entries are bundled
-# into a single Journal Entry (Contra) so one bank deposit slip = one JE, and
-# each Payment Entry is flagged custom_deposited_to_bank so it can never be
-# bundled into a second deposit and the Cash-in-Hand ledger always reconciles
-# to "receipts − payments − deposits" = physical cash actually on hand.
+# The client does not want to track deposit status per individual cash entry
+# (no more picking specific receipts to bundle). Instead this is a running
+# POOL: "yet to deposit" = all-time Cash In − all-time Cash Out − all-time
+# already-deposited-to-bank, for a given Cash account. The user can deposit
+# any amount up to that pooled balance (a partial deposit is allowed), and
+# the next time they open the drawer the balance reflects what's left.
+#
+# Already-deposited-to-bank is tracked by summing the Cash-account credit
+# leg of every Contra Journal Entry created via deposit_cash_to_bank() below
+# (identified by voucher_type='Contra Entry' + a fixed remark marker).
+
+_CASH_DEPOSIT_REMARK_PREFIX = "Cash deposited to bank:"
+
+
+def _cash_account_balance(cash_account, company):
+    """Pooled 'yet to deposit' balance for one Cash account: all-time cash
+    received minus all-time cash paid out minus all-time already deposited.
+    """
+    total_in = flt(frappe.db.sql(
+        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+           WHERE docstatus = 1 AND payment_type = 'Receive'
+             AND paid_to = %s AND LOWER(company) = LOWER(%s)""",
+        (cash_account, company)
+    )[0][0] or 0)
+
+    total_out = flt(frappe.db.sql(
+        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+           WHERE docstatus = 1 AND payment_type = 'Pay'
+             AND paid_from = %s AND LOWER(company) = LOWER(%s)""",
+        (cash_account, company)
+    )[0][0] or 0)
+
+    total_deposited = flt(frappe.db.sql(
+        """SELECT SUM(jea.credit)
+           FROM `tabJournal Entry Account` jea
+           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+           WHERE je.docstatus = 1 AND je.voucher_type = 'Contra Entry'
+             AND jea.account = %s
+             AND je.remark LIKE %s""",
+        (cash_account, _CASH_DEPOSIT_REMARK_PREFIX + "%")
+    )[0][0] or 0)
+
+    return total_in - total_out - total_deposited
+
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
-def get_undeposited_cash(company=None):
-    """List submitted cash-receipt Payment Entries not yet deposited to bank."""
+def get_undeposited_cash(company=None, exclude_account=None):
+    """Pooled 'yet to deposit' cash balance, per Cash account, for this company.
+
+    exclude_account: when the deposit destination itself is a Cash account
+    (e.g. topping up Petty Cash from the general cash pool), pass its name
+    here so it's excluded from both the source pool AND the destination
+    list — money can't be moved from an account into itself.
+    """
     company = company or frappe.db.get_default("company")
     if not company:
         frappe.throw("No company context found.")
 
     cash_accounts = frappe.db.sql(
         """SELECT name FROM `tabAccount`
-           WHERE account_type = 'Cash' AND is_group = 0 AND LOWER(company) = LOWER(%s)""",
+           WHERE account_type = 'Cash' AND is_group = 0 AND LOWER(company) = LOWER(%s)
+           ORDER BY name""",
         (company,), as_dict=True
     )
     cash_account_names = [c["name"] for c in cash_accounts]
     if not cash_account_names:
-        return {"entries": [], "total": 0, "cash_accounts": [], "bank_accounts": []}
+        return {"cash_accounts": [], "total_undeposited": 0, "bank_accounts": [], "destination_accounts": [], "company": company}
 
-    rows = frappe.db.sql(
-        """SELECT name, party_name, party, payment_date, paid_amount, reference_no, paid_to
-           FROM `tabPayment Entry`
-           WHERE docstatus = 1
-             AND payment_type = 'Receive'
-             AND paid_to IN %(cash_accounts)s
-             AND LOWER(company) = LOWER(%(company)s)
-             AND IFNULL(custom_deposited_to_bank, 0) = 0
-           ORDER BY payment_date ASC, name ASC""",
-        {"cash_accounts": cash_account_names, "company": company}, as_dict=True
-    )
+    breakdown = []
+    for acc in cash_account_names:
+        if exclude_account and acc == exclude_account:
+            continue
+        bal = _cash_account_balance(acc, company)
+        breakdown.append({"account": acc, "undeposited": bal})
 
     bank_accounts = frappe.db.sql(
         """SELECT name FROM `tabAccount`
@@ -585,101 +625,127 @@ def get_undeposited_cash(company=None):
         (company,), as_dict=True
     )
 
-    total = sum(flt(r["paid_amount"]) for r in rows)
+    # Every Bank account, plus every OTHER Cash account, is a valid deposit
+    # destination — "Deposit" can mean banking the cash, or moving it into
+    # a different cash bucket like Petty Cash.
+    destination_accounts = (
+        [{"name": b["name"], "account_type": "Bank"} for b in bank_accounts]
+        + [{"name": acc, "account_type": "Cash"} for acc in cash_account_names if acc != exclude_account]
+    )
+
+    # Only positive balances are actually depositable cash-in-hand. A Cash
+    # account can go negative if cash payments were booked against it faster
+    # than receipts (data issue, or a "petty cash" account being topped up
+    # from elsewhere) — that shortfall isn't real cash sitting in a drawer,
+    # so it must not silently eat into what's shown as available to deposit.
+    total_depositable = sum(max(b["undeposited"], 0) for b in breakdown)
+
     return {
-        "entries": rows,
-        "total": total,
-        "cash_accounts": cash_account_names,
+        "cash_accounts": breakdown,
+        "total_undeposited": total_depositable,
         "bank_accounts": [b["name"] for b in bank_accounts],
+        "destination_accounts": destination_accounts,
         "company": company,
     }
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def deposit_cash_to_bank(payment_entries, bank_account, deposit_date=None, notes=None, company=None):
-    """Bundle selected undeposited cash Payment Entries into one Contra
-    Journal Entry (Dr Bank / Cr Cash-in-Hand) and flag them as deposited.
+def deposit_cash_to_bank(amount, destination_account, deposit_date=None, notes=None, company=None):
+    """Deposit/transfer a chosen amount (up to the pooled undeposited
+    balance) of cash out of the Cash-in-Hand pool, as one Journal Entry.
+
+    destination_account can be:
+      - a Bank account  -> Contra Entry (Dr Bank / Cr Cash-in-Hand): cash
+        physically banked.
+      - another Cash account (e.g. Petty Cash) -> internal Cash-to-Cash
+        transfer (Dr destination Cash / Cr Cash-in-Hand): topping up a
+        petty cash float from the general cash pool.
+
+    If the business has more than one source Cash account, the amount is
+    drawn automatically across whichever accounts currently hold a positive
+    balance (largest first, excluding the destination itself) so the user
+    only ever sees and edits ONE pooled number. Partial deposits/transfers
+    are allowed — whatever isn't moved stays in the pool for next time.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("banking", write=True)
 
-    if isinstance(payment_entries, str):
-        payment_entries = json.loads(payment_entries)
-    if not payment_entries:
-        frappe.throw("Select at least one cash entry to deposit.")
-    if not bank_account:
-        frappe.throw("Select a Bank account to deposit into.")
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+
+    amount = flt(amount)
+    if amount <= 0:
+        frappe.throw("Amount must be greater than 0.")
+    if not destination_account:
+        frappe.throw("Select where to deposit the cash (a bank or a cash account).")
 
     deposit_date = deposit_date or nowdate()
     company = company or frappe.db.get_default("company")
 
-    bank_company = frappe.db.get_value("Account", bank_account, "company")
-    if not bank_company:
-        frappe.throw(f"Bank account '{bank_account}' not found.")
-    company = bank_company  # canonical company, same pattern as record_payment
+    dest_company = frappe.db.get_value("Account", destination_account, "company")
+    if not dest_company:
+        frappe.throw(f"Account '{destination_account}' not found.")
+    company = dest_company  # canonical company, same pattern as record_payment
+
+    dest_type = frappe.db.get_value("Account", destination_account, "account_type")
+    if dest_type not in ("Bank", "Cash"):
+        frappe.throw(f"'{destination_account}' must be a Bank or Cash account.")
 
     validate_fiscal_year(deposit_date, company)
 
-    # Re-fetch + lock down the selected entries server-side — never trust the
-    # amounts/eligibility sent from the client.
-    placeholders = ", ".join(["%s"] * len(payment_entries))
-    rows = frappe.db.sql(
-        f"""SELECT name, paid_amount, paid_to, docstatus, custom_deposited_to_bank
-            FROM `tabPayment Entry` WHERE name IN ({placeholders})""",
-        tuple(payment_entries), as_dict=True
+    # Re-check the pooled balance server-side — never trust the amount as final truth.
+    # Exclude the destination itself from the source pool (can't move money
+    # from an account into itself).
+    exclude = destination_account if dest_type == "Cash" else None
+    data = get_undeposited_cash(company=company, exclude_account=exclude)
+    available_total = flt(data["total_undeposited"])
+    if amount > available_total + 0.005:  # small float tolerance
+        frappe.throw(f"Only {available_total} is available to deposit.")
+
+    # Greedily allocate the requested amount across source accounts with a
+    # positive balance, largest balance first, so as few accounts as
+    # possible are touched by any one deposit.
+    eligible = sorted(
+        [c for c in data["cash_accounts"] if flt(c["undeposited"]) > 0],
+        key=lambda c: flt(c["undeposited"]),
+        reverse=True,
     )
-    found_names = {r["name"] for r in rows}
-    missing = set(payment_entries) - found_names
-    if missing:
-        frappe.throw(f"Payment Entries not found: {', '.join(missing)}")
+    if not eligible:
+        frappe.throw("No undeposited cash available.")
 
-    cash_account = None
-    for r in rows:
-        if r["docstatus"] != 1:
-            frappe.throw(f"{r['name']} is not submitted and cannot be deposited.")
-        if int(r["custom_deposited_to_bank"] or 0) == 1:
-            frappe.throw(f"{r['name']} has already been deposited.")
-        acct_type = frappe.db.get_value("Account", r["paid_to"], "account_type")
-        if acct_type != "Cash":
-            frappe.throw(f"{r['name']} is not a Cash receipt and cannot go through a bank deposit.")
-        if cash_account and cash_account != r["paid_to"]:
-            frappe.throw("Selected entries span more than one Cash account. Deposit each Cash account separately.")
-        cash_account = r["paid_to"]
-
-    total_amount = sum(flt(r["paid_amount"]) for r in rows)
-    if total_amount <= 0:
-        frappe.throw("Total deposit amount must be greater than 0.")
+    allocations = []  # list of (cash_account, portion)
+    remaining_to_allocate = amount
+    for c in eligible:
+        if remaining_to_allocate <= 0:
+            break
+        portion = min(flt(c["undeposited"]), remaining_to_allocate)
+        if portion > 0:
+            allocations.append((c["account"], portion))
+            remaining_to_allocate -= portion
 
     je = frappe.new_doc("Journal Entry")
     je.naming_series = "JV-.YYYY.-"
     je.voucher_type  = "Contra Entry"
     je.company       = company
     je.posting_date  = deposit_date
-    je.remark        = notes or f"Cash deposited to bank ({len(rows)} entr{'y' if len(rows)==1 else 'ies'}): " + ", ".join(sorted(found_names))
-    je.append("accounts", {"account": bank_account, "debit": total_amount, "credit": 0})
-    je.append("accounts", {"account": cash_account, "debit": 0, "credit": total_amount})
+    je.remark        = f"{_CASH_DEPOSIT_REMARK_PREFIX} {notes}".strip() if notes else _CASH_DEPOSIT_REMARK_PREFIX
+    je.append("accounts", {"account": destination_account, "debit": amount, "credit": 0})
+    for cash_account, portion in allocations:
+        je.append("accounts", {"account": cash_account, "debit": 0, "credit": portion})
     je.insert(ignore_permissions=True)
     je.flags.ignore_permissions = True
     je.submit()
 
-    # Flag each Payment Entry as deposited, linked to this Journal Entry, so
-    # it can never be selected into a second deposit.
-    for r in rows:
-        frappe.db.set_value("Payment Entry", r["name"], {
-            "custom_deposited_to_bank": 1,
-            "custom_deposit_journal": je.name,
-        }, update_modified=False)
-
     frappe.db.commit()
 
+    remaining = available_total - amount
     return {
         "journal_entry": je.name,
-        "bank_account": bank_account,
-        "cash_account": cash_account,
-        "amount": total_amount,
-        "deposited": sorted(found_names),
+        "destination_account": destination_account,
+        "destination_type": dest_type,
+        "cash_accounts": [a[0] for a in allocations],
+        "amount": amount,
+        "remaining": remaining,
     }
 
 # ─── AI Assistant — Books AI with live DB queries (Tiers 1-3) ────────────────

@@ -25,11 +25,18 @@ from frappe.utils import nowdate
 
 # ─── Roles that may approve / reject ─────────────────────────────────────────
 
-_APPROVER_ROLES = {"Books Admin", "System Manager", "Administrator"}
+_APPROVER_ROLES = {"Books Admin", "System Manager"}
 
 
 def _require_approver():
     """Raise PermissionError if the caller is not in an approver role."""
+    # "Administrator" is a user, not a role — frappe.get_roles() never
+    # returns it as a role name, so including it in _APPROVER_ROLES was
+    # dead code that happened to work only because the Administrator user
+    # is also separately granted System Manager. Check the user directly
+    # instead of pretending it's a role.
+    if frappe.session.user == "Administrator":
+        return
     roles = set(frappe.get_roles(frappe.session.user))
     if not (roles & _APPROVER_ROLES):
         frappe.throw(
@@ -97,7 +104,6 @@ def create_qc_approval_request(inspection_name: str, reason: str = "") -> dict:
     req.approval_remarks = reason or ""
 
     req.insert(ignore_permissions=True)
-    frappe.db.commit()
 
     return {
         "request_name": req.name,
@@ -187,7 +193,6 @@ def approve_qc_approval_request(request_name: str, remarks: str = "") -> dict:
         doc.approval_remarks = remarks
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
 
     # Stamp the approval on the linked QC Inspection (if columns exist)
     _stamp_approval_on_inspection(doc.qc_inspection, "Approved", frappe.session.user, nowdate())
@@ -226,7 +231,6 @@ def reject_qc_approval_request(request_name: str, rejection_reason: str) -> dict
     doc.rejection_reason = rejection_reason
 
     doc.save(ignore_permissions=True)
-    frappe.db.commit()
 
     # Stamp on the linked QC Inspection
     _stamp_approval_on_inspection(doc.qc_inspection, "Rejected", frappe.session.user, nowdate())

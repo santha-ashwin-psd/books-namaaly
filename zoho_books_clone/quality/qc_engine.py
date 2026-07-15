@@ -10,6 +10,11 @@ and MUST run BEFORE _SL (stock_link) so QC state is known before stock moves.
 Design:
   - Soft-warn mode  (default): msgprint, never raises
   - Hard-block mode (opt-in via Books Settings qc_hard_block=1): frappe.throw() blocks submit
+  - QC coverage is tracked per reference-doc ROW (via each row's own
+    `quality_inspection` Link, stamped at creation time), not just per
+    item code — so two rows of the same item (different batches, a split
+    receipt) are each independently gated rather than one row's passed
+    inspection silently covering the other.
 
 Public surface
 --------------
@@ -20,13 +25,13 @@ auto_create_qc_for_delivery_note(doc, method=None)        -- before_submit hook 
 auto_create_qc_for_sales_invoice(doc, method=None)        -- before_submit hook (SI)
 doc_requires_qc(doc) -> bool
 get_linked_qc_status(doc) -> str
-create_qc_inspection_for_item(reference_type, reference_name, item_code, inspection_type) -> str
+create_qc_inspection_for_item(reference_type, reference_name, item_code, inspection_type, batch_no) -> str
 get_qc_summary_for_doc(reference_type, reference_name) -> dict
 """
 
 import frappe
 from frappe import _
-from frappe.utils import nowdate
+from frappe.utils import nowdate, flt
 
 
 # --- Inspection type mapping --------------------------------------------------
@@ -91,7 +96,7 @@ def check_qc_before_stock_link(doc, method=None):
         msg = _("No QC Inspection found for item(s): {0}.").format(item_list)
 
     # Hard-block mode -- throw and stop submit entirely
-    if _qc_hard_block_on():
+    if _qc_hard_block_on(getattr(doc, "company", None)):
         frappe.throw(
             msg + "<br><br>" + _(
                 "Submission blocked until QC is cleared. "
@@ -168,24 +173,36 @@ def _auto_create_qc_for_rows(
         if not frappe.db.get_value("Item", item_code, flag_field):
             continue
 
-        # Skip if QC Inspection already exists (non-cancelled)
-        existing = frappe.db.get_value(
-            "QC Inspection",
-            {
-                "reference_type": doc.doctype,
-                "reference_name": doc.name,
-                "item": item_code,
-                "docstatus": ["!=", 2],
-            },
-            "name",
-        )
-        if existing:
+        # Skip if this row already has a QC Inspection linked and it's not
+        # cancelled — checked at the row level (not just by item) so two
+        # rows of the same item (different batches, or a split receipt)
+        # each get their own inspection rather than one row's link being
+        # mistaken for coverage of the other.
+        existing = getattr(row, "quality_inspection", None)
+        if existing and frappe.db.get_value("QC Inspection", existing, "docstatus") != 2:
             continue
 
         try:
             qci_name = create_qc_inspection_for_item(
-                doc.doctype, doc.name, item_code, inspection_type
+                doc.doctype, doc.name, item_code, inspection_type,
+                batch_no=getattr(row, "batch_no", None),
+                inspected_qty=getattr(row, "qty", None) or getattr(row, "received_qty", None),
             )
+            if getattr(row, "doctype", None) and getattr(row, "name", None) \
+                    and frappe.db.has_column(row.doctype, "quality_inspection"):
+                # Set the in-memory field on the row FIRST. This hook runs
+                # in before_submit, before Frappe's own submit flow writes
+                # the whole document (including this child table) back to
+                # the DB via db_update() -- a frappe.db.set_value() alone,
+                # with the in-memory `row.quality_inspection` still blank,
+                # would get silently overwritten back to blank when that
+                # later db_update() flushes memory over what we just wrote.
+                # Setting it here as well as via db.set_value covers both
+                # the in-flight submit (via memory) and any caller that
+                # doesn't go through the normal submit flow afterward.
+                row.quality_inspection = qci_name
+                frappe.db.set_value(row.doctype, row.name, "quality_inspection", qci_name,
+                                     update_modified=False)
             if on_created:
                 on_created(qci_name, row)
             created.append(qci_name)
@@ -322,6 +339,16 @@ def doc_requires_qc(doc) -> bool:
         item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
         if not item_code:
             continue
+        # Stock Entry rows can be raw materials being consumed
+        # (s_warehouse set, t_warehouse blank) as well as finished goods
+        # being produced (t_warehouse set). Only finished-goods rows are
+        # ever QC'd — auto_create_qc_for_stock_entry and
+        # get_qc_summary_for_doc both already apply this same filter; it
+        # must be applied here too, or this function can report "QC
+        # required" for a raw-material row that no other part of the QC
+        # flow will ever create or look for an inspection against.
+        if doc.doctype == "Stock Entry" and not getattr(row, "t_warehouse", None):
+            continue
         flag_val = frappe.db.get_value("Item", item_code, flag_field)
         if flag_val:
             return True
@@ -342,6 +369,16 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
     """
     Return full QC status summary for all items on the document.
     Returns dict with overall_status, inspections, passed/failed/pending/missing item lists.
+
+    Row-scoped, not item-scoped: matching used to be done purely by item
+    code across the whole document, so if the same item appeared on two
+    rows (e.g. two different batches, or a partial receipt split across
+    rows) one row's QC Inspection would silently "cover" the other row
+    too. Each row's own `quality_inspection` Link (stamped at creation
+    time by create_qc_inspection_for_item / the manual-create API) is now
+    checked first, so each row is tracked independently. Older inspections
+    created before this link existed won't have it set on their row, so we
+    fall back to the legacy by-item match for those specifically.
     """
     inspection_type = _DOCTYPE_TO_INSPECTION_TYPE.get(reference_type)
 
@@ -356,11 +393,16 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
         ignore_permissions=True,
     )
 
-    inspected_items = {qi["item"]: qi for qi in inspections}
+    inspections_by_name = {qi["name"]: qi for qi in inspections}
+    # Legacy fallback only: first inspection found for a given item, used
+    # solely for rows whose own quality_inspection link is blank.
+    legacy_by_item = {}
+    for qi in inspections:
+        legacy_by_item.setdefault(qi["item"], qi)
 
     doc = frappe.get_doc(reference_type, reference_name)
     flag_field = _ITEM_FLAG_FOR_INSPECTION_TYPE.get(inspection_type, "")
-    items_needing_qc = []
+    rows_needing_qc = []
     for row in (getattr(doc, "items", []) or []):
         item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
         if not item_code:
@@ -376,9 +418,9 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
         if reference_type == "Stock Entry" and not getattr(row, "t_warehouse", None):
             continue
         if flag_field and frappe.db.get_value("Item", item_code, flag_field):
-            items_needing_qc.append(item_code)
+            rows_needing_qc.append((row, item_code))
 
-    if not items_needing_qc:
+    if not rows_needing_qc:
         return {"overall_status": "Pass", "inspections": inspections,
                 "passed_items": [], "failed_items": [], "pending_items": [],
                 "missing_items": [], "total_items_requiring_qc": 0}
@@ -388,16 +430,25 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
     pending = []
     missing = []
 
-    for item_code in items_needing_qc:
-        qi = inspected_items.get(item_code)
+    for row, item_code in rows_needing_qc:
+        batch = getattr(row, "batch_no", None)
+        label = f"{item_code} (Batch {batch})" if batch else item_code
+
+        qi = None
+        row_qi_name = getattr(row, "quality_inspection", None)
+        if row_qi_name:
+            qi = inspections_by_name.get(row_qi_name)
         if not qi:
-            missing.append(item_code)
+            qi = legacy_by_item.get(item_code)
+
+        if not qi:
+            missing.append(label)
         elif qi["status"] == "Pass":
-            passed.append(item_code)
+            passed.append(label)
         elif qi["status"] == "Fail":
-            failed.append(item_code)
+            failed.append(label)
         else:
-            pending.append(item_code)
+            pending.append(label)
 
     if failed:
         overall = "Fail"
@@ -415,7 +466,7 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
         "failed_items":             failed,
         "pending_items":            pending,
         "missing_items":            missing,
-        "total_items_requiring_qc": len(items_needing_qc),
+        "total_items_requiring_qc": len(rows_needing_qc),
     }
 
 
@@ -426,10 +477,20 @@ def create_qc_inspection_for_item(
     reference_name: str,
     item_code: str,
     inspection_type: str | None = None,
+    batch_no: str | None = None,
+    inspected_qty: float | None = None,
 ) -> str:
     """
     Create a draft QC Inspection for a specific item on a reference document.
     Copies parameters from the resolved template (if any).
+    batch_no, when given (e.g. from a Stock Entry Detail / Purchase Receipt
+    Item row that carries batch tracking), is stamped onto the inspection so
+    batch-level traceability survives into QC records. Not every reference
+    doctype's rows carry a batch (e.g. Delivery Note / Sales Invoice items in
+    this app don't), so this is left blank in that case rather than guessed.
+    inspected_qty, when given, seeds accepted_qty/rejected_qty so the
+    inspector can adjust the accept/reject split before submitting rather
+    than having to type the full qty in from scratch.
     Returns the new QC Inspection name.
     """
     if not inspection_type:
@@ -444,10 +505,19 @@ def create_qc_inspection_for_item(
     qci.reference_name         = reference_name
     qci.item                   = item_code
     qci.item_name              = item_name_val
+    qci.batch_no                = batch_no or ""
     qci.inspection_date        = nowdate()
     qci.inspected_by           = frappe.session.user
     qci.qc_inspection_template = template_name
     qci.status                 = "Pending"
+
+    if inspected_qty:
+        qci.inspected_qty = flt(inspected_qty)
+        # Sane starting point: assume the whole qty passes until readings say
+        # otherwise. _compute_qty_split on the controller re-derives this
+        # from the accept/reject split on submit, so this is just a UI default.
+        qci.accepted_qty = flt(inspected_qty)
+        qci.rejected_qty = 0
 
     if template_name:
         _populate_readings_from_template(qci, template_name)
@@ -601,10 +671,18 @@ def _qc_master_switch_on() -> bool:
         return True
 
 
-def _qc_hard_block_on() -> bool:
-    """Read qc_hard_block from Books Settings. Default False (soft-warn mode)."""
+def _qc_hard_block_on(company: str | None = None) -> bool:
+    """
+    Read qc_hard_block from Books Company for the given company. Default
+    False (soft-warn mode). Books Settings is a single global doctype and
+    is NOT company-enforced, so this must never be read from there in a
+    multi-tenant app — a hard-block flag set by one company would silently
+    block submissions for every other company too.
+    """
+    if not company:
+        return False
     try:
-        val = frappe.db.get_single_value("Books Settings", "qc_hard_block")
+        val = frappe.db.get_value("Books Company", company, "qc_hard_block")
         if val is None:
             return False
         return bool(int(val))
@@ -613,7 +691,7 @@ def _qc_hard_block_on() -> bool:
 
 
 def _log_qc_override(doc, summary: dict):
-    """Write a permanent audit record when a user overrides a QC warning."""
+    """Write an audit record when a user overrides a QC warning."""
     try:
         failed  = summary.get("failed_items", [])
         missing = summary.get("missing_items", [])
@@ -625,13 +703,24 @@ def _log_qc_override(doc, summary: dict):
         )
         frappe.get_doc({
             "doctype":           "Activity Log",
+            "subject":           f"QC Override on {doc.doctype} {doc.name}",
             "user":              frappe.session.user,
-            "operation":         "Submit",
             "status":            "Success",
             "reference_doctype": doc.doctype,
             "reference_name":    doc.name,
             "content":           content,
         }).insert(ignore_permissions=True)
-        frappe.db.commit()
+        # No manual commit here (previously present): this hook runs
+        # partway through the submit of `doc` (a Purchase Receipt /
+        # Delivery Note / etc.), inside the same DB transaction. A manual
+        # commit at this point would irrevocably commit that document's
+        # docstatus=1 submission early, before the rest of the submit
+        # hook chain finishes -- if a later hook in the same chain then
+        # threw, the request would report failure while the document was
+        # already durably submitted underneath it. Frappe commits the
+        # whole request as one atomic unit on success (or rolls it all
+        # back together on an unhandled exception); this audit log entry
+        # rides along with that same guarantee rather than jumping ahead
+        # of it.
     except Exception:
         pass

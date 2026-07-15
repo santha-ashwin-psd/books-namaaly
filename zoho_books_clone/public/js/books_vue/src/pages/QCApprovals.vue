@@ -161,6 +161,42 @@
             </div>
           </div>
 
+          <!-- Quarantine / Release from Hold (Approved requests only) -->
+          <div v-if="viewDoc.approval_status === 'Approved'" class="qcar-view-section">
+            <div class="qcar-sec-lbl">Quarantine Hold</div>
+
+            <div v-if="holdLoading" class="qcar-remarks-box">Checking hold status…</div>
+
+            <template v-else-if="holdInfo && holdInfo.qc_hold">
+              <div class="qcar-remarks-box" style="border-color:#fdba74;background:#fff7ed">
+                Item <strong>{{ viewDoc.item }}</strong> is still in quarantine{{ holdInfo.quarantine_warehouse ? ' (' + holdInfo.quarantine_warehouse + ')' : '' }}.
+                Choose a disposition to release it.
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+                <select v-model="releaseForm.disposition" class="qcar-input">
+                  <option value="Release to Stock">Release to Stock</option>
+                  <option value="Scrap">Scrap</option>
+                  <option value="Return to Supplier">Return to Supplier</option>
+                </select>
+                <select
+                  v-if="releaseForm.disposition !== 'Scrap'"
+                  v-model="releaseForm.target_warehouse"
+                  class="qcar-input"
+                >
+                  <option value="">— Select target warehouse —</option>
+                  <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.warehouse_name || w.name }}</option>
+                </select>
+                <button class="qcar-btn-approve" :disabled="releasing" @click="doRelease">
+                  <span v-html="icon('check',13)"></span>{{ releasing ? 'Releasing…' : 'Release from Hold' }}
+                </button>
+              </div>
+            </template>
+
+            <div v-else class="qcar-remarks-box" style="border-color:#bbf7d0;background:#f0fdf4;color:#15803d">
+              Not currently on hold — stock has already been released (or no quarantine warehouse was configured).
+            </div>
+          </div>
+
           <!-- Action: Approve / Reject (Pending only, for admins) -->
           <div v-if="viewDoc.approval_status === 'Pending'" class="qcar-view-section">
             <div class="qcar-sec-lbl">Action</div>
@@ -189,8 +225,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { apiCall } from "../api/client.js";
+import { ref, reactive, computed, onMounted } from "vue";
+import { apiCall, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { fmtDate } from "../utils/format.js";
@@ -209,6 +245,13 @@ const rejectReason  = ref("");
 const showRejectReason = ref(false);
 const actionSaving  = ref(false);
 const actionMode    = ref("");
+
+// ── Quarantine / Release-from-Hold state ────────────────────────────────────────
+const holdInfo   = ref(null);
+const holdLoading = ref(false);
+const warehouses  = ref([]);
+const releasing    = ref(false);
+const releaseForm  = reactive({ disposition: "Release to Stock", target_warehouse: "" });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function statusClass(s) {
@@ -259,13 +302,74 @@ async function load() {
   }
 }
 
-function openView(r) {
+async function openView(r) {
   viewDoc.value = { ...r };
   viewOpen.value = true;
   actionRemarks.value = "";
   rejectReason.value = "";
   showRejectReason.value = false;
   actionMode.value = "";
+
+  holdInfo.value = null;
+  releaseForm.disposition = "Release to Stock";
+  releaseForm.target_warehouse = "";
+
+  if (r.approval_status === "Approved" && r.qc_inspection) {
+    await loadHoldInfo(r.qc_inspection);
+    if (!warehouses.value.length) await loadWarehouses();
+  }
+}
+
+async function loadHoldInfo(inspectionName) {
+  holdLoading.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.api.qc.get_inspection_detail", {
+      inspection_name: inspectionName,
+    });
+    const doc = res?.message || res;
+    holdInfo.value = {
+      qc_hold: !!doc?.qc_hold,
+      quarantine_warehouse: doc?.quarantine_warehouse || "",
+    };
+  } catch (e) {
+    holdInfo.value = null;
+  } finally {
+    holdLoading.value = false;
+  }
+}
+
+async function loadWarehouses() {
+  try {
+    const res = await apiList("Warehouse", {
+      fields: ["name", "warehouse_name"],
+      filters: [["disabled", "=", 0]],
+      limit: 200,
+    });
+    warehouses.value = res?.message || res || [];
+  } catch (e) {
+    warehouses.value = [];
+  }
+}
+
+async function doRelease() {
+  if (!viewDoc.value?.qc_inspection) return;
+  if (releaseForm.disposition !== "Scrap" && !releaseForm.target_warehouse) {
+    return toast.error("Target warehouse is required for this disposition.");
+  }
+  releasing.value = true;
+  try {
+    await apiCall("zoho_books_clone.quality.qc_hold_manager.release_from_hold", {
+      inspection_name: viewDoc.value.qc_inspection,
+      disposition: releaseForm.disposition,
+      target_warehouse: releaseForm.target_warehouse,
+    });
+    toast.success("QC Hold released");
+    await loadHoldInfo(viewDoc.value.qc_inspection);
+  } catch (e) {
+    toast.error(e.message || "Release failed");
+  } finally {
+    releasing.value = false;
+  }
 }
 
 async function doApprove() {
