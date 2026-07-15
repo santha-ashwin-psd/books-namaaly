@@ -144,6 +144,7 @@ SALES_PURCHASE_SERIES = [
 	("Purchase Order",     "PO-2026-",      5),
 	("Purchase Receipt",   "PR-2026-",      5),
 	("Purchase Invoice",   "PINV-2026-",    5),
+	("Payment Entry",      "PAY-2026-",     5),
 ]
 
 
