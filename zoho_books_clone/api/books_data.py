@@ -77,6 +77,7 @@ def get_live_exchange_rate(from_currency, to_currency="INR"):
     return {"rate": None, "source": "unavailable", "date": today}
 
 
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def refresh_all_exchange_rates():
     """Fetch and cache live rates for all known currencies against INR. Called from Settings page."""
     results = {}

@@ -413,6 +413,7 @@ def seed_cost_centers():
 
 
 # ─── Print Formats ───────────────────────────────────────────────────────────
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def seed_print_formats():
     """
     Create or update the 'Tax Invoice' Print Format in the Frappe database.
