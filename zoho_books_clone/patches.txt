@@ -5,3 +5,9 @@ zoho_books_clone.patches.v1_0.seed_modes_of_payment
 zoho_books_clone.patches.v1_1.fix_company_names
 zoho_books_clone.patches.v1_2.seed_tax_templates_per_company
 zoho_books_clone.patches.v1_3.seed_landed_cost_charge_accounts
+
+[post_model_sync]
+# Reads/writes Item.is_sales_item and Item.is_purchase_item — these are new
+# columns added via the Item DocType JSON, so this patch must run AFTER
+# schema sync creates them, not before (pre_model_sync would hit "Unknown
+# column" since the ALTER TABLE hasn't happened yet).
