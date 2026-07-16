@@ -714,7 +714,7 @@ async function load() {
                "docstatus", "remarks", "reference_doctype", "reference_name",
                "adjustment_reason", "company", "owner", "creation"],
       filters: [["company", "=", co]],
-      limit: 500, order: "posting_date desc, creation desc",
+      limit: 100000, order: "posting_date desc, creation desc",
     });
     // Attach item count from a separate list call (names only)
     list.value = rows;

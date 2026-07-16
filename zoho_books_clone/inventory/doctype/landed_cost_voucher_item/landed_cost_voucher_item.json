@@ -1,0 +1,156 @@
+{
+ "name": "Landed Cost Voucher Item",
+ "module": "Inventory",
+ "doctype": "DocType",
+ "creation": "2026-07-15 00:00:00.000000",
+ "modified": "2026-07-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "insert_after": "",
+ "show_name_in_global_search": 0,
+ "read_only": 0,
+ "in_create": 0,
+ "allow_rename": 0,
+ "allow_copy": 0,
+ "allow_import": 1,
+ "allow_events_in_timeline": 0,
+ "allow_auto_repeat": 0,
+ "beta": 0,
+ "custom": 0,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "max_attachments": 0,
+ "migration_hash": "",
+ "naming_rule": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "links": [],
+ "actions": [],
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "autoname": "",
+ "title_field": "",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "col1",
+  "warehouse",
+  "batch_no",
+  "sec_amounts",
+  "received_qty",
+  "purchase_amount",
+  "col2",
+  "valuation_rate",
+  "allocated_amount",
+  "new_valuation_rate",
+  "capitalized_amount",
+  "reference_item_row"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item_code.item_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "sec_amounts",
+   "fieldtype": "Section Break",
+   "label": "Amounts"
+  },
+  {
+   "fieldname": "received_qty",
+   "fieldtype": "Float",
+   "label": "Received Qty",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "purchase_amount",
+   "fieldtype": "Currency",
+   "label": "Purchase Amount",
+   "description": "Base item value from the PR/PI line, before landed cost is added",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "label": "Current Valuation Rate",
+   "description": "Bin.valuation_rate at the time this LCV is created (read-only snapshot)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allocated_amount",
+   "fieldtype": "Currency",
+   "label": "Allocated Charges",
+   "description": "This item's share of total_charges, computed by the allocation engine",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "new_valuation_rate",
+   "fieldtype": "Currency",
+   "label": "New Valuation Rate",
+   "description": "(purchase_amount + allocated_amount) / received_qty",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "capitalized_amount",
+   "fieldtype": "Currency",
+   "label": "Actually Capitalized",
+   "description": "Set on submit. Equals allocated_amount unless some of received_qty had already been issued out of stock, in which case only the remaining-qty share is capitalized \u2014 see parent Total Capitalized.",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "reference_item_row",
+   "fieldtype": "Data",
+   "label": "Reference Item Row",
+   "description": "Row name of the source Purchase Receipt Item / Purchase Invoice Item, for traceability",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "permissions": []
+}

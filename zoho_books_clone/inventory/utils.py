@@ -332,6 +332,52 @@ def get_valuation_rate(item_code: str, warehouse: str) -> float:
     return flt(rate)
 
 
+def compute_bin_valuation(
+    old_qty: float,
+    old_value: float,
+    delta_qty: float,
+    incoming_rate: float = 0.0,
+    valuation_rate: float = 0.0,
+    stock_value_difference: float = 0.0,
+) -> tuple[float, float, float]:
+    """Pure moving-average valuation math — the single source of truth for how
+    a stock movement (or value-only adjustment) changes a Bin's qty/value/rate.
+    No DB access, so it's directly unit-testable; StockLedgerEntry._update_bin()
+    calls this rather than duplicating the branching logic inline.
+
+    Returns (new_qty, new_value, new_rate).
+
+    - delta_qty > 0 (incoming): blend the new layer's cost into the running
+      value. incoming_rate is what this stock actually cost; valuation_rate
+      is the fallback if incoming_rate wasn't supplied.
+    - delta_qty < 0 (outgoing): draw down at the bin's OWN existing average
+      rate — never at valuation_rate/incoming_rate off the moving SLE, which
+      can be 0/FIFO/stale and would otherwise corrupt the value of the stock
+      that's staying put.
+    - delta_qty == 0 and stock_value_difference != 0: a value-only adjustment
+      (e.g. a Landed Cost Voucher capitalizing freight/duty into stock that's
+      already on hand) — shift stock_value by stock_value_difference without
+      touching qty.
+    - delta_qty == 0 and stock_value_difference == 0: no-op.
+    """
+    new_qty = flt(old_qty) + flt(delta_qty)
+
+    if delta_qty > 0:
+        in_rate = flt(incoming_rate) or flt(valuation_rate)
+        new_value = flt(old_value) + (flt(delta_qty) * in_rate)
+    elif delta_qty < 0:
+        existing_rate = (flt(old_value) / flt(old_qty)) if flt(old_qty) else 0.0
+        new_value = flt(old_value) + (flt(delta_qty) * existing_rate)  # delta_qty negative
+    elif flt(stock_value_difference) != 0:
+        new_value = flt(old_value) + flt(stock_value_difference)
+    else:
+        new_value = flt(old_value)
+
+    new_value = max(0.0, new_value)
+    new_rate = (new_value / new_qty) if new_qty > 0 else 0.0
+    return new_qty, new_value, new_rate
+
+
 def get_total_stock_value(warehouse: str | None = None, company: str | None = None) -> float:
     """Sum of stock_value across all Bins, optionally filtered."""
     filters = {}

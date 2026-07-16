@@ -542,7 +542,7 @@ async function load() {
   try {
     const co = await resolveCompany();
     const [rows, st] = await Promise.all([
-      apiGET("zoho_books_clone.api.eway.get_eway_bills", { limit: 500 }),
+      apiGET("zoho_books_clone.api.eway.get_eway_bills", { limit: 100000 }),
       apiGET("zoho_books_clone.api.eway.get_eway_stats", { company: co }),
     ]);
     const data = rows?.message ?? rows ?? [];

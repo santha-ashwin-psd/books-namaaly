@@ -337,7 +337,7 @@
                 <th>Result</th>
               </tr></thead>
               <tbody>
-                <tr v-for="rd in viewDoc.readings" :key="rd.name||rd.idx" :class="'qc-reading-row-'+rd.status?.toLowerCase()">
+                <tr v-for="rd in viewDoc.readings" :key="rd.name||rd.idx" :class="'qc-reading-row-'+(rd.status||'Pending').toLowerCase()">
                   <td style="font-weight:600;font-size:12.5px">{{ rd.template_parameter }}</td>
                   <td><span class="qc-type-mini" :style="paramTypeStyle(rd.parameter_type)">{{ rd.parameter_type }}</span></td>
                   <td style="font-size:12px;color:#6b7280">
@@ -350,7 +350,7 @@
                     <span v-else style="font-size:12.5px;font-weight:600">{{ rd.reading_value || '—' }}</span>
                   </td>
                   <td>
-                    <span class="qc-rd-badge" :class="'qc-rd-'+rd.status?.toLowerCase()">{{ rd.status || 'Pending' }}</span>
+                    <span class="qc-rd-badge" :class="'qc-rd-'+(rd.status||'Pending').toLowerCase()">{{ rd.status || 'Pending' }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -369,26 +369,29 @@
           <!-- Accept/Reject Qty split -->
           <div class="qc-view-section" v-if="viewDoc.inspected_qty">
             <div class="qc-view-sec-lbl">Accepted / Rejected Qty</div>
-            <div v-if="viewDoc.docstatus===0" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-              <div>
-                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Inspected Qty</label>
-                <div style="font-size:13px;font-weight:600;padding:6px 0">{{ viewDoc.inspected_qty }}</div>
-              </div>
-              <div>
-                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Accepted Qty</label>
-                <input type="number" min="0" step="0.001" class="qc-input" style="width:110px"
-                       v-model.number="viewDoc.accepted_qty"
-                       @change="onAcceptedQtyChange" />
-              </div>
-              <div>
-                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">Rejected Qty</label>
-                <input type="number" min="0" step="0.001" class="qc-input" style="width:110px"
-                       v-model.number="viewDoc.rejected_qty"
-                       @change="onRejectedQtyChange" />
+            <div v-if="viewDoc.docstatus===0">
+              <div class="qc-qty-grid">
+                <div class="qc-qty-card qc-qty-card--fixed">
+                  <label class="qc-qty-lbl">Inspected Qty</label>
+                  <div class="qc-qty-fixed-val">{{ viewDoc.inspected_qty }}</div>
+                </div>
+                <div class="qc-qty-card">
+                  <label class="qc-qty-lbl" for="qc-accepted-qty">Accepted Qty</label>
+                  <input id="qc-accepted-qty" type="number" min="0" step="0.001" class="qc-input qc-qty-input"
+                         v-model.number="viewDoc.accepted_qty"
+                         @change="onAcceptedQtyChange" />
+                </div>
+                <div class="qc-qty-card">
+                  <label class="qc-qty-lbl" for="qc-rejected-qty">Rejected Qty</label>
+                  <input id="qc-rejected-qty" type="number" min="0" step="0.001" class="qc-input qc-qty-input"
+                         v-model.number="viewDoc.rejected_qty"
+                         @change="onRejectedQtyChange" />
+                </div>
               </div>
               <div v-if="Number(viewDoc.accepted_qty||0)+Number(viewDoc.rejected_qty||0) !== Number(viewDoc.inspected_qty||0)"
-                   style="font-size:11.5px;color:#dc2626">
-                Must sum to {{ viewDoc.inspected_qty }}
+                   class="qc-qty-warn">
+                <span v-html="icon('alert-triangle',13)"></span>
+                Accepted + Rejected must sum to {{ viewDoc.inspected_qty }}
               </div>
             </div>
             <div v-else style="display:flex;gap:16px;flex-wrap:wrap">
@@ -397,6 +400,7 @@
               <div><span class="qc-meta-lbl">Rejected</span><div style="font-size:12.5px;margin-top:2px;color:#dc2626;font-weight:600">{{ viewDoc.rejected_qty || 0 }}</div></div>
             </div>
           </div>
+
 
           <!-- Remarks -->
           <div class="qc-view-section" v-if="viewDoc.remarks">
@@ -612,7 +616,7 @@ const editRefLoading = ref(false);
 // openEdit() is hydrating the form from an existing record (see openEdit()).
 const suppressEditRefWatch = ref(false);
 
-const refTypes = ["Purchase Invoice", "Sales Invoice", "Stock Entry"];
+const refTypes = ["Purchase Receipt", "Purchase Invoice", "Delivery Note", "Sales Invoice", "Stock Entry"];
 
 // ── Dropdown data ──────────────────────────────────────────────────
 const refDocs       = ref([]);   // Reference Document options
@@ -632,13 +636,13 @@ const form = reactive({
 
 // ── Reference Doc Type options driven by Inspection Type ───────────────────────
 const REF_TYPE_MAP = {
-  "Incoming":   ["Purchase Invoice", "Sales Invoice"],
-  "Outgoing":   ["Sales Invoice", "Purchase Invoice"],
-  "In Process": ["Stock Entry", "Purchase Invoice", "Sales Invoice"],
+  "Incoming":   ["Purchase Receipt", "Purchase Invoice"],
+  "Outgoing":   ["Delivery Note", "Sales Invoice"],
+  "In Process": ["Stock Entry"],
 };
 
 const refTypeOptions = computed(() => {
-  return REF_TYPE_MAP[form.inspection_type] || ["Purchase Invoice", "Sales Invoice", "Stock Entry"];
+  return REF_TYPE_MAP[form.inspection_type] || refTypes;
 });
 
 // Reset ref type + docs when inspection_type changes
@@ -927,7 +931,9 @@ async function fetchEditRefDocs(q = "") {
   editRefLoading.value = true;
   try {
     const LABEL_FIELD = {
+      "Purchase Receipt": "supplier",
       "Purchase Invoice": "supplier",
+      "Delivery Note":    "customer",
       "Sales Invoice":    "customer",
       "Stock Entry":      "stock_entry_type",
     };
@@ -1097,7 +1103,9 @@ async function fetchRefDocs(q = "") {
   try {
     // Doctype-specific field mapping for a meaningful label
     const LABEL_FIELD = {
+      "Purchase Receipt": "supplier",
       "Purchase Invoice": "supplier",
+      "Delivery Note":    "customer",
       "Sales Invoice":    "customer",
       "Stock Entry":      "stock_entry_type",
     };
@@ -1267,6 +1275,15 @@ onMounted(load);
 .qc-view-section { display:flex; flex-direction:column; gap:6px; }
 .qc-view-sec-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; }
 .qc-meta-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#9ca3af; }
+.qc-qty-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.qc-qty-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+.qc-qty-lbl { font-size:11px; font-weight:600; color:#6b7280; }
+.qc-qty-fixed-val { font-size:15px; font-weight:700; color:#111827; padding:7px 0; }
+.qc-qty-input { width:100%; box-sizing:border-box; font-size:14px; font-weight:600; }
+.qc-qty-warn { display:flex; align-items:center; gap:6px; margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:12px; font-weight:600; color:#dc2626; }
+@media (max-width:520px) {
+  .qc-qty-grid { grid-template-columns:1fr; }
+}
 
 /* Readings table */
 .qc-readings-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }

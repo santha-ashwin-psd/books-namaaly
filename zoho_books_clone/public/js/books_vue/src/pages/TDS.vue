@@ -364,7 +364,7 @@ async function loadSuppliers() {
     const rows = await apiList("Supplier", {
       fields: ["name", "supplier_name"],
       filters: [["disabled", "=", 0]],
-      limit: 500,
+      limit: 100000,
     });
     suppliers.value = rows || [];
   } catch { suppliers.value = []; }

@@ -817,7 +817,7 @@ async function load() {
       fields: ["name", "customer", "customer_name", "posting_date", "delivery_date",
                "sales_order", "status", "total_qty", "lr_no", "transporter_name", "docstatus"],
       filters: [["company", "=", company]],
-      limit: 500,
+      limit: 100000,
       order: "posting_date desc, creation desc",
     }).catch(() => []);
 
@@ -830,7 +830,7 @@ async function load() {
         ["company", "=", company],
         ["status", "in", ["To Deliver", "Partially Delivered", "Submitted"]],
       ],
-      limit: 500,
+      limit: 100000,
       order: "transaction_date desc, creation desc",
     }).catch(() => []);
 
@@ -1171,7 +1171,7 @@ async function fetchWarehouses(q = "") {
 
 async function fetchItems(q = "") {
   try {
-    const f = [["disabled", "=", 0], ["has_variants", "=", 0]];
+    const f = [["disabled", "=", 0], ["has_variants", "=", 0], ["is_sales_item", "=", 1]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
     const r = await apiList("Item", {
       fields: ["name", "item_name", "stock_uom", "description"],

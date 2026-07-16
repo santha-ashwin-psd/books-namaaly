@@ -629,7 +629,12 @@ def _get_source_warehouse(qci) -> str | None:
 
     - Purchase Receipt / Purchase Invoice (Incoming): stock lands in the row's
       `warehouse` (or `t_warehouse` for stock-updating invoices) — that's the
-      warehouse to pull from into quarantine.
+      warehouse to pull from into quarantine. Purchase Receipt UIs commonly
+      only set a header-level `set_warehouse` and leave the per-row warehouse
+      blank, so fall back to that (mirrors the same fallback order
+      stock_link.py._stock_rows() uses when it actually receives the stock —
+      without it, this would return None even though the goods really did
+      land somewhere, and the quarantine transfer would silently never fire).
     - Stock Entry (In Process / Manufacture): finished goods land in `t_warehouse`.
     - Delivery Note / Sales Invoice (Outgoing): stock is picked from the row's
       `warehouse` (or `s_warehouse` for stock-updating invoices) before dispatch.
@@ -642,7 +647,11 @@ def _get_source_warehouse(qci) -> str | None:
                 continue
 
             if qci.reference_type in ("Purchase Receipt", "Purchase Invoice"):
-                return getattr(row, "warehouse", None) or getattr(row, "t_warehouse", None)
+                return (
+                    getattr(row, "warehouse", None)
+                    or getattr(row, "t_warehouse", None)
+                    or getattr(doc, "set_warehouse", None)
+                )
             elif qci.reference_type == "Stock Entry":
                 return getattr(row, "t_warehouse", None)
             elif qci.reference_type in ("Delivery Note", "Sales Invoice"):

@@ -292,7 +292,8 @@
   },
   {
    "fieldname": "set_warehouse",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
+   "options": "Warehouse",
    "label": "Default Warehouse",
    "creation": "2026-05-29 00:00:00.000000",
    "modified": "2026-05-29 00:00:00.000000",

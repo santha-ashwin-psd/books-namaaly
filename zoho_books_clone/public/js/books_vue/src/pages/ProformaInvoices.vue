@@ -327,7 +327,7 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "description"], filters: [...f, ["has_variants", "=", 0]], limit: 30, order: "item_name asc" });
+    const r = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "description"], filters: [...f, ["has_variants", "=", 0], ["is_sales_item", "=", 1]], limit: 30, order: "item_name asc" });
     items.value = (r || []).map(x => ({
       ...x,
       label: x.item_name || x.name,

@@ -232,6 +232,10 @@
                     <div class="bomx-rm-field">
                       <label>Rate (₹)</label>
                       <input class="bomx-fi bomx-fi-mono" type="number" v-model="rm.rate" min="0" step="any" :disabled="readOnly"/>
+                      <div v-if="rmLandedInfo(rm.item_code)?.has_landed_cost" class="bomx-landed-hint" :title="`Base ${INR(rmLandedInfo(rm.item_code).base_rate)} + landed ${INR(rmLandedInfo(rm.item_code).landed_rate)} = ${INR(rmLandedInfo(rm.item_code).valuation_rate)} at ${rmLandedInfo(rm.item_code).warehouse}`">
+                        🚚 Warehouse rate incl. landed cost: {{ INR(rmLandedInfo(rm.item_code).valuation_rate) }}
+                        <a v-if="!readOnly" href="javascript:void(0)" @click="useLandedRate(rm)">Use</a>
+                      </div>
                     </div>
                     <div class="bomx-rm-field bomx-rm-field-wide">
                       <label>Sub-Assembly BOM</label>
@@ -803,8 +807,9 @@ function formatVersion(v) {
 onMounted(async () => {
   loading.value = true;
   try {
-    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "item_type", "default_warehouse"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
+    refreshRmLandedCosts();
     const uoms = await apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 });
     uomList.value = (uoms || []).map(r => r.name);
     const ops = await apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" });
@@ -857,6 +862,7 @@ async function loadBom() {
     if (!bom.value.operations) bom.value.operations = [];
     if (!bom.value.scrap_items) bom.value.scrap_items = [];
     activeTab.value = "components";
+    refreshRmLandedCosts();
   } catch (e) {
     toast("Error loading BOM: " + e.message, "error");
     goBackToList();
@@ -907,6 +913,50 @@ function onRmItemChange(rm) {
   if (!rm.item_code) return;
   const item = stockItems.value.find(i => i.name === rm.item_code);
   if (item) { rm.rate = item.standard_rate || 0; rm.uom = item.stock_uom || "Nos"; rm.item_name = item.item_name; }
+  refreshRmLandedCosts();
+}
+
+// Landed-cost visibility (Phase 8): rm.rate is a manually-entered/standard
+// rate used for BOM cost estimation, which can drift from the live Bin
+// valuation rate once a Landed Cost Voucher has capitalized freight/customs
+// into that item+warehouse. This surfaces the current warehouse rate
+// (base + landed split) as a hint next to Rate, read-only, so the client can
+// see the true landed cost impact without this editable BOM figure silently
+// changing underneath them.
+const rmLanded = ref({}); // item_code -> { valuation_rate, base_rate, landed_rate, has_landed_cost, warehouse }
+let rmLandedTimer = null;
+function refreshRmLandedCosts() {
+  clearTimeout(rmLandedTimer);
+  rmLandedTimer = setTimeout(async () => {
+    const rows = bom.value.bom_type === "Packing" ? bom.value.packing_items : bom.value.items;
+    const pairs = [];
+    for (const rm of (rows || [])) {
+      if (!rm.item_code) continue;
+      const item = stockItems.value.find(i => i.name === rm.item_code);
+      const warehouse = item?.default_warehouse;
+      if (warehouse) pairs.push({ item_code: rm.item_code, warehouse });
+    }
+    if (!pairs.length) return;
+    try {
+      const r = await apiCall(
+        "zoho_books_clone.inventory.landed_cost_engine.get_landed_cost_breakdown",
+        { pairs: JSON.stringify(pairs) }
+      );
+      const byItem = {};
+      for (const p of pairs) {
+        const info = (r || {})[`${p.item_code}::${p.warehouse}`];
+        if (info) byItem[p.item_code] = { ...info, warehouse: p.warehouse };
+      }
+      rmLanded.value = byItem;
+    } catch (e) { /* non-fatal — BOM rate stays user-editable regardless */ }
+  }, 300);
+}
+function rmLandedInfo(itemCode) {
+  return rmLanded.value[itemCode] || null;
+}
+function useLandedRate(rm) {
+  const info = rmLandedInfo(rm.item_code);
+  if (info) rm.rate = info.valuation_rate;
 }
 function onBulkItemChange() {
   if (!bom.value.bulk_item) return;
@@ -1211,6 +1261,8 @@ function icon(name, size) {
 .bomx-rm-card-rm { flex-shrink:0; }
 .bomx-rm-card-body { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; padding:12px 14px; }
 .bomx-rm-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.bomx-landed-hint { font-size:10.5px; color:var(--bx-amber); background:var(--bx-amberS); border-radius:5px; padding:3px 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; cursor:help; }
+.bomx-landed-hint a { color:var(--bx-mfg); font-weight:700; text-decoration:underline; cursor:pointer; }
 .bomx-rm-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
 .bomx-rm-field .bomx-fi { width:100%; }
 .bomx-rm-field-wide { grid-column:span 1; }

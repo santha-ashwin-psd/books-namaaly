@@ -46,6 +46,10 @@ COA = [
     ("Salaries & Wages",      "Expense",    "Operating Expenses",  0),
     ("Rent",                  "Expense",    "Operating Expenses",  0),
     ("Office Supplies",       "Expense",    "Operating Expenses",  0),
+    # Phase 10 rollout — Landed Cost Voucher charge accounts (client-requested).
+    ("Freight & Parcel Charges - Inward",   "Expense", "Operating Expenses", 0),
+    ("Local Transport Charges - Inward",    "Expense", "Operating Expenses", 0),
+    ("Freight & Courier Charges - Outward", "Expense", "Operating Expenses", 0),
 ]
 
 

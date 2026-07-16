@@ -502,7 +502,12 @@ async function onDestinationChange(){
   try{
     const prevAmount=depositForm.amount;
     const prevWasFull = prevAmount>=totalUndeposited.value; // was the user depositing "everything"?
+    const keepDestination=depositForm.destination_account;
     await loadDepositPool(excludeAccount);
+    if(keepDestination && !depositDestinations.value.some(d=>d.name===keepDestination)){
+      const original=dest||{name:keepDestination,account_type:"Cash"};
+      depositDestinations.value=[...depositDestinations.value,original];
+    }
     depositForm.amount = prevWasFull ? totalUndeposited.value : Math.min(prevAmount, totalUndeposited.value);
   }catch(e){toast.error(e.message||"Failed to refresh balance");}
   finally{depositLoading.value=false;}

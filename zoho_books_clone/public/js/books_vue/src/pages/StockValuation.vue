@@ -38,11 +38,12 @@
           <th>UOM</th>
           <th @click="sort('actual_qty')" class="sortable ta-r">Qty <span v-html="sortArrow('actual_qty')"></span></th>
           <th @click="sort('valuation_rate')" class="sortable ta-r">Rate <span v-html="sortArrow('valuation_rate')"></span></th>
+          <th class="ta-r" style="width:70px">Landed?</th>
           <th @click="sort('stock_value')" class="sortable ta-r">Stock Value <span v-html="sortArrow('stock_value')"></span></th>
           <th style="width:80px"></th>
         </tr></thead>
         <tbody>
-          <template v-if="loading"><tr v-for="n in 10" :key="n"><td colspan="8"><div class="sv-shimmer"></div></td></tr></template>
+          <template v-if="loading"><tr v-for="n in 10" :key="n"><td colspan="9"><div class="sv-shimmer"></div></td></tr></template>
           <template v-else>
             <tr v-for="i in sorted" :key="i.item_code+i.warehouse" class="sv-row">
               <td><span class="sv-code">{{ i.item_code }}</span></td>
@@ -50,11 +51,15 @@
               <td class="text-muted">{{ i.item_group||'—' }}</td>
               <td class="text-muted">{{ i.stock_uom||'—' }}</td>
               <td class="ta-r mono-sm" :class="flt(i.actual_qty)<=0?'red':''">{{ fmtQty(i.actual_qty) }}</td>
-              <td class="ta-r mono-sm">{{ fmtCur(i.valuation_rate) }}</td>
+              <td class="ta-r mono-sm" :title="rateTooltip(i)">{{ fmtCur(i.valuation_rate) }}</td>
+              <td class="ta-r">
+                <span v-if="landedInfo(i).has_landed_cost" class="sv-landed-badge" :title="rateTooltip(i)">🚚 {{ fmtCur(landedInfo(i).landed_rate) }}</span>
+                <span v-else class="text-muted">—</span>
+              </td>
               <td class="ta-r mono-sm font-medium">{{ fmtCur(i.stock_value) }}</td>
               <td class="ta-r"><button class="sv-adjust-btn" @click="goAdjust(i)">Adjust</button></td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="8" class="sv-empty">{{ list.length ? 'No items match your search' : 'No stock data found' }}</td></tr>
+            <tr v-if="!sorted.length"><td colspan="9" class="sv-empty">{{ list.length ? 'No items match your search' : 'No stock data found' }}</td></tr>
           </template>
         </tbody>
       </table>
@@ -81,6 +86,7 @@
             <div class="sv-mc-mid">{{ i.item_name||i.item_code }}</div>
             <div class="sv-mc-meta">
               <span :class="flt(i.actual_qty)<=0?'sv-mc-neg':''">{{ fmtQty(i.actual_qty) }} {{ i.stock_uom||'' }}</span>
+              <span v-if="landedInfo(i).has_landed_cost" class="sv-landed-badge" :title="rateTooltip(i)">🚚 landed</span>
               <button class="sv-adjust-btn" @click.stop="goAdjust(i)">Adjust</button>
             </div>
           </div>
@@ -92,7 +98,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { apiList, apiGET, resolveCompany, apiLinkValues } from "../api/client.js";
+import { apiList, apiGET, apiCall, resolveCompany, apiLinkValues } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
@@ -101,7 +107,24 @@ import SummaryStrip from "../components/SummaryStrip.vue";
 const { toast } = useToast();
 const router = useRouter();
 const list=ref([]),loading=ref(false),search=ref("");
+const landedByBin=ref({});
 function goAdjust(i){ router.push({ name:"inventory-adjustments", query:{ item:i.item_code, warehouse:i.warehouse } }); }
+function landedInfo(i){
+  return landedByBin.value[`${i.item_code}::${i.warehouse}`] || { has_landed_cost:false, base_rate:i.valuation_rate, landed_rate:0, valuation_rate:i.valuation_rate };
+}
+function rateTooltip(i){
+  const li=landedInfo(i);
+  if(!li.has_landed_cost) return "No landed costs capitalized into this rate.";
+  return `Base rate ${fmtCur(li.base_rate)} + landed cost ${fmtCur(li.landed_rate)} = ${fmtCur(li.valuation_rate)} per unit`;
+}
+async function loadLandedBreakdown(rows){
+  const pairs=rows.filter(r=>r.item_code&&r.warehouse).map(r=>({item_code:r.item_code,warehouse:r.warehouse}));
+  if(!pairs.length){landedByBin.value={};return;}
+  try{
+    const r=await apiCall("zoho_books_clone.inventory.landed_cost_engine.get_landed_cost_breakdown",{pairs:JSON.stringify(pairs)});
+    landedByBin.value=r||{};
+  }catch(e){ landedByBin.value={}; } // non-fatal — base rate still shows fine without the breakdown
+}
 const warehouses=ref([]),itemGroups=ref([]);
 const sortCol=ref("stock_value"),sortDir=ref("desc");
 const filters=reactive({warehouse:"",item_group:""});
@@ -117,6 +140,7 @@ async function load(){
     const r=await apiGET("zoho_books_clone.api.inventory.get_stock_summary",params);
     const rows=Array.isArray(r)?r:(r?.message||[]);
     list.value=rows.map(x=>({...x,stock_uom:x.uom||x.stock_uom||""}));
+    loadLandedBreakdown(list.value);
   }catch(e){toast.error(e.message||"Failed to load valuation");}finally{loading.value=false;}
 }
 const filteredRows=computed(()=>{
@@ -136,9 +160,10 @@ function exportCSV(){
   const rows=sorted.value;
   if(!rows.length)return;
   const esc=v=>{const s=v==null?"":String(v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
-  const lines=[["Item","Item Name","Group","Warehouse","UOM","Qty","Rate","Stock Value"].join(",")];
+  const lines=[["Item","Item Name","Group","Warehouse","UOM","Qty","Rate","Base Rate","Landed Rate","Stock Value"].join(",")];
   for(const i of rows){
-    lines.push([i.item_code||"",i.item_name||"",i.item_group||"",i.warehouse||"",i.stock_uom||"",flt(i.actual_qty),flt(i.valuation_rate),flt(i.stock_value)].map(esc).join(","));
+    const li=landedInfo(i);
+    lines.push([i.item_code||"",i.item_name||"",i.item_group||"",i.warehouse||"",i.stock_uom||"",flt(i.actual_qty),flt(i.valuation_rate),flt(li.base_rate),flt(li.landed_rate),flt(i.stock_value)].map(esc).join(","));
   }
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
   const url=URL.createObjectURL(blob);
@@ -181,6 +206,7 @@ onMounted(()=>{load();fetchWarehouses("");fetchItemGroups("");});
 .sv-code{font-size:12.5px;color:#2563eb;font-weight:600;}
 .sv-adjust-btn{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:7px;padding:4px 10px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;}
 .sv-adjust-btn:hover{background:#dbeafe;}
+.sv-landed-badge{display:inline-flex;align-items:center;gap:3px;background:#fff3bf;color:#e67700;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700;cursor:help;white-space:nowrap;}
 .mono-sm{font-size:13px;}.font-medium{font-weight:600;}.text-muted{color:#6b7280;}
 .sv-empty{text-align:center;color:#9ca3af;padding:48px!important;}
 .sv-shimmer{height:13px;background:linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 50%,#f3f4f6 75%);border-radius:4px;animation:shimmer 1.2s infinite;background-size:200% 100%;}

@@ -2000,16 +2000,16 @@ async function load() {
               "grand_total","outstanding_amount","status","docstatus","po_no",
               "customer_gstin","irn","einvoice_status","ack_no","ack_date"],
       filters:[["is_return","=",0]],
-      limit:500, order: "posting_date desc, creation desc",
+      limit:100000, order: "posting_date desc, creation desc",
     })||[];
   } catch { list.value=[]; toast("Could not load invoices","error"); }
   loading.value=false;
 }
 async function loadCustomers() {
-  try { const r=await apiList("Customer",{fields:["name","customer_name"],filters:[["disabled","=",0]],limit:500,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
+  try { const r=await apiList("Customer",{fields:["name","customer_name"],filters:[["disabled","=",0]],limit:100000,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
 }
 async function loadSalesPersons() {
-  try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:500,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
+  try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:100000,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
 }
 async function loadPriceLists() {
   try {
@@ -2087,7 +2087,7 @@ function salesPersonLabel(id) {
   return sp ? sp.label : id;
 }
 async function loadItems() {
-  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0],["has_variants","=",0]],limit:500,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
+  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
 async function loadTaxAccount() {
   try {

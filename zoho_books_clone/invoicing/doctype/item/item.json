@@ -199,6 +199,20 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "is_sales_item",
+   "fieldtype": "Check",
+   "label": "Sales Item",
+   "default": "1",
+   "description": "Available for selection on Sales Invoices, Quotations, and Sales Orders."
+  },
+  {
+   "fieldname": "is_purchase_item",
+   "fieldtype": "Check",
+   "label": "Purchase Item",
+   "default": "1",
+   "description": "Available for selection on Purchase Invoices, Purchase Orders, and Purchase Receipts."
+  },
+  {
    "creation": "2026-03-17 11:02:53.037714",
    "modified": "2026-03-17 11:02:53.037714",
    "modified_by": "Administrator",

@@ -29,6 +29,7 @@ export const NAV = [
   { path: "/purchases",                     label: "Bills",            icon: "fileplus",   module: "bills"      },
   { path: "/recurring-bills",               label: "Recurring Bills",  icon: "recurring",  module: "bills"      },
   { path: "/purchase-receipts",             label: "Purchase Receipts",icon: "purchase",   module: "bills"      },
+  { path: "/purchasing/landed-cost-vouchers", label: "Landed Costs",   icon: "balance",    module: "bills"      },
   { path: "/payments",                      label: "Payments Made",    icon: "payment",    module: "payments"   },
   { path: "/debit-notes",                   label: "Debit Notes",      icon: "creditnote", module: "bills"      },
 

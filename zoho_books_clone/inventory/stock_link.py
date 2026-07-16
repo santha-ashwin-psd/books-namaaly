@@ -179,6 +179,13 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
     for row in (doc.items or []):
         item_code = getattr(row, "item_code", None)
         qty       = flt(getattr(row, "qty", 0))
+        # Purchase Receipt rows carry an accepted/rejected split — only the
+        # accepted portion should actually land in stock. Other reference
+        # doctypes (Delivery Note, Sales Invoice, ...) don't have this field,
+        # so getattr falls through to the full qty exactly as before.
+        accepted_qty = getattr(row, "accepted_qty", None)
+        if accepted_qty is not None and accepted_qty != "":
+            qty = flt(accepted_qty)
         if not item_code or qty <= 0:
             continue
 

@@ -490,6 +490,30 @@
           </div>
 
           <div class="ad-section">
+            <div class="ad-section-title">Applicability <span class="ad-hint" style="font-size:11px;font-weight:400">(where this item shows up)</span></div>
+            <div class="ad-toggle-row" style="margin-bottom:12px">
+              <div class="ad-toggle-left">
+                <div class="ad-toggle-title">Sales Item</div>
+                <div class="ad-toggle-sub">Show this item when creating Sales Invoices, Quotations, and Sales Orders</div>
+              </div>
+              <label class="ad-switch">
+                <input type="checkbox" :checked="!!form.is_sales_item" @change="form.is_sales_item=($event.target.checked?1:0)"/>
+                <span class="ad-switch-track ad-switch-track--green"></span>
+              </label>
+            </div>
+            <div class="ad-toggle-row">
+              <div class="ad-toggle-left">
+                <div class="ad-toggle-title">Purchase Item</div>
+                <div class="ad-toggle-sub">Show this item when creating Purchase Invoices, Purchase Orders, and Purchase Receipts</div>
+              </div>
+              <label class="ad-switch">
+                <input type="checkbox" :checked="!!form.is_purchase_item" @change="form.is_purchase_item=($event.target.checked?1:0)"/>
+                <span class="ad-switch-track ad-switch-track--green"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="ad-section">
             <div class="ad-section-title">Additional Info</div>
             <div class="ad-grid-2">
               <div class="ad-field">
@@ -821,6 +845,7 @@ const form = reactive({
   stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
   standard_rate: 0, standard_buying_rate: 0, gst_rate: 18, tax_code: "",
   income_account: "", expense_account: "",
+  is_sales_item: 1, is_purchase_item: 1,
   is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0, opening_stock: 0,
   default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
@@ -907,12 +932,12 @@ const ITEM_TYPE_COLOR = {
 };
 // Smart defaults: warehouse type and valuation per item type
 const ITEM_TYPE_DEFAULTS = {
-  "Raw Material":     { warehouse_type: "Raw Material Store", valuation: "FIFO",          is_stock: 1 },
-  "Work In Progress": { warehouse_type: "WIP",                valuation: "Moving Average", is_stock: 1 },
-  "Finished Good":    { warehouse_type: "Finished Goods",     valuation: "FIFO",           is_stock: 1 },
-  "Packing Material": { warehouse_type: "Raw Material Store", valuation: "FIFO",           is_stock: 1 },
-  "Product":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 1 },
-  "Service":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 0 },
+  "Raw Material":     { warehouse_type: "Raw Material Store", valuation: "FIFO",          is_stock: 1, is_sales: 0, is_purchase: 1 },
+  "Work In Progress": { warehouse_type: "WIP",                valuation: "Moving Average", is_stock: 1, is_sales: 0, is_purchase: 0 },
+  "Finished Good":    { warehouse_type: "Finished Goods",     valuation: "FIFO",           is_stock: 1, is_sales: 1, is_purchase: 0 },
+  "Packing Material": { warehouse_type: "Raw Material Store", valuation: "FIFO",           is_stock: 1, is_sales: 0, is_purchase: 1 },
+  "Product":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 1, is_sales: 1, is_purchase: 1 },
+  "Service":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 0, is_sales: 1, is_purchase: 1 },
 };
 const VAL_METHODS     = ["FIFO", "Moving Average", "LIFO"];
 
@@ -922,54 +947,80 @@ const leafGroupOptions = computed(() =>
 
 async function load() {
   loading.value = true;
+  // The table only needs the Item list itself — fetch and paint that first,
+  // instead of blocking on every drawer dropdown lookup below it (which used
+  // to run one-after-another: 8 sequential network round trips before the
+  // table could render at all).
   try {
     const rows = await apiList("Item", {
-      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","has_variants","variant_of","creation","default_bom","quality_inspection_required","inspection_required_before_purchase","inspection_required_before_delivery","inspection_required_before_manufacture","min_order_qty","lead_time_days"],
-      order: "item_name asc", limit: 500,
+      fields: ["name","item_code","item_name","item_group","item_type","stock_uom","standard_rate","standard_buying_rate","disabled","is_stock_item","is_sales_item","is_purchase_item","has_variants","variant_of","creation","default_bom","quality_inspection_required","inspection_required_before_purchase","inspection_required_before_delivery","inspection_required_before_manufacture","min_order_qty","lead_time_days"],
+      order: "item_name asc", limit: 100000,
     });
     list.value = rows || [];
   } catch { list.value = []; }
-  try {
-    const g = await apiList("Item Group", { fields: ["name", "is_group"], order: "name asc", limit: 200 });
-    itemGroupsFull.value = g || [];
-    itemGroups.value = (g || []).map((r) => r.name);
-  } catch { itemGroups.value = ["Raw Materials", "Herbs & Botanicals", "Minerals & Bhasmas", "Oils & Fats", "WIP - Semi Finished", "Finished Goods - Capsules", "Finished Goods - Tablets", "Finished Goods - Oils", "Finished Goods - Churnam", "Finished Goods - Kashayam", "Finished Goods - Lehyam", "Packing Materials - Primary", "Packing Materials - Secondary", "Services"]; }
-  try {
-    const wh = await apiList("Warehouse", {
+  loading.value = false;
+
+  // Everything else only feeds the Add/Edit drawer's dropdowns (item group,
+  // warehouse, tax template, UOM, brand, income/expense accounts) — none of
+  // it blocks the table, so fetch it all concurrently in the background
+  // instead of one round trip at a time.
+  loadDrawerReferenceData();
+}
+
+async function loadDrawerReferenceData() {
+  const [groupsRes, whRes, ttRes, uomRes, brandRes, acctRes] = await Promise.allSettled([
+    apiList("Item Group", { fields: ["name", "is_group"], order: "name asc", limit: 200 }),
+    apiList("Warehouse", {
       fields: ["name", "warehouse_name", "warehouse_type"],
       filters: [["disabled", "=", 0]], order: "warehouse_name asc", limit: 200,
-    });
-    warehouses.value = (wh || []).map((r) => ({
-      name: r.name,
-      label: (r.warehouse_name || r.name) + (r.warehouse_type ? " (" + r.warehouse_type + ")" : ""),
-    }));
-  } catch { warehouses.value = []; }
-  try {
-    const tt = await apiList("Tax Template", {
+    }),
+    apiList("Tax Template", {
       fields: ["name", "template_name"],
       filters: [["disabled", "=", 0]],
       order: "template_name asc", limit: 100,
-    });
-    taxTemplates.value = (tt || []).map((r) => ({ name: r.name, label: r.template_name || r.name }));
-  } catch { taxTemplates.value = []; }
-  try {
-    const uoms = await apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 });
-    uomList.value = (uoms || []).map((r) => r.name);
-  } catch { uomList.value = ["Nos", "Kg", "Ltr", "Mtr", "Box", "Pcs", "Set", "Dozen"]; }
-  try {
-    const brands = await apiList("Brand", { fields: ["name"], filters: [["disabled", "=", 0]], order: "name asc", limit: 200 });
-    brandList.value = (brands || []).map((r) => r.name);
-  } catch { brandList.value = []; }
-  try {
-    const company = await resolveCompany();
-    await loadAccountLists(company);
+    }),
+    apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 }),
+    apiList("Brand", { fields: ["name"], filters: [["disabled", "=", 0]], order: "name asc", limit: 200 }),
+    resolveCompany().then(async (company) => { await loadAccountLists(company); return company; }),
+  ]);
+
+  if (groupsRes.status === "fulfilled") {
+    itemGroupsFull.value = groupsRes.value || [];
+    itemGroups.value = (groupsRes.value || []).map((r) => r.name);
+  } else {
+    itemGroups.value = ["Raw Materials", "Herbs & Botanicals", "Minerals & Bhasmas", "Oils & Fats", "WIP - Semi Finished", "Finished Goods - Capsules", "Finished Goods - Tablets", "Finished Goods - Oils", "Finished Goods - Churnam", "Finished Goods - Kashayam", "Finished Goods - Lehyam", "Packing Materials - Primary", "Packing Materials - Secondary", "Services"];
+  }
+
+  if (whRes.status === "fulfilled") {
+    warehouses.value = (whRes.value || []).map((r) => ({
+      name: r.name,
+      label: (r.warehouse_name || r.name) + (r.warehouse_type ? " (" + r.warehouse_type + ")" : ""),
+    }));
+  } else { warehouses.value = []; }
+
+  if (ttRes.status === "fulfilled") {
+    taxTemplates.value = (ttRes.value || []).map((r) => ({ name: r.name, label: r.template_name || r.name }));
+  } else { taxTemplates.value = []; }
+
+  if (uomRes.status === "fulfilled") {
+    uomList.value = (uomRes.value || []).map((r) => r.name);
+  } else { uomList.value = ["Nos", "Kg", "Ltr", "Mtr", "Box", "Pcs", "Set", "Dozen"]; }
+
+  if (brandRes.status === "fulfilled") {
+    brandList.value = (brandRes.value || []).map((r) => r.name);
+  } else { brandList.value = []; }
+
+  if (acctRes.status === "fulfilled") {
     // First income / expense account becomes the default for new items
     defaultAccounts.value = {
       income:  incomeAccounts.value[0]?.value  || "",
       expense: expenseAccounts.value[0]?.value || "",
     };
-  } catch { defaultAccounts.value = { income: "", expense: "" }; incomeAccounts.value = []; expenseAccounts.value = []; }
-  loading.value = false;
+  } else {
+    defaultAccounts.value = { income: "", expense: "" };
+    incomeAccounts.value = [];
+    expenseAccounts.value = [];
+  }
 }
 
 async function reloadGroups() {
@@ -1195,6 +1246,9 @@ function applyTypeDefaults(type) {
   const d = ITEM_TYPE_DEFAULTS[type] || {};
   // Set is_stock_item
   form.is_stock_item = d.is_stock !== undefined ? d.is_stock : 1;
+  // Set sales/purchase applicability
+  form.is_sales_item = d.is_sales !== undefined ? d.is_sales : 1;
+  form.is_purchase_item = d.is_purchase !== undefined ? d.is_purchase : 1;
   // Set valuation method
   if (d.valuation) form.valuation_method = d.valuation;
   // Auto-select first matching warehouse if warehouse_type hint given
@@ -1215,6 +1269,8 @@ function openAdd(presetType) {
     income_account:  defaultAccounts.value.income,
     expense_account: defaultAccounts.value.expense,
     is_stock_item: d.is_stock !== undefined ? d.is_stock : 1,
+    is_sales_item: d.is_sales !== undefined ? d.is_sales : 1,
+    is_purchase_item: d.is_purchase !== undefined ? d.is_purchase : 1,
     has_batch_no: 0,
     shelf_life_in_days: 0,
     valuation_method: d.valuation || "FIFO",
@@ -1256,6 +1312,8 @@ async function openEdit(row) {
       income_account:       full.income_account       || defaultAccounts.value.income,
       expense_account:      full.expense_account      || defaultAccounts.value.expense,
       is_stock_item:        full.is_stock_item ? 1 : 0,
+      is_sales_item:        full.is_sales_item === 0 ? 0 : 1,
+      is_purchase_item:     full.is_purchase_item === 0 ? 0 : 1,
       has_batch_no:         full.has_batch_no ? 1 : 0,
       shelf_life_in_days:   flt(full.shelf_life_in_days),
       valuation_method:     full.valuation_method     || "FIFO",
@@ -1300,6 +1358,8 @@ function validateItem() {
     [!form.income_account,                           "Income account is required",   "pricing"],
     [!form.expense_account,                          "Expense account is required",  "pricing"],
     [!!form.is_stock_item && !form.default_warehouse, "Default Warehouse is required when Track Inventory is on", "inventory"],
+    [form.item_type !== "Work In Progress" && !form.is_sales_item && !form.is_purchase_item,
+      "Enable Sales Item and/or Purchase Item — an item unusable in both won't show up anywhere", "basic"],
   ];
   for (const [bad, msg, tab] of checks) {
     if (bad) { drawerTab.value = tab; toast(msg, "error"); return false; }
@@ -1333,6 +1393,7 @@ async function saveItem({ close = true } = {}) {
       tax_code: form.tax_code,
       income_account: form.income_account, expense_account: form.expense_account,
       is_stock_item: form.is_stock_item ? 1 : 0, has_batch_no: form.is_stock_item ? (form.has_batch_no ? 1 : 0) : 0,
+      is_sales_item: form.is_sales_item ? 1 : 0, is_purchase_item: form.is_purchase_item ? 1 : 0,
       shelf_life_in_days: (form.is_stock_item && form.has_batch_no) ? flt(form.shelf_life_in_days) : 0,
       valuation_method: form.valuation_method,
       default_warehouse: form.default_warehouse, reorder_level: flt(form.reorder_level),

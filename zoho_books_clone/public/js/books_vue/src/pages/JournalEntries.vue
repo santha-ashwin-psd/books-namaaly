@@ -699,7 +699,7 @@ async function load() {
       allEntries.value = [];
     }
     try {
-      const accts = await apiList("Account", { fields: ["name", "account_name", "account_type"], filters: [["is_group", "=", 0], ["disabled", "=", 0]], limit: 500 });
+      const accts = await apiList("Account", { fields: ["name", "account_name", "account_type"], filters: [["is_group", "=", 0], ["disabled", "=", 0]], limit: 100000 });
       // Receivable / Payable / Stock are control accounts whose balances must
       // stay tied to a Customer/Supplier/Item via Invoices, Bills, and Stock
       // Entries — posting to them directly from a Journal Entry would silently

@@ -20,6 +20,20 @@ class PurchaseReceipt(Document):
         for row in self.items:
             if flt(row.qty) <= 0:
                 frappe.throw(_("Row {0}: qty must be > 0").format(row.idx))
+            # accepted_qty defaults to the full received qty (nothing rejected)
+            # when not explicitly set — keeps older callers / API integrations
+            # that never set accepted_qty behaving exactly as before this field
+            # existed. rejected_qty is always derived, never trusted from the
+            # client, so it can't drift out of sync with accepted_qty.
+            if row.accepted_qty in (None, ""):
+                row.accepted_qty = flt(row.qty)
+            row.accepted_qty = flt(row.accepted_qty)
+            if row.accepted_qty < 0 or row.accepted_qty > flt(row.qty):
+                frappe.throw(
+                    _("Row {0}: Accepted Qty ({1}) must be between 0 and the Received Qty ({2}).")
+                    .format(row.idx, row.accepted_qty, row.qty)
+                )
+            row.rejected_qty = flt(row.qty) - row.accepted_qty
         self.total_qty = sum(flt(r.qty) for r in self.items)
 
     def on_submit(self):

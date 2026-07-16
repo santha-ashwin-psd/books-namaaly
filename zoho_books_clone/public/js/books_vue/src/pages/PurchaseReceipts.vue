@@ -189,6 +189,9 @@
             <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-primary" @click="submitGRN" :disabled="submitting">
               <span v-html="icon('send',13)"></span> {{ submitting ? 'Submitting…' : 'Submit GRN' }}
             </button>
+            <button v-if="viewDoc.docstatus===1 && viewDoc.source==='real'" class="inv-ab-btn" @click="goToLandedCost(viewDoc)">
+              <span v-html="icon('purchase',13)"></span> Create Landed Cost Voucher
+            </button>
             <button v-if="viewDoc.docstatus===1 && viewDoc.source==='real'" class="inv-ab-btn pr-act-cancel" @click="confirmTarget={row:viewDoc,mode:'cancel'}">
               <span v-html="icon('x',13)"></span> Cancel
             </button>
@@ -348,7 +351,8 @@
               <div class="inv-fg inv-fg2">
                 <div style="grid-column:1/-1">
                   <label class="inv-lbl">Warehouse</label>
-                  <input class="inv-fi" v-model="form.set_warehouse" placeholder="e.g. Stores - ABC"/>
+                  <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse where goods will be received…"
+                    :createable="true" :staticCreate="true" createLabel="+ Create Warehouse" createDoctype="Warehouse" @search="fetchWarehouses" @open="fetchWarehouses('')" @create="fetchWarehouses('')" />
                 </div>
                 <div style="grid-column:1/-1">
                   <label class="inv-lbl">Remarks</label>
@@ -425,7 +429,7 @@
                         </div>
                         <div class="po-item-field">
                           <label>Accepted Qty</label>
-                          <input class="inv-fi" type="number" v-model.number="it.accepted_qty" placeholder="1" min="0" step="0.01"/>
+                          <input class="inv-fi" type="number" v-model.number="it.accepted_qty" placeholder="1" min="0" :max="it.qty" step="0.01"/>
                         </div>
                       </div>
                       <div class="po-item-field" style="margin-top:14px">
@@ -495,6 +499,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiDelete, apiCancel, resolveCompany } from "../api/client.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import DocLink from "../components/DocLink.vue";
@@ -506,6 +511,11 @@ import BulkActionBar from "../components/BulkActionBar.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
+const router = useRouter();
+
+function goToLandedCost(doc) {
+  router.push({ path: "/purchasing/landed-cost-vouchers/new", query: { purchase_receipt: doc.name } });
+}
 
 const TABS = [{k:"all",l:"All"},{k:"0",l:"Draft"},{k:"1",l:"Received"},{k:"2",l:"Cancelled"}];
 const list      = ref([]);
@@ -527,6 +537,7 @@ const sortDir = ref(-1);
 const vendorOptions = ref([]);
 const itemOptions   = ref([]);
 const poOptions     = ref([]);
+const warehouses    = ref([]);
 const collapsed = reactive({ details: false, receiving: false, items: false });
 
 const form = reactive({
@@ -564,7 +575,7 @@ async function load() {
   try {
     // No standalone Purchase Receipt doctype in this build. Synthesise the list
     // from Purchase Order lines with received_qty > 0.
-    const rows = await apiGET("zoho_books_clone.api.docs.get_purchase_receipt_list", { limit: 500 }) || [];
+    const rows = await apiGET("zoho_books_clone.api.docs.get_purchase_receipt_list", { limit: 100000 }) || [];
     const rawList = rows.map(r => ({
       // Real Purchase Receipts already have their own name from the backend —
       // don't overwrite it with the linked PO's name, or multiple GRNs against
@@ -738,6 +749,7 @@ function openNew() {
   fetchVendors("");
   fetchItems("");
   fetchPOs("");
+  fetchWarehouses("");
   addItem();
   formOpen.value = true;
 }
@@ -749,6 +761,7 @@ async function openEdit(r) {
   fetchVendors("");
   fetchItems("");
   fetchPOs("");
+  fetchWarehouses("");
   formOpen.value = true;
   try {
     const doc = await apiGet("Purchase Receipt", r.name);
@@ -818,6 +831,15 @@ function onSupSelect(opt) {
   poOptions.value = [];
   fetchPOs("");
 }
+async function fetchWarehouses(q = "") {
+  try {
+    const co = await resolveCompany();
+    const rows = await apiList("Warehouse", { filters: [["company","=",co],["disabled","=",0],["is_group","=",0]], fields: ["name","parent_warehouse"], limit: 50 });
+    warehouses.value = (rows || [])
+      .filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.parent_warehouse||"").toLowerCase().includes(q.toLowerCase()))
+      .map(r => ({ label: r.parent_warehouse ? `${r.parent_warehouse} / ${r.name}` : r.name, value: r.name }));
+  } catch { warehouses.value = []; }
+}
 async function fetchPOs(q = "") {
   try {
     const company = await resolveCompany();
@@ -877,7 +899,7 @@ async function onPOSelect(opt) {
 }
 async function fetchItems(q = "") {
   try {
-    const filters = [["disabled", "=", 0], ["has_variants", "=", 0]];
+    const filters = [["disabled", "=", 0], ["has_variants", "=", 0], ["is_purchase_item", "=", 1]];
     if (q) filters.push(["item_name", "like", `%${q}%`]);
     const rows = await apiList("Item", { fields: ["name", "item_name", "description", "stock_uom", "standard_rate", "standard_buying_rate", "has_batch_no"], filters, limit: 30, order: "item_name asc" });
     itemOptions.value = rows.map(r => ({ label: r.item_name || r.name, value: r.name, description: r.description || "", uom: r.stock_uom || "Nos", rate: r.standard_buying_rate || r.standard_rate || 0, has_batch_no: r.has_batch_no ? 1 : 0 }));
@@ -924,6 +946,15 @@ async function saveGRN(submit) {
   if (!form.supplier.trim()) { toast.error("Supplier is required"); return; }
   const usable = form.items.filter(it => it.item_code.trim());
   if (!usable.length) { toast.error("Add at least one item"); return; }
+
+  for (const [idx, it] of usable.entries()) {
+    const rowQty = parseFloat(it.qty) || 0;
+    const rowAccepted = parseFloat(it.accepted_qty);
+    if (!isNaN(rowAccepted) && (rowAccepted < 0 || rowAccepted > rowQty)) {
+      toast.error(`Row ${idx + 1}: Accepted Qty can't be negative or exceed Received Qty (${rowQty}).`);
+      return;
+    }
+  }
 
   // Batch-tracked items must carry a Batch No before we let this go to the
   // backend — otherwise the auto-generated Stock Entry (Material Receipt)
@@ -983,23 +1014,27 @@ async function saveGRN(submit) {
       purchase_order: form.purchase_order || null,
       set_warehouse: form.set_warehouse || null,
       remarks: form.remarks || "",
-      items: usable.map(it => ({
+      items: usable.map(it => {
+        const rowQty = parseFloat(it.qty) || 1;
+        const rawAccepted = parseFloat(it.accepted_qty);
+        const rowAccepted = Math.min(Math.max(isNaN(rawAccepted) ? rowQty : rawAccepted, 0), rowQty);
+        return {
         doctype: "Purchase Receipt Item",
         item_code: it.item_code,
         item_name: it.item_name || it.item_code,
-        qty: parseFloat(it.qty) || 1,
-        accepted_qty: parseFloat(it.accepted_qty) || parseFloat(it.qty) || 1,
-        rejected_qty: 0,
+        qty: rowQty,
+        accepted_qty: rowAccepted,
+        rejected_qty: rowQty - rowAccepted,
         uom: it.uom || "Nos",
         stock_uom: it.uom || "Nos",
         conversion_factor: 1,
-        received_qty: parseFloat(it.qty) || 1,
+        received_qty: rowQty,
         rate: 0,
         po_item: it.po_item || undefined,
         batch_no: it.has_batch_no ? (it.batch_no || null) : null,
         manufacturing_date: it.has_batch_no ? (it.manufacturing_date || null) : null,
         expiry_date: it.has_batch_no ? (it.expiry_date || null) : null,
-      })),
+      };}),
     };
     if (editingName.value) doc.name = editingName.value;
 

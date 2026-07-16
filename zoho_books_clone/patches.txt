@@ -1,5 +1,7 @@
+[pre_model_sync]
 zoho_books_clone.patches.v1_0.create_indexes
 zoho_books_clone.patches.v1_0.seed_default_currency
 zoho_books_clone.patches.v1_0.seed_modes_of_payment
 zoho_books_clone.patches.v1_1.fix_company_names
 zoho_books_clone.patches.v1_2.seed_tax_templates_per_company
+zoho_books_clone.patches.v1_3.seed_landed_cost_charge_accounts

@@ -1342,7 +1342,7 @@ async function load() {
       fields: ["name","customer","customer_name","transaction_date",
                "valid_till","status","docstatus","grand_total","title","currency"],
       filters: [["company","=",co]],
-      limit: 500,
+      limit: 100000,
       order: "transaction_date desc, creation desc",
     });
   } catch (e) {
@@ -1515,7 +1515,7 @@ async function fetchCustomers(q = "") {
 
 async function fetchItems(q = "") {
   try {
-    const f = [["disabled","=",0],["has_variants","=",0]];
+    const f = [["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]];
     if (q) f.push(["item_name","like","%" + q + "%"]);
     const r = await apiList("Item", {
       fields: ["name","item_name","standard_rate","stock_uom","hsn_code","description"], filters: f, limit: 30, order: "item_name asc",

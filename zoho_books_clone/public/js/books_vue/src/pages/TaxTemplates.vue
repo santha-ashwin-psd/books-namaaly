@@ -270,7 +270,7 @@ async function load() {
 async function loadAccounts() {
   try {
     let r = await apiList("Account", { fields: ["name"], filters: [["account_type", "=", "Tax"], ["is_group", "=", 0]], limit: 200, order: "name asc" });
-    if (!r || !r.length) r = await apiList("Account", { fields: ["name"], filters: [["is_group", "=", 0]], limit: 500, order: "name asc" });
+    if (!r || !r.length) r = await apiList("Account", { fields: ["name"], filters: [["is_group", "=", 0]], limit: 100000, order: "name asc" });
     accounts.value = r || [];
   } catch { accounts.value = []; }
 }

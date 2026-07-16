@@ -849,7 +849,7 @@ async function load() {
     list.value = await apiList("Warehouse", {
       fields: ["name","warehouse_name","warehouse_type","parent_warehouse",
                "city","state","address_line1","pincode","is_group","disabled"],
-      limit: 500,
+      limit: 100000,
     }) || [];
     // Auto-select: restore last-used group, else fall back to first group
     if (!selectedWH.value) {
@@ -895,7 +895,7 @@ function fmtBatchDate(d) {
 }
 
 async function loadItems() {
-  try { allItems.value = await apiList("Item", { fields: ["name","item_name","has_batch_no"], limit: 500, order: "item_name asc" }) || []; }
+  try { allItems.value = await apiList("Item", { fields: ["name","item_name","has_batch_no"], limit: 100000, order: "item_name asc" }) || []; }
   catch {}
 }
 

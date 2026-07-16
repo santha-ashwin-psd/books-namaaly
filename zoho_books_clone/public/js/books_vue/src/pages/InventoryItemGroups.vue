@@ -406,7 +406,7 @@ async function loadItems() {
     allItems.value = await apiList("Item", {
       fields: ["name", "item_code", "item_name", "item_group", "item_type",
                "stock_uom", "standard_rate", "disabled", "is_stock_item"],
-      order: "item_name asc", limit: 500,
+      order: "item_name asc", limit: 100000,
     });
   } catch { allItems.value = []; }
   itemsLoading.value = false;

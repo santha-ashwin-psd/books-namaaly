@@ -250,7 +250,7 @@ async function load() {
     const rows = await apiList("Batch", {
       fields: ["name", "batch_no", "item", "warehouse", "manufacturing_date", "expiry_date", "batch_qty", "supplier", "disabled"],
       filters: [],
-      limit: 500,
+      limit: 100000,
       order: "expiry_date asc",
     });
     list.value = rows;

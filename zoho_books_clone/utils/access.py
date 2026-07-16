@@ -42,6 +42,7 @@ DOCTYPE_MODULE = {
     # Inventory
     "Item": "inventory", "Item Group": "inventory", "Warehouse": "inventory",
     "Stock Entry": "inventory", "Stock Ledger Entry": "inventory", "Price List": "inventory",
+    "Landed Cost Voucher": "inventory",
     # Manufacturing
     "BOM": "inventory", "Work Order": "inventory", "Production Plan": "inventory",
     "Job Card": "inventory", "Material Request": "inventory",

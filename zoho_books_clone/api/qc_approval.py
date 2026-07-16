@@ -276,7 +276,7 @@ def get_approval_status_for_inspection(inspection_name: str) -> dict:
     """
     Utility (non-whitelisted) — look up the latest non-cancelled approval
     request for a QC Inspection.  Used by generate_coa() and
-    check_qc_before_stock_link approval guard.
+    qc_hold_manager.release_from_hold()'s approval guard.
     Returns dict with keys: found, approval_status, approved_by, approval_date,
     rejection_reason, request_name.
     """

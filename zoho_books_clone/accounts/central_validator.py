@@ -39,6 +39,8 @@ def on_validate(doc, _method=None):
     _check_period_not_closed(doc)
     _check_lock_date(doc)          # Audit: per-company lock date (Books Company.lock_date)
     _check_fiscal_year_period_lock(doc)  # Per-fiscal-year period lock (Fiscal Year.lock_date)
+    _check_sales_items_are_sellable(doc)     # Item.is_sales_item — see below
+    _check_purchase_items_are_purchasable(doc)  # Item.is_purchase_item — see below
 
 
 def _check_company_tenancy(doc):
@@ -193,6 +195,61 @@ def _check_lock_date(doc):
             "The period up to {0} is locked. You cannot create or edit {1} documents "
             "dated on or before the lock date. Contact your System Manager to unlock the period."
         ).format(frappe.bold(lock_date), doc.doctype))
+
+
+def _check_sales_items_are_sellable(doc):
+    """
+    Every line item on a sales-facing document must be flagged as a Sales
+    Item (Item.is_sales_item = 1). The item pickers in the Sales module UI
+    already filter these out, but this is a server-side backstop for
+    anything that bypasses the UI — API calls, data imports, or older
+    clients — same as ERPNext enforces is_sales_item itself.
+
+    Items where is_sales_item is still NULL (not yet touched by the
+    v1_4 back-fill patch, e.g. a brand-new install mid-migration) are
+    allowed through rather than blocked — NULL means "unknown", not
+    "explicitly not a sales item", and matches the patch's own
+    visible-everywhere default for anything it has no opinion about.
+    """
+    if doc.doctype not in ("Sales Invoice", "Sales Order", "Quotation", "Delivery Note", "Credit Note"):
+        return
+
+    for row in (getattr(doc, "items", []) or []):
+        item_code = getattr(row, "item_code", None)
+        if not item_code:
+            continue
+        is_sales_item = frappe.db.get_value("Item", item_code, "is_sales_item")
+        if is_sales_item is not None and not is_sales_item:
+            frappe.throw(_(
+                "Row {0}: Item {1} is not marked as a Sales Item and cannot be added to a {2}."
+            ).format(row.idx, frappe.bold(item_code), doc.doctype))
+
+
+def _check_purchase_items_are_purchasable(doc):
+    """
+    Mirror of _check_sales_items_are_sellable() for the purchase side: every
+    line item on a purchase-facing document must be flagged as a Purchase
+    Item (Item.is_purchase_item = 1). Debit Notes are Purchase Invoice
+    (is_return=1) in this app, not a separate doctype, so they're covered
+    automatically by the "Purchase Invoice" check below — no extra entry
+    needed.
+
+    Same NULL-is-allowed rule as the sales-side check: an Item that hasn't
+    been touched by the v1_4 back-fill patch yet is let through rather than
+    blocked.
+    """
+    if doc.doctype not in ("Purchase Invoice", "Purchase Order", "Purchase Receipt"):
+        return
+
+    for row in (getattr(doc, "items", []) or []):
+        item_code = getattr(row, "item_code", None)
+        if not item_code:
+            continue
+        is_purchase_item = frappe.db.get_value("Item", item_code, "is_purchase_item")
+        if is_purchase_item is not None and not is_purchase_item:
+            frappe.throw(_(
+                "Row {0}: Item {1} is not marked as a Purchase Item and cannot be added to a {2}."
+            ).format(row.idx, frappe.bold(item_code), doc.doctype))
 
 
 def _check_credit_limit(doc):

@@ -618,7 +618,7 @@ def list_inspections(
                 "name", "inspection_type", "status", "reference_type", "reference_name",
                 "item", "item_name", "inspection_date", "inspected_by",
                 "total_readings", "accepted_readings", "rejected_readings",
-                "docstatus", "creation",
+                "docstatus", "creation", "qc_inspection_template",
             ],
             order_by="creation desc",
             limit=page_len,

@@ -143,8 +143,8 @@ async function load() {
 
     if (companyGstin.value) {
       const [withIrn, submitted] = await Promise.all([
-        apiList("Sales Invoice", { fields: ["name"], filters: [["company","=",co],["irn","!=",""],["docstatus","=",1]], limit: 500 }).catch(() => []),
-        apiList("Sales Invoice", { fields: ["name"], filters: [["company","=",co],["docstatus","=",1],["customer_gstin","!=",""]], limit: 500 }).catch(() => []),
+        apiList("Sales Invoice", { fields: ["name"], filters: [["company","=",co],["irn","!=",""],["docstatus","=",1]], limit: 100000 }).catch(() => []),
+        apiList("Sales Invoice", { fields: ["name"], filters: [["company","=",co],["docstatus","=",1],["customer_gstin","!=",""]], limit: 100000 }).catch(() => []),
       ]);
       irnGenerated.value = withIrn.length;
       irnPending.value = Math.max(0, submitted.length - withIrn.length);

@@ -784,7 +784,7 @@ async function load() {
     const rows = await apiList("Purchase Invoice", {
       fields: ["name", "supplier", "supplier_name", "posting_date", "grand_total", "return_against", "docstatus", "status"],
       filters: [["is_return", "=", 1], ["company", "=", co]],
-      limit: 500,
+      limit: 100000,
       order: "posting_date desc, creation desc",
     });
     // Resolve supplier_name for any rows where it's missing
@@ -986,7 +986,7 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "standard_buying_rate", "stock_uom"], filters: [...f, ["has_variants", "=", 0]], limit: 30, order: "item_name asc" });
+    const r = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "standard_buying_rate", "stock_uom"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
     items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0 }));
   } catch { items.value = []; }
 }

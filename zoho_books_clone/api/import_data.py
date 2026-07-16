@@ -204,12 +204,12 @@ def _build_doc(doctype, row, company):
             "doctype": "Item",
             "item_name": iname,
             "item_code": (row.get("item_code") or iname).strip(),
-            "item_group": row.get("item_group") or "All Item Groups",
+            "item_group": _resolve_or_create_item_group(row.get("item_group")),
             "item_type": row.get("item_type") or "Service",
             "stock_uom": row.get("stock_uom") or "Nos",
             "standard_rate": flt(row.get("standard_rate") or 0),
             "standard_buying_rate": flt(row.get("standard_buying_rate") or 0),
-            "tax_code": row.get("tax_code") or "",
+            "tax_code": _resolve_tax_code(row.get("tax_code"), company),
             "gst_rate": flt(row.get("gst_rate") or 0),
             "hsn_code": row.get("hsn_code") or "",
             "description": row.get("description") or iname,
@@ -391,6 +391,83 @@ def _build_doc(doctype, row, company):
         }
 
     return None
+
+
+def _resolve_tax_code(tax_code_input, company):
+    """
+    Resolve a 'tax_code' CSV value to a valid Tax Template docname.
+
+    Tax Template's autoname was changed (patch v1_2) from a globally-unique
+    `field:template_name` to `format:{template_name} - {company}`, so a CSV
+    written against the old naming (e.g. "GST 5% (Intra-State)") no longer
+    matches any docname directly and would otherwise fail Item's Link
+    validation with a generic "Could not find Default Tax Template: ..."
+    error on every row. Resolve it the same way the Tax Template list
+    displays it — by template_name scoped to the company — before falling
+    back to a direct name match.
+    """
+    value = (tax_code_input or "").strip()
+    if not value:
+        return ""
+
+    # Already the exact per-company docname (or user typed it in full).
+    if frappe.db.exists("Tax Template", value):
+        return value
+
+    # New naming scheme: "{template_name} - {company}", scoped to this company.
+    by_company_name = frappe.db.get_value(
+        "Tax Template", {"name": f"{value} - {company}"}, "name"
+    )
+    if by_company_name:
+        return by_company_name
+
+    # Fall back to the clean display name (template_name), scoped to company.
+    by_template_name = frappe.db.get_value(
+        "Tax Template", {"template_name": value, "company": company}, "name"
+    )
+    if by_template_name:
+        return by_template_name
+
+    frappe.throw(
+        _(
+            "Tax code '{0}' not found for this company. "
+            "Please check the Tax Templates list or the spelling."
+        ).format(value)
+    )
+
+
+def _resolve_or_create_item_group(name):
+    """
+    Item Group is a global (not per-company) taxonomy, autonamed by prompt —
+    the value typed in the CSV *is* the docname directly, there's no
+    separate title field. If the CSV references a group that doesn't exist
+    yet, create it as a flat leaf group under "All Item Groups" instead of
+    failing the whole row with a generic Link-validation error ("Could not
+    find Item Group: ...") — the same class of failure the tax_code column
+    used to hit before _resolve_tax_code was added.
+    """
+    name = (name or "").strip() or "All Item Groups"
+    if frappe.db.exists("Item Group", name):
+        return name
+
+    # "All Item Groups" itself is seeded at install and should always exist.
+    # If it's somehow missing, don't try to parent the new group under a
+    # group that doesn't exist either — leave it parentless rather than
+    # fail the whole row over a missing root node.
+    parent = "All Item Groups" if frappe.db.exists("Item Group", "All Item Groups") else None
+
+    try:
+        frappe.get_doc({
+            "doctype": "Item Group",
+            "name": name,  # autoname: prompt — the typed name is the docname
+            "parent_item_group": parent,
+            "is_group": 0,
+        }).insert(ignore_permissions=True)
+    except frappe.DuplicateEntryError:
+        # Race: an earlier row in this same import batch (or a concurrent
+        # import) already created it — nothing more to do.
+        pass
+    return name
 
 
 def _resolve_supplier(supplier_input, company):

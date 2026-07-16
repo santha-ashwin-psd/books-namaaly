@@ -252,7 +252,7 @@ onMounted(async () => {
     const co = await resolveCompany();
 
     [companiesList.value, itemsList.value, uomList.value] = await Promise.all([
-      apiList("Company", { fields: ["name"], limit: 500 }),
+      apiList("Company", { fields: ["name"], limit: 100000 }),
       apiList("Item", { fields: ["name", "item_name", "stock_uom"], limit: 5000, order: "name asc" }),
       apiList("UOM", { fields: ["name"], limit: 200, order: "name asc" }),
     ]);

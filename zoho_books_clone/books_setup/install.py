@@ -11,6 +11,7 @@ def after_install():
     seed_modes_of_payment()
     seed_payment_terms()
     create_default_accounts()
+    seed_landed_cost_accounts()
     seed_tax_templates()
     seed_warehouses()
     seed_price_lists()
@@ -35,6 +36,8 @@ def after_migrate():
         seed_modes_of_payment()
     if frappe.db.exists("DocType", "Payment Terms"):
         seed_payment_terms()
+    if frappe.db.exists("DocType", "Account"):
+        seed_landed_cost_accounts()
     seed_tax_templates()
     seed_item_groups()
     seed_customer_custom_fields()
@@ -111,6 +114,7 @@ def seed_naming_series():
         "Job Card":         "JC-.YYYY.-.#####",
         "Material Request": "MR-.YYYY.-.#####",
         "Packing Slip":    "PS-.YYYY.-.#####",
+        "Landed Cost Voucher": "LCV-.YYYY.-.#####",
     }
     for doctype, prefix in series.items():
         key = f"{prefix}."
@@ -285,6 +289,52 @@ def create_default_accounts():
             }).insert(ignore_permissions=True)
         except Exception as e:
             frappe.log_error(str(e), f"Account seed: {name}")
+
+
+# ─── Landed Cost Voucher accounts ────────────────────────────────────────────
+def seed_landed_cost_accounts():
+    """Three expense accounts a Landed Cost Voucher charge row can point at.
+    LCV reclassifies out of these into Stock In Hand on submit (Phase 4) —
+    seeding them here is just data, no code needed on the accounting side."""
+    company = frappe.db.get_single_value("Books Settings", "default_company")
+    if not company:
+        try:
+            company = frappe.db.get_single_value("Global Defaults", "default_company")
+        except Exception:
+            company = None
+    if not company:
+        return
+
+    def _acc(name):
+        return f"{name} - {company}"
+
+    parent = _acc("Operating Expenses")
+    if not frappe.db.exists("Account", parent):
+        # Base chart of accounts hasn't been seeded yet (or uses a different
+        # structure) — skip rather than guess a parent.
+        return
+
+    landed_cost_accounts = [
+        "Freight & Parcel Charges - Inward",
+        "Local Transport Charges - Inward",
+        "Freight & Courier Charges - Outward",
+    ]
+    for name in landed_cost_accounts:
+        full_name = _acc(name)
+        if frappe.db.exists("Account", full_name):
+            continue
+        try:
+            frappe.get_doc({
+                "doctype":        "Account",
+                "account_name":   name,
+                "account_type":   "Expense",
+                "parent_account": parent,
+                "is_group":       0,
+                "company":        company,
+                "currency":       "INR",
+            }).insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.log_error(str(e), f"Landed cost account seed: {name}")
 
 
 # ─── Tax Templates (GST) ─────────────────────────────────────────────────────

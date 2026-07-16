@@ -55,6 +55,9 @@ doc_events = {
     "Bank Transaction": {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # QC Inspection — auto-handle hold/quarantine on submit
     "QC Inspection":    {"on_submit": f"{_QH}.handle_qc_result", "on_cancel": f"{_QH}.handle_qc_cancel"},
+    # QC Approval Request — rejection_reason requirement enforced via doc_events
+    # too (belt-and-suspenders alongside the controller's own validate()).
+    "QC Approval Request": {"validate": f"{_QH}.validate_approval_request"},
     # Phase 3: pre-sales and GST docs wired so Books lock date + fiscal-year
     # period lock are enforced on these document types too.
     "Sales Order":      {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
@@ -255,6 +258,12 @@ website_route_rules = [
     {"from_route": "/quality/<path:path>", "to_route": "books"},
     {"from_route": "/manufacturing", "to_route": "books"},
     {"from_route": "/manufacturing/<path:path>", "to_route": "books"},
+    # Catch-all: anything else that would otherwise 404 lands on the Books
+    # dashboard instead of Frappe's default error page. Frappe's own core
+    # paths (/app, /api, /assets, /files, etc.) are registered as their own,
+    # more specific Werkzeug rules and are matched before this wildcard, so
+    # they're unaffected — this only fires for genuinely unmatched routes.
+    {"from_route": "/<path:app_path>", "to_route": "books"},
 ]
 
 # Frappe's built-in account pages are not used by Books — bounce them to the

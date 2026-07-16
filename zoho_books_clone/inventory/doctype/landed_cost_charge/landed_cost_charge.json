@@ -1,0 +1,105 @@
+{
+ "name": "Landed Cost Charge",
+ "module": "Inventory",
+ "doctype": "DocType",
+ "creation": "2026-07-15 00:00:00.000000",
+ "modified": "2026-07-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "idx": 0,
+ "document_type": "",
+ "search_fields": "",
+ "insert_after": "",
+ "show_name_in_global_search": 0,
+ "read_only": 0,
+ "in_create": 0,
+ "allow_rename": 0,
+ "allow_copy": 0,
+ "allow_import": 1,
+ "allow_events_in_timeline": 0,
+ "allow_auto_repeat": 0,
+ "beta": 0,
+ "custom": 0,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "max_attachments": 0,
+ "migration_hash": "",
+ "naming_rule": "",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "links": [],
+ "actions": [],
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 1,
+ "issingle": 0,
+ "autoname": "",
+ "title_field": "",
+ "field_order": [
+  "description",
+  "account",
+  "col1",
+  "amount",
+  "sec_source",
+  "supplier",
+  "reference_doctype",
+  "reference_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "label": "Expense Account",
+   "options": "Account",
+   "description": "The account this charge currently sits in (e.g. Freight & Parcel Charges \u2013 Inward). LCV reclassifies out of this account into Inventory.",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Charge Description",
+   "reqd": 0,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sec_source",
+   "fieldtype": "Section Break",
+   "label": "Source (optional, for traceability)"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "description": "E.g. the transporter, if this charge is billed separately from the goods supplier"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType",
+   "description": "Purchase Invoice or Journal Entry the charge was originally booked against, if any"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
+  }
+ ],
+ "permissions": []
+}

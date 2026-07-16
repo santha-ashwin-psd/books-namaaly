@@ -1296,7 +1296,7 @@ async function load() {
     list.value = await apiList("Sales Order", {
       fields: ["name", "customer", "customer_name", "transaction_date", "delivery_date", "status", "grand_total", "billed_amount", "ref_quote", "po_number"],
       filters: [["company", "=", co]],
-      limit: 500,
+      limit: 100000,
       order: "transaction_date desc, creation desc",
     });
   } catch (e) { toast.error(e.message || "Failed to load sales orders"); }
@@ -1624,7 +1624,7 @@ async function saveNewAddress() {
 }
 async function fetchItems(q = "") {
   try {
-    const f = [["disabled", "=", 0]];
+    const f = [["disabled", "=", 0], ["is_sales_item", "=", 1]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
     const r = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "description"], filters: [...f, ["has_variants", "=", 0]], limit: 30, order: "item_name asc" });
     items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_rate || 0, uom: x.stock_uom || "Nos", description: x.description || "" }));

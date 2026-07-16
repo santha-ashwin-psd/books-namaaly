@@ -606,9 +606,25 @@ function readFile(file) {
   parseError.value = "";
   parsing.value = true;
   const reader = new FileReader();
-  reader.onload = (e) => { parseCSV(e.target.result); parsing.value = false; };
+  reader.onload = (e) => { parseCSV(decodeCSVBuffer(e.target.result)); parsing.value = false; };
   reader.onerror = () => { parseError.value = "Could not read that file"; parsing.value = false; };
-  reader.readAsText(file, "UTF-8");
+  reader.readAsArrayBuffer(file);
+}
+
+// Excel's "CSV (Comma delimited)" export (as opposed to "CSV UTF-8") writes
+// smart punctuation — em dashes, curly quotes — in Windows-1252, not UTF-8.
+// Forcing a UTF-8 decode on that file turns every such character into a
+// U+FFFD replacement character (the "�" seen in place of an em dash after
+// import). Detect this by attempting a strict UTF-8 decode first; if the
+// byte sequence isn't valid UTF-8, it throws, and we fall back to
+// Windows-1252 — which covers the vast majority of real-world Excel exports.
+function decodeCSVBuffer(buffer) {
+  const bytes = new Uint8Array(buffer);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (e) {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
 }
 
 function parseCSV(text) {
