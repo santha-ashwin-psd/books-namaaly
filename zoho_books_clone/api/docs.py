@@ -6,6 +6,81 @@ from zoho_books_clone.api.session import _get_company
 from zoho_books_clone.db.validators import validate_fiscal_year
 
 
+# ─── Default account resolution ───────────────────────────────────────────────
+#
+# Both Sales-side postings (Sales Invoice, Credit Note, Quotation/Sales-Order
+# -> Invoice) and Purchase-side postings (Purchase Invoice) need a fallback
+# account whenever the caller didn't supply one explicitly (e.g. the Item
+# master has no income_account/expense_account set, or the frontend line
+# didn't carry one through).
+#
+# frappe.db.get_value(..., {"account_type": X}) is NOT deterministic when more
+# than one leaf account shares the same account_type — e.g. "Sales Revenue"
+# and "Other Income" are both account_type "Income"; "Rent", "Salaries &
+# Wages", "Office Supplies" and the two Freight/Transport "-Inward" charge
+# accounts are all account_type "Expense". Picking "any" account of that type
+# means postings can land on the wrong account, silently, per-save.
+#
+# The fix: always try an exact account_name match first (the account the app
+# was actually designed around — see books_setup/bootstrap.py), and only fall
+# back to "first leaf account of this type" — with a deterministic ORDER BY —
+# if that named account is genuinely missing from this company's chart of
+# accounts.
+
+def _find_account(account_types, company, preferred_name=None):
+    """Resolve a fallback Account for `company`.
+
+    1. If `preferred_name` is given, prefer the leaf account with that exact
+       account_name (e.g. "Sales Revenue", "Cost of Goods Sold").
+    2. Otherwise (or if that account doesn't exist for this company), fall
+       back to the first leaf account matching any of `account_types`, tried
+       in the given priority order, deterministically (ORDER BY name).
+    """
+    if preferred_name:
+        val = frappe.db.get_value(
+            "Account",
+            {"account_name": preferred_name, "company": company, "is_group": 0},
+            "name",
+        )
+        if val:
+            return val
+    for at in account_types:
+        val = frappe.db.get_value(
+            "Account",
+            {"account_type": at, "company": company, "is_group": 0},
+            "name",
+            order_by="name asc",
+        )
+        if val:
+            return val
+    return None
+
+
+def _default_income_account(company):
+    """Default Sales/Income account: prefer "Sales Revenue", else any Income-type account."""
+    return _find_account(
+        ["Income", "Income Account", "Direct Income", "Sales"],
+        company,
+        preferred_name="Sales Revenue",
+    )
+
+
+def _default_expense_account(company):
+    """Default Purchase/COGS account: prefer "Cost of Goods Sold", else any Expense-type account.
+
+    Note the account_types list intentionally puts "Cost of Goods Sold" before
+    the generic "Expense" type — with the old ordering, ["Expense", ...] was
+    tried first and matched Rent/Salaries & Wages/Office Supplies/etc. before
+    "Cost of Goods Sold" was ever reached, since a generic Expense-type
+    account always exists.
+    """
+    return _find_account(
+        ["Cost of Goods Sold", "Expenses Included In Valuation", "Expense", "Expense Account"],
+        company,
+        preferred_name="Cost of Goods Sold",
+    )
+
+
 # ─── Email Template helpers ───────────────────────────────────────────────────
 
 def _resolve_company_for_user():
@@ -527,23 +602,21 @@ def save_doc(doc):
             if _uc:
                 doc["books_company"] = _uc
 
-    # Auto-fill mandatory account fields Frappe requires but the UI doesn't expose
+    # Auto-fill mandatory account fields Frappe requires but the UI doesn't expose.
+    # Uses the shared _find_account / _default_income_account / _default_expense_account
+    # helpers (module level, above) so "Sales Revenue" / "Cost of Goods Sold" are
+    # preferred deterministically instead of an arbitrary same-type account.
     _company = doc.get("company") or frappe.db.get_value("Global Defaults", None, "default_company")
-
-    def _find_account(account_types, company):
-        """Find first leaf account matching any of the given account_type values."""
-        for at in account_types:
-            val = frappe.db.get_value("Account", {"account_type": at, "company": company, "is_group": 0}, "name")
-            if val:
-                return val
-        return None
 
     if doctype == "Sales Invoice":
         if not doc.get("debit_to"):
             _ar = _find_account(["Receivable"], _company)
             if _ar:
                 doc["debit_to"] = _ar
-        _income = _find_account(["Income", "Income Account", "Direct Income", "Sales"], _company)
+        # Item-level income_account (set via the Item master, or picked on the
+        # line by the frontend) always wins — this fallback only fires for
+        # rows/headers that genuinely have nothing set.
+        _income = _default_income_account(_company)
         if _income:
             # Set on header (used by accounting_engine.post_sales_invoice)
             if not doc.get("income_account"):
@@ -558,7 +631,10 @@ def save_doc(doc):
             _ap = _find_account(["Payable"], _company)
             if _ap:
                 doc["credit_to"] = _ap
-        _expense = _find_account(["Expense", "Expense Account", "Cost of Goods Sold", "Expenses Included In Valuation"], _company)
+        # Item-level expense_account (set via the Item master, or picked on the
+        # line by the frontend) always wins — this fallback only fires for
+        # rows/headers that genuinely have nothing set.
+        _expense = _default_expense_account(_company)
         if _expense:
             # Set on header (used by accounting_engine.post_purchase_invoice)
             if not doc.get("expense_account"):
@@ -1491,9 +1567,7 @@ def create_debit_note():
     ap_account = frappe.db.get_value(
         "Account", {"account_type": "Payable", "company": company, "is_group": 0}, "name"
     )
-    expense_account = frappe.db.get_value(
-        "Account", {"account_type": "Expense", "company": company, "is_group": 0}, "name"
-    )
+    expense_account = _default_expense_account(company)
 
     pi_items = [
         {
@@ -1502,7 +1576,7 @@ def create_debit_note():
             "description":    it.get("description") or it.get("item_name") or "",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
-            "expense_account": expense_account,
+            "expense_account": it.get("expense_account") or expense_account,
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
@@ -2290,9 +2364,7 @@ def create_credit_note():
     ar_account = frappe.db.get_value(
         "Account", {"account_type": "Receivable", "company": company, "is_group": 0}, "name"
     )
-    income_account = frappe.db.get_value(
-        "Account", {"account_type": "Income", "company": company, "is_group": 0}, "name"
-    )
+    income_account = _default_income_account(company)
 
     cn_items = [
         {
@@ -2301,7 +2373,7 @@ def create_credit_note():
             "description":    it.get("description") or it.get("item_name") or "",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
-            "income_account": income_account,
+            "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
@@ -2437,9 +2509,7 @@ def save_credit_note_draft():
     ar_account = frappe.db.get_value(
         "Account", {"account_type": "Receivable", "company": company, "is_group": 0}, "name"
     )
-    income_account = frappe.db.get_value(
-        "Account", {"account_type": "Income", "company": company, "is_group": 0}, "name"
-    )
+    income_account = _default_income_account(company)
     customer_display = frappe.db.get_value("Customer", customer, "customer_name") or customer
 
     cn_items = [
@@ -2449,7 +2519,7 @@ def save_credit_note_draft():
             "description":    it.get("description") or it.get("item_code") or "",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
-            "income_account": income_account,
+            "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
@@ -2650,13 +2720,10 @@ def convert_quote_to_invoice(quotation_name, due_date=""):
     ar = frappe.db.get_value(
         "Account", {"account_type": "Receivable", "company": qd.company, "is_group": 0}, "name"
     )
-    inc = frappe.db.get_value(
-        "Account", {"account_type": ["in", ["Income", "Income Account", "Direct Income", "Sales"]],
-                    "company": qd.company, "is_group": 0}, "name"
-    )
+    inc = _default_income_account(qd.company)
     items = _quote_items_to_doc_items(qd, "Sales Invoice Item")
     for it in items:
-        it["income_account"] = inc
+        it["income_account"] = it.get("income_account") or inc
     si = frappe.get_doc({
         "doctype":               "Sales Invoice",
         "company":               qd.company,
@@ -2906,9 +2973,7 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
     company = so.company
     ar = frappe.db.get_value("Account",
         {"account_type": "Receivable", "company": company, "is_group": 0}, "name")
-    inc = frappe.db.get_value("Account",
-        {"account_type": ["in", ["Income", "Income Account", "Direct Income", "Sales"]],
-         "company": company, "is_group": 0}, "name")
+    inc = _default_income_account(company)
 
     si_items = []
     line_updates = []  # (so_item_name, qty_to_bill)
@@ -3257,9 +3322,7 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
     company = po.company
     ap = frappe.db.get_value("Account",
         {"account_type": "Payable", "company": company, "is_group": 0}, "name")
-    exp = frappe.db.get_value("Account",
-        {"account_type": ["in", ["Expense", "Expense Account", "Cost of Goods Sold", "Direct Expense"]],
-         "company": company, "is_group": 0}, "name")
+    exp = _default_expense_account(company)
 
     pi_items = []
     line_updates = []

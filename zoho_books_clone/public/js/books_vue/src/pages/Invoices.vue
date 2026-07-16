@@ -2087,7 +2087,7 @@ function salesPersonLabel(id) {
   return sp ? sp.label : id;
 }
 async function loadItems() {
-  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
+  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
 async function loadTaxAccount() {
   try {
@@ -2129,7 +2129,7 @@ function toggleAll(e) { if(e.target.checked) sorted.value.forEach(i=>selectedRow
 function toggleRow(name) { const s=new Set(selectedRows.value); s.has(name)?s.delete(name):s.add(name); selectedRows.value=s; }
 
 // ── Line item helpers ──────────────────────────────────────────────────
-function addLine() { lines.value.push({id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}); }
+function addLine() { lines.value.push({id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}); }
 function removeLine(id) { lines.value=lines.value.filter(l=>l.id!==id); }
 function calcLine(line) {
   if (line.discount_percentage > 100) line.discount_percentage = 100;
@@ -2148,6 +2148,10 @@ async function onItemChange(line) {
     line.uom=it.stock_uom||"Nos";
     if (it.description) line.description=it.description;
     if (it.hsn_code) line.hsn_code=it.hsn_code;
+    // Carry the Item master's own Default Income Account onto the line, so
+    // the backend fallback in save_doc (Sales Revenue) is only used when the
+    // Item genuinely has no income_account of its own.
+    line.income_account=it.income_account||"";
     calcLine(line);
   }
   if (line.item_code) {
@@ -2159,6 +2163,7 @@ async function onItemChange(line) {
       if (!flt(line.rate)&&doc?.standard_rate) { line.rate=flt(doc.standard_rate); line._standardRate=flt(doc.standard_rate); }
       if (doc?.stock_uom) line.uom=doc.stock_uom;
       if (doc?.tax_code) line.tax_code=doc.tax_code;
+      if (doc?.income_account) line.income_account=doc.income_account;
       calcLine(line);
     } catch {}
   }
@@ -2283,7 +2288,7 @@ async function copyLastItems() {
   try {
     const r=await apiGET("zoho_books_clone.api.docs.get_party_last_items",{party_type:"Customer",party:form.customer,limit:20});
     if (r?.items?.length) {
-      lines.value=[...lines.value,...r.items.map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:Math.round(flt(it.qty)*flt(it.rate)*100)/100,tax_code:it.tax_code||"",collapsed:false}))];
+      lines.value=[...lines.value,...r.items.map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:Math.round(flt(it.qty)*flt(it.rate)*100)/100,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false}))];
       toast("Copied "+r.items.length+" items from last invoice");
     } else toast("No previous items found for this customer","info");
   } catch (e) { toast("Could not copy items: "+e.message,"error"); }
@@ -2294,7 +2299,7 @@ function openAdd() {
   editingName.value=null;
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
-  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
+  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}];
   Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
@@ -2305,7 +2310,7 @@ async function openEdit(inv) {
   editingName.value=inv.name;
   Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
-  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",collapsed:false}];
+  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}];
   fetchWarehouses("");
   drawerOpen.value=true;
   const [doc] = await Promise.all([
@@ -2327,7 +2332,7 @@ async function openEdit(inv) {
       additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
       additional_discount_amount:flt(doc.additional_discount_amount)||0,
     });
-    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",collapsed:false}));
+    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false}));
     if (!lines.value.length) addLine();
     // Base Price is a read-only reference showing the Item's own standard_rate
     // (independent of whatever rate/discount ended up on the saved line), so
@@ -2389,7 +2394,7 @@ async function saveInvoice(docstatus, andNew = false) {
   drawerSaving.value=true;
   try {
     const company=await resolveCompany();
-    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||""}));
+    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||"",income_account:l.income_account||""}));
     const taxes=computeTaxRows(discountedLines.value.filter(l=>l.item_code), taxTemplates.value, {
       companyState: companyGstState.value,
       placeOfSupply: form.place_of_supply,

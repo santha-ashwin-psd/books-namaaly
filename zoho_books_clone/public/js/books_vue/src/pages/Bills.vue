@@ -918,7 +918,7 @@ const sortCol = ref("posting_date"), sortDir = ref("desc");
 const copyingLast = ref(false);
 
 let _id = 1;
-const blankLine = () => ({ id: _id++, item_code: "", description: "", qty: 1, rate: 0, amount: 0, tax_code: "", collapsed: false, has_batch_no: 0, batch_no: "", batchOptions: [] });
+const blankLine = () => ({ id: _id++, item_code: "", description: "", qty: 1, rate: 0, amount: 0, tax_code: "", expense_account: "", collapsed: false, has_batch_no: 0, batch_no: "", batchOptions: [] });
 const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
 const vendorAddresses = ref([]);
 const addrModal = reactive({
@@ -1149,7 +1149,7 @@ async function openEdit(b) {
       lines.value = doc.items.map(i => ({
         id: _id++, item_code: i.item_code || "", description: i.description || "",
         qty: i.qty || 1, rate: i.rate || 0, amount: i.amount || 0,
-        tax_code: i.tax_code || "", collapsed: false,
+        tax_code: i.tax_code || "", expense_account: i.expense_account || "", collapsed: false,
         has_batch_no: 0, batch_no: i.batch_no || "", batchOptions: [],
       }));
       // Resolve has_batch_no per item so the Batch No field shows for
@@ -1244,8 +1244,8 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
-    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.tax_code || "" }));
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
+    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
   } catch { items.value = []; }
 }
 watch(() => form.supplier, async (name) => {
@@ -1278,13 +1278,18 @@ async function onItemSelect(line, opt) {
   if (opt?.item_name) { line.item_name = opt.item_name; }
   if (opt?.tax_code !== undefined) { line.tax_code = opt.tax_code || ""; }
   if (opt?.description) { line.description = opt.description; }
-  else if (opt?.value) {
+  // Carry the Item master's own Default Expense Account onto the line, so
+  // the backend fallback in save_doc (Cost of Goods Sold) is only used when
+  // the Item genuinely has no expense_account of its own.
+  line.expense_account = opt?.expense_account || "";
+  if (!opt?.description && opt?.value) {
     // description not in option cache — fetch from Item doc directly
     try {
       const doc = await apiGet("Item", opt.value);
       if (doc?.description) line.description = doc.description;
       if (doc?.item_name) line.item_name = doc.item_name;
       if (doc?.tax_code) line.tax_code = doc.tax_code;
+      if (doc?.expense_account) line.expense_account = doc.expense_account;
     } catch {}
   }
   // Resolve has_batch_no so the Batch No field shows up for batch-tracked
@@ -1371,6 +1376,7 @@ async function copyLastItems() {
         id: _id++, item_code: it.item_code || "", description: it.description || it.item_name || "",
         qty: flt(it.qty) || 1, rate: flt(it.rate) || 0,
         amount: Math.round(flt(it.qty || 1) * flt(it.rate || 0) * 100) / 100,
+        expense_account: it.expense_account || "",
         has_batch_no: 0, batch_no: "", batchOptions: [],
       }));
       const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
@@ -1437,7 +1443,7 @@ async function saveBill(submit) {
         doctype: "Purchase Invoice Item", item_code: l.item_code,
         description: l.description || l.item_code,
         qty: flt(l.qty) || 1, rate: flt(l.rate), amount: flt(l.amount),
-        tax_code: l.tax_code || "",
+        tax_code: l.tax_code || "", expense_account: l.expense_account || "",
         batch_no: (form.update_stock && l.has_batch_no) ? l.batch_no : "",
       })),
       taxes,
