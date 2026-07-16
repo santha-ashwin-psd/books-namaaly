@@ -355,7 +355,7 @@ def _consume_qty_for_row(row, wo, consumption_ratio, ms):
         return max(min(consume_qty, remaining_transferred), 0)
     return flt(row.required_qty) * consumption_ratio
 
-
+@frappe.whitelist(allow_guest=True)
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
                          manufacturing_date=None, expiry_date=None):
