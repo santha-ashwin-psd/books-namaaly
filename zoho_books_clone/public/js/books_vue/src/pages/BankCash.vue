@@ -797,7 +797,7 @@ textarea.cash-input{resize:vertical;}
 .cash-ledger-sum-val--main{font-size:19px;color:#2563eb;}
 .cash-ledger-sum-val.neg{color:#dc2626;}
 
-.cash-ledger-table-wrap{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;}
+.cash-ledger-table-wrap{border:1px solid #e5e7eb;border-radius:10px;}
 .cash-ledger-table{font-size:12.5px;}
 .cash-ledger-table thead th{position:sticky;top:0;z-index:1;background:#f8fafc;}
 .cash-ledger-table .cash-ledger-row td{padding:11px 12px;cursor:default;}
