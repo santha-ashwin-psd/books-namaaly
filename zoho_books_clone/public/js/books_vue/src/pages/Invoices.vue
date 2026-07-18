@@ -3019,6 +3019,9 @@ watch(() => route.query, (q) => {
 .inv-inv-switch input:checked + .inv-inv-slider { background:#2563eb; }
 .inv-inv-switch input:checked + .inv-inv-slider:before { transform:translateX(18px); }
 .inv-fi:focus { border-color:#1a6ef7; box-shadow:0 0 0 3px rgba(26,110,247,.08); }
+.inv-fi[type="number"]::-webkit-outer-spin-button,
+.inv-fi[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.inv-fi[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Line items table (row) layout ── */
 .po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: hidden; }
