@@ -279,8 +279,8 @@
   <Teleport to="body">
 
     <!-- ── Create / Edit Drawer ── -->
-    <div v-if="drawerOpen" class="inv-drawer-bg" @click.self="!editingName ? null : drawerOpen=false">
-      <div class="inv-drawer-panel inv-new-drawer" :class="{'inv-split':showPreview, 'is-add':!editingName}">
+    <div v-if="drawerOpen" class="inv-drawer-bg inv-addedit-bg" @click.self="!editingName ? null : drawerOpen=false">
+      <div class="inv-drawer-panel inv-new-drawer inv-addedit-panel" :class="{'inv-split':showPreview, 'is-add':!editingName}">
 
         <!-- ── Header ── -->
         <div class="inv-dh">
@@ -333,72 +333,74 @@
                   <input v-model="form.due_date" type="date" class="inv-fi"/>
                 </div>
               </div>
-              <!-- Row 2: Title / Project (PO number) -->
-              <div class="add-details-row2">
-                <div>
-                  <label class="inv-lbl">Title / Project</label>
-                  <input v-model="form.po_no" class="inv-fi" placeholder="Project name or short description"/>
-                </div>
-                <div>
-                  <label class="inv-lbl">Payment Terms</label>
-                  <select v-model="form.payment_terms" class="inv-fi" @change="applyPaymentTerms">
-                    <option value="">— Select Payment Terms —</option>
-                    <option v-for="t in PAYMENT_TERMS" :key="t" :value="t">{{ t }}</option>
-                  </select>
-                </div>
-              </div>
-              <!-- Cost Center | Price List -->
-              <div class="inv-details-2col">
-                <div>
-                  <label class="inv-lbl">Cost Center</label>
-                  <select v-model="form.cost_center" class="inv-fi">
-                    <option value="">— Select —</option>
-                    <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="inv-lbl">Price List</label>
-                  <select v-model="form.price_list" class="inv-fi" @change="onPriceListChange(form.price_list)">
-                    <option value="">Select price list (optional)</option>
-                    <option v-for="pl in priceLists" :key="pl.value" :value="pl.value">{{ pl.label }}</option>
-                  </select>
-                </div>
-              </div>
-              <!-- Sales Person | Place of supply -->
-              <div class="inv-details-2col">
-                <div>
-                  <label class="inv-lbl">Sales Person</label>
-                  <SearchableSelect v-model="form.sales_person" :options="salesPersons"
-                    placeholder="Select sales person"/>
-                </div>
-                <div>
-                  <label class="inv-lbl">Place of Supply</label>
-                  <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
-                    <span>🌐</span> Outside India — Not applicable for export invoices
-                  </div>
-                  <select v-else v-model="form.place_of_supply" class="inv-fi">
-                    <option value="">— Select State —</option>
-                    <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
-                  </select>
-                </div>
-              </div>
-              <!-- Inventory toggle -->
-              <div style="margin-top:14px">
-                <div class="inv-inv-block" :class="form.update_stock ? 'inv-on' : 'inv-off'">
-                  <div class="inv-inv-toggle-row">
-                    <div class="inv-inv-icon" v-html="icon('box',16)"></div>
-                    <div class="inv-inv-text">
-                      <div class="inv-inv-title">Deduct Inventory on Submit</div>
-                      <div class="inv-inv-sub">Stock reduces from the selected warehouse when this invoice is submitted</div>
+              <!-- Lower section: field rows on the left, inventory toggle card on the right -->
+              <div class="inv-details-lower">
+                <div class="inv-details-lower-main">
+                  <!-- Row 2: Title / Project | Payment Terms | Cost Center | Price List -->
+                  <div class="inv-details-row2-4col">
+                    <div>
+                      <label class="inv-lbl">Title / Project</label>
+                      <input v-model="form.po_no" class="inv-fi" placeholder="Project name or short description"/>
                     </div>
-                    <label class="inv-inv-switch">
-                      <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
-                      <span class="inv-inv-slider"></span>
-                    </label>
+                    <div>
+                      <label class="inv-lbl">Payment Terms</label>
+                      <select v-model="form.payment_terms" class="inv-fi" @change="applyPaymentTerms">
+                        <option value="">— Select Payment Terms —</option>
+                        <option v-for="t in PAYMENT_TERMS" :key="t" :value="t">{{ t }}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="inv-lbl">Cost Center</label>
+                      <select v-model="form.cost_center" class="inv-fi">
+                        <option value="">— Select —</option>
+                        <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="inv-lbl">Price List</label>
+                      <select v-model="form.price_list" class="inv-fi" @change="onPriceListChange(form.price_list)">
+                        <option value="">Select price list (optional)</option>
+                        <option v-for="pl in priceLists" :key="pl.value" :value="pl.value">{{ pl.label }}</option>
+                      </select>
+                    </div>
                   </div>
-                  <div v-if="form.update_stock" class="inv-inv-wh-row">
-                    <label class="inv-lbl" style="margin-bottom:6px">Dispatch Warehouse <span style="color:#dc2626">*</span></label>
-                    <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
+                  <!-- Sales Person | Place of supply -->
+                  <div class="inv-details-2col">
+                    <div>
+                      <label class="inv-lbl">Sales Person</label>
+                      <SearchableSelect v-model="form.sales_person" :options="salesPersons"
+                        placeholder="Select sales person"/>
+                    </div>
+                    <div>
+                      <label class="inv-lbl">Place of Supply</label>
+                      <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
+                        <span>🌐</span> Outside India — Not applicable for export invoices
+                      </div>
+                      <select v-else v-model="form.place_of_supply" class="inv-fi">
+                        <option value="">— Select State —</option>
+                        <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <!-- Inventory toggle card -->
+                <div class="inv-details-toggle-col">
+                  <div class="inv-inv-block" :class="form.update_stock ? 'inv-on' : 'inv-off'">
+                    <div class="inv-inv-toggle-row">
+                      <div class="inv-inv-icon" v-html="icon('box',16)"></div>
+                      <div class="inv-inv-text">
+                        <div class="inv-inv-title">Deduct Inventory on Submit</div>
+                        <div class="inv-inv-sub">Stock reduces from the selected warehouse when this invoice is submitted</div>
+                      </div>
+                      <label class="inv-inv-switch">
+                        <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
+                        <span class="inv-inv-slider"></span>
+                      </label>
+                    </div>
+                    <div v-if="form.update_stock" class="inv-inv-wh-row">
+                      <label class="inv-lbl" style="margin-bottom:6px">Dispatch Warehouse <span style="color:#dc2626">*</span></label>
+                      <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2987,6 +2989,19 @@ watch(() => route.query, (q) => {
 .inv-fi { width:100%; border:1px solid #e2e8f0; border-radius:6px; padding:7px 10px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; }
 .inv-details-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 14px; }
 @media (max-width: 700px) { .inv-details-2col { grid-template-columns: 1fr; } }
+
+/* ── Invoice Details: lower section (fields left, inventory card right) ── */
+.inv-details-lower { display: flex; align-items: stretch; gap: 16px; margin-top: 14px; }
+.inv-details-lower-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.inv-details-row2-4col { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 16px; }
+.inv-details-toggle-col { width: 280px; flex-shrink: 0; display: flex; }
+.inv-details-toggle-col .inv-inv-block { width: 100%; }
+@media (max-width: 900px) {
+  .inv-details-lower { flex-direction: column; }
+  .inv-details-toggle-col { width: 100%; }
+}
+@media (max-width: 700px) { .inv-details-row2-4col { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .inv-details-row2-4col { grid-template-columns: 1fr; } }
 .inv-inv-block { border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:12px; transition:background .2s,border-color .2s; }
 .inv-inv-block.inv-on  { background:#eff6ff; border:1.5px solid #93c5fd; }
 .inv-inv-block.inv-off { background:#f9fafb; border:1.5px solid #e5e7eb; }
@@ -3006,38 +3021,47 @@ watch(() => route.query, (q) => {
 .inv-fi:focus { border-color:#1a6ef7; box-shadow:0 0 0 3px rgba(26,110,247,.08); }
 
 /* ── Line items table (row) layout ── */
-.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: auto; }
-.po-items-table { width: 100%; min-width: 1180px; border-collapse: collapse; }
+.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: hidden; }
+.po-items-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .po-items-table thead th {
   background: #f8fafc; border-bottom: 1px solid #e5e7eb;
   font-size: 10.5px; font-weight: 700; color: #6b7280; text-transform: uppercase;
-  letter-spacing: .04em; text-align: left; padding: 10px 12px; white-space: nowrap;
+  letter-spacing: .04em; text-align: left; padding: 10px 10px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
 }
-.po-items-table .th-num { width: 34px; }
-.po-items-table .th-item { min-width: 260px; }
-.po-items-table .th-hsn { width: 120px; }
-.po-items-table .th-uom { width: 90px; }
-.po-items-table .th-qty { width: 90px; }
-.po-items-table .th-rate { width: 110px; }
-.po-items-table .th-mrp { width: 100px; }
-.po-items-table .th-disc { width: 100px; }
-.po-items-table .th-tax { width: 140px; }
-.po-items-table .th-subtotal { width: 120px; text-align: right; }
-.po-items-table .th-rm { width: 36px; }
+.po-items-table .th-num { width: 3%; }
+.po-items-table .th-item { width: 24%; }
+.po-items-table .th-hsn { width: 9%; }
+.po-items-table .th-uom { width: 7%; }
+.po-items-table .th-qty { width: 6%; }
+.po-items-table .th-rate { width: 9%; }
+.po-items-table .th-mrp { width: 9%; }
+.po-items-table .th-disc { width: 8%; }
+.po-items-table .th-tax { width: 12%; }
+.po-items-table .th-subtotal { width: 10%; text-align: right; }
+.po-items-table .th-rm { width: 3%; }
 .po-items-row { border-bottom: 1px solid #f0f2f8; }
 .po-items-row:hover { background: #fafbfe; }
-.po-items-row td { padding: 12px; vertical-align: top; }
+.po-items-row td { padding: 12px 10px; vertical-align: top; overflow: hidden; }
 .po-items-row .td-num { padding-top: 16px; }
 .po-row-num { font-size: 11px; font-weight: 800; color: #4f46e5; background: #e0e7ff; border-radius: 5px; padding: 3px 8px; letter-spacing: .02em; white-space: nowrap; }
-.po-row-desc-ta { resize: vertical; min-height: 46px; font-size: 12.5px; line-height: 1.4; margin-top: 8px; }
-.po-items-row .td-subtotal { text-align: right; white-space: nowrap; }
+.po-row-desc-ta { resize: vertical; min-height: 46px; font-size: 12.5px; line-height: 1.4; margin-top: 8px; width: 100%; box-sizing: border-box; }
+.po-items-row .td-subtotal { text-align: right; white-space: normal; word-break: break-word; }
 .po-row-subtotal-label { display: block; font-size: 9.5px; font-weight: 700; color: #9ca3af; letter-spacing: .08em; }
-.po-row-subtotal-amt { display: block; font-size: 16px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.po-row-subtotal-tax { display: block; font-size: 10.5px; color: #6b7280; margin-top: 2px; }
+.po-row-subtotal-amt { display: block; font-size: 15px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.po-row-subtotal-tax { display: block; font-size: 10px; color: #6b7280; margin-top: 2px; word-break: break-word; }
 .po-items-row .td-rm { text-align: center; padding-top: 14px; }
-.po-items-tax-row td { padding: 0 12px 10px; border-bottom: 1px solid #f0f2f8; }
+.po-items-row .td-hsn .inv-fi,
+.po-items-row .td-uom .inv-fi,
+.po-items-row .td-qty .inv-fi,
+.po-items-row .td-rate .inv-fi,
+.po-items-row .td-mrp .inv-fi,
+.po-items-row .td-disc .inv-fi,
+.po-items-row .td-tax .inv-fi { width: 100%; box-sizing: border-box; padding: 7px 8px; font-size: 12.5px; }
+.po-items-tax-row td { padding: 0 10px 10px; border-bottom: 1px solid #f0f2f8; }
 @media (max-width: 900px) {
-  .po-items-table-wrap { -webkit-overflow-scrolling: touch; }
+  .po-items-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .po-items-table { min-width: 900px; table-layout: auto; }
 }
 .inv-add-line-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(26,110,247,.3); background:#eaf1ff; color:#1a6ef7; border-radius:6px; padding:5px 12px; font-size:12.5px; font-weight:600; cursor:pointer; }
 .inv-copy-btn { background:#f0fdf4; border-color:rgba(5,150,105,.3); color:#059669; }
@@ -3274,4 +3298,9 @@ watch(() => route.query, (q) => {
 .inv-brand-settings-link { color: #2563eb; text-decoration: none; font-weight: 500; }
 .inv-brand-settings-link:hover { text-decoration: underline; }
 .inv-new-drawer{width:1020px !important;right:-1020px!important;}
+
+/* ── Invoice Add/Edit drawer: sit beside the sidebar, not over it ── */
+.inv-addedit-bg { left: var(--bv-sidebar-w, 220px) !important; }
+.bv-app-sidebar-collapsed .inv-addedit-bg { left: var(--bv-sidebar-w-narrow, 56px) !important; }
+.inv-addedit-bg .inv-addedit-panel { width: 100% !important; max-width: 100% !important; }
 </style>

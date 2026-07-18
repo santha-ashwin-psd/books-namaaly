@@ -258,6 +258,14 @@ website_route_rules = [
     {"from_route": "/quality/<path:path>", "to_route": "books"},
     {"from_route": "/manufacturing", "to_route": "books"},
     {"from_route": "/manufacturing/<path:path>", "to_route": "books"},
+
+    # Explicitly exclude Frappe's auth routes from the catch-all below —
+    # without this, a Guest hitting /login gets caught by the wildcard,
+    # routed to the books page, which redirects back to /login, which gets
+    # caught again -> ERR_TOO_MANY_REDIRECTS.
+    {"from_route": "/login", "to_route": "login"},
+    {"from_route": "/login/<path:path>", "to_route": "login"},
+
     # Catch-all: anything else that would otherwise 404 lands on the Books
     # dashboard instead of Frappe's default error page. Frappe's own core
     # paths (/app, /api, /assets, /files, etc.) are registered as their own,
