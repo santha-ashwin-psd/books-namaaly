@@ -233,174 +233,6 @@
     <Pagination v-model:page="page" v-model:page-size="pageSize" :total-items="sorted.length" />
   </div>
 
-  <!-- View Drawer -->
-  <Teleport to="body">
-    <div v-if="viewOpen" class="vd-backdrop" @click.self="viewOpen=false"></div>
-    <div class="vd-panel" :class="viewOpen ? 'vd-panel--open' : ''">
-      <template v-if="viewDoc">
-
-        <!-- Header -->
-        <div class="vd-header">
-          <div class="vd-header-left">
-            <div class="vd-avatar">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            </div>
-            <div class="vd-header-info">
-              <div class="vd-title">{{ viewDoc.item_name }}</div>
-              <div class="vd-subtitle">{{ viewDoc.item_code || viewDoc.name }}</div>
-            </div>
-          </div>
-          <div class="vd-header-right">
-            <span class="vd-status-pill" :class="viewDoc.disabled ? 'vd-status-inactive' : 'vd-status-active'">
-              <span class="vd-status-dot"></span>
-              {{ viewDoc.disabled ? 'Inactive' : 'Active' }}
-            </span>
-            <button class="vd-close-btn" @click="viewOpen=false">
-              <span v-html="icon('x', 15)"></span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Hero metrics row -->
-        <div class="vd-hero">
-          <div class="vd-metric">
-            <div class="vd-metric-value vd-metric-green">{{ fmt(viewDoc.standard_rate) }}</div>
-            <div class="vd-metric-label">Selling Rate</div>
-          </div>
-          <div class="vd-metric-divider"></div>
-          <div class="vd-metric">
-            <div class="vd-metric-value">{{ fmt(viewDoc.standard_buying_rate || 0) }}</div>
-            <div class="vd-metric-label">Buying Rate</div>
-          </div>
-          <div class="vd-metric-divider"></div>
-          <div class="vd-metric">
-            <div class="vd-metric-value">
-              <span class="vd-badge-type">{{ viewDoc.item_type || '—' }}</span>
-            </div>
-            <div class="vd-metric-label">Item Type</div>
-          </div>
-        </div>
-
-        <!-- Body -->
-        <div class="vd-body">
-
-          <!-- Item Details card -->
-          <div class="vd-card">
-            <div class="vd-card-header">
-              <div class="vd-card-icon vd-card-icon--blue">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              </div>
-              <span class="vd-card-title">Item Details</span>
-            </div>
-            <div class="vd-rows">
-              <div class="vd-row">
-                <span class="vd-row-label">Item Code</span>
-                <span class="vd-row-val vd-row-val--code">{{ viewDoc.item_code || viewDoc.name }}</span>
-              </div>
-              <div class="vd-row">
-                <span class="vd-row-label">Item Group</span>
-                <span class="vd-row-val">
-                  <span v-if="viewDoc.item_group" class="vd-group-chip">{{ viewDoc.item_group }}</span>
-                  <span v-else class="vd-row-val--muted">—</span>
-                </span>
-              </div>
-              <div class="vd-row">
-                <span class="vd-row-label">Default UOM</span>
-                <span class="vd-row-val">{{ viewDoc.stock_uom || 'Nos' }}</span>
-              </div>
-              <div class="vd-row" v-if="viewDoc.brand">
-                <span class="vd-row-label">Brand</span>
-                <span class="vd-row-val">{{ viewDoc.brand }}</span>
-              </div>
-              <div class="vd-row" v-if="viewDoc.hsn_code">
-                <span class="vd-row-label">HSN / SAC</span>
-                <span class="vd-row-val vd-row-val--code">{{ viewDoc.hsn_code }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Pricing & Tax card -->
-          <div class="vd-card">
-            <div class="vd-card-header">
-              <div class="vd-card-icon vd-card-icon--green">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              </div>
-              <span class="vd-card-title">Pricing & Tax</span>
-            </div>
-            <div class="vd-price-grid">
-              <div class="vd-price-block">
-                <div class="vd-price-amount vd-price-amount--sell">{{ fmt(viewDoc.standard_rate) }}</div>
-                <div class="vd-price-tag">Selling Rate</div>
-              </div>
-              <div class="vd-price-block" v-if="viewDoc.standard_buying_rate">
-                <div class="vd-price-amount">{{ fmt(viewDoc.standard_buying_rate) }}</div>
-                <div class="vd-price-tag">Buying Rate</div>
-              </div>
-            </div>
-            <div class="vd-rows" style="margin-top:10px">
-              <div class="vd-row">
-                <span class="vd-row-label">Tax Template</span>
-                <span class="vd-row-val">
-                  <span v-if="viewDoc.tax_code" class="vd-gst-chip">{{ viewDoc.tax_code }}</span>
-                  <span v-else class="vd-row-val--muted">—</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Inventory card -->
-          <div class="vd-card">
-            <div class="vd-card-header">
-              <div class="vd-card-icon vd-card-icon--purple">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-              </div>
-              <span class="vd-card-title">Inventory</span>
-            </div>
-            <div class="vd-rows">
-              <div class="vd-row">
-                <span class="vd-row-label">Stock Tracking</span>
-                <span class="vd-row-val">
-                  <span class="vd-stock-pill" :class="viewDoc.is_stock_item ? 'vd-stock-pill--on' : 'vd-stock-pill--off'">
-                    {{ viewDoc.is_stock_item ? 'Tracked' : 'Not Tracked' }}
-                  </span>
-                </span>
-              </div>
-              <div class="vd-row" v-if="viewDoc.default_warehouse">
-                <span class="vd-row-label">Default Warehouse</span>
-                <span class="vd-row-val">{{ viewDoc.default_warehouse }}</span>
-              </div>
-              <div class="vd-row" v-if="viewDoc.valuation_method">
-                <span class="vd-row-label">Valuation Method</span>
-                <span class="vd-row-val">{{ viewDoc.valuation_method }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Description if present -->
-          <div class="vd-card" v-if="viewDoc.description">
-            <div class="vd-card-header">
-              <div class="vd-card-icon vd-card-icon--gray">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="13" y1="18" x2="3" y2="18"/></svg>
-              </div>
-              <span class="vd-card-title">Description</span>
-            </div>
-            <div class="vd-description">{{ viewDoc.description }}</div>
-          </div>
-
-        </div>
-
-        <!-- Footer -->
-        <div class="vd-footer">
-          <button class="vd-btn-ghost" @click="viewOpen=false">Close</button>
-          <button class="vd-btn-primary" @click="openEdit(viewDoc); viewOpen=false">
-            <span v-html="icon('edit', 13)"></span> Edit Item
-          </button>
-        </div>
-
-      </template>
-    </div>
-  </Teleport>
-
   <!-- Delete confirm -->
   <Teleport to="body">
     <div v-if="showDel" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="showDel=false">
@@ -826,8 +658,6 @@ const deleting   = ref(false);
 const showDel    = ref(false);
 const delTarget  = ref(null);
 const drawerTab  = ref("basic");
-const viewOpen   = ref(false);
-const viewDoc    = ref(null);
 const itemGroups    = ref([]);
 const itemGroupsFull = ref([]);
 const filterGroup   = ref("");
@@ -1207,14 +1037,8 @@ function exportCSV() {
   toast(`Exported ${rows.length} item(s)`);
 }
 
-async function openView(row) {
-  viewDoc.value = row;
-  viewOpen.value = true;
-  // Fetch full doc to fill in any extra fields
-  try {
-    const full = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: row.name });
-    if (full) viewDoc.value = { ...row, ...full };
-  } catch {}
+function openView(row) {
+  router.push({ name: "item-view", params: { itemCode: row.name } });
 }
 
 // Fetch active, submitted BOMs whose Production Item is this item, for the

@@ -125,20 +125,31 @@ def get_bom_breakdown(bom, qty):
     ms = _get_mfg_settings()
     ratio = flt(qty) / flt(bom_doc.quantity or 1)
 
+    exploded_operations = []
     if bom_doc.bom_type == "Packing":
         items = _explode_packing_bom(bom_doc, ratio, flt(qty))
     else:
         # Manufacturing or Sub-Assembly
-        items = _explode_bom_items(bom_doc.items, ratio, depth=0)
+        items = _explode_bom_items(bom_doc.items, ratio, depth=0, operations_acc=exploded_operations)
         items = _merge_duplicate_rows(items)
 
+    # Operations defined on the top-level BOM, plus (below) any operations
+    # belonging to sub-BOMs that _explode_bom_items flattened into raw
+    # materials above. A row exploded via sub_assembly_bom OR an
+    # auto-detected phantom BOM is NEVER built through its own separate
+    # Work Order -- there is nowhere else that sub-BOM's labor/overhead
+    # would ever be captured. Without pulling its Operations in here too,
+    # that cost simply vanished: not double-counted, not deferred, just
+    # silently missing from both Operating Cost and FG stock valuation for
+    # every product that uses a sub-assembly/phantom BOM with its own
+    # Operations table.
     operations = [{
         "operation": r.operation,
         "workstation": r.workstation,
         "planned_time_in_mins": flt(r.time_in_mins) * ratio,
         "hour_rate": flt(r.hour_rate),
         "cost": flt(r.cost) * ratio,
-    } for r in bom_doc.operations]
+    } for r in bom_doc.operations] + exploded_operations
 
     scrap_items = [{
         "item_code": r.item_code,
@@ -163,7 +174,7 @@ def get_bom_breakdown(bom, qty):
     }
 
 
-def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None):
+def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=None):
     """Recursively flatten BOM Item rows up to MAX_DEPTH levels deep.
 
     Rows are exploded (replaced by their own sub-components) when either:
@@ -173,10 +184,17 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None):
        intermediate item.
 
     All other rows pass through as-is (leaf raw materials).
+
+    operations_acc: an optional list that any exploded sub-BOM's own
+    Operations get appended to (scaled by that sub-BOM's ratio, same as its
+    material rows), since an exploded row never gets a Work Order of its own
+    to otherwise capture that labor/overhead in.
     """
     MAX_DEPTH = 5
     if _seen_boms is None:
         _seen_boms = set()
+    if operations_acc is None:
+        operations_acc = []
 
     result = []
     for r in rows:
@@ -196,7 +214,17 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None):
                 if sub_doc.docstatus == 1:
                     sub_ratio = flt(r.qty) * ratio / flt(sub_doc.quantity or 1)
                     _seen_boms.add(target_bom)
-                    sub_items = _explode_bom_items(sub_doc.items, sub_ratio, depth + 1, _seen_boms)
+                    for op in (sub_doc.operations or []):
+                        operations_acc.append({
+                            "operation": op.operation,
+                            "workstation": op.workstation,
+                            "planned_time_in_mins": flt(op.time_in_mins) * sub_ratio,
+                            "hour_rate": flt(op.hour_rate),
+                            "cost": flt(op.cost) * sub_ratio,
+                        })
+                    sub_items = _explode_bom_items(
+                        sub_doc.items, sub_ratio, depth + 1, _seen_boms, operations_acc
+                    )
                     result.extend(sub_items)
                     continue
             except Exception:
@@ -355,7 +383,7 @@ def _consume_qty_for_row(row, wo, consumption_ratio, ms):
         return max(min(consume_qty, remaining_transferred), 0)
     return flt(row.required_qty) * consumption_ratio
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=False)
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
                          manufacturing_date=None, expiry_date=None):
@@ -384,6 +412,13 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     if wo.status == "Stopped":
         frappe.throw(_("Work Order is stopped. Resume it before recording completion."))
 
+    bom_type = frappe.db.get_value("BOM", wo.bom, "bom_type")
+    if bom_type == "Packing":
+        frappe.throw(_(
+            "Work Order {0} uses a Packing BOM. Use a Packing Slip to record "
+            "its completion instead of completing the Work Order directly."
+        ).format(wo.name))
+
     qty_manufactured = flt(qty_manufactured)
     process_loss_qty = flt(process_loss_qty)
     if qty_manufactured <= 0:
@@ -399,6 +434,7 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # waited behind another completion.
     current_produced_qty = flt(frappe.db.get_value("Work Order", wo.name, "produced_qty"))
     current_process_loss_qty = flt(frappe.db.get_value("Work Order", wo.name, "process_loss_qty"))
+    current_total_operating_cost = flt(frappe.db.get_value("Work Order", wo.name, "total_operating_cost"))
 
     ms = _get_mfg_settings()
     over_pct = flt(ms.get("over_production_allowance_pct", 0))
@@ -479,15 +515,52 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         total_scrap_value += s_qty * s_rate
         scrap_rows_to_append.append((s, s_qty, s_rate))
 
+    # Operating Cost allocation: spread the Work Order's Total Operating Cost
+    # (labor/overhead from the Operations table, see work_order.py::
+    # calculate_operating_cost) across the finished good, same as raw
+    # material cost is. Uses consumption_ratio (qty_manufactured +
+    # process_loss_qty, scaled against wo.qty) rather than qty_manufactured
+    # alone -- the time/labor behind process_loss_qty was genuinely spent
+    # too, same reasoning as why raw material consumption already includes
+    # it (see consumption_ratio above), so operating cost should absorb into
+    # the FG that did come out on the same basis, not be under-applied.
+    #
+    # Note: total_operating_cost can itself change between partial
+    # completions (Actual Operating Cost rises as more Job Card time is
+    # logged), so the per-unit rate used here is a snapshot at the moment of
+    # this completion -- each run absorbs cost at whatever rate was current
+    # when it was recorded, rather than being retroactively rebalanced
+    # across earlier runs. This mirrors how raw material valuation rates are
+    # also snapshotted per run.
+    operating_cost_this_run = 0.0
+    if flt(wo.qty) > 0:
+        operating_cost_this_run = current_total_operating_cost * consumption_ratio
+
     # Whatever consumed cost is left after crediting out scrap value gets
     # spread across the qty actually manufactured this run. This also
     # absorbs the cost of any process_loss_qty (that material was consumed
     # too, per consumption_ratio above, but never became stock of its own)
     # into the finished good that did come out -- the standard costing
     # treatment for in-process loss.
+    #
+    # In the unusual case where total_scrap_value alone exceeds the
+    # available cost pool (total_consumed_cost + operating_cost_this_run),
+    # the naive rate would go negative -- clamped to 0 below. That clamp
+    # would otherwise silently strand the shortfall as an uncleared debit
+    # balance in the WIP account forever (nothing ever credits it out).
+    # manufacturing_variance_loss captures exactly that shortfall so
+    # _post_gl_entries can write it off to a loss/variance account instead.
+    raw_pool = total_consumed_cost - total_scrap_value + operating_cost_this_run
     fg_unit_rate = 0.0
+    manufacturing_variance_loss = 0.0
     if qty_manufactured > 0:
-        fg_unit_rate = max(total_consumed_cost - total_scrap_value, 0.0) / qty_manufactured
+        fg_unit_rate = max(raw_pool, 0.0) / qty_manufactured
+        if raw_pool < 0:
+            manufacturing_variance_loss = -raw_pool
+
+    se.remarks += f" (operating cost absorbed this run: {operating_cost_this_run:.2f})"
+    se.operating_cost_absorbed = operating_cost_this_run
+    se.manufacturing_variance_loss = manufacturing_variance_loss
 
     # Receive the finished good. If it's batch-tracked, pre-create the Batch
     # record first (same pattern the transaction pages use) so Stock Entry's
@@ -623,6 +696,63 @@ def stop_work_order(work_order):
     _set_operations_status(wo, "Stopped", skip_statuses={"Completed"})
     frappe.db.commit()
     return "Stopped"
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def recalculate_operating_cost(work_order, refresh_hour_rates=False):
+    """Recompute Planned/Actual/Total Operating Cost for a Work Order and
+    write them via db_set.
+
+    Needed because these fields normally only get freshly computed inside
+    Work Order.validate() -- which a submitted Work Order stops going
+    through for most of its lifecycle. complete_work_order() advances
+    status/produced_qty with db_set() (bypassing validate() by design, so a
+    completion can't be blocked by unrelated validation), and Job Card time
+    roll-ups also write straight to the child row with db_set(). So a
+    Work Order whose Operations table had hour_rate = 0 at the moment it was
+    loaded from the BOM (e.g. the BOM's operation didn't have a rate set
+    yet, or an older BOM version was used) stays stuck at
+    ₹0.00 Operating Cost forever with no natural trigger to fix it --
+    even after the BOM is corrected.
+
+    refresh_hour_rates=True additionally re-pulls hour_rate from each row's
+    linked Operation's current BOM Operation entry isn't tracked directly,
+    so instead it re-reads the *current* Workstation.hour_rate for each row
+    (the same source BOM.vue uses to auto-fill hour_rate) as a best-effort
+    resync when the original BOM's rate was simply never captured. Leave
+    this off to only recompute cost from whatever hour_rate is already
+    stored on each row.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "write")
+
+    refresh_hour_rates = frappe.parse_json(refresh_hour_rates) if isinstance(refresh_hour_rates, str) else refresh_hour_rates
+
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+
+    if refresh_hour_rates:
+        for row in (wo.operations or []):
+            if not row.workstation:
+                continue
+            ws_rate = frappe.db.get_value("Workstation", row.workstation, "hour_rate")
+            if ws_rate:
+                row.db_set("hour_rate", flt(ws_rate), update_modified=False)
+        wo.reload()
+
+    wo.calculate_operating_cost()
+    wo.db_set("planned_operating_cost", wo.planned_operating_cost)
+    wo.db_set("actual_operating_cost", wo.actual_operating_cost)
+    wo.db_set("total_operating_cost", wo.total_operating_cost)
+    frappe.db.commit()
+
+    return {
+        "planned_operating_cost": wo.planned_operating_cost,
+        "actual_operating_cost": wo.actual_operating_cost,
+        "additional_operating_cost": flt(wo.additional_operating_cost),
+        "total_operating_cost": wo.total_operating_cost,
+    }
 
 
 def apply_row_substitution(work_order, work_order_item_row, alternative_item_code,

@@ -114,6 +114,13 @@
               <input class="psx-fi" :value="ps.bom || '—'" disabled style="width:100%"/>
             </div>
             <div>
+              <div class="psx-hf-label">Sourced From (Bulk WO)</div>
+              <select class="psx-fi" v-model="ps.source_work_order" :disabled="readOnly" style="width:100%">
+                <option value="">— None —</option>
+                <option v-for="w in workOrderList" :key="w.name" :value="w.name">{{ w.name }} — {{ w.production_item }}</option>
+              </select>
+            </div>
+            <div>
               <div class="psx-hf-label">Qty to Pack</div>
               <input class="psx-fi psx-fi-mono" type="number" v-model="ps.qty_to_pack" min="0.001" step="any" :disabled="readOnly" style="width:100%"/>
             </div>
@@ -189,6 +196,10 @@
                       <option v-for="u in uomList" :key="u.name" :value="u.name">{{ u.name }}</option>
                     </select>
                   </div>
+                  <div class="psx-item-field" v-if="row.batch_no || !readOnly">
+                    <label>Batch</label>
+                    <input class="psx-fi" v-model="row.batch_no" placeholder="—" :disabled="readOnly" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -212,6 +223,15 @@
                 <div style="font-size:13px;color:var(--bx-text);">{{ ps.work_order }}</div>
               </div>
               <span class="psx-link" @click="router.push(`/manufacturing/work-order/${ps.work_order}`)">Open Work Order ↗</span>
+            </div>
+
+            <!-- Sourced From (bulk WO) shortcut -->
+            <div v-if="!isNew && ps.source_work_order" class="psx-lo-cell" style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div class="psx-section-lbl" style="margin-bottom:2px;">Sourced From</div>
+                <div style="font-size:13px;color:var(--bx-text);">Bulk item packed from {{ ps.source_work_order }}</div>
+              </div>
+              <span class="psx-link" @click="router.push(`/manufacturing/work-order/${ps.source_work_order}`)">Open Work Order ↗</span>
             </div>
 
           </div>
@@ -303,6 +323,7 @@ function emptyPS() {
     work_order: "",
     production_item: "",
     bom: "",
+    source_work_order: "",
     status: "Draft",
     qty_to_pack: 1,
     packing_date: new Date().toISOString().slice(0, 10),

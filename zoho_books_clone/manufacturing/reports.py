@@ -316,3 +316,56 @@ def get_production_performance_report(filters=None):
             "avg_efficiency":  avg_eff,
         },
     }
+
+
+# ─── 5. Bulk → Packed Reconciliation Report (Phase 6b) ───────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_bulk_packing_reconciliation_report(filters=None):
+    """Thin wrapper around manufacturing.packing_engine.
+    list_bulk_packing_reconciliations() that adapts it to the same
+    filters-dict convention every other report on this dashboard uses, so
+    ManufacturingReports.vue's generic runReport()/API_MAP plumbing didn't
+    need a special case for this one tab.
+
+    Columns: work_order, bulk_item, bulk_item_name, fg_warehouse,
+             qty_planned, bulk_qty_produced, bulk_qty_consumed_posted,
+             bulk_qty_reserved_unposted, bulk_qty_remaining_in_warehouse,
+             bulk_qty_unaccounted, status, wo_status, planned_start_date.
+
+    Filters: from_date, to_date (Work Order planned_start_date range,
+             falling back to creation date -- see list_bulk_packing_
+             reconciliations()'s own docstring), status ("shortage" /
+             "overpack" / "reconciled" / "All"), company.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "read")
+
+    f = _parse_filters(filters)
+    from_date, to_date = _date_filters(f)
+
+    from zoho_books_clone.manufacturing.packing_engine import list_bulk_packing_reconciliations
+
+    status_filter = f.get("status")
+    if status_filter in (None, "All"):
+        status_filter = None
+
+    data = list_bulk_packing_reconciliations(
+        from_date=from_date,
+        to_date=to_date,
+        status=status_filter,
+        company=f.get("company"),
+        limit=f.get("limit") or 200,
+    )
+    rows = data["rows"]
+
+    summary = {
+        "total": len(rows),
+        "shortage": sum(1 for r in rows if r["status"] == "shortage"),
+        "overpack": sum(1 for r in rows if r["status"] == "overpack"),
+        "reconciled": sum(1 for r in rows if r["status"] == "reconciled"),
+        "truncated": data["truncated"],
+    }
+
+    return {"rows": rows, "summary": summary}

@@ -68,6 +68,18 @@
    "description": "The Packing BOM used for this Work Order."
   },
   {
+   "fieldname": "sec_ps_trace",
+   "fieldtype": "Section Break",
+   "label": "Traceability"
+  },
+  {
+   "fieldname": "source_work_order",
+   "fieldtype": "Link",
+   "label": "Sourced From (Bulk Work Order)",
+   "options": "Work Order",
+   "description": "The Manufacturing/Sub-Assembly-BOM Work Order that produced the bulk item being packed on this slip. Auto-filled from the most recent completed/in-process run when the slip is created; can be changed manually if packing from a different batch."
+  },
+  {
    "fieldname": "sec_ps_schedule",
    "fieldtype": "Section Break",
    "label": "Schedule"
@@ -92,6 +104,13 @@
    "label": "Qty to Pack",
    "default": "0",
    "description": "Number of packed units being produced in this run."
+  },
+  {
+   "fieldname": "packing_operating_cost",
+   "fieldtype": "Currency",
+   "label": "Packing Operating Cost",
+   "default": "0",
+   "description": "Labor/overhead cost for running this packing line (e.g. Workstation hour rate x time for the packing operation). Not read from the BOM -- Packing BOMs deliberately don't carry an Operations table (that belongs to the Manufacturing BOM that produced the bulk item), so this is entered directly per run. Absorbed into the packed item's valuation the same way a Work Order's Total Operating Cost is absorbed into its finished good -- see post_packing_consumption()."
   },
   {
    "fieldname": "sec_ps_items",

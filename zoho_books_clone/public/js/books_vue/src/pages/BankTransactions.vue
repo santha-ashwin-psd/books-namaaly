@@ -154,6 +154,14 @@
           </div>
           <div class="bt-section-hdr"><span v-html="icon('file',13)"></span> Description</div>
           <div class="bt-desc">{{ viewDoc.description||'—' }}</div>
+
+          <div class="bt-section-hdr"><span v-html="icon('journal',13)"></span> Journal</div>
+          <JournalTab
+            voucher-type="Bank Transaction"
+            :voucher-no="viewDoc.name"
+            label="Bank Transaction"
+            :currency="viewDoc.currency || 'INR'"
+          />
         </div>
         <div class="bt-dfooter">
           <button v-if="viewDoc.status!=='Reconciled'" class="bt-btn-primary" :disabled="reconciling" @click="reconcileOne(viewDoc)">
@@ -342,6 +350,7 @@ import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
+import JournalTab from "../components/JournalTab.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();

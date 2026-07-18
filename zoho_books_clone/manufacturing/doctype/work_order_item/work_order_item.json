@@ -76,7 +76,8 @@
    "fieldname": "source_warehouse",
    "fieldtype": "Link",
    "label": "Source Warehouse",
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "allow_on_submit": 1
   },
   {
    "fieldname": "rate",

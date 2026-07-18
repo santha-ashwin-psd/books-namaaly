@@ -1,7 +1,7 @@
 <template>
-<div class="b-page coa-page">
+<div class="coa-page" style="padding:10px;">
 
-  <div class="coa-type-strip">
+  <!-- <div class="coa-type-strip">
     <div v-for="s in typeStats" :key="s.type"
       class="coa-type-card"
       :class="{active: typeFilter===s.type}"
@@ -11,10 +11,10 @@
       <div class="coa-type-val" :style="'color:'+s.meta.color">{{s.count}}</div>
       <div class="coa-type-sub">{{s.meta.dr?'Normally Dr':'Normally Cr'}} · {{s.total?fmtINR(s.total):'No opening'}}</div>
     </div>
-  </div>
+  </div> -->
 
   <!-- Trial-balance / balancing card -->
-  <div class="coa-balance-row">
+  <!-- <div class="coa-balance-row">
     <div class="coa-balance-card" :class="trialBalance.balanced ? 'is-ok' : 'is-off'">
       <span class="coa-bal-title">Trial Balance</span>
       <span class="coa-bal-kv"><i>Dr</i><b>{{ fmtINR(trialBalance.dr) }}</b></span>
@@ -24,83 +24,134 @@
       <span v-else-if="trialBalance.balanced" class="coa-bal-chip ok"><span v-html="icon('check',11)"></span> Balanced</span>
       <span v-else class="coa-bal-chip off"><span v-html="icon('alert',11)"></span> Off by {{ fmtINR(Math.abs(trialBalance.diff)) }}</span>
     </div>
-  </div>
+  </div> -->
 
-  <div class="b-action-bar" style="margin-bottom:14px">
+  <div class="b-action-bar">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div class="b-search" style="border-radius:20px;padding:6px 12px">
+      <div class="b-search" style="border-radius:20px;padding:2px 12px">
         <span v-html="icon('search',13)"></span>
         <input v-model="searchQ" placeholder="Search account name or code..." style="border:none;outline:none;font-size:13px;background:transparent;width:220px"/>
       </div>
-      <button class="b-btn b-btn-ghost" @click="expandAll"><span v-html="icon('chevD',13)"></span> Expand All</button>
-      <button class="b-btn b-btn-ghost" @click="collapseAll"><span v-html="icon('chevR',13)"></span> Collapse All</button>
       <button class="b-btn b-btn-ghost" @click="load"><span v-html="icon('refresh',13)"></span> Refresh</button>
+      <div class="coa-view-toggle">
+        <button type="button" class="coa-view-btn" :class="{active: viewMode==='list'}" @click="viewMode='list'">List</button>
+        <button type="button" class="coa-view-btn" :class="{active: viewMode==='tree'}" @click="viewMode='tree'">Tree</button>
+      </div>
+      <template v-if="viewMode==='tree'">
+        <button class="b-btn b-btn-ghost" @click="expandAllGroups"><span v-html="icon('chevD',13)"></span> Expand All</button>
+        <button class="b-btn b-btn-ghost" @click="collapseAllGroups"><span v-html="icon('chevR',13)"></span> Collapse All</button>
+      </template>
     </div>
     <button class="b-btn b-btn-primary" @click="openAdd()" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> Add Account</button>
   </div>
 
-  <div class="b-card" style="padding:0;overflow:hidden">
-    <!-- ── Desktop table (hidden on mobile 375–425px via media query) ── -->
-    <table class="b-table coa-tbl coa-desktop-table">
-      <thead>
-        <tr>
-          <th style="width:36%">Account Name</th>
-          <th>Type</th>
-          <th>Account No.</th>
-          <th class="ta-r">Opening</th>
-          <th class="ta-r">Current Balance</th>
-          <th style="text-align:center;width:120px">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <template v-if="loading">
-          <tr v-for="n in 8" :key="n">
-            <td colspan="6" style="padding:12px 14px"><div class="b-shimmer" style="height:12px"></div></td>
-          </tr>
-        </template>
-        <template v-else-if="flatTree.length===0">
-          <tr><td colspan="6" class="b-empty">No accounts found</td></tr>
+  <div class="b-card coa-split-card" style="padding:0;overflow:hidden">
+    <!-- ── Desktop split view: account list (left) + detail panel (right) ── -->
+    <div class="coa-split coa-desktop-table">
+      <!-- Left: account list -->
+      <div class="coa-split-list">
+        <div class="coa-split-list-head">
+          <span>Account Name</span><span>Type</span>
+        </div>
+        <div class="coa-split-list-body">
+          <template v-if="loading">
+            <div v-for="n in 8" :key="n" class="coa-split-row" style="padding:12px 14px">
+              <div class="b-shimmer" style="height:12px"></div>
+            </div>
+          </template>
+          <template v-else-if="flatTree.length===0">
+            <div class="b-empty">No accounts found</div>
+          </template>
+          <template v-else>
+            <div v-for="row in flatTree" :key="row.name"
+              class="coa-split-row"
+              :class="{active: selectedAccount && selectedAccount.name===row.name, 'coa-group-row': row.is_group}"
+              :style="viewMode==='tree' ? ('padding-left:'+(14+row.depth*18)+'px') : ''"
+              @click="selectAccount(row)">
+              <button v-if="viewMode==='tree' && row.is_group"
+                type="button" class="coa-toggle"
+                :class="{open: isExpanded(row.name)}"
+                @click.stop="toggleGroup(row.name)">
+                <span v-html="icon('chevR',10)"></span>
+              </button>
+              <span v-else style="width:6px;flex-shrink:0;display:inline-block"></span>
+              <div class="coa-split-row-main">
+                <div class="coa-split-row-name" :class="{'fw-700':row.is_group}">{{row.account_name||row.name}}</div>
+                <div class="coa-split-row-type">{{row.account_type || row.root_type}}<span v-if="row.is_group"> · Group</span></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Right: detail panel -->
+      <div class="coa-split-detail">
+        <template v-if="!selectedAccount">
+          <div class="coa-split-empty">
+            <span v-html="icon('accts',34)"></span>
+            <div>Select an account to view details</div>
+          </div>
         </template>
         <template v-else>
-          <tr v-for="row in flatTree" :key="row.name"
-            class="coa-row"
-            :class="row.is_group?'coa-group-row':'coa-leaf-row'"
-            @click="openEdit(row.name)">
-            <td>
-              <div class="coa-tree-cell" :style="'padding-left:'+(14+row.depth*22)+'px'">
-                <button v-if="row.is_group && hasChildren(row.name)"
-                  class="coa-toggle" :class="{open: expandedGroups.has(row.name)}"
-                  @click.stop="toggleGroup(row.name)">
-                  <span v-html="icon('chevR',12)"></span>
-                </button>
-                <span v-else style="width:18px;flex-shrink:0;display:inline-block"></span>
-                <span class="coa-dot" :style="'background:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).color+';margin-left:6px'"></span>
-                <span class="coa-acct-name" :class="{'fw-700':row.is_group}">{{row.account_name||row.name}}</span>
-                <span v-if="row.is_group" class="coa-group-chip" :style="'background:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).bg+';color:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).color">Group</span>
-                <span v-if="row.account_type" class="coa-acct-type">{{row.account_type}}</span>
-              </div>
-            </td>
-            <td style="padding:9px 14px">
-              <span class="b-badge" :style="'background:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).bg+';color:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).color">{{row.root_type}}</span>
-            </td>
-            <td style="padding:9px 14px;font-size:12px;color:#868e96">{{row.code||'—'}}</td>
-            <td class="ta-r" style="padding:9px 14px;font-weight:600" :class="row.opening>0?(row.bal_type==='Debit'?'coa-dr':'coa-cr'):'c-muted'">{{fmtINR(row.opening)}}</td>
-            <td class="ta-r" style="padding:9px 14px;font-weight:600" :class="(balances[row.name]||0) > 0 ? 'coa-dr' : (balances[row.name]||0) < 0 ? 'coa-cr' : 'c-muted'">
-              <span v-if="row.is_group">—</span>
-              <span v-else-if="balancesLoading && balances[row.name] === undefined" style="color:#9ca3af;font-size:11px">…</span>
-              <span v-else>{{ fmtBal(balances[row.name]) }}</span>
-            </td>
-            <td style="text-align:center;padding:8px 14px">
-              <div style="display:flex;gap:4px;justify-content:center">
-                <button v-if="!row.is_group && row.source==='frappe'" class="b-icon-btn" @click.stop="openLedger(row)" title="View Ledger" style="color:#2563eb"><span v-html="icon('book',14)"></span></button>
-                <button class="b-icon-btn" @click.stop="openEdit(row.name)" title="Edit"><span v-html="icon('edit',14)"></span></button>
-                <button v-if="row.source!=='frappe'" class="b-icon-btn danger" @click.stop="confirmDelete(row.name)" title="Delete"><span v-html="icon('trash',14)"></span></button>
-              </div>
-            </td>
-          </tr>
+          <div class="coa-detail-head">
+            <div>
+              <div class="coa-detail-type">{{selectedAccount.account_type || selectedAccount.root_type}}</div>
+              <div class="coa-detail-name">{{selectedAccount.account_name || selectedAccount.name}}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+            <div class="coa-detail-balance" v-if="!selectedAccount.is_group">
+            <div class="coa-detail-balance-lbl">Closing Balance</div>
+            <div class="coa-detail-balance-val" :class="(balances[selectedAccount.name]||0) < 0 ? 'coa-cr' : 'coa-dr'">
+              {{ fmtBal(balances[selectedAccount.name]) }}
+              <span class="coa-detail-balance-tag">{{ (balances[selectedAccount.name]||0) < 0 ? '(Cr)' : '(Dr)' }}</span>
+            </div>
+            <div v-if="selectedAccount.notes" class="coa-detail-desc"><i>Description</i> : {{selectedAccount.notes}}</div>
+          </div>
+          <div class="coa-detail-balance" v-else>
+            <div class="coa-detail-balance-lbl">Group Account</div>
+            <div style="font-size:12.5px;color:#868e96;margin-top:4px">Group accounts don't carry ledger entries — they contain child accounts.</div>
+          </div>
+            <div style="align-content: center;">
+              <button v-if="!selectedAccount.is_group && selectedAccount.source==='frappe'" class="b-icon-btn" @click="openLedger(selectedAccount)" title="View Full Ledger" style="color:#2563eb"><span v-html="icon('book',15)"></span></button>
+              <button class="b-icon-btn" style="margin-left:2px" @click="openEdit(selectedAccount.name)" title="Edit"><span v-html="icon('edit',15)"></span></button>
+              <button v-if="selectedAccount.source!=='frappe'" class="b-icon-btn danger" @click="confirmDelete(selectedAccount.name)" title="Delete"><span v-html="icon('trash',15)"></span></button>
+            </div>
+            </div>
+          </div>
+
+          <div class="coa-detail-edit"><span v-html="icon('edit',12)"></span> <a @click="openEdit(selectedAccount.name)">Edit</a></div>
+
+          
+
+          <template v-if="!selectedAccount.is_group && selectedAccount.source==='frappe'">
+            <div class="coa-detail-txn-head">
+              <span>Recent Transactions</span>
+            </div>
+            <div class="coa-detail-txns">
+              <div v-if="inlineLedger[selectedAccount.name] && inlineLedger[selectedAccount.name].loading" style="padding:22px;text-align:center;color:#9ca3af;font-size:12.5px">Loading transactions…</div>
+              <div v-else-if="!inlineLedger[selectedAccount.name] || !inlineLedger[selectedAccount.name].rows.length" style="padding:22px;text-align:center;color:#9ca3af;font-size:12.5px">No transactions yet.</div>
+              <template v-else>
+                <div class="coa-txn-tbl-head">
+                  <span>Date</span><span>Transaction Details</span><span>Type</span><span class="ta-r">Debit</span><span class="ta-r">Credit</span>
+                </div>
+                <div v-for="r in inlineLedger[selectedAccount.name].rows.slice(0, inlineLedger[selectedAccount.name].visible)"
+                  :key="(r.voucher_no||'')+'-'+r.posting_date+'-'+r.balance" class="coa-txn-row">
+                  <span class="coa-txn-date">{{ r.posting_date }}</span>
+                  <span class="coa-txn-detail" :title="r.party_name || r.party || r.voucher_no">{{ r.party_name || r.party || r.voucher_no }}</span>
+                  <span class="coa-txn-type">{{ r.voucher_type }}</span>
+                  <span class="ta-r coa-txn-dr">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
+                  <span class="ta-r coa-txn-cr">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
+                </div>
+                <div class="coa-detail-loadmore">
+                  <span>Showing {{ Math.min(inlineLedger[selectedAccount.name].visible, inlineLedger[selectedAccount.name].rows.length) }} of {{ inlineLedger[selectedAccount.name].rows.length }}</span>
+                  <button v-if="inlineLedger[selectedAccount.name].visible < inlineLedger[selectedAccount.name].rows.length" class="b-btn b-btn-ghost" style="padding:5px 14px;font-size:12px" @click="loadMoreInline(selectedAccount.name)">Load More</button>
+                </div>
+              </template>
+            </div>
+          </template>
         </template>
-      </tbody>
-    </table>
+      </div>
+    </div>
 
     <!-- ── Mobile card list (shown only on 375–425px screens via media query) ── -->
     <div class="coa-mobile-cards">
@@ -124,15 +175,21 @@
         <div v-for="row in flatTree" :key="'mc-'+row.name"
           class="coa-mobile-card"
           :class="[row.is_group ? 'coa-mobile-card--group' : 'coa-mobile-card--leaf']"
-          :style="'--mc-accent:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).color+';--mc-bg:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).bg"
-          @click="openEdit(row.name)">
+          :style="'--mc-accent:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).color+';--mc-bg:'+(TYPE_META_COA[row.root_type]||TYPE_META_COA.Asset).bg+(viewMode==='tree' ? (';margin-left:'+(row.depth*12)+'px') : '')"
+          @click="handleRowClick(row)">
 
-          <!-- Card header: tree indent + name + badges -->
-          <div class="coa-mc-header" :style="'padding-left:'+(8 + row.depth * 12)+'px'">
+          <!-- Card header: name + badges -->
+          <div class="coa-mc-header" style="padding-left:8px">
             <div class="coa-mc-name-row">
-              <button v-if="row.is_group && hasChildren(row.name)"
+              <button v-if="!row.is_group && row.source==='frappe'"
                 class="coa-toggle coa-mc-toggle"
-                :class="{open: expandedGroups.has(row.name)}"
+                :class="{open: !!inlineLedger[row.name]}"
+                @click.stop="toggleInlineLedger(row)">
+                <span v-html="icon('chevR',10)"></span>
+              </button>
+              <button v-else-if="row.is_group && viewMode==='tree'"
+                class="coa-toggle coa-mc-toggle"
+                :class="{open: isExpanded(row.name)}"
                 @click.stop="toggleGroup(row.name)">
                 <span v-html="icon('chevR',10)"></span>
               </button>
@@ -181,6 +238,26 @@
                 <template v-else>{{ fmtBal(balances[row.name]) }}</template>
               </span>
             </div>
+          </div>
+
+          <!-- Inline ledger (mobile) -->
+          <div v-if="inlineLedger[row.name]" class="coa-inline-ledger" @click.stop>
+            <div v-if="inlineLedger[row.name].loading" style="padding:14px;text-align:center;color:#9ca3af;font-size:12px">Loading ledger entries…</div>
+            <div v-else-if="!inlineLedger[row.name].rows.length" style="padding:14px;text-align:center;color:#9ca3af;font-size:12px">No ledger entries for this account.</div>
+            <template v-else>
+              <div v-for="r in inlineLedger[row.name].rows.slice(0, inlineLedger[row.name].visible)" :key="(r.voucher_no||'')+'-'+r.posting_date+'-'+r.balance"
+                style="padding:8px 12px;border-top:1px solid #f3f4f6;font-size:12px">
+                <div style="display:flex;justify-content:space-between"><b style="color:#2563eb">{{r.voucher_no}}</b><span style="color:#6b7280">{{r.posting_date}}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-top:2px;color:#6b7280">
+                  <span>{{r.voucher_type}} · {{r.party_name||r.party||'—'}}</span>
+                  <span :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151', fontWeight:700}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;border-top:1px solid #e5e7eb">
+                <span style="font-size:11px;color:#868e96">{{ Math.min(inlineLedger[row.name].visible, inlineLedger[row.name].rows.length) }} of {{ inlineLedger[row.name].rows.length }}</span>
+                <button v-if="inlineLedger[row.name].visible < inlineLedger[row.name].rows.length" class="b-btn b-btn-ghost" style="padding:4px 10px;font-size:11.5px" @click.stop="loadMoreInline(row.name)">Load More</button>
+              </div>
+            </template>
           </div>
 
           <!-- Card footer: actions -->
@@ -479,10 +556,25 @@ const STANDARD_COA_DATA = [
 
 const allAccounts    = ref([]);
 const loading        = ref(true);
-const expandedGroups = ref(new Set());
 const typeFilter     = ref("");
 const searchQ        = ref("");
-const expandTick     = ref(0);
+const viewMode       = ref("list"); // "list" | "tree"
+const expandedGroups = ref(new Set());
+
+function toggleGroup(name) {
+  const s = new Set(expandedGroups.value);
+  if (s.has(name)) s.delete(name); else s.add(name);
+  expandedGroups.value = s;
+}
+function isExpanded(name) {
+  return expandedGroups.value.has(name);
+}
+function expandAllGroups() {
+  expandedGroups.value = new Set(allAccounts.value.filter(a => a.is_group).map(a => a.name));
+}
+function collapseAllGroups() {
+  expandedGroups.value = new Set();
+}
 const drawerOpen     = ref(false);
 const editingName    = ref(null);
 const drawerSaving   = ref(false);
@@ -505,57 +597,78 @@ const typeStats = computed(() =>
 const accountTypeOptions = computed(() => ACCOUNT_TYPES_COA[form.root_type] || []);
 const parentOptions      = computed(() => allAccounts.value.filter((a) => a.is_group));
 
+// List view (no tree nesting, groups hidden): sorted by root type, then code/name.
+// Tree view: groups are shown as expandable parent rows with children nested underneath.
+const ROOT_TYPE_ORDER = { Asset: 0, Liability: 1, Equity: 2, Income: 3, Expense: 4 };
+
+function sortAccts(list) {
+  return list.slice().sort((a, b) => {
+    const ro = (ROOT_TYPE_ORDER[a.root_type] ?? 9) - (ROOT_TYPE_ORDER[b.root_type] ?? 9);
+    if (ro !== 0) return ro;
+    if (!!a.is_group !== !!b.is_group) return a.is_group ? -1 : 1;
+    const ca = (a.code || "").toString(), cb = (b.code || "").toString();
+    if (ca && cb && ca !== cb) return ca.localeCompare(cb, undefined, { numeric: true });
+    return (a.account_name || a.name).localeCompare(b.account_name || b.name);
+  });
+}
+
 const flatTree = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  expandTick.value;
   const q = searchQ.value.toLowerCase().trim();
   const tf = typeFilter.value;
-  if (q) {
-    return allAccounts.value
-      .filter((a) => {
-        const nm = (a.account_name || a.name).toLowerCase();
-        const cd = (a.code || "").toLowerCase();
-        return (!tf || a.root_type === tf) && (nm.includes(q) || cd.includes(q));
-      })
-      .map((a) => ({ ...a, depth: 0 }));
+  const matches = (a) => {
+    if (tf && a.root_type !== tf) return false;
+    if (!q) return true;
+    const nm = (a.account_name || a.name).toLowerCase();
+    const cd = (a.code || "").toLowerCase();
+    return nm.includes(q) || cd.includes(q);
+  };
+
+  if (viewMode.value === "list") {
+    // List view: leaf accounts only, no group accounts shown.
+    const rows = allAccounts.value.filter((a) => !a.is_group && matches(a));
+    return sortAccts(rows).map((a) => ({ ...a, depth: 0 }));
   }
-  function walk(parent, depth) {
-    const children = allAccounts.value.filter((a) => {
-      const par = a.parent || "";
-      return par === parent && (!tf || a.root_type === tf);
-    });
-    const rows = [];
-    children.forEach((a) => {
-      rows.push({ ...a, depth });
-      const has = allAccounts.value.some((c) => (c.parent || "") === a.name);
-      if (a.is_group && has && expandedGroups.value.has(a.name)) {
-        rows.push(...walk(a.name, depth + 1));
+
+  // Tree view: build a real hierarchy from parent/child relationships.
+  const byParent = new Map();
+  allAccounts.value.forEach((a) => {
+    const p = a.parent || "";
+    if (!byParent.has(p)) byParent.set(p, []);
+    byParent.get(p).push(a);
+  });
+
+  // When searching/filtering, auto-expand ancestors of matches so results are visible.
+  const searching = !!(q || tf);
+  let visibleNames = null;
+  if (searching) {
+    visibleNames = new Set();
+    const byName = new Map(allAccounts.value.map((a) => [a.name, a]));
+    allAccounts.value.forEach((a) => {
+      if (matches(a)) {
+        let cur = a;
+        while (cur) {
+          visibleNames.add(cur.name);
+          cur = cur.parent ? byName.get(cur.parent) : null;
+        }
       }
     });
-    return rows;
   }
-  return walk("", 0);
+
+  const out = [];
+  function walk(parentName, depth) {
+    const kids = sortAccts(byParent.get(parentName) || []);
+    for (const a of kids) {
+      if (visibleNames && !visibleNames.has(a.name)) continue;
+      out.push({ ...a, depth });
+      const hasKids = (byParent.get(a.name) || []).length > 0;
+      if (a.is_group && hasKids && (searching || isExpanded(a.name))) {
+        walk(a.name, depth + 1);
+      }
+    }
+  }
+  walk("", 0);
+  return out;
 });
-
-function toggleGroup(name) {
-  if (expandedGroups.value.has(name)) expandedGroups.value.delete(name);
-  else expandedGroups.value.add(name);
-  expandTick.value++;
-}
-
-function expandAll() {
-  allAccounts.value.filter((a) => a.is_group).forEach((a) => expandedGroups.value.add(a.name));
-  expandTick.value++;
-}
-
-function collapseAll() {
-  expandedGroups.value.clear();
-  expandTick.value++;
-}
-
-function hasChildren(name) {
-  return allAccounts.value.some((c) => (c.parent || "") === name);
-}
 
 function fmtINR(v) {
   if (!v && v !== 0) return "—";
@@ -635,8 +748,6 @@ async function load() {
         try { localStorage.setItem("books_coa", JSON.stringify(allAccounts.value)); } catch {}
       }
     }
-    allAccounts.value.filter((a) => a.is_group && !a.parent).forEach((a) => expandedGroups.value.add(a.name));
-    expandTick.value++;
   } finally {
     loading.value = false;
   }
@@ -698,7 +809,6 @@ async function saveAccount() {
         if (res && res.name) newName = res.name;
       } catch (e) { toast(e.message || "Frappe create failed", "error"); }
       allAccounts.value.push({ name: newName, account_name: form.name.trim(), code: form.code.trim(), root_type: form.root_type, account_type: form.account_type, parent: form.parent, is_group: form.is_group ? 1 : 0, opening: flt(form.opening), bal_type: form.bal_type, notes: form.notes, source: "frappe" });
-      if (form.is_group) { expandedGroups.value.add(newName); expandTick.value++; }
       toast("Account created", "success");
     }
     drawerOpen.value = false;
@@ -720,7 +830,6 @@ async function doDelete() {
     toast(e.message || "Delete failed in Frappe", "error");
   }
   allAccounts.value = allAccounts.value.filter((a) => a.name !== name && a.parent !== name);
-  expandTick.value++;
   showDel.value = false;
   deleteTarget.value = null;
   toast("Account deleted", "success");
@@ -804,6 +913,51 @@ async function fetchLedger() {
 }
 function closeLedger() { ledgerDrawer.open = false; }
 
+const PAGE_SIZE = 10;
+const inlineLedger = reactive({}); // { [accountName]: { loading, rows, visible } }
+const selectedAccount = ref(null);
+
+async function fetchInlineLedger(row) {
+  if (inlineLedger[row.name]) return;
+  inlineLedger[row.name] = { loading: true, rows: [], visible: PAGE_SIZE };
+  try {
+    const company = await resolveCompany();
+    const rows = await apiGET("zoho_books_clone.db.queries.get_gl_entries", {
+      company,
+      account: row.name,
+      from_date: "2000-01-01",
+      to_date: "2099-12-31",
+    }) || [];
+    let bal = 0;
+    rows.forEach((r) => { bal += Number(r.debit || 0) - Number(r.credit || 0); r.balance = bal; });
+    rows.reverse(); // most recent first
+    if (inlineLedger[row.name]) { inlineLedger[row.name].rows = rows; inlineLedger[row.name].loading = false; }
+  } catch (e) {
+    toast(e?.message || "Failed to load ledger entries", "error");
+    if (inlineLedger[row.name]) inlineLedger[row.name].loading = false;
+  }
+}
+
+function selectAccount(row) {
+  selectedAccount.value = row;
+  if (!row.is_group && row.source === "frappe") fetchInlineLedger(row);
+}
+
+function handleRowClick(row) {
+  if (row.is_group && viewMode.value === "tree") { toggleGroup(row.name); return; }
+  if (!row.is_group && row.source === "frappe") toggleInlineLedger(row);
+  else openEdit(row.name);
+}
+
+async function toggleInlineLedger(row) {
+  if (inlineLedger[row.name]) { delete inlineLedger[row.name]; return; }
+  await fetchInlineLedger(row);
+}
+
+function loadMoreInline(name) {
+  if (inlineLedger[name]) inlineLedger[name].visible += PAGE_SIZE;
+}
+
 function exportLedgerCSV() {
   if (!ledgerDrawer.rows.length) return;
   const head = ["Date","Voucher","Type","Party","Debit","Credit","Balance","Remarks"];
@@ -835,6 +989,111 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 </script>
 
 <style scoped>
+/* ── Inline ledger (list-view row expansion) ── */
+.coa-row-expanded { background: #f8fafc; }
+.coa-inline-ledger-row td { border-top: none !important; }
+.coa-inline-ledger {
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 2px solid #e5e7eb;
+  background: #fafbfc;
+}
+.coa-mc-header .coa-mc-toggle,
+.coa-toggle { cursor: pointer; }
+
+/* ── View toggle (List / Tree) ── */
+.coa-view-toggle {
+  display: inline-flex; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden;
+}
+.coa-view-btn {
+  border: none; background: #fff; padding: 6px 14px; font-size: 12.5px; font-weight: 600;
+  color: #64748b; cursor: pointer; transition: background .15s, color .15s;
+}
+.coa-view-btn + .coa-view-btn { border-left: 1px solid #e2e8f0; }
+.coa-view-btn.active { background: #3b5bdb; color: #fff; }
+
+/* Expand/collapse chevron used for group rows in tree view */
+.coa-split-row > .coa-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; flex-shrink: 0; border: none; background: transparent;
+  color: #64748b; padding: 0; transition: transform .15s;
+}
+.coa-split-row > .coa-toggle.open { transform: rotate(90deg); }
+
+/* ── Split view: account list + detail panel (Zoho-style) ── */
+.coa-split { min-height: 520px; max-height: 74vh; }
+.coa-split-list {
+  width: 320px; flex-shrink: 0; border-right: 1px solid #e5e7eb;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.coa-split-list-head {
+  display: flex; justify-content: space-between; padding: 10px 14px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+  color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+}
+.coa-split-list-body { overflow-y: auto; flex: 1; }
+.coa-split-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  cursor: pointer; border-bottom: 1px solid #f3f4f6;
+}
+.coa-split-row:hover { background: #f8fafc; }
+.coa-split-row.active { background: #eff6ff; border-left: 3px solid #2563eb; padding-left: 11px; }
+.coa-lock-ic { font-size: 11px; opacity: .55; flex-shrink: 0; }
+.coa-split-row-main { min-width: 0; flex: 1; }
+.coa-split-row-name {
+  font-size: 13px; font-weight: 600; color: #232336; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.coa-split-row-type { font-size: 11.5px; color: #9ca3af; margin-top: 1px; }
+.coa-split-detail { flex: 1; overflow-y: auto; min-width: 0; }
+.coa-split-empty {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; color: #9ca3af; font-size: 13px;
+}
+.coa-split-empty svg { opacity: .35; }
+.coa-detail-head { display: flex; justify-content: space-between; align-items: flex-start;padding:10px 20px }
+.coa-detail-type { font-size: 12px; color: #868e96; }
+.coa-detail-name { font-size: 21px; font-weight: 800; color: #1a1a2e; margin-top: 2px; }
+.coa-detail-edit {
+  display: flex; align-items: center; gap: 6px;padding: 5px 26px;
+  border-bottom: 1px solid #f0f1f3; font-size: 12.5px; color: #2563eb; cursor: pointer;
+}
+.coa-detail-edit a { color: inherit; cursor: pointer; }
+.coa-detail-balance {
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 6px 8px;width:max-content;
+}
+.coa-detail-balance-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #6b7280; }
+.coa-detail-balance-val { font-size: 16px; font-weight: 800; margin-top: 6px; }
+.coa-detail-balance-tag { font-size: 15px; font-weight: 600; margin-left: 4px; }
+.coa-detail-desc { font-size: 12.5px; color: #6b7280; margin-top: 10px; font-style: italic; line-height: 1.5; }
+.coa-detail-txn-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 15px; font-weight: 700; color: #1a1a2e; margin: 18px 0 8px;padding: 0px 20px;
+}
+.coa-detail-txns { border: 1px solid #e5e7eb;overflow: hidden; }
+.coa-txn-tbl-head, .coa-txn-row {
+  display: grid; grid-template-columns: 100px 1.6fr 110px 100px 100px; gap: 8px; align-items: center;
+}
+.coa-txn-tbl-head {
+  padding: 8px 14px; background: #f9fafb; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px; color: #6b7280; border-bottom: 1px solid #e5e7eb;
+}
+.coa-txn-row { padding: 10px 14px; font-size: 12.5px; border-bottom: 1px solid #f3f4f6; }
+.coa-txn-row:last-child { border-bottom: none; }
+.coa-txn-date { color: #6b7280; }
+.coa-txn-detail { color: #1a1a2e; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coa-txn-type { color: #6b7280; }
+.coa-txn-dr { color: #16a34a; font-weight: 600; }
+.coa-txn-cr { color: #dc2626; font-weight: 600; }
+.coa-detail-loadmore {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: #f9fafb; font-size: 11.5px; color: #868e96;
+}
+@media (max-width: 900px) {
+  .coa-split-list { width: 240px; }
+  .coa-txn-tbl-head, .coa-txn-row { grid-template-columns: 80px 1.4fr 90px 80px 80px; font-size: 11.5px; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    COA MOBILE CARD VIEW  –  375 px … 425 px
    By default (all widths): mobile cards hidden, desktop table shown.
@@ -846,9 +1105,9 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
   display: none;
 }
 
-/* ── Default: desktop table visible everywhere ── */
+/* ── Default: desktop split view visible everywhere ── */
 .coa-desktop-table {
-  display: table;
+  display: flex;
 }
 
 /* ── Activate card layout only on 375 px – 425 px ── */

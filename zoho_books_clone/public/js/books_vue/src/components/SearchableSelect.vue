@@ -174,11 +174,13 @@ watch(q, (val) => {
   _searchDebounce = setTimeout(() => emit("search", val), 200);
 });
 
+let _openWidth = 0;
 function openDD() {
   if (props.disabled) return;
   calcDropStyle();
   open.value = true;
   q.value = "";
+  _openWidth = window.innerWidth;
   emit("search", "");
   nextTick(() => inputEl.value && inputEl.value.focus());
 }
@@ -223,6 +225,18 @@ function onScrollOrResize(e) {
   // page/ancestor containers behind the teleported dropdown.
   const drop = document.querySelector(".ss-drop-teleport");
   if (drop && e.target && drop.contains(e.target)) return;
+
+  // On mobile, focusing the search input pops up the virtual keyboard, which
+  // shrinks the viewport and fires a 'resize' event on window — indistinguishable
+  // from a real resize unless we check *what* changed. A real resize/orientation
+  // change also changes the viewport width; the on-screen keyboard only eats
+  // vertical space, width stays the same. So for resize events, only treat it
+  // as "the user resized/rotated" (and close) when width actually changed;
+  // otherwise just recalc the dropdown position and keep it open.
+  if (e.type === "resize" && window.innerWidth === _openWidth) {
+    calcDropStyle();
+    return;
+  }
   open.value = false;
 }
 

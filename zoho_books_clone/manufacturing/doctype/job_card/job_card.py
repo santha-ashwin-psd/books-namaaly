@@ -76,3 +76,25 @@ def _sync_wo_operation_actual_time(wo_op_name):
         frappe.db.set_value("Work Order Operation", wo_op_name, "actual_time_in_mins", flt(total))
     except Exception:
         pass
+
+    _sync_wo_operating_cost(wo_op_name)
+
+
+def _sync_wo_operating_cost(wo_op_name):
+    """Recompute the parent Work Order's Planned/Actual/Total Operating Cost
+    after an Operation row's actual_time_in_mins changes. Job Card writes to
+    the Work Order Operation child row via db.set_value (not through the
+    Work Order's own validate()), so without this the cost summary on the
+    Work Order would stay stale until it was next opened and saved.
+    """
+    wo_name = frappe.db.get_value("Work Order Operation", wo_op_name, "parent")
+    if not wo_name:
+        return
+    try:
+        wo = frappe.get_doc("Work Order", wo_name)
+        wo.calculate_operating_cost()
+        wo.db_set("planned_operating_cost", wo.planned_operating_cost)
+        wo.db_set("actual_operating_cost", wo.actual_operating_cost)
+        wo.db_set("total_operating_cost", wo.total_operating_cost)
+    except Exception:
+        pass

@@ -12,6 +12,24 @@ class WorkOrder(Document):
 		if not self.fg_warehouse:
 			frappe.throw(_("Finished Goods Warehouse is required."))
 
+		# A Source Warehouse to consume raw materials from is required at
+		# Complete Work Order time -- either the Work Order's own Default
+		# Source Warehouse, or a Source Warehouse on every individual raw
+		# material row. Enforcing this here (rather than only at Complete
+		# time) stops a Work Order from being saved/submitted in a state
+		# that's guaranteed to fail production later with no way to add a
+		# warehouse from the Complete Work Order screen.
+		if not self.source_warehouse:
+			missing_rows = [
+				row.item_code for row in (self.items or []) if not row.source_warehouse
+			]
+			if missing_rows or not self.items:
+				frappe.throw(_(
+					"Default Source Warehouse is required, or a Source Warehouse must "
+					"be set on every raw material row. Missing for: {0}"
+				).format(", ".join(missing_rows) or _("all rows")))
+
+
 		# Safety net: if the Raw Materials table is still empty (e.g. the doc
 		# was created via API without calling get_bom_breakdown first), pull
 		# it from the BOM now rather than letting an empty Work Order through.
@@ -26,6 +44,52 @@ class WorkOrder(Document):
 
 		if flt(self.produced_qty) > flt(self.qty):
 			frappe.throw(_("Produced Qty cannot exceed Qty to Manufacture."))
+
+		self.calculate_operating_cost()
+
+	def calculate_operating_cost(self):
+		"""Recompute Planned/Actual/Total Operating Cost from the Operations
+		child table.
+
+		- planned_operating_cost = Σ (planned_time_in_mins / 60 * hour_rate)
+		- actual_operating_cost  = Σ (actual_time_in_mins / 60 * hour_rate)
+		- total_operating_cost   = Σ, PER ROW, of (actual cost if that row has
+		  logged actual time, else its planned cost) + additional_operating_cost
+
+		total_operating_cost is evaluated per row rather than as a single
+		all-or-nothing switch across the whole table. A multi-operation
+		routing (e.g. Mixing -> Filling -> Packaging) starts logging actual
+		time on its first operation well before the later ones begin --
+		switching the WHOLE total to "actual mode" the moment any one row
+		gets a Job Card would make every not-yet-started row contribute ₹0
+		instead of its planned cost, understating the true cost-to-date
+		(and, via complete_work_order's operating_cost_this_run snapshot,
+		understating FG valuation for any partial completion recorded while
+		some operations are still pending).
+
+		This is the single source of truth referenced from validate() (every
+		normal save), from work_order_engine.recalculate_operating_cost()
+		(the "Recalculate" button, used when hour rates were stale/zero at
+		BOM-load time), and from Job Card's _sync_wo_operating_cost() (roll-up
+		after time-log changes written via db_set outside validate()).
+		"""
+		planned = 0.0
+		actual = 0.0
+		total = 0.0
+
+		for row in (self.operations or []):
+			hour_rate = flt(row.hour_rate)
+			row_planned_cost = flt(row.planned_time_in_mins) / 60.0 * hour_rate
+			row_actual_time = flt(row.actual_time_in_mins)
+			row_actual_cost = row_actual_time / 60.0 * hour_rate
+
+			planned += row_planned_cost
+			actual += row_actual_cost
+			total += row_actual_cost if row_actual_time else row_planned_cost
+
+		self.planned_operating_cost = planned
+		self.actual_operating_cost = actual
+		self.total_operating_cost = total + flt(self.additional_operating_cost)
 
 	def set_items_and_operations_from_bom(self):
 		"""Safety net used only when a Work Order reaches validate() with a BOM

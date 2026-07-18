@@ -480,6 +480,20 @@
             <div style="font-size:13px;color:#374151;line-height:1.5;background:#f8fafc;border-radius:6px;padding:10px 12px;border:1px solid #e2e8f0">{{ viewDoc.remarks }}</div>
           </div>
 
+          <!-- Journal (debit/credit ledger) -->
+          <div class="se-view-section">
+            <div class="se-view-sec-lbl">Journal</div>
+            <template v-if="viewDoc.docstatus===1">
+              <JournalTab
+                voucher-type="Stock Entry"
+                :voucher-no="viewDoc.name"
+                label="Stock Entry"
+                :currency="viewDoc.currency || 'INR'"
+              />
+            </template>
+            <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the stock entry is submitted.</div>
+          </div>
+
           <!-- Timestamps -->
           <div class="se-view-section">
             <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -513,6 +527,7 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import JournalTab from "../components/JournalTab.vue";
 
 const { toast } = useToast();
 const route = useRoute();

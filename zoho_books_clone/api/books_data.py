@@ -90,6 +90,33 @@ def refresh_all_exchange_rates():
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_voucher_journal(voucher_type, voucher_no):
+    """
+    Return the General Ledger Entry rows for a single voucher (Invoice, Bill,
+    Payment Entry, Expense, Credit/Debit Note, Journal Entry, etc.) so the UI
+    can render a Zoho-style "Journal" tab: ACCOUNT | DEBIT | CREDIT.
+    """
+    rows = frappe.db.sql(
+        """
+        SELECT account, debit, credit, party_type, party, cost_center, currency
+        FROM `tabGeneral Ledger Entry`
+        WHERE voucher_type = %s AND voucher_no = %s AND is_cancelled = 0
+        ORDER BY creation ASC
+        """,
+        (voucher_type, voucher_no),
+        as_dict=True,
+    )
+    total_debit = sum(flt(r.debit) for r in rows)
+    total_credit = sum(flt(r.credit) for r in rows)
+    print(total_debit, total_credit)
+    return {
+        "rows": rows,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+    }
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_invoice_email_defaults(invoice_name):
     inv = frappe.get_doc("Sales Invoice", invoice_name)
     customer_email = frappe.db.get_value("Customer", inv.customer, "email_id") or ""

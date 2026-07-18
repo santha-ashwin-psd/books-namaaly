@@ -260,6 +260,64 @@ def save_bank_account(
 
 
 @frappe.whitelist(allow_guest=False)
+def get_account_ledger(account: str, from_date: str = None, to_date: str = None) -> dict:
+    """Chronological GL trail for a single account (e.g. a Cash or Bank account),
+    with a running balance — lets a user trace money as it moves in, out, and
+    between accounts (e.g. Cash -> Petty Cash -> Expense).
+    """
+    if not account:
+        frappe.throw(_("Account is required."))
+
+    conditions = ["IFNULL(is_cancelled, 0) = 0", "account = %(account)s"]
+    params = {"account": account}
+    if from_date:
+        conditions.append("posting_date >= %(from_date)s")
+        params["from_date"] = from_date
+    if to_date:
+        conditions.append("posting_date <= %(to_date)s")
+        params["to_date"] = to_date
+
+    where = " AND ".join(conditions)
+
+    opening = 0.0
+    if from_date:
+        opening = flt(frappe.db.sql(
+            f"""
+            SELECT SUM(debit) - SUM(credit)
+            FROM `tabGeneral Ledger Entry`
+            WHERE IFNULL(is_cancelled,0)=0 AND account=%(account)s AND posting_date < %(from_date)s
+            """,
+            params,
+        )[0][0] or 0)
+
+    rows = frappe.db.sql(
+        f"""
+        SELECT posting_date, voucher_type, voucher_no, party_type, party,
+               debit, credit, remarks, creation
+        FROM `tabGeneral Ledger Entry`
+        WHERE {where}
+        ORDER BY posting_date, creation
+        """,
+        params,
+        as_dict=True,
+    )
+
+    balance = opening
+    for row in rows:
+        balance += flt(row.debit) - flt(row.credit)
+        row["balance"] = balance
+        if row.voucher_type in ("Payment Entry", "Journal Entry"):
+            row["direction"] = "in" if flt(row.debit) > 0 else "out"
+
+    return {
+        "account": account,
+        "opening_balance": opening,
+        "closing_balance": balance,
+        "entries": rows,
+    }
+
+
+@frappe.whitelist()
 def get_bank_accounts_with_balances(company: str = None) -> list:
     """
     Return all Bank Accounts for the company with their live GL balance,

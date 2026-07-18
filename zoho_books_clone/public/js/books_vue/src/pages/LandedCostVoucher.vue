@@ -257,6 +257,16 @@
               <textarea class="inv-fi" v-model="lcv.remarks" :disabled="readOnly" rows="2"></textarea>
             </div>
 
+            <template v-if="!isNew && lcv.docstatus===1">
+              <div class="inv-sec-lbl" style="margin-top:18px">Journal</div>
+              <JournalTab
+                voucher-type="Landed Cost Voucher"
+                :voucher-no="lcv.name"
+                label="Landed Cost Voucher"
+                :currency="lcv.currency || 'INR'"
+              />
+            </template>
+
           </template>
         </div>
 
@@ -294,6 +304,7 @@ import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall } fro
 import { useToast } from "../composables/useToast.js";
 import Pagination from "../components/Pagination.vue";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import JournalTab from "../components/JournalTab.vue";
 
 const ENGINE = "zoho_books_clone.inventory.landed_cost_engine.";
 

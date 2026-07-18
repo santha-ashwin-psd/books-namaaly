@@ -518,6 +518,7 @@
             <button class="inv-vtab" :class="{active:viewTab==='payments'}" @click="viewTab='payments'">
               Payments<span v-if="viewPayments.length || viewDebitApps.length" class="inv-vtab-count">{{ viewPayments.length + viewDebitApps.length }}</span>
             </button>
+            <button v-if="viewDoc.docstatus===1" class="inv-vtab" :class="{active:viewTab==='journal'}" @click="viewTab='journal'">Journal</button>
           </div>
 
           <!-- ── Details tab ── -->
@@ -739,6 +740,18 @@
             </div>
           </template>
 
+          <!-- ── Journal tab ── -->
+          <template v-if="viewTab==='journal'">
+            <div class="inv-tab-body">
+              <JournalTab
+                voucher-type="Purchase Invoice"
+                :voucher-no="viewDoc.name"
+                label="Bill"
+                :currency="viewDoc.currency || 'INR'"
+              />
+            </div>
+          </template>
+
         </div><!-- /inv-view-body -->
 
       </template>
@@ -839,6 +852,7 @@ import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 import BulkActionBar from "../components/BulkActionBar.vue";
 import TimelineStepper from "../components/TimelineStepper.vue";
+import JournalTab from "../components/JournalTab.vue";
 
 const TDS_RATES = { "194C": 1, "194J": 10, "194A": 10, "194H": 5, "194I": 10, "192": 0, "195": 20, "Other": 10 };
 

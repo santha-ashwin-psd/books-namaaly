@@ -422,9 +422,18 @@
           <button class="inv-vtab" :class="{active:viewTab==='applied'}" @click="viewTab='applied'">
             Applied To<span v-if="viewApplications.length" class="inv-vtab-count">{{ viewApplications.length }}</span>
           </button>
+          <button v-if="viewDoc.docstatus===1" class="inv-vtab" :class="{active:viewTab==='journal'}" @click="viewTab='journal'">Journal</button>
         </div>
 
         <div class="inv-dbody">
+          <template v-if="viewTab==='journal'">
+            <JournalTab
+              voucher-type="Sales Invoice"
+              :voucher-no="viewDoc.name"
+              label="Credit Note"
+              :currency="viewDoc.currency || 'INR'"
+            />
+          </template>
           <template v-if="viewTab==='details'">
             <div class="cn-meta-grid">
               <div><div class="cn-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.posting_date) }}</div></div>
@@ -714,6 +723,7 @@ import { useEmailDialog } from "../composables/useEmailDialog.js";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import { usePagination } from "../composables/usePagination.js";
 import DocLink from "../components/DocLink.vue";
+import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import { useConfirm } from "../composables/useConfirm.js";
 import { useLivePreview } from "../composables/useLivePreview.js";

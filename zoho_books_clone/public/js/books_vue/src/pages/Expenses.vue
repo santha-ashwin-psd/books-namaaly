@@ -317,6 +317,19 @@
             </a>
           </div>
 
+          <div class="ew-section">
+            <div class="ew-section-hdr"><span v-html="icon('journal',13)"></span><span>Journal</span></div>
+            <template v-if="viewDoc.docstatus===1">
+              <JournalTab
+                voucher-type="Expense"
+                :voucher-no="viewDoc.name"
+                label="Expense"
+                :currency="viewDoc.currency || 'INR'"
+              />
+            </template>
+            <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the expense is submitted.</div>
+          </div>
+
         </div>
 
         <!-- View Footer -->
@@ -347,6 +360,7 @@ import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import QuickCreateDrawer from "../components/QuickCreateDrawer.vue";
+import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 

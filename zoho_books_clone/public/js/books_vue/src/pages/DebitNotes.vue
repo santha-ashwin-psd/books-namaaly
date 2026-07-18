@@ -416,9 +416,18 @@
           <button class="inv-vtab" :class="{active:viewTab==='applied'}" @click="viewTab='applied'">
             Applied To<span v-if="viewApplications.length" class="inv-vtab-count">{{ viewApplications.length }}</span>
           </button>
+          <button v-if="viewDoc.docstatus===1" class="inv-vtab" :class="{active:viewTab==='journal'}" @click="viewTab='journal'">Journal</button>
         </div>
 
         <div class="inv-dbody">
+          <template v-if="viewTab==='journal'">
+            <JournalTab
+              voucher-type="Purchase Invoice"
+              :voucher-no="viewDoc.name"
+              label="Debit Note"
+              :currency="viewDoc.currency || 'INR'"
+            />
+          </template>
           <template v-if="viewTab==='details'">
             <div class="dn-meta-grid">
               <div><div class="dn-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.posting_date) }}</div></div>
@@ -708,6 +717,7 @@ import { usePagination } from "../composables/usePagination.js";
 import BulkActionBar from "../components/BulkActionBar.vue";
 import TimelineStepper from "../components/TimelineStepper.vue";
 import DocLink from "../components/DocLink.vue";
+import JournalTab from "../components/JournalTab.vue";
 
 const { toast } = useToast();
 const { canWrite } = usePermissions();

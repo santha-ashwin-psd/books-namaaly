@@ -1030,37 +1030,23 @@
               </div>
             </div>
             <div style="display:flex;margin:5px">
-            <!-- Activity Timeline -->
+            <!-- Journal (debit/credit ledger) -->
               <div class="inv-bottom-card" style="margin-right:5px;">
                 <div class="inv-bottom-card-header">
                   <div class="inv-bottom-card-title">
-                    <span v-html="icon('activity',14)"></span> Activity Timeline
+                    <span v-html="icon('journal',14)"></span> Journal
                   </div>
                 </div>
                 <div class="inv-bottom-card-body">
-                  <div class="inv-log-list">
-                    <template v-if="viewInv.comments&&viewInv.comments.length">
-                      <div v-for="(c,i) in viewInv.comments" :key="i" class="inv-log-item">
-                        <div class="inv-log-icon" v-html="icon('message-circle',13)"></div>
-                        <div class="inv-log-content">
-                          <div class="inv-log-text">{{ c.comment_by || c.subject }}</div>
-                          <div class="inv-log-by">{{ c.comment_by }}</div>
-                        </div>
-                        <div class="inv-log-time">{{ fmtDateTime(c.creation) }}</div>
-                      </div>
-                    </template>
-                    <template v-else-if="viewInv._activity&&viewInv._activity.length">
-                      <div v-for="(a,i) in viewInv._activity" :key="i" class="inv-log-item">
-                        <div class="inv-log-icon" v-html="icon(a.icon||'file-text',13)"></div>
-                        <div class="inv-log-content">
-                          <div class="inv-log-text">{{ a.text }}</div>
-                          <div class="inv-log-by">{{ a.by }}</div>
-                        </div>
-                        <div class="inv-log-time">{{ a.time }}</div>
-                      </div>
-                    </template>
-                    <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">No activity yet.</div>
-                  </div>
+                  <template v-if="viewInv.docstatus===1">
+                    <JournalTab
+                      voucher-type="Sales Invoice"
+                      :voucher-no="viewInv.name"
+                      label="Invoice"
+                      :currency="viewInv.currency || 'INR'"
+                    />
+                  </template>
+                  <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the invoice is submitted.</div>
                 </div>
               </div>
 
@@ -1384,6 +1370,7 @@ import { useMakeRecurring } from "../composables/useMakeRecurring.js";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import { usePagination } from "../composables/usePagination.js";
 import DocLink from "../components/DocLink.vue";
+import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import { useReturnNote } from "../composables/useReturnNote.js";

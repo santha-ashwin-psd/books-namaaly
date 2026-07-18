@@ -81,8 +81,8 @@
                 <button v-if="!isNew && wo.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitWO" :disabled="submitting || saving">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
-                  {{ saving ? 'Saving…' : (isNew ? 'Save Work Order' : 'Save Changes') }}
+                <button v-if="!readOnly || (wo.docstatus===1 && (warehousesEditable || operatingCostEditable))" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                  {{ saving ? 'Saving…' : (isNew ? 'Save Work Order' : (readOnly ? 'Save Changes' : 'Save Changes')) }}
                 </button>
               </div>
             </div>
@@ -136,15 +136,15 @@
               <div class="bomx-section-lbl">Warehouses</div>
               <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
-                  <div class="bomx-hf-label">Default Source Warehouse (Raw Materials)</div>
-                  <select class="bomx-fi" v-model="wo.source_warehouse" :disabled="readOnly" style="width:100%">
+                  <div class="bomx-hf-label">Default Source Warehouse (Raw Materials) <span style="color:var(--bx-red)">*</span></div>
+                  <select class="bomx-fi" v-model="wo.source_warehouse" :disabled="!warehousesEditable" style="width:100%">
                     <option value="">— Select —</option>
                     <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                   </select>
                 </div>
                 <div>
                   <div class="bomx-hf-label">Work-in-Progress Warehouse</div>
-                  <select class="bomx-fi" v-model="wo.wip_warehouse" :disabled="readOnly" style="width:100%">
+                  <select class="bomx-fi" v-model="wo.wip_warehouse" :disabled="!warehousesEditable" style="width:100%">
                     <option value="">— None (consume from Source directly) —</option>
                     <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                   </select>
@@ -223,7 +223,7 @@
                     </div>
                     <div class="bomx-rm-field">
                       <label>Source Warehouse</label>
-                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="readOnly">
+                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="!warehousesEditable">
                         <option value="">— Use Default —</option>
                         <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                       </select>
@@ -295,6 +295,46 @@
                   </div>
                 </div>
               </div>
+
+              <div class="bomx-section-lbl" style="margin-top:22px;display:flex;align-items:center;justify-content:space-between">
+                <span>Operation Cost</span>
+                <button
+                  v-if="!isNew"
+                  type="button"
+                  class="bomx-btn bomx-btn-sm bomx-btn-light"
+                  style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)"
+                  @click="recalcOperatingCost(false)"
+                  :disabled="recalcLoading"
+                >{{ recalcLoading ? 'Recalculating…' : 'Recalculate' }}</button>
+              </div>
+              <div
+                v-if="!isNew && !recalcLoading && flt(wo.planned_operating_cost) === 0 && wo.operations && wo.operations.length && totalPlannedOperationMinutes > 0"
+                class="bomx-field-hint"
+                style="color:var(--bx-amber);margin-bottom:8px"
+              >
+                ⚠ Planned Operating Cost is ₹0.00 despite planned time being set — the Operations table likely has no Hour Rate
+                stored (captured as 0 when this was last loaded from the BOM). Click Recalculate to
+                <button type="button" class="bomx-btn-link" style="border:none;background:none;color:var(--bx-mfgB);text-decoration:underline;cursor:pointer;padding:0;font:inherit" @click="recalcOperatingCost(true)">re-pull current Workstation hour rates</button>
+                and resync.
+              </div>
+              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
+                <div>
+                  <div class="bomx-hf-label">Planned Operating Cost</div>
+                  <div class="bomx-rm-static" >₹ {{ fmt(wo.planned_operating_cost) }}</div>
+                </div>
+                <div>
+                  <div class="bomx-hf-label">Actual Operating Cost</div>
+                  <div class="bomx-rm-static" >₹ {{ fmt(wo.actual_operating_cost) }}</div>
+                </div>
+                <div>
+                  <div class="bomx-hf-label">Additional Operating Cost</div>
+                  <input class="bomx-fi bomx-fi-mono" type="number" v-model="wo.additional_operating_cost" min="0" step="any" :disabled="!operatingCostEditable"/>
+                </div>
+                <div>
+                  <div class="bomx-hf-label">Total Operating Cost</div>
+                  <div class="bomx-rm-static" style="font-weight:700">₹ {{ fmt(totalOperatingCostPreview) }}</div>
+                </div>
+              </div>
             </template>
 
             <!-- ── TAB: Production ── -->
@@ -324,12 +364,61 @@
                     <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped'">
                       {{ actionLoading==='issue' ? 'Issuing…' : (allTransferred ? 'Materials Issued' : 'Issue Materials to WIP') }}
                     </button>
-                    <button class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped'">
+                    <button v-if="bomType!=='Packing'" class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped'">
                       Complete Work Order
                     </button>
                   </div>
-                  <div class="bomx-field-hint" v-if="wo.status==='Stopped'" style="color:var(--bx-amber);margin-top:8px">Work Order is stopped — resume it to continue production.</div>
+                  <div class="bomx-field-hint" v-if="bomType==='Packing'" style="margin-top:8px">This Work Order uses a Packing BOM — complete it via a Packing Slip instead (see above).</div>
+                  <div class="bomx-field-hint" v-else-if="wo.status==='Stopped'" style="color:var(--bx-amber);margin-top:8px">Work Order is stopped — resume it to continue production.</div>
                   <div class="bomx-field-hint" v-else-if="!canCompleteMore" style="margin-top:8px">Fully produced — no further completions possible.</div>
+                </div>
+
+                <div class="bomx-prod-card" v-if="bomType!=='Packing' && (sourcedPackingSlips.length || sourcedPsLoading)">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div class="bomx-section-lbl" style="margin-bottom:0">Packed Via</div>
+                    <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadReconciliation" :disabled="reconLoading">
+                      {{ reconLoading ? 'Checking…' : (reconciliation ? 'Refresh Reconciliation' : 'Check Reconciliation') }}
+                    </button>
+                  </div>
+                  <div v-if="sourcedPsLoading" class="bomx-field-hint" style="margin-top:8px">Loading…</div>
+                  <div v-else style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+                    <div v-for="ps in sourcedPackingSlips" :key="ps.name" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                      <div>
+                        <span class="bomx-link" @click="router.push(`/manufacturing/packing-slip/${ps.name}`)">{{ ps.name }}</span>
+                        <span style="color:var(--bx-muted);font-size:12px;margin-left:8px">{{ fmt(ps.qty_to_pack) }} packed</span>
+                      </div>
+                      <span class="bomx-badge" :class="statusClass({status: ps.status})" style="font-size:11px">{{ ps.status }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Phase 6: Bulk → Packed reconciliation -->
+                  <div v-if="reconciliation" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--bx-border)">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                      <span class="bomx-badge" :style="reconStatusStyle(reconciliation.status)">{{ reconStatusLabel(reconciliation.status) }}</span>
+                      <span style="color:var(--bx-muted);font-size:12px">{{ reconciliation.bulk_item_name }} in {{ reconciliation.fg_warehouse }}</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+                      <div class="bomx-recon-cell">
+                        <div class="bomx-recon-lbl">Produced</div>
+                        <div class="bomx-recon-val">{{ fmt(reconciliation.bulk_qty_produced) }}</div>
+                      </div>
+                      <div class="bomx-recon-cell">
+                        <div class="bomx-recon-lbl">Consumed (posted)</div>
+                        <div class="bomx-recon-val">{{ fmt(reconciliation.bulk_qty_consumed_posted) }}</div>
+                      </div>
+                      <div class="bomx-recon-cell">
+                        <div class="bomx-recon-lbl">Reserved (unposted)</div>
+                        <div class="bomx-recon-val">{{ fmt(reconciliation.bulk_qty_reserved_unposted) }}</div>
+                      </div>
+                      <div class="bomx-recon-cell">
+                        <div class="bomx-recon-lbl">Remaining in Warehouse</div>
+                        <div class="bomx-recon-val">{{ fmt(reconciliation.bulk_qty_remaining_in_warehouse) }}</div>
+                      </div>
+                    </div>
+                    <div class="bomx-field-hint" style="margin-top:8px" v-if="reconciliation.status!=='reconciled'">
+                      {{ fmt(Math.abs(reconciliation.bulk_qty_unaccounted)) }} units {{ reconciliation.status==='shortage' ? 'unaccounted for' : 'more in the warehouse than were ever produced' }} — check for stock movements against {{ reconciliation.bulk_item }} outside this Work Order's Packing Slip chain.
+                    </div>
+                  </div>
                 </div>
 
                 <div class="bomx-prod-card" v-if="qcInspections.length || qcLoading">
@@ -412,6 +501,34 @@
             <!-- ── TAB: More Information ── -->
             <template v-if="activeTab==='more'">
               <div class="bomx-section-lbl">More Information</div>
+
+              <div class="bomx-cost-card">
+                <div class="bomx-cost-card-hdr">
+                  <span>Cost Breakdown</span>
+                  <span class="bomx-cost-total-pill">₹ {{ fmt(totalWorkOrderCost) }}</span>
+                </div>
+                <div class="bomx-cost-card-body">
+                  <div class="bomx-cost-item">
+                    <div class="bomx-cost-item-lbl">
+                      <span class="bomx-cost-dot" style="background:var(--bx-mfg)"></span>Raw Material Cost
+                    </div>
+                    <div class="bomx-cost-item-val">₹ {{ fmt(rawMaterialCost) }}</div>
+                  </div>
+                  <div class="bomx-cost-plus">+</div>
+                  <div class="bomx-cost-item">
+                    <div class="bomx-cost-item-lbl">
+                      <span class="bomx-cost-dot" style="background:var(--bx-violet)"></span>Operation Cost
+                    </div>
+                    <div class="bomx-cost-item-val">₹ {{ fmt(totalOperatingCostPreview) }}</div>
+                  </div>
+                  <div class="bomx-cost-eq">=</div>
+                  <div class="bomx-cost-item bomx-cost-item--total">
+                    <div class="bomx-cost-item-lbl">Total Cost</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(totalWorkOrderCost) }}</div>
+                  </div>
+                </div>
+              </div>
+
               <div class="bomx-hdr-fields bomx-hf-cols-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Sales Order</div>
@@ -647,6 +764,10 @@ function emptyWO() {
     company: "",
     sales_order: "",
     remarks: "",
+    planned_operating_cost: 0,
+    actual_operating_cost: 0,
+    additional_operating_cost: 0,
+    total_operating_cost: 0,
   };
 }
 const wo = ref(emptyWO());
@@ -681,6 +802,10 @@ const salesOrdersList = ref([]);
 const bomScrapItems = ref([]);
 const bomProcessLoss = ref(0);
 const bomType = ref("");
+const sourcedPackingSlips = ref([]);
+const sourcedPsLoading = ref(false);
+const reconciliation = ref(null);
+const reconLoading = ref(false);
 
 const EMPTY_MATERIAL = () => ({ item_code: "", required_qty: 1, transferred_qty: 0, consumed_qty: 0, source_warehouse: "" });
 const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 0, actual_time_in_mins: 0, status: "Pending" });
@@ -689,6 +814,20 @@ const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 
 // plan (materials/operations/warehouses) is locked — progress from here on
 // happens only through Issue Materials / Complete Work Order.
 const readOnly = computed(() => !isNew.value && (wo.value.docstatus === 1 || wo.value.docstatus === 2));
+// Source/WIP warehouse (and per-row source warehouse) can still be corrected
+// after submit -- e.g. if the Work Order was submitted without one -- as
+// long as the Work Order isn't cancelled and no production has actually
+// been recorded against it yet. Once qty has been manufactured, changing
+// the source warehouse would be misleading against stock already consumed.
+const warehousesEditable = computed(() => wo.value.docstatus !== 2 && flt(wo.value.produced_qty) <= 0);
+
+// Additional Operating Cost is deliberately allow_on_submit=1 on the
+// backend (see work_order.json) -- overhead/utilities/etc. not captured by
+// Job Card time logs genuinely needs adding while a Work Order is in
+// progress (docstatus===1), not just while still a Draft. Only a
+// cancelled Work Order (docstatus===2) should block it.
+const operatingCostEditable = computed(() => wo.value.docstatus !== 2);
+
 
 onMounted(async () => {
   loading.value = true;
@@ -696,7 +835,7 @@ onMounted(async () => {
     const co = await resolveCompany();
     if (isNew.value) wo.value.company = co;
 
-    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus", "bom_version", "is_default"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
+    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus", "bom_version", "is_default", "bom_type"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
     const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
     const itemNameOf = {};
@@ -759,6 +898,53 @@ async function fetchManufacturingDefaults() {
 const totalPlannedOperationMinutes = computed(() =>
   (wo.value.operations || []).reduce((sum, op) => sum + (flt(op.planned_time_in_mins) || 0), 0)
 );
+
+// Client-side preview of Total Operating Cost so the field updates instantly
+// as Additional Operating Cost is edited, ahead of the authoritative
+// server-side recalculation in Work Order.calculate_operating_cost() on save.
+const totalOperatingCostPreview = computed(() => {
+  const actual = flt(wo.value.actual_operating_cost);
+  const planned = flt(wo.value.planned_operating_cost);
+  const additional = flt(wo.value.additional_operating_cost);
+  return (actual > 0 ? actual : planned) + additional;
+});
+
+// Raw Material Cost: sum of each Work Order Item row's amount
+// (required_qty × rate), same basis Stock Entry uses to value consumption.
+const rawMaterialCost = computed(() =>
+  (wo.value.items || []).reduce((sum, row) => sum + (flt(row.amount) || 0), 0)
+);
+
+// Total Cost shown in the More Information > Cost Breakdown panel: raw
+// material cost plus the same Operating Cost figure shown on the Work
+// Order tab (planned/actual + additional), mirroring how
+// complete_work_order() actually values the finished good.
+const totalWorkOrderCost = computed(() => rawMaterialCost.value + totalOperatingCostPreview.value);
+
+const recalcLoading = ref(false);
+async function recalcOperatingCost(refreshHourRates) {
+  if (!wo.value.name || recalcLoading.value) return;
+  recalcLoading.value = true;
+  try {
+    const r = await apiCall(
+      "zoho_books_clone.manufacturing.work_order_engine.recalculate_operating_cost",
+      { work_order: wo.value.name, refresh_hour_rates: !!refreshHourRates }
+    );
+    wo.value.planned_operating_cost = r.planned_operating_cost;
+    wo.value.actual_operating_cost = r.actual_operating_cost;
+    wo.value.total_operating_cost = r.total_operating_cost;
+    if (refreshHourRates) {
+      // Hour rates on the Operations rows were re-pulled server-side too —
+      // reload so the in-memory rows (and any future save) reflect them.
+      const fresh = await apiGet("Work Order", wo.value.name);
+      wo.value.operations = fresh.operations || wo.value.operations;
+    }
+    toast("Operating cost recalculated.", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  recalcLoading.value = false;
+}
 
 // Estimated number of working days needed to run all operations,
 // based on Manufacturing Settings > Job Card Hours Per Day
@@ -828,7 +1014,12 @@ async function loadWO() {
   selectedProductionItem.value = data.production_item || "";
   if (!wo.value.items) wo.value.items = [];
   if (!wo.value.operations) wo.value.operations = [];
-  if (wo.value.docstatus === 1) { await loadStockEntries(); await loadJobCards(); }
+  const linkedBom = bomList.value.find(b => b.name === wo.value.bom);
+  bomType.value = linkedBom ? (linkedBom.bom_type || "Manufacturing") : "";
+  if (wo.value.docstatus === 1) {
+    await loadStockEntries(); await loadJobCards();
+    loadSourcedPackingSlips();
+  }
 
   // If the linked BOM is no longer active (it was amended into a newer version,
   // or cancelled), auto-switch a still-editable draft to the latest active
@@ -933,11 +1124,24 @@ function removeMaterial(idx) { wo.value.items.splice(idx, 1); }
 function addOp() { wo.value.operations.push(EMPTY_OP()); }
 function removeOp(idx) { wo.value.operations.splice(idx, 1); }
 
+// A Work Order needs a Source Warehouse to consume raw materials from at
+// Complete time -- either a Default Source Warehouse on the Work Order
+// itself, or every individual raw material row overriding its own. If
+// neither is set, Complete Work Order fails later with no way to fix it
+// from that screen, so we catch it here at save/submit time instead.
+function hasSourceWarehouse() {
+  if (wo.value.source_warehouse) return true;
+  const rows = wo.value.items || [];
+  return rows.length > 0 && rows.every(r => !!r.source_warehouse);
+}
+
 async function save() {
   if (!wo.value.bom) return toast("Please select a BOM", "error");
   if (!wo.value.qty || wo.value.qty <= 0) return toast("Qty to Manufacture must be greater than 0", "error");
   if (!wo.value.fg_warehouse) return toast("Finished Goods Warehouse is required", "error");
   if (!wo.value.items || !wo.value.items.length) return toast("Load raw materials from the BOM first", "error");
+  if (!hasSourceWarehouse()) return toast("Default Source Warehouse is required (or set a Source Warehouse on every raw material row)", "error");
+
 
   saving.value = true;
   try {
@@ -961,8 +1165,10 @@ async function submitWO() {
   if (!wo.value.qty || wo.value.qty <= 0) return toast("Qty to Manufacture must be greater than 0", "error");
   if (!wo.value.fg_warehouse) return toast("Finished Goods Warehouse is required", "error");
   if (!wo.value.items || !wo.value.items.length) return toast("Load raw materials from the BOM first", "error");
+  if (!hasSourceWarehouse()) return toast("Default Source Warehouse is required (or set a Source Warehouse on every raw material row)", "error");
 
   submitting.value = true;
+
   try {
     // Persist any unsaved edits (e.g. an auto-corrected BOM reference) before
     // submitting — apiSubmit acts on the doc as currently stored in the DB.
@@ -1105,6 +1311,51 @@ async function loadQcInspections() {
     }) || [];
   } catch (e) { qcInspections.value = []; }
   qcLoading.value = false;
+}
+
+// Packing Slips that traced their bulk item back to this Work Order (see
+// packing_engine.py's source_work_order field) -- the inverse of "Sourced
+// From" shown on the Packing Slip itself.
+async function loadSourcedPackingSlips() {
+  sourcedPsLoading.value = true;
+  try {
+    sourcedPackingSlips.value = await apiCall(
+      "zoho_books_clone.manufacturing.packing_engine.get_packing_slips_sourced_from_work_order",
+      { work_order: wo.value.name }
+    ) || [];
+  } catch (e) { sourcedPackingSlips.value = []; }
+  sourcedPsLoading.value = false;
+}
+
+// Phase 6: on-demand reconciliation of this (bulk-producing) Work Order's
+// output against every Packing Slip that drew on it, plus what's still
+// sitting in the warehouse. Loaded on click rather than on mount -- it's a
+// diagnostic view, not something every page load needs to pay for.
+async function loadReconciliation() {
+  reconLoading.value = true;
+  try {
+    reconciliation.value = await apiCall(
+      "zoho_books_clone.manufacturing.packing_engine.get_bulk_packing_reconciliation",
+      { work_order: wo.value.name }
+    ) || null;
+  } catch (e) {
+    reconciliation.value = null;
+    toast.error(e?.message || "Could not load reconciliation.");
+  }
+  reconLoading.value = false;
+}
+
+function reconStatusLabel(status) {
+  if (status === "reconciled") return "Reconciled";
+  if (status === "shortage") return "Shortage";
+  if (status === "overpack") return "Overpack";
+  return status;
+}
+
+function reconStatusStyle(status) {
+  if (status === "reconciled") return "background:var(--bx-greenS);color:var(--bx-green)";
+  if (status === "shortage") return "background:var(--bx-redS);color:var(--bx-red)";
+  return "background:var(--bx-amberS);color:var(--bx-amber)"; // overpack
 }
 
 // Job Cards aren't a child table on Work Order — they're separate documents that
@@ -1420,12 +1671,17 @@ function icon(name, size) {
 
 .bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
 .bomx-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); margin-bottom:8px; }
+.bomx-link { color:var(--bx-mfg); font-weight:600; cursor:pointer; font-size:13px; }
+.bomx-link:hover { text-decoration:underline; }
 .bomx-tree-empty { text-align:center; padding:20px; color:var(--bx-muted); font-size:13px; }
 .bomx-tree-icon { font-size:14px; flex-shrink:0; }
 .bomx-add-row { display:flex; align-items:center; gap:8px; padding:8px 12px; color:var(--bx-mfg); cursor:pointer; font-size:13px; font-weight:600; border-radius:var(--bx-rsm); margin-top:4px; }
 .bomx-add-row:hover { background:var(--bx-mfgS); }
 
 .bomx-prod-card { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:16px; margin-bottom:16px; }
+.bomx-recon-cell { background:var(--bx-surf); border:1px solid var(--bx-border); border-radius:8px; padding:8px 10px; }
+.bomx-recon-lbl { font-size:11px; color:var(--bx-muted); text-transform:uppercase; letter-spacing:.02em; }
+.bomx-recon-val { font-size:15px; font-weight:600; margin-top:2px; }
 
 /* ── Child-row cards ── */
 .bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
@@ -1447,6 +1703,50 @@ function icon(name, size) {
 .bomx-rm-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
 .bomx-rm-field .bomx-fi { width:100%; }
 .bomx-rm-static { font-size:13px; color:var(--bx-text); padding:7px 0; }
+
+.bomx-cost-card {
+  border:1px solid var(--bx-border,#e5e9f0);
+  border-radius:var(--bx-rlg,14px);
+  background:linear-gradient(135deg, var(--bx-mfgS), #fff 60%);
+  overflow:hidden;
+  margin-bottom:24px;
+}
+.bomx-cost-card-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 18px;
+  background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg));
+  color:#fff;
+}
+.bomx-cost-card-hdr span:first-child { font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.bomx-cost-total-pill {
+ font-size:13.5px; font-weight:700;
+  background:rgba(255,255,255,.18); padding:4px 12px; border-radius:999px;
+}
+.bomx-cost-card-body {
+  display:flex; align-items:center; gap:14px;
+  padding:20px 18px; flex-wrap:wrap;
+}
+.bomx-cost-item { flex:1 1 140px; min-width:140px; }
+.bomx-cost-item-lbl {
+  display:flex; align-items:center; gap:7px;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--bx-muted); margin-bottom:6px;
+}
+.bomx-cost-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.bomx-cost-item-val { font-size:17px; font-weight:600; color:var(--bx-text); }
+.bomx-cost-item--total {
+  background:#fff; border:1px solid var(--bx-mfg); border-radius:var(--bx-rmd,10px);
+  padding:10px 14px; flex:1 1 160px; min-width:160px;
+}
+.bomx-cost-item-val--total { font-size:19px; font-weight:800; color:var(--bx-mfgB); }
+.bomx-cost-plus, .bomx-cost-eq {
+  font-size:20px; font-weight:700; color:var(--bx-muted); flex:0 0 auto; padding-bottom:2px;
+}
+@media (max-width:560px) {
+  .bomx-cost-card-body { flex-direction:column; align-items:stretch; }
+  .bomx-cost-plus, .bomx-cost-eq { display:none; }
+}
+
 @media (max-width:640px) {
   .bomx-rm-card-body { grid-template-columns:1fr; }
 }

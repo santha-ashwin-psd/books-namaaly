@@ -124,15 +124,27 @@ def _append_round_off_entry(gl_map: list[dict], doc) -> None:
 # ─── Sales Invoice ─────────────────────────────────────────────────────────────
 
 def post_sales_invoice(doc) -> None:
-    """DR Receivable / CR Income (+ tax accounts) on Sales Invoice submit."""
+    """
+    DR Receivable / CR Income (+ tax accounts) on Sales Invoice submit.
+
+    Return invoices (is_return=1, used for Credit Notes) carry negative
+    qty/rate, so grand_total/net_total/tax_amount come out negative here.
+    A ledger must never store a negative debit or credit — normalize by
+    flipping the sign into the opposite column, same pattern already used
+    in _append_round_off_entry. Net effect on account balances (which sum
+    debit - credit) is unchanged; only which column the amount sits in.
+    """
     _require(doc, "debit_to",      "Debit To (Accounts Receivable) account")
     _require(doc, "income_account","Income Account")
+
+    grand_total = flt(doc.grand_total)
+    net_total   = flt(doc.net_total)
 
     gl_map = [
         {
             "account":      doc.debit_to,
-            "debit":        flt(doc.grand_total),
-            "credit":       0,
+            "debit":        grand_total if grand_total >= 0 else 0,
+            "credit":       -grand_total if grand_total < 0 else 0,
             "voucher_type": doc.doctype,
             "voucher_no":   doc.name,
             "posting_date": doc.posting_date,
@@ -145,8 +157,8 @@ def post_sales_invoice(doc) -> None:
         },
         {
             "account":      doc.income_account,
-            "debit":        0,
-            "credit":       flt(doc.net_total),
+            "debit":        -net_total if net_total < 0 else 0,
+            "credit":       net_total if net_total >= 0 else 0,
             "voucher_type": doc.doctype,
             "voucher_no":   doc.name,
             "posting_date": doc.posting_date,
@@ -157,11 +169,12 @@ def post_sales_invoice(doc) -> None:
         },
     ]
     for tax in (doc.taxes or []):
-        if flt(tax.tax_amount) and tax.account_head:
+        tax_amount = flt(tax.tax_amount)
+        if tax_amount and tax.account_head:
             gl_map.append({
                 "account":      tax.account_head,
-                "debit":        0,
-                "credit":       flt(tax.tax_amount),
+                "debit":        -tax_amount if tax_amount < 0 else 0,
+                "credit":       tax_amount if tax_amount >= 0 else 0,
                 "voucher_type": doc.doctype,
                 "voucher_no":   doc.name,
                 "posting_date": doc.posting_date,

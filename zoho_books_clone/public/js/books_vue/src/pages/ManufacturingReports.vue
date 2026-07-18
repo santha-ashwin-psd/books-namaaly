@@ -56,6 +56,16 @@
         </select>
       </div>
 
+      <div v-if="activeTab === 'bulk-recon'">
+        <div class="mrx-hf-label">Reconciliation Status</div>
+        <select class="mrx-fi" v-model="filters.recon_status">
+          <option value="All">All</option>
+          <option value="shortage">Shortage</option>
+          <option value="overpack">Overpack</option>
+          <option value="reconciled">Reconciled</option>
+        </select>
+      </div>
+
       <div v-if="activeTab === 'bom-cost'">
         <div class="mrx-hf-label">BOM Type</div>
         <select class="mrx-fi" v-model="filters.bom_type">
@@ -305,6 +315,59 @@
             </div>
           </div>
         </div>
+
+        <!-- ── Bulk → Packed Reconciliation table ── -->
+        <div v-if="activeTab === 'bulk-recon'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No bulk-producing Work Orders found for the selected filters.</div>
+          <template v-else>
+            <div v-if="summary?.truncated" class="mrx-field-hint" style="padding:8px 4px;color:var(--bx-amber);">
+              Showing the {{ result.rows.length }} worst-reconciled Work Orders in this window — narrow the date range for a complete picture.
+            </div>
+            <table class="mrx-table">
+              <thead>
+                <tr>
+                  <th>Work Order</th><th>Bulk Item</th><th>Warehouse</th>
+                  <th style="text-align:right;">Produced</th>
+                  <th style="text-align:right;">Consumed (posted)</th>
+                  <th style="text-align:right;">Reserved (unposted)</th>
+                  <th style="text-align:right;">Remaining</th>
+                  <th style="text-align:right;">Unaccounted</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in result.rows" :key="r.work_order" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+                  <td class="mrx-link">{{ r.work_order }}</td>
+                  <td>{{ r.bulk_item_name }}<div class="mrx-sub">{{ r.bulk_item }}</div></td>
+                  <td class="mrx-sub">{{ r.fg_warehouse || '—' }}</td>
+                  <td style="text-align:right;">{{ fmt(r.bulk_qty_produced) }}</td>
+                  <td style="text-align:right;">{{ fmt(r.bulk_qty_consumed_posted) }}</td>
+                  <td style="text-align:right;">{{ fmt(r.bulk_qty_reserved_unposted) }}</td>
+                  <td style="text-align:right;">{{ fmt(r.bulk_qty_remaining_in_warehouse) }}</td>
+                  <td style="text-align:right;" :style="r.status!=='reconciled' ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.bulk_qty_unaccounted) }}</td>
+                  <td><span class="mrx-badge" :style="reconStatusStyle(r.status)">{{ reconStatusLabel(r.status) }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.work_order" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link">{{ r.work_order }}</span>
+                <span class="mrx-badge" :style="reconStatusStyle(r.status)">{{ reconStatusLabel(r.status) }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.bulk_item_name }}</div>
+              <div class="mrx-sub">{{ r.bulk_item }} · {{ r.fg_warehouse || '—' }}</div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Produced</span>{{ fmt(r.bulk_qty_produced) }}</div>
+                <div><span class="mrx-rcard-mlbl">Consumed</span>{{ fmt(r.bulk_qty_consumed_posted) }}</div>
+                <div><span class="mrx-rcard-mlbl">Reserved</span>{{ fmt(r.bulk_qty_reserved_unposted) }}</div>
+                <div><span class="mrx-rcard-mlbl">Remaining</span>{{ fmt(r.bulk_qty_remaining_in_warehouse) }}</div>
+                <div><span class="mrx-rcard-mlbl">Unaccounted</span><span :style="r.status!=='reconciled' ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.bulk_qty_unaccounted) }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
 
       <!-- Empty state before first run -->
@@ -334,6 +397,7 @@ const tabs = [
   { id: "stock-req",   label: "Stock Requirement",       icon: "📦", desc: "Material needs and shortfalls across open work orders." },
   { id: "bom-cost",    label: "BOM Cost Analysis",       icon: "💰", desc: "Cost breakdown of raw materials, operations, and scrap per BOM." },
   { id: "performance", label: "Production Performance",  icon: "⚙️", desc: "Yield, efficiency, and process loss across completed runs." },
+  { id: "bulk-recon",  label: "Bulk → Packed Reconciliation", icon: "🔄", desc: "Bulk qty produced vs. consumed via Packing Slips vs. remaining in warehouse, across every bulk-producing Work Order." },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -342,6 +406,7 @@ const filters = ref({
   from_date: firstOfMonth,
   to_date: today,
   status: "All",
+  recon_status: "All",
   bom_type: "All",
   is_active: "",
 });
@@ -354,13 +419,21 @@ const API_MAP = {
   "stock-req":   "zoho_books_clone.manufacturing.reports.get_stock_requirement_report",
   "bom-cost":    "zoho_books_clone.manufacturing.reports.get_bom_cost_analysis",
   "performance": "zoho_books_clone.manufacturing.reports.get_production_performance_report",
+  "bulk-recon":  "zoho_books_clone.manufacturing.reports.get_bulk_packing_reconciliation_report",
 };
 
 async function runReport() {
   loading.value = true;
   result.value = null;
   try {
-    const data = await apiCall(API_MAP[activeTab.value], { filters: filters.value });
+    // bulk-recon's status filter ("shortage"/"overpack"/"reconciled") uses a
+    // separate recon_status field so it doesn't collide with wo-status/
+    // performance's WO-status filter (Draft/Submitted/...) sharing the same
+    // <select> UI slot -- remapped to "status" here since that's what
+    // get_bulk_packing_reconciliation_report() actually reads.
+    const payload = { ...filters.value };
+    if (activeTab.value === "bulk-recon") payload.status = filters.value.recon_status;
+    const data = await apiCall(API_MAP[activeTab.value], { filters: payload });
     result.value = data;
   } catch (e) {
     toast("Report failed: " + e.message, "error");
@@ -397,6 +470,12 @@ const summaryKpis = computed(() => {
     { label: "Avg Yield", value: s.avg_yield_pct + "%", color: s.avg_yield_pct >= 90 ? "var(--bx-green)" : "var(--bx-red)" },
     { label: "Avg Efficiency", value: s.avg_efficiency + "%", color: s.avg_efficiency >= 90 ? "var(--bx-green)" : "var(--bx-mfg)" },
   ];
+  if (activeTab.value === "bulk-recon") return [
+    { label: "Work Orders", value: s.total },
+    { label: "Shortage", value: s.shortage, color: s.shortage > 0 ? "var(--bx-red)" : "var(--bx-muted)" },
+    { label: "Overpack", value: s.overpack, color: s.overpack > 0 ? "var(--bx-amber)" : "var(--bx-muted)" },
+    { label: "Reconciled", value: s.reconciled, color: "var(--bx-green)" },
+  ];
   return [];
 });
 
@@ -415,6 +494,19 @@ function statusClass(status) {
     "Draft":      "badge-obsolete",
   };
   return map[status] || "badge-obsolete";
+}
+
+function reconStatusLabel(status) {
+  if (status === "reconciled") return "Reconciled";
+  if (status === "shortage") return "Shortage";
+  if (status === "overpack") return "Overpack";
+  return status;
+}
+
+function reconStatusStyle(status) {
+  if (status === "reconciled") return "background:var(--bx-greenS);color:var(--bx-green)";
+  if (status === "shortage") return "background:var(--bx-redS);color:var(--bx-red)";
+  return "background:var(--bx-amberS);color:var(--bx-amber)"; // overpack
 }
 
 function exportCSV() {
@@ -476,6 +568,7 @@ onMounted(() => runReport());
 /* ── Table ── */
 .mrx-table-wrap { overflow-x:auto; border:1px solid var(--bx-border); border-radius:var(--bx-rsm); }
 .mrx-empty { text-align:center; padding:32px; color:var(--bx-muted); font-size:13px; }
+.mrx-field-hint { font-size:12px; color:var(--bx-muted); }
 .mrx-table { width:100%; border-collapse:collapse; font-size:13px; }
 .mrx-table th { text-align:left; padding:8px 12px; border-bottom:1px solid var(--bx-border); color:var(--bx-muted); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:var(--bx-surf2); white-space:nowrap; }
 .mrx-table td { padding:9px 12px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }

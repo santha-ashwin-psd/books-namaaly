@@ -202,6 +202,14 @@
             <div v-if="viewDoc.purpose" style="grid-column:1/-1"><div class="btr-meta-lbl">Purpose / Transfer Type</div><div>{{ viewDoc.purpose }}</div></div>
             <div v-if="viewDoc.description" style="grid-column:1/-1"><div class="btr-meta-lbl">Notes / Remarks</div><div style="word-break: break-word;">{{ viewDoc.description }}</div></div>
           </div>
+
+          <div class="btr-section-hdr"><span v-html="icon('journal',13)"></span> Journal</div>
+          <JournalTab
+            voucher-type="Bank Transaction"
+            :voucher-no="viewDoc.from_transaction"
+            label="Bank Transfer"
+            :currency="viewDoc.currency || 'INR'"
+          />
         </div>
         <div class="btr-dfooter">
           <button class="btr-btn-danger-ghost" @click="deleteTransfer(viewDoc)" :disabled="actionBusy"><span v-html="icon('trash',13)"></span> Delete</button>
@@ -223,6 +231,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
+import JournalTab from "../components/JournalTab.vue";
 import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();

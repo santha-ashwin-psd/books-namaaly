@@ -120,15 +120,19 @@
    "fieldname": "source_warehouse",
    "fieldtype": "Link",
    "label": "Default Source Warehouse (Raw Materials)",
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "reqd": 1,
+   "allow_on_submit": 1
   },
   {
    "fieldname": "wip_warehouse",
    "fieldtype": "Link",
    "label": "Work-in-Progress Warehouse",
    "options": "Warehouse",
-   "description": "Optional. If set, raw materials are transferred here before Complete Work Order consumes them. If blank, Complete Work Order consumes directly from Source Warehouse."
+   "description": "Optional. If set, raw materials are transferred here before Complete Work Order consumes them. If blank, Complete Work Order consumes directly from Source Warehouse.",
+   "allow_on_submit": 1
   },
+
   {
    "fieldname": "col_break_wo_warehouses",
    "fieldtype": "Column Break",
@@ -189,6 +193,51 @@
    "fieldtype": "Table",
    "label": "Operations",
    "options": "Work Order Operation"
+  },
+  {
+   "fieldname": "sec_wo_op_cost",
+   "fieldtype": "Section Break",
+   "label": "Operation Cost"
+  },
+  {
+   "fieldname": "planned_operating_cost",
+   "fieldtype": "Currency",
+   "label": "Planned Operating Cost",
+   "read_only": 1,
+   "default": "0",
+   "description": "Sum of Hour Rate \u00d7 Planned Time across all Operations."
+  },
+  {
+   "fieldname": "actual_operating_cost",
+   "fieldtype": "Currency",
+   "label": "Actual Operating Cost",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "description": "Sum of Hour Rate \u00d7 Actual Time (rolled up from Job Cards) across all Operations."
+  },
+  {
+   "fieldname": "col_break_wo_op_cost",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "additional_operating_cost",
+   "fieldtype": "Currency",
+   "label": "Additional Operating Cost",
+   "default": "0",
+   "allow_on_submit": 1,
+   "description": "Manually entered extra operating costs not captured on any Operation row (e.g. subcontracting, rework)."
+  },
+  {
+   "fieldname": "total_operating_cost",
+   "fieldtype": "Currency",
+   "label": "Total Operating Cost",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "bold": 1,
+   "description": "Actual Operating Cost + Additional Operating Cost (falls back to Planned Operating Cost before any time is logged)."
   },
   {
    "fieldname": "sec_wo_more",

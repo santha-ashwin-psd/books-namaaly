@@ -421,6 +421,8 @@ class StockEntry(Document):
                             incoming value differs from outgoing value, which is the normal
                             case since FG/scrap value reflects the BOM cost roll-up rather
                             than a 1:1 mirror of raw material cost.
+                            DR Loss/Variance / CR Work In Progress  (only when scrap value
+                            exceeds the absorbable cost pool -- see manufacturing_variance_loss)
         """
         if self.stock_entry_type not in (
             "Material Issue", "Material Receipt", "Stock Adjustment", "Manufacture"
@@ -481,7 +483,7 @@ class StockEntry(Document):
             wip_account = (
                 self._get_account_by_type("Work In Progress")
                 or self._get_account_by_type("Stock")
-                or inventory_account   # fallback: self-balancing on same account
+                or inventory_account   # fallback if no dedicated WIP account exists yet for this company
             )
             gl_map = []
             if flt(self.total_outgoing_value):
@@ -528,6 +530,113 @@ class StockEntry(Document):
                         "posting_date": self.posting_date,
                         "company":      self.company,
                         "remarks":      f"WIP — finished goods/scrap received {self.name}",
+                    },
+                ]
+            if flt(self.operating_cost_absorbed):
+                # Fund WIP with the labor/overhead absorbed into this run's FG
+                # valuation (see work_order_engine.py::complete_work_order and
+                # packing_engine.py::post_packing_consumption -- both set
+                # operating_cost_absorbed the same way), crediting a
+                # contra-expense account -- the labor cost is being
+                # capitalized into inventory instead of expensed outright.
+                #
+                # The WIP debit below is NOT optional: the total_incoming_value
+                # block above already credited wip_account for the FG's full
+                # valuation, which was built from fg_unit_rate INCLUDING this
+                # operating cost (see complete_work_order's fg_unit_rate calc).
+                # If this debit were skipped, wip_account would be credited for
+                # more than it was ever debited -- the GL entry would be left
+                # unbalanced by exactly operating_cost_absorbed. So instead of
+                # skipping the entries entirely when no Expense account exists,
+                # fall back through progressively less-ideal contra accounts,
+                # and only as an absolute last resort self-balance against
+                # wip_account's own inventory fallback so the entry still nets
+                # to zero and posts cleanly.
+                operating_cost_account = (
+                    self._get_account_by_type("Expense")
+                    or self._get_account_by_type("Cost of Goods Sold")
+                    or self._get_account_by_type("Stock Adjustment")
+                    or inventory_account
+                )
+                if operating_cost_account == inventory_account:
+                    frappe.log_error(
+                        f"Stock Entry {self.name}: Work Order {self.work_order} absorbed "
+                        f"operating cost {self.operating_cost_absorbed} into FG valuation but no "
+                        f"Expense, Cost of Goods Sold, or Stock Adjustment account exists for "
+                        f"company '{self.company}'. Falling back to crediting the Stock account "
+                        "so GL still balances -- create a proper Expense-type account for this "
+                        "company and re-post a correcting Journal Entry to reclassify it.",
+                        "Inventory GL Posting"
+                    )
+                gl_map += [
+                    {
+                        "account":      wip_account,
+                        "debit":        flt(self.operating_cost_absorbed),
+                        "credit":       0,
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"WIP — operating cost absorbed {self.name}",
+                    },
+                    {
+                        "account":      operating_cost_account,
+                        "debit":        0,
+                        "credit":       flt(self.operating_cost_absorbed),
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"Operating cost (labor/overhead) capitalized into WIP {self.name}",
+                    },
+                ]
+            if flt(self.manufacturing_variance_loss):
+                # Recoverable scrap value exceeded what this run's raw
+                # material + operating cost could absorb, so the FG receipt
+                # above was valued at (or clamped to) less than the true
+                # cost pool. Without this leg that shortfall would sit as a
+                # stranded, never-cleared debit balance in wip_account
+                # forever. Write it off here to a loss/variance account so
+                # WIP nets back to zero for this entry, same self-balancing
+                # fallback chain as the operating cost leg above.
+                variance_account = (
+                    self._get_account_by_type("Cost of Goods Sold")
+                    or self._get_account_by_type("Expense")
+                    or self._get_account_by_type("Stock Adjustment")
+                    or inventory_account
+                )
+                if variance_account == inventory_account:
+                    frappe.log_error(
+                        f"Stock Entry {self.name}: Work Order {self.work_order} could not "
+                        f"absorb {self.manufacturing_variance_loss} of scrap/consumption "
+                        f"variance into FG valuation (scrap value exceeded the available "
+                        f"cost pool), and no Cost of Goods Sold, Expense, or Stock "
+                        f"Adjustment account exists for company '{self.company}'. Falling "
+                        "back to crediting the Stock account so GL still balances -- create "
+                        "a proper loss/variance account for this company and re-post a "
+                        "correcting Journal Entry to reclassify it.",
+                        "Inventory GL Posting"
+                    )
+                gl_map += [
+                    {
+                        "account":      variance_account,
+                        "debit":        flt(self.manufacturing_variance_loss),
+                        "credit":       0,
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"Manufacturing variance — unabsorbed cost written off {self.name}",
+                    },
+                    {
+                        "account":      wip_account,
+                        "debit":        0,
+                        "credit":       flt(self.manufacturing_variance_loss),
+                        "voucher_type": "Stock Entry",
+                        "voucher_no":   self.name,
+                        "posting_date": self.posting_date,
+                        "company":      self.company,
+                        "remarks":      f"WIP — variance written off {self.name}",
                     },
                 ]
             if not gl_map:
@@ -619,17 +728,14 @@ class StockEntry(Document):
         if self.stock_entry_type not in ("Manufacture", "Material Transfer"):
             return
 
-        if self.work_order:
-            wo_status = frappe.db.get_value("Work Order", self.work_order, "status")
-            frappe.throw(_(
-                "This Stock Entry was generated from Work Order {0} (currently {1}) "
-                "and cannot be cancelled directly — cancelling it here would reverse "
-                "the stock movement without updating the Work Order's produced/"
-                "consumed/transferred quantities and status, leaving them out of "
-                "sync with the stock ledger. Use the Work Order's own actions "
-                "(Stop/reverse production there) instead."
-            ).format(self.work_order, wo_status))
-
+        # Checked before the Work Order check below: post_packing_consumption()
+        # sets work_order on the Stock Entry it creates too (so it can be found/
+        # filtered per Work Order), which meant a packing-consumption entry
+        # always matched the generic "cancel it via the Work Order" branch
+        # first and never reached this one -- routing the person to reverse
+        # production from the Work Order (wrong, and not even a supported
+        # path for a packing entry) instead of the correct
+        # reverse_packing_consumption() flow.
         linked_packing_slip = frappe.db.get_value(
             "Packing Slip", {"stock_entry": self.name}, "name"
         )
@@ -641,6 +747,17 @@ class StockEntry(Document):
                 "status, leaving it permanently locked out of sync with the stock "
                 "ledger. Reverse the consumption from the Packing Slip instead."
             ).format(linked_packing_slip))
+
+        if self.work_order:
+            wo_status = frappe.db.get_value("Work Order", self.work_order, "status")
+            frappe.throw(_(
+                "This Stock Entry was generated from Work Order {0} (currently {1}) "
+                "and cannot be cancelled directly — cancelling it here would reverse "
+                "the stock movement without updating the Work Order's produced/"
+                "consumed/transferred quantities and status, leaving them out of "
+                "sync with the stock ledger. Use the Work Order's own actions "
+                "(Stop/reverse production there) instead."
+            ).format(self.work_order, wo_status))
 
     def on_cancel(self):
         self._guard_manufacturing_links()

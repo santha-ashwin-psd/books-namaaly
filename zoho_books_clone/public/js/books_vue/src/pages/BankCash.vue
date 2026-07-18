@@ -11,6 +11,7 @@
           :title="!$canWrite('banking') ? 'Read-only access' : ''"
           @click="openDeposit"
         ><span v-html="icon('bank',14)"></span> Deposit <span class="cash-dep-count" style="margin-left:4px">{{ fmtCur(totalUndeposited) }}</span></button>
+        <button class="cash-btn-ghost" v-if="cashAccounts.length" @click="openLedger()"><span v-html="icon('file',14)"></span> Ledger</button>
         <button class="cash-btn-primary" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Cash Entry</button>
       </div>
     </div>
@@ -270,6 +271,112 @@
         </div>
       </template>
     </div>
+
+    <!-- Account Ledger Drawer -->
+    <div v-if="ledgerOpen" class="cash-overlay" @click.self="ledgerOpen=false"></div>
+    <div class="cash-drawer cash-ledger-drawer" :class="{open:ledgerOpen}">
+      <div class="cash-dheader">
+        <button class="cash-dclose cash-dclose-abs" @click="ledgerOpen=false"><span v-html="icon('x',16)"></span></button>
+        <div class="cash-dh-top">
+          <div class="cash-dh-ico"><span v-html="icon('cash',20)"></span></div>
+          <div>
+            <div class="cash-dh-title">Account Ledger</div>
+            <div class="cash-dh-sub">Trace every entry that hit this account</div>
+          </div>
+        </div>
+      </div>
+      <div class="cash-dbody">
+        <div class="cash-fields-grid" style="margin-bottom:12px">
+          <div class="cash-field" style="grid-column:1/-1">
+            <label class="cash-label">Account</label>
+            <select v-model="ledgerAccount" class="cash-input" @change="loadLedger">
+              <option v-for="a in cashAccounts" :key="a" :value="a">{{ a }}</option>
+            </select>
+          </div>
+          <div class="cash-field">
+            <label class="cash-label">From</label>
+            <input type="date" v-model="ledgerFrom" class="cash-input" @change="loadLedger" />
+          </div>
+          <div class="cash-field">
+            <label class="cash-label">To</label>
+            <input type="date" v-model="ledgerTo" class="cash-input" @change="loadLedger" />
+          </div>
+        </div>
+
+        <template v-if="ledgerLoading">
+          <div class="cash-ledger-summary">
+            <div class="cash-ledger-sum-item" v-for="n in 3" :key="n">
+              <div class="cash-shimmer" style="height:9px;width:60px;margin-bottom:8px"></div>
+              <div class="cash-shimmer" style="height:16px;width:90px"></div>
+            </div>
+          </div>
+          <div class="cash-shimmer" style="height:200px;border-radius:10px"></div>
+        </template>
+        <template v-else-if="ledgerData">
+          <div class="cash-ledger-summary">
+            <div class="cash-ledger-sum-item">
+              <div class="cash-ledger-sum-lbl">Opening Balance</div>
+              <div class="cash-ledger-sum-val" :class="{neg: ledgerData.opening_balance<0}">{{ fmtCur(ledgerData.opening_balance) }}</div>
+            </div>
+            <div class="cash-ledger-sum-div"></div>
+            <div class="cash-ledger-sum-item">
+              <div class="cash-ledger-sum-lbl">Closing Balance</div>
+              <div class="cash-ledger-sum-val cash-ledger-sum-val--main" :class="{neg: ledgerData.closing_balance<0}">{{ fmtCur(ledgerData.closing_balance) }}</div>
+            </div>
+            <div class="cash-ledger-sum-div"></div>
+            <div class="cash-ledger-sum-item">
+              <div class="cash-ledger-sum-lbl">Entries</div>
+              <div class="cash-ledger-sum-val">{{ ledgerFilteredEntries.length }}<span v-if="ledgerFilteredEntries.length!==ledgerData.entries.length" class="cash-ledger-sum-of"> / {{ ledgerData.entries.length }}</span></div>
+            </div>
+          </div>
+
+          <div class="cash-ledger-filter-row">
+            <div class="cash-search-wrap cash-ledger-search">
+              <span v-html="icon('search',14)"></span>
+              <input class="cash-search-input" v-model="ledgerSearch" placeholder="Search voucher, party or remarks..." />
+            </div>
+            <select v-model="ledgerTypeFilter" class="cash-input cash-ledger-type-select">
+              <option value="">All voucher types</option>
+              <option v-for="t in ledgerVoucherTypes" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
+
+          <div class="cash-ledger-table-wrap">
+            <table class="cash-table cash-ledger-table cash-desktop-table" style="width:100%">
+              <thead><tr>
+                <th>Date</th>
+                <th>Voucher</th>
+                <th>Party / Source</th>
+                <th class="ta-r">Debit</th>
+                <th class="ta-r">Credit</th>
+                <th class="ta-r">Balance</th>
+              </tr></thead>
+              <tbody>
+                <tr v-if="!ledgerFilteredEntries.length"><td colspan="6" class="cash-empty">No entries match this filter</td></tr>
+                <tr v-for="(e,i) in ledgerVisibleEntries" :key="i" class="cash-ledger-row">
+                  <td class="cash-ledger-date">{{ fmtDate(e.posting_date) }}</td>
+                  <td>
+                    <span class="cash-ledger-voucher-chip" :class="'vt-'+(e.voucher_type||'').toLowerCase().replace(/[^a-z]/g,'')">
+                      {{ e.voucher_type }}
+                    </span>
+                    <span class="cash-num">{{ e.voucher_no }}</span>
+                  </td>
+                  <td class="cash-ledger-party">{{ e.party || e.remarks || '—' }}</td>
+                  <td class="ta-r mono-sm cash-ledger-debit">{{ e.debit>0 ? fmtCur(e.debit) : '—' }}</td>
+                  <td class="ta-r mono-sm cash-ledger-credit">{{ e.credit>0 ? fmtCur(e.credit) : '—' }}</td>
+                  <td class="ta-r mono-sm cash-ledger-balance" :class="{neg: e.balance<0}">{{ fmtCur(e.balance) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="cash-ledger-loadmore-wrap" v-if="ledgerVisible < ledgerFilteredEntries.length">
+            <button class="cash-btn-ghost" @click="loadMoreLedger">
+              Load more <span class="cash-ledger-loadmore-count">({{ ledgerFilteredEntries.length - ledgerVisible }} more)</span>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 <script setup>
@@ -292,6 +399,42 @@ const tabs=[{key:"all",label:"All"},{key:"Receive",label:"Cash In"},{key:"Pay",l
 const list=ref([]),loading=ref(false),search=ref("");
 const drawerOpen=ref(false),drawerSaving=ref(false),actionBusy=ref(false),bulkBusy=ref(false);
 const viewOpen=ref(false),viewDoc=ref(null);
+const ledgerOpen=ref(false),ledgerLoading=ref(false),ledgerData=ref(null),ledgerAccount=ref(""),ledgerFrom=ref(""),ledgerTo=ref(new Date().toISOString().slice(0,10));
+const ledgerSearch=ref(""),ledgerTypeFilter=ref(""),ledgerPageSize=10,ledgerVisible=ref(10);
+function openLedger(account){
+  ledgerAccount.value=account||cashAccount.value||cashAccounts.value[0]||"";
+  if(!ledgerFrom.value){const d=new Date();d.setMonth(d.getMonth()-3);ledgerFrom.value=d.toISOString().slice(0,10);}
+  ledgerSearch.value="";ledgerTypeFilter.value="";ledgerVisible.value=ledgerPageSize;
+  ledgerOpen.value=true;
+  loadLedger();
+}
+async function loadLedger(){
+  if(!ledgerAccount.value)return;
+  ledgerLoading.value=true;
+  ledgerVisible.value=ledgerPageSize;
+  try{
+    ledgerData.value=await apiGET("zoho_books_clone.api.banking.get_account_ledger",{account:ledgerAccount.value,from_date:ledgerFrom.value,to_date:ledgerTo.value});
+  }catch(e){toast.error(e.message||"Failed to load ledger");ledgerData.value=null;}
+  finally{ledgerLoading.value=false;}
+}
+const ledgerVoucherTypes=computed(()=>{
+  if(!ledgerData.value)return[];
+  const set=new Set(ledgerData.value.entries.map(e=>e.voucher_type).filter(Boolean));
+  return[...set];
+});
+const ledgerFilteredEntries=computed(()=>{
+  if(!ledgerData.value)return[];
+  let rows=ledgerData.value.entries;
+  if(ledgerTypeFilter.value)rows=rows.filter(e=>e.voucher_type===ledgerTypeFilter.value);
+  if(ledgerSearch.value.trim()){
+    const q=ledgerSearch.value.trim().toLowerCase();
+    rows=rows.filter(e=>(e.voucher_no||"").toLowerCase().includes(q)||(e.party||"").toLowerCase().includes(q)||(e.remarks||"").toLowerCase().includes(q));
+  }
+  return rows;
+});
+const ledgerVisibleEntries=computed(()=>ledgerFilteredEntries.value.slice(0,ledgerVisible.value));
+watch([ledgerSearch,ledgerTypeFilter],()=>{ledgerVisible.value=ledgerPageSize;});
+function loadMoreLedger(){ledgerVisible.value+=ledgerPageSize;}
 const depositOpen=ref(false),depositLoading=ref(false),depositSaving=ref(false);
 const depositDestinations=ref([]); // [{name, account_type}]
 const totalUndeposited=ref(0);
@@ -608,6 +751,7 @@ onMounted(()=>{load();loadAccounts();refreshUndepositedCount();});
 .cash-drawer{position:fixed;top:0;right:-440px;bottom:0;width:440px;max-width:96vw;background:#fff;border-left:1px solid #e5e7eb;box-shadow:-8px 0 28px rgba(15,23,42,.12);z-index:50;display:flex;flex-direction:column;transition:right .24s ease;}
 .cash-drawer.open{right:0;}
 .cash-view-drawer{width:400px;right:-400px;}.cash-view-drawer.open{right:0;}
+.cash-ledger-drawer{width:780px;max-width:92vw;right:-780px;}.cash-ledger-drawer.open{right:0;}
 .cash-dheader{position:relative;flex-shrink:0;padding:20px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);}
 .cash-dclose{background:transparent;border:none;cursor:pointer;color:#475569;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;}
 .cash-dclose:hover{background:rgba(255,255,255,.6);color:#0f172a;}
@@ -644,10 +788,45 @@ textarea.cash-input{resize:vertical;}
 .cash-mobile-cards { display: none; }
 .cash-desktop-table { display: table; }
 
+/* Account Ledger */
+.cash-ledger-summary{display:flex;align-items:stretch;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:14px 18px;margin-bottom:16px;}
+.cash-ledger-sum-item{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;}
+.cash-ledger-sum-div{width:1px;background:#e5e7eb;margin:2px 20px;}
+.cash-ledger-sum-lbl{font-size:10.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+.cash-ledger-sum-val{font-size:16px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;}
+.cash-ledger-sum-val--main{font-size:19px;color:#2563eb;}
+.cash-ledger-sum-val.neg{color:#dc2626;}
+
+.cash-ledger-table-wrap{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;}
+.cash-ledger-table{font-size:12.5px;}
+.cash-ledger-table thead th{position:sticky;top:0;z-index:1;background:#f8fafc;}
+.cash-ledger-table .cash-ledger-row td{padding:11px 12px;cursor:default;}
+.cash-ledger-table .cash-ledger-row:nth-child(even) td{background:#fafbfc;}
+.cash-ledger-table .cash-ledger-row:hover td{background:#f1f5f9;}
+.cash-ledger-date{color:#64748b;white-space:nowrap;font-size:12px;}
+.cash-ledger-party{color:#334155;}
+.cash-ledger-debit{color:#16a34a;font-weight:600;}
+.cash-ledger-credit{color:#dc2626;font-weight:600;}
+.cash-ledger-balance{font-weight:700;color:#0f172a;}
+.cash-ledger-balance.neg{color:#dc2626;}
+.cash-ledger-voucher-chip{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;background:#eef2f7;color:#475569;margin-right:6px;}
+.cash-ledger-voucher-chip.vt-journalentry{background:#eef2ff;color:#4338ca;}
+.cash-ledger-voucher-chip.vt-paymententry{background:#eff6ff;color:#1d4ed8;}
+.cash-ledger-voucher-chip.vt-expense{background:#fef2f2;color:#b91c1c;}
+.cash-ledger-voucher-chip.vt-invoice,.cash-ledger-voucher-chip.vt-salesinvoice{background:#f0fdf4;color:#15803d;}
+.cash-ledger-voucher-chip.vt-bill,.cash-ledger-voucher-chip.vt-purchaseinvoice{background:#fffbeb;color:#b45309;}
+.cash-ledger-sum-of{color:#94a3b8;font-weight:600;font-size:13px;}
+.cash-ledger-filter-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.cash-ledger-search{flex:1;min-width:0;}
+.cash-ledger-type-select{width:190px;flex-shrink:0;}
+.cash-ledger-loadmore-wrap{display:flex;justify-content:center;padding-top:14px;}
+.cash-ledger-loadmore-count{color:#94a3b8;font-weight:500;}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .cash-drawer      { width: 100% !important; right: -100% !important; max-width: 100%; }
   .cash-view-drawer { width: 100% !important; right: -100% !important; max-width: 100%; }
+  .cash-ledger-drawer { width: 100% !important; right: -100% !important; max-width: 100%; }
   .cash-drawer.open,
   .cash-view-drawer.open { right: 0 !important; }
   .cash-desktop-table { display: none !important; }

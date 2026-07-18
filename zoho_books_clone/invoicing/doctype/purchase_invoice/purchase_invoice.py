@@ -47,7 +47,7 @@ class PurchaseInvoice(Document):
             validate_account_type(self.credit_to, ["Payable"])
         if self.expense_account:
             validate_account_company(self.expense_account, self.company)
-            validate_account_type(self.expense_account, ["Expense"])
+            validate_account_type(self.expense_account, ["Expense", "Cost of Goods Sold"])
 
     def set_status(self):
         if self.docstatus == 2:   self.status = "Cancelled"

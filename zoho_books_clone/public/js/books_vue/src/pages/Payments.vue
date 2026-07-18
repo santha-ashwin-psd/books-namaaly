@@ -453,6 +453,20 @@
             <div class="pmt-vd-card-title">REMARKS</div>
             <div class="pmt-vd-remarks">{{ viewPmt.remarks }}</div>
           </div>
+
+          <!-- ── Journal (debit/credit ledger) card ── -->
+          <div class="pmt-vd-card">
+            <div class="pmt-vd-card-title">JOURNAL</div>
+            <template v-if="viewPmt.docstatus===1">
+              <JournalTab
+                voucher-type="Payment Entry"
+                :voucher-no="viewPmt.name"
+                label="Payment"
+                :currency="viewPmt.paid_from_account_currency || viewPmt.currency || 'INR'"
+              />
+            </template>
+            <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the payment is submitted.</div>
+          </div>
         </div>
 
         <!-- ── Footer ── -->
@@ -485,6 +499,7 @@ import { usePagination } from "../composables/usePagination.js";
 import DocLink from "../components/DocLink.vue";
 import Pagination from "../components/Pagination.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
+import JournalTab from "../components/JournalTab.vue";
 const { confirm } = useConfirm();
 
 async function cancelPmt(p) {
