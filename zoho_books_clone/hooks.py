@@ -75,6 +75,8 @@ doc_events = {
     "Material Request": {"before_insert": f"{_TN}.auto_stamp_company"},
     "Packing Slip":     {"before_insert": f"{_TN}.auto_stamp_company"},
     "Job Card":         {"before_insert": f"{_TN}.auto_stamp_company"},
+    # Assets — also scoped by the `company` field
+    "Asset":            {"before_insert": f"{_TN}.auto_stamp_company"},
 }
 
 scheduler_events = {
@@ -138,6 +140,12 @@ global_search_doctypes = {
         {"doctype": "Workstation"},
         {"doctype": "Routing"},
     ],
+    "Assets": [
+        {"doctype": "Asset"},
+        {"doctype": "Asset Category"},
+        {"doctype": "Maintenance Log"},
+        {"doctype": "Depreciation Schedule"},
+    ],
 }
 
 app_include_css = ["/assets/zoho_books_clone/css/books.css"]
@@ -182,6 +190,8 @@ permission_query_conditions = {
     "Job Card":          f"{_TN}.qc_job_card",
     "Material Request":  f"{_TN}.qc_material_request",
     "Packing Slip":      f"{_TN}.qc_packing_slip",
+    # Assets — scoped by the `company` field
+    "Asset":             f"{_TN}.qc_asset",
 }
 
 has_permission = {
@@ -213,6 +223,8 @@ has_permission = {
     "Job Card":          f"{_TN}.hp_job_card",
     "Material Request":  f"{_TN}.hp_material_request",
     "Packing Slip":      f"{_TN}.hp_packing_slip",
+    # Assets — scoped by the `company` field
+    "Asset":             f"{_TN}.hp_asset",
 }
 
 website_route_rules = [
@@ -222,6 +234,8 @@ website_route_rules = [
     {"from_route": "/customers/<path:path>", "to_route": "books"},
     {"from_route": "/vendors", "to_route": "books"},
     {"from_route": "/inventory/<path:path>", "to_route": "books"},
+    {"from_route": "/assets", "to_route": "books"},
+    {"from_route": "/assets/<path:path>", "to_route": "books"},
     {"from_route": "/settings/<path:path>", "to_route": "books"},
     {"from_route": "/accounting/<path:path>", "to_route": "books"},
     {"from_route": "/invoices", "to_route": "books"},

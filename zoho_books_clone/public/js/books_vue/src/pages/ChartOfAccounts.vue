@@ -124,8 +124,15 @@
           
 
           <template v-if="!selectedAccount.is_group && selectedAccount.source==='frappe'">
-            <div class="coa-detail-txn-head">
+            <div class="coa-detail-txn-head" style="flex-wrap:wrap;gap:8px">
               <span>Recent Transactions</span>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <input type="date" v-model="coaFilterFrom" :max="coaFilterTo || undefined" />
+                <span style="font-size:12px;color:#9ca3af">to</span>
+                <input type="date" v-model="coaFilterTo" :min="coaFilterFrom || undefined" />
+                <button class="b-btn b-btn-ghost" style="padding:5px 10px;font-size:12px" @click="applyCoaDateFilter(selectedAccount)">Apply</button>
+                <button v-if="coaFilterFrom || coaFilterTo" class="b-btn b-btn-ghost" style="padding:5px 10px;font-size:12px" @click="clearCoaDateFilter(selectedAccount)">Clear</button>
+              </div>
             </div>
             <div class="coa-detail-txns">
               <div v-if="inlineLedger[selectedAccount.name] && inlineLedger[selectedAccount.name].loading" style="padding:22px;text-align:center;color:#9ca3af;font-size:12.5px">Loading transactions…</div>
@@ -917,16 +924,21 @@ const PAGE_SIZE = 10;
 const inlineLedger = reactive({}); // { [accountName]: { loading, rows, visible } }
 const selectedAccount = ref(null);
 
-async function fetchInlineLedger(row) {
-  if (inlineLedger[row.name]) return;
+// Date range filter for the "Recent Transactions" panel (right-side detail view)
+const coaFilterFrom = ref("");
+const coaFilterTo = ref("");
+
+async function fetchInlineLedger(row, opts = {}) {
+  const { force = false, fromDate = "2000-01-01", toDate = "2099-12-31" } = opts;
+  if (inlineLedger[row.name] && !force) return;
   inlineLedger[row.name] = { loading: true, rows: [], visible: PAGE_SIZE };
   try {
     const company = await resolveCompany();
     const rows = await apiGET("zoho_books_clone.db.queries.get_gl_entries", {
       company,
       account: row.name,
-      from_date: "2000-01-01",
-      to_date: "2099-12-31",
+      from_date: fromDate,
+      to_date: toDate,
     }) || [];
     let bal = 0;
     rows.forEach((r) => { bal += Number(r.debit || 0) - Number(r.credit || 0); r.balance = bal; });
@@ -940,7 +952,25 @@ async function fetchInlineLedger(row) {
 
 function selectAccount(row) {
   selectedAccount.value = row;
-  if (!row.is_group && row.source === "frappe") fetchInlineLedger(row);
+  // Reset the date filter when switching accounts
+  coaFilterFrom.value = "";
+  coaFilterTo.value = "";
+  if (!row.is_group && row.source === "frappe") fetchInlineLedger(row, { force: true });
+}
+
+function applyCoaDateFilter(row) {
+  if (!row) return;
+  fetchInlineLedger(row, {
+    force: true,
+    fromDate: coaFilterFrom.value || "2000-01-01",
+    toDate: coaFilterTo.value || "2099-12-31",
+  });
+}
+
+function clearCoaDateFilter(row) {
+  coaFilterFrom.value = "";
+  coaFilterTo.value = "";
+  if (row) fetchInlineLedger(row, { force: true });
 }
 
 function handleRowClick(row) {
@@ -1069,6 +1099,13 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 .coa-detail-txn-head {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 15px; font-weight: 700; color: #1a1a2e; margin: 18px 0 8px;padding: 0px 20px;
+}
+.coa-detail-txn-head input[type="date"] {
+  border: 1px solid #e2e8f0; border-radius: 7px; padding: 5px 8px; font-size: 12px;
+  font-family: inherit; color: #374151; background: #fff;
+}
+.coa-detail-txn-head input[type="date"]:focus {
+  outline: none; border-color: #1a6ef7; box-shadow: 0 0 0 3px rgba(26,110,247,.13);
 }
 .coa-detail-txns { border: 1px solid #e5e7eb;overflow: hidden; }
 .coa-txn-tbl-head, .coa-txn-row {

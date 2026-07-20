@@ -20,6 +20,29 @@ class Item(Document):
         elif not hasattr(self, "is_stock_item") or self.is_stock_item is None:
             self.is_stock_item = 1
 
+        self._validate_inventory_account()
+
+    def _validate_inventory_account(self):
+        """
+        Guard against pointing inventory_account at a non-Stock account —
+        nothing else in the perpetual-inventory GL path checks this, so a
+        misconfigured item would silently debit the wrong account type on
+        every purchase/receipt/return that touches it.
+
+        Item has no `company` field (items can be shared across companies
+        in this app), so only the account TYPE is checked here, not company
+        ownership — company-account matching still happens wherever the
+        account is actually used (e.g. Purchase Invoice validate_accounts).
+        """
+        inventory_account = getattr(self, "inventory_account", None)
+        if not inventory_account:
+            return
+        acc_type = frappe.db.get_value("Account", inventory_account, "account_type")
+        if acc_type != "Stock":
+            frappe.throw(_(
+                "Inventory Account {0} must be of type 'Stock', found {1}."
+            ).format(inventory_account, acc_type or "None"))
+
     def after_insert(self):
         """Post-insert: create opening stock entry if opening_stock > 0."""
         if flt(getattr(self, "opening_stock", 0)) > 0 and self.is_stock_item:
@@ -128,6 +151,7 @@ class Item(Document):
             "standard_rate":   rate,
             "income_account":  self.income_account,
             "expense_account": self.expense_account,
+            "inventory_account": getattr(self, "inventory_account", None),
             "tax_code":        self.tax_code,
             "hsn_code":        self.hsn_code,
             "is_stock_item":   self.is_stock_item,

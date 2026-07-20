@@ -84,9 +84,9 @@ class PurchaseInvoice(Document):
             # A return doesn't create new debt; it offsets the source bill.
             self.db_set("outstanding_amount", 0, update_modified=False)
             self.db_set("status", "Paid", update_modified=False)
-            remark = (getattr(self, "remark", "") or "").strip()
-            return_type = "inventory" if "Goods Returned" in remark else "expense"
-            post_debit_note(self, return_type=return_type)
+            # post_debit_note splits the return per line (stock vs non-stock)
+            # itself now — see inventory_gl.classify_debit_note_item_amounts.
+            post_debit_note(self)
             self._adjust_source_bill_outstanding(direction=-1)
         else:
             self.db_set("outstanding_amount", self.grand_total, update_modified=False)

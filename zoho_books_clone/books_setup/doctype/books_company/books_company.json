@@ -469,6 +469,38 @@
    "idx": 61
   },
   {
+   "fieldname": "sec_inventory_accounts",
+   "fieldtype": "Section Break",
+   "label": "Inventory Accounts",
+   "description": "Defaults for perpetual inventory GL posting. Item-level overrides win when set.",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "default_inventory_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Default Inventory Account",
+   "description": "Stock asset account (e.g. Stock In Hand). Used when Item has no inventory_account."
+  },
+  {
+   "fieldname": "stock_received_not_billed",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Stock Received But Not Billed",
+   "description": "GR/IR clearing liability. Credited on goods receipt, debited when the purchase invoice is booked."
+  },
+  {
+   "fieldname": "col_inventory_accounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_cogs_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Default COGS Account",
+   "description": "Debited when stock is issued/sold (Material Issue)."
+  },
+  {
    "fieldname": "sec_qc",
    "fieldtype": "Section Break",
    "label": "Quality Control"

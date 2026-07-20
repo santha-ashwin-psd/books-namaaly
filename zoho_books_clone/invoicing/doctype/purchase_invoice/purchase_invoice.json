@@ -161,7 +161,8 @@
    "fieldname": "expense_account",
    "fieldtype": "Link",
    "label": "Expense Account",
-   "options": "Account"
+   "options": "Account",
+   "description": "Used for non-stock (service/expense) lines. Stock items clear through Stock Received But Not Billed (GR/IR) instead."
   },
   {
    "default": "PINV-.YYYY.-.#####",

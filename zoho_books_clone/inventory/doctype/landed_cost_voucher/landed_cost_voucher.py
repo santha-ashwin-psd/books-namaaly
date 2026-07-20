@@ -375,7 +375,9 @@ class LandedCostVoucher(Document):
         if not flt(self.total_charges) or not flt(total_capitalized):
             return
 
-        inventory_account = self._get_account_by_type("Stock")
+        from zoho_books_clone.accounts.inventory_gl import get_inventory_account
+
+        inventory_account = get_inventory_account(self.company) or self._get_account_by_type("Stock")
         if not inventory_account:
             frappe.log_error(
                 f"Landed Cost Voucher {self.name}: no Stock-type account found for "

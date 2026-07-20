@@ -301,7 +301,7 @@
 
         <!-- ── Content row: form + optional preview ── -->
         <div class="inv-content-row">
-        <div class="inv-dbody">
+        <div class="inv-dbody" style="padding:5px;">
 
           <!-- ══ CARD 2: Invoice Details ══ -->
           <div class="add-card">
@@ -503,11 +503,12 @@
                       <th class="th-item">ITEM NAME &amp; DESCRIPTION</th>
                       <th class="th-hsn">HSN/SAC</th>
                       <th class="th-uom">UOM</th>
+                      <th class="th-mrp">MRP ({{ currencySymbol }})</th>
                       <th class="th-qty">QTY</th>
                       <th class="th-rate">RATE ({{ currencySymbol }})</th>
-                      <th class="th-mrp">MRP ({{ currencySymbol }})</th>
-                      <th class="th-disc">DISCOUNT %</th>
-                      <th class="th-tax">TAX TEMPLATE</th>
+                      <th class="th-disc">DISC %</th>
+                      <th class="th-batch">BATCH NO</th>
+                      <th class="th-expiry">EXP DATE</th>
                       <th class="th-subtotal">SUBTOTAL</th>
                       <th class="th-rm"></th>
                     </tr>
@@ -521,8 +522,8 @@
                           placeholder="Search item or service"
                           :createable="true" createDoctype="Item"
                           @update:modelValue="onItemChange(line)"/>
-                        <textarea v-model="line.description" class="inv-fi po-row-desc-ta" rows="2" maxlength="500" placeholder="Enter item description…"></textarea>
-                        <div class="exp-field-hint" :class="{'exp-field-hint-err': (line.description||'').length >= 500}">{{ (line.description||'').length }}/500</div>
+                        <!-- <textarea v-model="line.description" class="inv-fi po-row-desc-ta" rows="2" maxlength="500" placeholder="Enter item description…"></textarea>
+                        <div class="exp-field-hint" :class="{'exp-field-hint-err': (line.description||'').length >= 500}">{{ (line.description||'').length }}/500</div> -->
                       </td>
                       <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
                       <td class="td-uom">
@@ -535,31 +536,44 @@
                           <option value="Box">Box</option>
                         </select>
                       </td>
+                      <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
                       <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/></td>
                       <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/></td>
-                      <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
                       <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
-                      <td class="td-tax">
+                      <td class="td-tax" style="display:none;">
                         <select v-model="line.tax_code" class="inv-fi">
                           <option value="">— No Tax —</option>
                           <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
                         </select>
                       </td>
+                      <td class="td-batch">
+                        <template v-if="line.has_batch_no">
+                          <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Select batch"
+                            @search="q => fetchLineBatches(line, q)" @select="opt => onLineBatchSelect(line, opt)" style="font-size:12px"
+                            :title="batchQtyError(line) || (!line.batchOptions.length ? 'No batches with stock yet' : '')"/>
+                        </template>
+                        <span v-else style="color:#cbd5e1;font-size:12px">—</span>
+                      </td>
+                      <td class="td-expiry">
+                        <span v-if="line.has_batch_no && line.batch_no && line.batch_expiry_date" style="font-size:12px;color:#374151">{{ fmtDate(line.batch_expiry_date) }}</span>
+                        <span v-else style="color:#cbd5e1;font-size:12px">—</span>
+                      </td>
+                      <td class="td-availqty" style="display:none;">
+                        <span v-if="line.has_batch_no && line.batch_no && line._batchQty!=null" style="font-size:12px;color:#374151">{{ line._batchQty }}</span>
+                        <span v-else style="color:#cbd5e1;font-size:12px">—</span>
+                      </td>
                       <td class="td-subtotal">
                         <span class="po-row-subtotal-label">SUBTOTAL</span>
                         <span class="po-row-subtotal-amt">{{ fmtAmt(line.amount) }}</span>
-                        <span v-if="lineTaxTotal(line)" class="po-row-subtotal-tax">+GST {{ fmtAmt(lineTaxTotal(line)) }} = {{ fmtAmt(lineAmountWithTax(line)) }}</span>
+                        <span v-if="lineTaxBreakup(line).length" class="po-row-subtotal-total">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
                       </td>
                       <td class="td-rm"><button @click="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button></td>
                     </tr>
-                    <tr v-if="lineTaxBreakup(line).length" class="po-items-tax-row">
-                      <td></td>
-                      <td colspan="10">
-                        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:#374151;padding:6px 0">
-                          <span v-for="t in lineTaxBreakup(line)" :key="t.tax_type+t.rate">{{ t.tax_type }} @ {{ t.rate }}% <strong>{{ fmtAmt(t.amount) }}</strong></span>
-                          <span style="margin-left:auto;color:#1a1d23;font-weight:700">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
-                        </div>
-                      </td>
+                    <tr v-if="line.has_batch_no && batchQtyError(line)" class="po-items-error-row">
+                      <td colspan="14"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> {{ batchQtyError(line) }}</div></td>
+                    </tr>
+                    <tr v-else-if="line.has_batch_no && !line.batchOptions.length" class="po-items-warn-row">
+                      <td colspan="14"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No batches with stock yet for this item</div></td>
                     </tr>
                     </template>
                   </tbody>
@@ -1794,7 +1808,7 @@ const previewData = computed(()=>({
 
 // ── Shared print/preview renderer (active template from Company Settings) ──
 const { setCompany, refreshBranding, renderDocument, printDoc } = useLivePreview();
-const INV_PRINT_CFG = { title: "INVOICE", partyLabel: "Bill To", partyField: "customer_name" };
+const INV_PRINT_CFG = { title: "INVOICE", partyLabel: "Bill To", partyField: "customer_name", includeHsn: true, includeDiscount: true, includeMrp: true };
 
 // Map the page's local print-data shape onto the standard doc contract that
 // useLivePreview.renderDocument expects (net_total / grand_total / taxes[].tax_amount).
@@ -1914,6 +1928,7 @@ async function downloadInvoicePdf(mode = 'pdf') {
     terms: inv.terms || '',
     company: inv.company || window.__booksCompany || '',
     logo: logoSrc(inv.logo || ''),
+    in_words: inv.in_words || '',
   };
 
   // Render using the same template + branding as the live preview
@@ -2071,12 +2086,55 @@ async function onLineQtyChange(line) {
     calcLine(line);
   }
 }
+// ── Batch picker (batch-tracked items only) ─────────────────────────────
+// Mirrors the Bills.vue pattern: search existing batches for the item, show
+// each option's live available Qty, and let the row track the currently
+// selected batch's Qty/expiry so batchQtyError() can enforce it client-side
+// (the same check is re-run server-side in Sales Invoice.validate_batches).
+async function fetchLineBatches(line, q = "") {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  const itemCode = line.item_code;
+  try {
+    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: itemCode, search: q || "" }) || [];
+    if (line.item_code !== itemCode) return; // item changed again while awaiting
+    line.batchOptions = rows.map(b => ({
+      value: b.batch_no,
+      label: b.batch_no,
+      qty: flt(b.qty),
+      expiry_date: b.expiry_date || "",
+    }));
+    // Keep the already-selected batch's Qty/expiry in sync with fresh data.
+    if (line.batch_no) {
+      const m = line.batchOptions.find(o => o.value === line.batch_no);
+      if (m) { line._batchQty = m.qty; line.batch_expiry_date = m.expiry_date; }
+    }
+  } catch { if (line.item_code === itemCode) line.batchOptions = []; }
+}
+function onLineBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+  const m = line.batchOptions.find(o => o.value === line.batch_no);
+  line._batchQty = m ? m.qty : null;
+  line.batch_expiry_date = m ? m.expiry_date : "";
+}
+// Returns a human-readable error string when the entered Qty exceeds the
+// selected batch's available stock, or "" when the row is fine. Used both to
+// show an inline warning and to block Save/Submit until it's resolved.
+function batchQtyError(line) {
+  if (!line.has_batch_no || !line.item_code) return "";
+  if (!line.batch_no) return `${line.item_name || line.item_code} is batch-tracked — select a Batch No`;
+  if (line._batchQty == null) return "";
+  if (flt(line.qty) > flt(line._batchQty)) {
+    return `${line.item_name || line.item_code} — Batch ${line.batch_no} exceeds stock (Available: ${line._batchQty}, Entered: ${flt(line.qty)})`;
+  }
+  return "";
+}
+
 function salesPersonLabel(id) {
   const sp = salesPersons.value.find(p => p.name === id);
   return sp ? sp.label : id;
 }
 async function loadItems() {
-  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
+  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","mrp","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
 async function loadTaxAccount() {
   try {
@@ -2118,7 +2176,7 @@ function toggleAll(e) { if(e.target.checked) sorted.value.forEach(i=>selectedRow
 function toggleRow(name) { const s=new Set(selectedRows.value); s.has(name)?s.delete(name):s.add(name); selectedRows.value=s; }
 
 // ── Line item helpers ──────────────────────────────────────────────────
-function addLine() { lines.value.push({id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}); }
+function addLine() { lines.value.push({id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}); }
 function removeLine(id) { lines.value=lines.value.filter(l=>l.id!==id); }
 function calcLine(line) {
   if (line.discount_percentage > 100) line.discount_percentage = 100;
@@ -2128,12 +2186,15 @@ function calcLine(line) {
   line.discount_amount=disc;
   line.amount=base-disc;
 }
+
 async function onItemChange(line) {
+  // Item changed — any previously selected batch no longer applies.
+  line.batch_no=""; line.batch_expiry_date=""; line.batchOptions=[]; line._batchQty=null; line.has_batch_no=0;
   const it=items.value.find(i=>i.name===line.item_code);
   if (it) {
     line.item_name=it.item_name||it.name;
     line.rate=flt(it.standard_rate);
-    line._standardRate=flt(it.standard_rate);
+    line._standardRate=flt(it.mrp)||flt(it.standard_rate);
     line.uom=it.stock_uom||"Nos";
     if (it.description) line.description=it.description;
     if (it.hsn_code) line.hsn_code=it.hsn_code;
@@ -2149,12 +2210,15 @@ async function onItemChange(line) {
       if (doc?.item_name) line.item_name=doc.item_name;
       if (doc?.description) line.description=doc.description;
       if (doc?.hsn_code) line.hsn_code=doc.hsn_code;
-      if (!flt(line.rate)&&doc?.standard_rate) { line.rate=flt(doc.standard_rate); line._standardRate=flt(doc.standard_rate); }
+      if (!flt(line.rate)&&doc?.standard_rate) { line.rate=flt(doc.standard_rate); }
+      line._standardRate=flt(doc?.mrp)||flt(doc?.standard_rate)||line._standardRate||0;
       if (doc?.stock_uom) line.uom=doc.stock_uom;
       if (doc?.tax_code) line.tax_code=doc.tax_code;
       if (doc?.income_account) line.income_account=doc.income_account;
+      line.has_batch_no=doc?.has_batch_no?1:0;
       calcLine(line);
     } catch {}
+    if (line.has_batch_no) await fetchLineBatches(line, "");
   }
   // Price List override: when a Price List is selected on the invoice and it
   // has an explicit Item Price for this item, that rate takes priority over
@@ -2277,7 +2341,18 @@ async function copyLastItems() {
   try {
     const r=await apiGET("zoho_books_clone.api.docs.get_party_last_items",{party_type:"Customer",party:form.customer,limit:20});
     if (r?.items?.length) {
-      lines.value=[...lines.value,...r.items.map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:Math.round(flt(it.qty)*flt(it.rate)*100)/100,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false}))];
+      const newLines=r.items.map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:Math.round(flt(it.qty)*flt(it.rate)*100)/100,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}));
+      lines.value=[...lines.value,...newLines];
+      // Resolve has_batch_no for the copied lines so batch-tracked items
+      // immediately show the Batch No picker instead of only after a manual
+      // item re-select.
+      for (const line of newLines) {
+        if (!line.item_code) continue;
+        try {
+          line.has_batch_no = (await apiList("Item", { fields: ["has_batch_no"], filters: [["name","=",line.item_code]], limit: 1 }))[0]?.has_batch_no ? 1 : 0;
+        } catch { continue; }
+        if (line.has_batch_no) await fetchLineBatches(line, "");
+      }
       toast("Copied "+r.items.length+" items from last invoice");
     } else toast("No previous items found for this customer","info");
   } catch (e) { toast("Could not copy items: "+e.message,"error"); }
@@ -2288,7 +2363,7 @@ function openAdd() {
   editingName.value=null;
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
-  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}];
+  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
   Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
@@ -2299,7 +2374,7 @@ async function openEdit(inv) {
   editingName.value=inv.name;
   Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
-  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false}];
+  lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
   fetchWarehouses("");
   drawerOpen.value=true;
   const [doc] = await Promise.all([
@@ -2321,7 +2396,7 @@ async function openEdit(inv) {
       additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
       additional_discount_amount:flt(doc.additional_discount_amount)||0,
     });
-    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false}));
+    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false,has_batch_no:0,batch_no:it.batch_no||"",batch_expiry_date:it.batch_expiry_date||"",batchOptions:[],_batchQty:null}));
     if (!lines.value.length) addLine();
     // Base Price is a read-only reference showing the Item's own standard_rate
     // (independent of whatever rate/discount ended up on the saved line), so
@@ -2329,8 +2404,16 @@ async function openEdit(inv) {
     await Promise.all(lines.value.map(async (line) => {
       if (!line.item_code) return;
       const it = items.value.find(i => i.name === line.item_code);
-      if (it) { line._standardRate = flt(it.standard_rate); return; }
-      try { const idoc = await apiGet("Item", line.item_code); line._standardRate = flt(idoc?.standard_rate) || 0; } catch { line._standardRate = 0; }
+      if (it) { line._standardRate = flt(it.mrp) || flt(it.standard_rate); } else {
+        try { const idoc = await apiGet("Item", line.item_code); line._standardRate = flt(idoc?.mrp) || flt(idoc?.standard_rate) || 0; } catch { line._standardRate = 0; }
+      }
+      // Resolve has_batch_no so the Batch No picker shows up for batch-tracked
+      // items already saved on this invoice, and load its batch options so the
+      // saved batch's live Available Qty / expiry can be checked against.
+      try {
+        line.has_batch_no = (await apiList("Item", { fields: ["has_batch_no"], filters: [["name","=",line.item_code]], limit: 1 }))[0]?.has_batch_no ? 1 : 0;
+      } catch { line.has_batch_no = 0; }
+      if (line.has_batch_no) await fetchLineBatches(line, "");
     }));
   }
 }
@@ -2374,6 +2457,10 @@ async function saveInvoice(docstatus, andNew = false) {
   if ((form.remarks||'').length > 500) { toast("Internal Remarks cannot exceed 500 characters","error"); return; }
   if (!lines.value.some(l=>l.item_code&&flt(l.qty)>0)) { toast("Add at least one line item","error"); return; }
   if (form.update_stock && !form.set_warehouse) { toast("Dispatch Warehouse is required when Update Inventory is on","error"); return; }
+  // Batch-tracked lines must have a batch selected, and can't sell more than
+  // that batch currently has in stock (also enforced server-side).
+  const batchErr = lines.value.filter(l=>l.item_code).map(batchQtyError).find(Boolean);
+  if (batchErr) { toast(batchErr,"error"); return; }
   // Check if the posting date falls in a locked fiscal period before hitting the server.
   const lockedUpTo = checkPostingDateLocked(form.posting_date);
   if (lockedUpTo) {
@@ -2383,7 +2470,7 @@ async function saveInvoice(docstatus, andNew = false) {
   drawerSaving.value=true;
   try {
     const company=await resolveCompany();
-    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||"",income_account:l.income_account||""}));
+    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||"",income_account:l.income_account||"",batch_no:l.has_batch_no?(l.batch_no||""):"",batch_expiry_date:l.has_batch_no?(l.batch_expiry_date||""):""}));
     const taxes=computeTaxRows(discountedLines.value.filter(l=>l.item_code), taxTemplates.value, {
       companyState: companyGstState.value,
       placeOfSupply: form.place_of_supply,
@@ -3024,48 +3111,71 @@ watch(() => route.query, (q) => {
 .inv-fi[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Line items table (row) layout ── */
-.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: hidden; }
+.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
 .po-items-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .po-items-table thead th {
   background: #f8fafc; border-bottom: 1px solid #e5e7eb;
-  font-size: 10.5px; font-weight: 700; color: #6b7280; text-transform: uppercase;
-  letter-spacing: .04em; text-align: left; padding: 10px 10px; white-space: nowrap;
+  font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+  letter-spacing: .02em; text-align: left; padding: 8px 4px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.po-items-table .th-num { width: 3%; }
-.po-items-table .th-item { width: 24%; }
-.po-items-table .th-hsn { width: 9%; }
-.po-items-table .th-uom { width: 7%; }
-.po-items-table .th-qty { width: 6%; }
+.po-items-table .th-num { width: 4%; }
+.po-items-table .th-item { width: 22%; }
+.po-items-table .th-hsn { width: 10%; }
+.po-items-table .th-uom { width: 6%; }
+.po-items-table .th-qty { width: 5%; }
 .po-items-table .th-rate { width: 9%; }
-.po-items-table .th-mrp { width: 9%; }
-.po-items-table .th-disc { width: 8%; }
-.po-items-table .th-tax { width: 12%; }
+.po-items-table .th-mrp { width: 6%; }
+.po-items-table .th-disc { width: 6%; }
+.po-items-table .th-tax { width: 0; }
+.po-items-table .th-batch { width: 8%; }
+.po-items-table .th-expiry { width: 10%; }
+.po-items-table .th-availqty { width: 0; }
 .po-items-table .th-subtotal { width: 10%; text-align: right; }
-.po-items-table .th-rm { width: 3%; }
+.po-items-table .th-rm { width: 4%; }
 .po-items-row { border-bottom: 1px solid #f0f2f8; }
 .po-items-row:hover { background: #fafbfe; }
-.po-items-row td { padding: 12px 10px; vertical-align: top; overflow: hidden; }
-.po-items-row .td-num { padding-top: 16px; }
+.po-items-row td { padding: 8px 3px; vertical-align: middle; overflow: hidden; }
+.po-items-row .td-num { text-align: center; }
 .po-row-num { font-size: 11px; font-weight: 800; color: #4f46e5; background: #e0e7ff; border-radius: 5px; padding: 3px 8px; letter-spacing: .02em; white-space: nowrap; }
 .po-row-desc-ta { resize: vertical; min-height: 46px; font-size: 12.5px; line-height: 1.4; margin-top: 8px; width: 100%; box-sizing: border-box; }
 .po-items-row .td-subtotal { text-align: right; white-space: normal; word-break: break-word; }
 .po-row-subtotal-label { display: block; font-size: 9.5px; font-weight: 700; color: #9ca3af; letter-spacing: .08em; }
 .po-row-subtotal-amt { display: block; font-size: 15px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .po-row-subtotal-tax { display: block; font-size: 10px; color: #6b7280; margin-top: 2px; word-break: break-word; }
-.po-items-row .td-rm { text-align: center; padding-top: 14px; }
+.po-row-subtotal-total { display: block; font-size: 10.5px; font-weight: 700; color: #1a1d23; margin-top: 2px; white-space: nowrap; }
+.po-items-row .td-rm { text-align: center; }
+/* ── Common control height for every field in the row ── */
+.po-items-row .inv-fi,
+.po-items-row select.inv-fi { height: 36px; box-sizing: border-box; }
+.po-items-row .ss-wrap,
+.po-items-row .ss-trigger {
+  height: 36px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
 .po-items-row .td-hsn .inv-fi,
-.po-items-row .td-uom .inv-fi,
 .po-items-row .td-qty .inv-fi,
 .po-items-row .td-rate .inv-fi,
 .po-items-row .td-mrp .inv-fi,
 .po-items-row .td-disc .inv-fi,
-.po-items-row .td-tax .inv-fi { width: 100%; box-sizing: border-box; padding: 7px 8px; font-size: 12.5px; }
+.po-items-row .td-tax .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11.5px; }
+.po-items-row .td-uom .inv-fi { width: 100%; box-sizing: border-box; padding: 0 16px 0 6px; font-size: 11.5px; }
+.po-items-row .td-item, .po-items-row .td-hsn, .po-items-row .td-uom,
+.po-items-row .td-mrp, .po-items-row .td-qty, .po-items-row .td-rate,
+.po-items-row .td-disc, .po-items-row .td-batch { vertical-align: middle; }
+.po-items-row .td-batch, .po-items-row .td-expiry, .po-items-row .td-availqty { white-space: normal; }
+.po-items-row .td-expiry span, .po-items-row .td-availqty span { display: flex; align-items: center; height: 36px; }
 .po-items-tax-row td { padding: 0 10px 10px; border-bottom: 1px solid #f0f2f8; }
-@media (max-width: 900px) {
-  .po-items-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .po-items-table { min-width: 900px; table-layout: auto; }
+.po-items-error-row, .po-items-warn-row { border-bottom: 1px solid #f0f2f8; }
+.po-items-error-row td, .po-items-warn-row td { padding: 0; }
+.po-items-banner-inner {
+  padding: 6px 12px 10px 44px; font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 5px; white-space: normal;
 }
+.po-items-error-row .po-items-banner-inner { color: #dc2626; }
+.po-items-warn-row .po-items-banner-inner { color: #9ca3af; font-weight: 500; }
 .inv-add-line-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(26,110,247,.3); background:#eaf1ff; color:#1a6ef7; border-radius:6px; padding:5px 12px; font-size:12.5px; font-weight:600; cursor:pointer; }
 .inv-copy-btn { background:#f0fdf4; border-color:rgba(5,150,105,.3); color:#059669; }
 

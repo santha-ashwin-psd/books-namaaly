@@ -296,9 +296,15 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
     # Credit-normal: debit-credit is negative for balances owed → negate (not
     # abs) so a net-debit balance (e.g. a supplier advance) reduces liabilities
     # instead of inflating them, keeping Assets = Liabilities + Equity intact.
+    # "Stock Received But Not Billed" (GR/IR clearing) is credit-normal too —
+    # goods received but not yet billed sit here as a liability until the
+    # Purchase Invoice clears it. Without this it would fall through the
+    # BS_TYPES catch-all below and get misclassified as a P&L result folded
+    # into retained earnings instead of staying a period-end liability.
     payables        = -t.get("Payable", 0.0)
     other_liab      = -t.get("Liability", 0.0)
-    raw_liabilities = payables + other_liab
+    grir_liability  = -t.get("Stock Received But Not Billed", 0.0)
+    raw_liabilities = payables + other_liab + grir_liability
 
     inventory_value = t.get("Stock", 0.0)
     cash_and_bank   = t.get("Cash", 0.0) + t.get("Bank", 0.0)
@@ -311,7 +317,8 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
     # Because the trial balance nets to zero, this makes
     #   total_assets == total_liabilities + total_equity.
     BS_TYPES = {"Asset", "Cash", "Bank", "Receivable", "Stock",
-                "Liability", "Payable", "Tax", "Equity"}
+                "Liability", "Payable", "Tax", "Equity",
+                "Stock Received But Not Billed"}
     equity_capital    = -flt(t.get("Equity", 0.0))                 # credit-normal → positive
     retained_earnings = -sum(flt(bal) for atype, bal in t.items() if atype not in BS_TYPES)
     total_equity      = equity_capital + retained_earnings
@@ -327,6 +334,7 @@ def get_balance_sheet_totals(company: str, as_of_date: str) -> dict:
         "payables":          payables,
         "gst_liability":     gst_liability,
         "other_liabilities": other_liab,
+        "stock_received_not_billed": grir_liability,
         "total_equity":      total_equity,
         "equity_capital":    equity_capital,
         "retained_earnings": retained_earnings,
@@ -689,6 +697,96 @@ def get_trial_balance(company: str, from_date: str, to_date: str) -> list[dict]:
         r["closing"] = flt(r.get("opening")) + flt(r.get("debit")) - flt(r.get("credit"))
 
     return rows
+
+
+# ── Inventory ↔ GL Reconciliation ────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_inventory_reconciliation(company: str) -> dict:
+    """
+    Perpetual inventory audit check: does the Stock Ledger's operational view
+    of stock value (Bin.stock_value, moving-average) agree with the GL's
+    financial view (Inventory Asset account balance)?
+
+    These are two independently-maintained ledgers (Stock Ledger Entry / Bin
+    vs General Ledger Entry) that only stay in sync because every Stock Entry
+    posts both together. This report is the tripwire that catches drift —
+    e.g. a manual Journal Entry into the Inventory account, a GL posting
+    failure that Stock Entry logged and swallowed (see StockEntry._post_gl_entries
+    error handling), or an account misconfiguration — immediately instead of
+    at year-end audit.
+
+    Grouped by resolved inventory account (Item override → Books Company
+    default → CoA "Stock" type) since a company can have more than one
+    Inventory Asset ledger. Also reports the Stock Received But Not Billed
+    (GR/IR) balance for context — a nonzero GRIR is normal (goods received,
+    bill not yet booked) and is NOT counted as drift.
+    """
+    from zoho_books_clone.accounts.inventory_gl import get_grir_account, get_inventory_account
+
+    default_account = get_inventory_account(company)
+
+    items = frappe.db.sql("""
+        SELECT b.item_code, i.item_name, b.warehouse, b.actual_qty,
+               b.valuation_rate, b.stock_value, i.inventory_account
+        FROM `tabBin` b
+        INNER JOIN `tabWarehouse` w ON w.name = b.warehouse
+        INNER JOIN `tabItem` i ON i.name = b.item_code
+        WHERE w.company = %(company)s
+          AND i.is_stock_item = 1
+          AND b.actual_qty != 0
+        ORDER BY b.item_code, b.warehouse
+    """, {"company": company}, as_dict=True)
+
+    for row in items:
+        row["resolved_account"] = row.inventory_account or default_account
+
+    accounts = sorted({
+        row["resolved_account"] for row in items if row["resolved_account"]
+    } | ({default_account} if default_account else set()))
+
+    account_summary = []
+    total_bin_value = 0.0
+    total_gl_balance = 0.0
+    for account in accounts:
+        bin_value = sum(flt(row.stock_value) for row in items if row["resolved_account"] == account)
+        gl_balance = flt(frappe.db.sql("""
+            SELECT COALESCE(SUM(debit) - SUM(credit), 0)
+            FROM `tabGeneral Ledger Entry`
+            WHERE account = %(account)s AND company = %(company)s
+              AND IFNULL(is_cancelled, 0) = 0
+        """, {"account": account, "company": company})[0][0])
+        difference = round(bin_value - gl_balance, 2)
+        account_summary.append({
+            "account": account,
+            "bin_stock_value": round(bin_value, 2),
+            "gl_balance": round(gl_balance, 2),
+            "difference": difference,
+            "is_reconciled": abs(difference) < 0.01,
+        })
+        total_bin_value += bin_value
+        total_gl_balance += gl_balance
+
+    grir_account = get_grir_account(company)
+    grir_balance = 0.0
+    if grir_account:
+        grir_balance = flt(frappe.db.sql("""
+            SELECT COALESCE(SUM(credit) - SUM(debit), 0)
+            FROM `tabGeneral Ledger Entry`
+            WHERE account = %(account)s AND company = %(company)s
+              AND IFNULL(is_cancelled, 0) = 0
+        """, {"account": grir_account, "company": company})[0][0])
+
+    return {
+        "accounts": account_summary,
+        "items": items,
+        "total_bin_value": round(total_bin_value, 2),
+        "total_gl_balance": round(total_gl_balance, 2),
+        "total_difference": round(total_bin_value - total_gl_balance, 2),
+        "is_reconciled": abs(total_bin_value - total_gl_balance) < 0.01,
+        "grir_account": grir_account,
+        "grir_balance": round(grir_balance, 2),
+    }
 
 
 # ── AR Aging ──────────────────────────────────────────────────────────────────

@@ -9,3 +9,4 @@ Books Setup
 Gst
 Quality
 Manufacturing
+Assets

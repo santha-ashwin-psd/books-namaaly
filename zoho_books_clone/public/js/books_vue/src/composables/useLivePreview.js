@@ -8,6 +8,13 @@ const _state = reactive({
   brandColor: "#1a6ef7",
   logo: "",
   company: "",
+  companyGstin: "",
+  companyAddress: "",
+  companyCity: "",
+  companyState: "",
+  companyPincode: "",
+  companyPhone: "",
+  companyEmail: "",
 });
 
 async function _loadBranding(company) {
@@ -25,6 +32,13 @@ async function _loadBranding(company) {
     if (d.pdf_template) _state.template   = d.pdf_template;
     if (d.brand_color)  _state.brandColor = d.brand_color;
     if (d.company_logo) _state.logo       = d.company_logo;
+    _state.companyGstin    = d.gstin || "";
+    _state.companyAddress  = d.company_address || "";
+    _state.companyCity     = d.company_city || "";
+    _state.companyState    = d.company_state || "";
+    _state.companyPincode  = d.company_pincode || "";
+    _state.companyPhone    = d.company_phone || "";
+    _state.companyEmail    = d.company_email || "";
   } catch {}
 }
 
@@ -39,6 +53,31 @@ function _esc(s) {
 function _fmt(v, currency) {
   const symbol = (currency && currency !== "INR") ? (currency + " ") : "₹";
   return symbol + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function _numberToWords(n) {
+  n = Math.round(Number(n) || 0);
+  if (n === 0) return "Rupees Zero Only";
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+    "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  function two(x) {
+    if (x < 20) return ones[x];
+    return tens[Math.floor(x / 10)] + (x % 10 ? " " + ones[x % 10] : "");
+  }
+  function three(x) {
+    if (x >= 100) return ones[Math.floor(x / 100)] + " Hundred" + (x % 100 ? " " + two(x % 100) : "");
+    return two(x);
+  }
+  let parts = [];
+  let crore = Math.floor(n / 10000000); n %= 10000000;
+  let lakh = Math.floor(n / 100000); n %= 100000;
+  let thousand = Math.floor(n / 1000); n %= 1000;
+  let rest = n;
+  if (crore) parts.push(three(crore) + " Crore");
+  if (lakh) parts.push(three(lakh) + " Lakh");
+  if (thousand) parts.push(three(thousand) + " Thousand");
+  if (rest) parts.push(three(rest));
+  return "Rupees " + parts.join(" ") + " Only";
 }
 function _today() {
   return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -58,6 +97,10 @@ function _renderClassic(doc, cfg) {
     : (doc.grand_total || 0) - (doc.total_taxes_and_charges ?? doc.total_tax ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0));
   const party    = doc[cfg.partyField] || doc.customer || doc.supplier || "";
   const docDate  = doc.posting_date || doc.transaction_date || "";
+  const includeMrp = cfg.includeMrp && (doc.items || []).some(it => Number(it.mrp) > 0);
+  const totalTax = doc.total_taxes_and_charges ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0);
+  const roundOff = doc.grand_total != null ? Math.round((doc.grand_total - (netTotal + totalTax)) * 100) / 100 : 0;
+  const amountWords = doc.in_words || _numberToWords(Math.round(doc.grand_total || 0));
 
   const items = (doc.items || []).map((it, i) => `
     <tr>
@@ -71,11 +114,15 @@ function _renderClassic(doc, cfg) {
       <td class="c">${_esc(it.uom || "Nos")}</td>
       <td class="r">${_fmt(it.rate, currency)}</td>
       ${cfg.includeDiscount ? `<td class="c">${Number(it.discount_percentage || 0)}%</td>` : ""}
+      ${includeMrp ? `<td class="r">${it.mrp ? _fmt(it.mrp, currency) : "—"}</td>` : ""}
       <td class="r b">${_fmt(it.amount, currency)}</td>
     </tr>`).join("");
-  const taxRows = (doc.taxes || []).map(t =>
-    `<tr><td class="tl">${_esc(t.description || t.account_head)}</td><td class="r">${_fmt(t.tax_amount || 0, currency)}</td></tr>`).join("");
-  const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0);
+  const taxRows = (doc.taxes || []).map(t => {
+    const label = t.description || t.account_head || "";
+    const hasRate = t.rate && !/%/.test(label);
+    return `<tr><td class="tl">${_esc(label)}${hasRate ? ` (${Number(t.rate)}%)` : ""}</td><td class="r">${_fmt(t.tax_amount || 0, currency)}</td></tr>`;
+  }).join("");
+  const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0) + (includeMrp ? 1 : 0);
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <title>${_esc(cfg.title)} — ${_esc(doc.name)}</title>
@@ -109,14 +156,17 @@ function _renderClassic(doc, cfg) {
   .it .ids{font-size:10.5px;color:#666;margin-top:2px}
   .it .r{text-align:right}.it .c{text-align:center}.it .b{font-weight:700}
   /* Totals */
-  .tw{display:flex;justify-content:flex-end;margin-top:14px}
-  .tt{width:300px;border:1px solid #ccc;font-family:Arial,sans-serif}
+  .tot-wrap{display:flex;justify-content:space-between;gap:20px;margin-top:16px;align-items:flex-start}
+  .tot-left{flex:1;min-width:0}
+  .tt{width:300px;flex-shrink:0;border:1px solid #ccc;font-family:Arial,sans-serif}
   .tt tr td{padding:7px 14px;font-size:12.5px;border-bottom:1px solid #eee}
   .tt .tl{color:#555}.tt .r{text-align:right}
   .tt .grand td{background:${brand};color:#fff;font-weight:700;font-size:14px;border:none}
   /* Notes / sign */
-  .notes{margin-top:18px;font-family:Arial,sans-serif;font-size:11.5px;color:#444;line-height:1.6}
+  .notes{margin-bottom:12px;font-family:Arial,sans-serif;font-size:11.5px;color:#444;line-height:1.6}
   .notes .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+  .words{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;font-weight:700;line-height:1.5}
+  .words .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;font-family:Arial,sans-serif}
   .sig{display:flex;justify-content:space-between;gap:40px;margin-top:40px;font-family:Arial,sans-serif}
   .sig div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#777;text-align:center}
   .ft{text-align:center;margin-top:18px;font-size:9.5px;color:#999;font-family:Arial,sans-serif;font-style:italic}
@@ -125,7 +175,9 @@ function _renderClassic(doc, cfg) {
   <div class="lh">
     ${logo ? `<img src="${_esc(logo)}"/>` : ""}
     <div class="co">${_esc(doc.company || cfg.companyName || "")}</div>
-    <div class="meta">${doc.company_gstin || doc.gstin ? "GSTIN: " + _esc(doc.company_gstin || doc.gstin) : ""}</div>
+    ${_state.companyAddress ? `<div class="meta">${_esc([_state.companyAddress, [_state.companyCity, _state.companyState, _state.companyPincode].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}</div>` : ""}
+    ${(_state.companyPhone || _state.companyEmail) ? `<div class="meta">${[_state.companyPhone, _state.companyEmail].filter(Boolean).join("  ·  ")}</div>` : ""}
+    ${(doc.company_gstin || doc.gstin || _state.companyGstin) ? `<div class="meta">GSTIN: ${_esc(doc.company_gstin || doc.gstin || _state.companyGstin)}</div>` : ""}
   </div>
   <div class="title">${_esc(cfg.title)}</div>
   <div class="pr">
@@ -151,22 +203,29 @@ function _renderClassic(doc, cfg) {
       <th class="c" style="width:30px">#</th><th>Item &amp; Description</th>
       ${cfg.includeHsn ? `<th class="c" style="width:72px">HSN/SAC</th>` : ""}
       <th class="r" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th>
-      <th class="r" style="width:100px">Rate</th>
-      ${cfg.includeDiscount ? `<th class="c" style="width:46px">Disc</th>` : ""}
-      <th class="r" style="width:110px">Amount</th>
+      <th class="r" style="width:90px">Rate</th>
+      ${cfg.includeDiscount ? `<th class="c" style="width:52px">Disc</th>` : ""}
+      ${includeMrp ? `<th class="r" style="width:80px">MRP</th>` : ""}
+      <th class="r" style="width:100px">Amount</th>
     </tr></thead>
     <tbody>${items || `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">No items</td></tr>`}</tbody>
   </table>
-  <div class="tw"><table class="tt">
-    <tr><td class="tl">Subtotal</td><td class="r">${_fmt(netTotal, currency)}</td></tr>
-    ${taxRows}
-    ${doc.discount_amount ? `<tr><td class="tl" style="color:#b91c1c">Discount</td><td class="r" style="color:#b91c1c">− ${_fmt(doc.discount_amount, currency)}</td></tr>` : ""}
-    <tr class="grand"><td>Grand Total</td><td class="r">${_fmt(doc.grand_total, currency)}</td></tr>
-  </table></div>
-  ${doc.remarks ? `<div class="notes"><div class="h">Remarks</div>${_esc(doc.remarks)}</div>` : ""}
-  ${doc.terms || doc.customer_note ? `<div class="notes"><div class="h">${doc.customer_note ? "Note" : "Terms & Conditions"}</div>${_esc(doc.customer_note || doc.terms)}</div>` : ""}
+  <div class="tot-wrap">
+    <div class="tot-left">
+      ${doc.terms || doc.customer_note ? `<div class="notes"><div class="h">${doc.customer_note ? "Note" : "Terms &amp; Conditions"}</div>${_esc(doc.customer_note || doc.terms)}</div>` : ""}
+      ${doc.remarks ? `<div class="notes"><div class="h">Remarks</div>${_esc(doc.remarks)}</div>` : ""}
+      <div class="words"><div class="h">Total Amount in Words</div>${_esc(amountWords)}</div>
+    </div>
+    <table class="tt">
+      <tr><td class="tl">Total Before Tax</td><td class="r">${_fmt(netTotal, currency)}</td></tr>
+      ${taxRows}
+      ${doc.discount_amount ? `<tr><td class="tl" style="color:#b91c1c">Discount</td><td class="r" style="color:#b91c1c">− ${_fmt(doc.discount_amount, currency)}</td></tr>` : ""}
+      ${roundOff ? `<tr><td class="tl">Round Off</td><td class="r">${roundOff > 0 ? "" : "− "}${_fmt(Math.abs(roundOff), currency)}</td></tr>` : ""}
+      <tr class="grand"><td>Grand Total</td><td class="r">${_fmt(doc.grand_total, currency)}</td></tr>
+    </table>
+  </div>
   <div class="sig"><div>Prepared By</div><div>Authorised Signatory</div><div>Receiver's Signature</div></div>
-  <div class="ft">${_esc(doc.company || "")} · ${_esc(doc.name)} · Printed ${_today()}</div>
+  <div class="ft">This is a computer-generated document. · ${_esc(doc.company || "")} · ${_esc(doc.name)} · Printed ${_today()}</div>
 </div></div></div></body></html>`;
 }
 

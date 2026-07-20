@@ -42,9 +42,44 @@ class PurchaseReceipt(Document):
         self.db_set("status", "Submitted", update_modified=False)
 
     def on_cancel(self):
+        self._guard_not_billed()
         self._adjust_po_received(direction=-1)
         self._release_ordered_qty(direction=+1)    # receipt reversed → restore "on order"
         self.db_set("status", "Cancelled", update_modified=False)
+
+    def _guard_not_billed(self):
+        """
+        Block cancelling once the linked Purchase Order has been billed.
+
+        Cancelling this receipt reverses its Material Receipt Stock Entry —
+        crediting Inventory and debiting GR/IR back. But if a Purchase
+        Invoice already submitted against the same PO, it already cleared
+        that GR/IR (DR GRIR / CR Accounts Payable). Reversing the receipt
+        underneath an already-cleared GR/IR would leave GR/IR permanently
+        unbalanced with no automatic way to fix it.
+
+        This check is at the Purchase Order level (not per-item/per-qty —
+        this app links PR/PI to a PO as a whole, not line-by-line), so it is
+        intentionally conservative: it blocks cancelling ANY receipt on a PO
+        that has ANY submitted invoice against it, even if that invoice
+        billed different items than this specific receipt. Cancel/amend the
+        Purchase Invoice(s) first, then this receipt.
+        """
+        if not self.purchase_order:
+            return
+        billed = frappe.get_all(
+            "Purchase Invoice",
+            filters={"purchase_order": self.purchase_order, "docstatus": 1},
+            fields=["name"],
+        )
+        if billed:
+            names = ", ".join(b.name for b in billed)
+            frappe.throw(_(
+                "Cannot cancel {0} — Purchase Order {1} already has a submitted "
+                "Purchase Invoice ({2}) that cleared Stock Received But Not "
+                "Billed (GR/IR) against it. Cancel/amend the Purchase Invoice "
+                "first, then cancel this receipt."
+            ).format(self.name, self.purchase_order, names))
 
     def _release_ordered_qty(self, direction: int):
         """

@@ -1,7 +1,8 @@
 frappe.ui.form.on("Item", {
   setup(frm) {
     frm.set_query("income_account",  () => ({ filters: { account_type: "Income",  is_group: 0 } }));
-    frm.set_query("expense_account", () => ({ filters: { account_type: "Expense", is_group: 0 } }));
+    frm.set_query("expense_account", () => ({ filters: { account_type: ["in", ["Expense", "Cost of Goods Sold"]], is_group: 0 } }));
+    frm.set_query("inventory_account", () => ({ filters: { account_type: "Stock", is_group: 0 } }));
     frm.set_query("stock_uom",       () => ({ filters: { enabled: 1 } }));
   },
 

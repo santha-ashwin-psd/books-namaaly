@@ -178,7 +178,7 @@
     </div>
 
     <!-- ── Create / Edit drawer ── -->
-    <div v-if="drawerOpen" class="inv-drawer-bg" @click.self="drawerOpen=false"></div>
+    <div v-if="drawerOpen" class="inv-drawer-bg bill-addedit-bg" @click.self="drawerOpen=false"></div>
     <div class="inv-drawer-panel bill-edit-drawer" :class="{open:drawerOpen}">
 
       <!-- Header -->
@@ -306,63 +306,75 @@
             </span>
           </div>
           <div class="add-card-body" :class="{collapsed:billCollapsed.lines}">
-            <div class="po-item-cards">
-              <div v-for="(line, idx) in lines" :key="line.id" class="po-item-card">
-                <div class="po-item-card-header" @click="line.collapsed=!line.collapsed" style="cursor:pointer">
-                  <span class="po-item-card-num">#{{ idx + 1 }}</span>
-                  <span class="po-item-card-title">{{ line.item_code || 'Line Item Detail' }}</span>
-                  <div class="po-item-card-subtotal">
-                    <span class="po-item-card-subtotal-label">SUBTOTAL</span>
-                    <span class="po-item-card-amount">{{ fmtCur(line.amount) }}</span>
-                  </div>
-                  <span class="po-item-card-chevron" :class="{collapsed:line.collapsed}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                  </span>
-                  <button @click.stop="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button>
-                </div>
-                <div class="po-item-card-body" v-show="!line.collapsed">
-                  <div class="po-item-col po-item-col--left">
-                    <div class="po-item-field">
-                      <label>Item Name</label>
+            <div class="po-items-table-wrap">
+              <table class="po-items-table">
+                <thead>
+                  <tr>
+                    <th class="th-num">#</th>
+                    <th class="th-item">ITEM NAME &amp; DESCRIPTION</th>
+                    <th class="th-hsn">HSN/SAC</th>
+                    <th class="th-uom">UOM</th>
+                    <th class="th-mrp">MRP (₹)</th>
+                    <th class="th-qty">QTY</th>
+                    <th class="th-rate">RATE (₹)</th>
+                    <th class="th-disc">DISC %</th>
+                    <th class="th-batch">BATCH NO</th>
+                    <th class="th-expiry">EXP DATE</th>
+                    <th class="th-subtotal">SUBTOTAL</th>
+                    <th class="th-rm"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="(line, idx) in lines" :key="line.id">
+                  <tr class="po-items-row">
+                    <td class="td-num"><span class="po-row-num">#{{ idx + 1 }}</span></td>
+                    <td class="td-item">
                       <SearchableSelect v-model="line.item_code" :options="items"
                         placeholder="Select item…" :createable="true" createDoctype="Item"
-                        @search="fetchItems" @select="v=>onItemSelect(line,v)" />
-                    </div>
-                    <div class="po-item-field" style="margin-top:14px">
-                      <label>Description</label>
-                      <textarea v-model="line.description" class="inv-fi po-item-desc-ta" :class="{'field-error': line.description && line.description.length > 500}" rows="4" maxlength="500" placeholder="Enter item description…"></textarea>
-                      <div class="exp-field-hint" :class="{'exp-field-hint-err': line.description && line.description.length >= 500}">{{ (line.description || '').length }}/500 characters</div>
-                    </div>
-                  </div>
-                  <div class="po-item-col po-item-col--right">
-                    <div class="po-item-field">
-                      <label>Tax Template</label>
-                      <select v-model="line.tax_code" class="inv-fi">
-                        <option value="">&#8212; No Tax &#8212;</option>
-                        <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
+                        @search="fetchItems" @select="v=>onItemSelect(line,v)"/>
+                    </td>
+                    <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
+                    <td class="td-uom">
+                      <select v-model="line.uom" class="inv-fi">
+                        <option value="Nos">Nos</option>
+                        <option value="Kg">Kg</option>
+                        <option value="Ltr">Ltr</option>
+                        <option value="Hrs">Hrs</option>
+                        <option value="Pcs">Pcs</option>
+                        <option value="Box">Box</option>
                       </select>
-                    </div>
-                    <div class="po-item-num-row">
-                      <div class="po-item-field">
-                        <label>Qty</label>
-                        <input v-model.number="line.qty" type="number" min="0" step="0.001" class="inv-fi" :class="{'field-error': line.qty > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.qty = 999999999; e.target.value = 999999999; } calcLine(line); }" />
-                        <div v-if="line.qty > 999999999" class="exp-field-hint exp-field-hint-err">⚠ Qty cannot exceed 999,999,999</div>
-                      </div>
-                      <div class="po-item-field">
-                        <label>Rate (₹)</label>
-                        <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" :class="{'field-error': line.rate > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.rate = 999999999; e.target.value = 999999999; } calcLine(line); }" />
-                        <div v-if="line.rate > 999999999" class="exp-field-hint exp-field-hint-err">⚠ Rate cannot exceed 999,999,999</div>
-                      </div>
-                    </div>
-                    <div class="po-item-hint">Pricing is calculated based on current inventory stock and regional tax policies.</div>
-                  </div>
-                </div>
-                <div v-if="form.update_stock && line.has_batch_no" class="po-item-col" style="grid-column:1 / -1;display:grid;grid-template-columns:2fr 1fr;gap:6px;padding:0 0 12px" v-show="!line.collapsed">
-                  <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Batch No — select existing or type to create new"
-                    createable @search="q => fetchBillLineBatches(line, q)" @select="opt => onBillLineBatchSelect(line, opt)" @create="val => onBillLineBatchCreate(line, val)" style="font-size:12px"/>
-                  <span style="font-size:11px;color:#9ca3af;align-self:center">{{ line.batchOptions.length ? 'Batch-tracked — required' : 'No batches yet — type a new code' }}</span>
-                </div>
-              </div>
+                    </td>
+                    <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
+                    <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" :class="{'field-error': line.qty > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.qty = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
+                    <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" :class="{'field-error': line.rate > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.rate = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
+                    <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
+                    <td class="td-batch">
+                      <template v-if="form.update_stock && line.has_batch_no">
+                        <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Select batch"
+                          createable @search="q => fetchBillLineBatches(line, q)" @select="opt => onBillLineBatchSelect(line, opt)" @create="val => onBillLineBatchCreate(line, val)" style="font-size:12px"
+                          :title="batchQtyError(line) || (!line.batchOptions.length ? 'No batches with stock yet' : '')"/>
+                      </template>
+                      <span v-else style="color:#cbd5e1;font-size:12px">—</span>
+                    </td>
+                    <td class="td-expiry">
+                      <input v-if="form.update_stock && line.has_batch_no" v-model="line.batch_expiry_date" type="date" class="inv-fi"/>
+                      <span v-else style="color:#cbd5e1;font-size:12px">—</span>
+                    </td>
+                    <td class="td-subtotal">
+                      <span class="po-row-subtotal-label">SUBTOTAL</span>
+                      <span class="po-row-subtotal-amt">{{ fmtCur(line.amount) }}</span>
+                    </td>
+                    <td class="td-rm"><button @click="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button></td>
+                  </tr>
+                  <tr v-if="form.update_stock && line.has_batch_no && batchQtyError(line)" class="po-items-error-row">
+                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> {{ batchQtyError(line) }}</div></td>
+                  </tr>
+                  <tr v-else-if="form.update_stock && line.has_batch_no && !line.batchOptions.length" class="po-items-warn-row">
+                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No batches with stock yet — type a new code to create one</div></td>
+                  </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
             <button class="inv-add-line-btn" style="margin-top:10px" @click="addLine"><span v-html="icon('plus',12)"></span> Add Item</button>
 
@@ -932,7 +944,7 @@ const sortCol = ref("posting_date"), sortDir = ref("desc");
 const copyingLast = ref(false);
 
 let _id = 1;
-const blankLine = () => ({ id: _id++, item_code: "", description: "", qty: 1, rate: 0, amount: 0, tax_code: "", expense_account: "", collapsed: false, has_batch_no: 0, batch_no: "", batchOptions: [] });
+const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", _standardRate: 0, discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", expense_account: "", collapsed: false, has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null });
 const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
 const vendorAddresses = ref([]);
 const addrModal = reactive({
@@ -1161,10 +1173,12 @@ async function openEdit(b) {
     const doc = await apiGet("Purchase Invoice", b.name);
     if (doc?.items?.length) {
       lines.value = doc.items.map(i => ({
-        id: _id++, item_code: i.item_code || "", description: i.description || "",
-        qty: i.qty || 1, rate: i.rate || 0, amount: i.amount || 0,
+        id: _id++, item_code: i.item_code || "", item_name: i.item_name || "", description: i.description || "",
+        hsn_code: i.hsn_code || "", qty: i.qty || 1, rate: i.rate || 0, uom: i.uom || "Nos",
+        _standardRate: i.mrp || 0, discount_percentage: i.discount_percentage || 0, discount_amount: i.discount_amount || 0,
+        amount: i.amount || 0,
         tax_code: i.tax_code || "", expense_account: i.expense_account || "", collapsed: false,
-        has_batch_no: 0, batch_no: i.batch_no || "", batchOptions: [],
+        has_batch_no: 0, batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "", batchOptions: [], _batchQty: null,
       }));
       // Resolve has_batch_no per item so the Batch No field shows for
       // batch-tracked items already on this draft bill.
@@ -1258,8 +1272,8 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
-    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "mrp", "stock_uom", "hsn_code", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
+    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, mrp: x.mrp || x.standard_buying_rate || x.standard_rate || 0, stock_uom: x.stock_uom || "Nos", hsn_code: x.hsn_code || "", description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
   } catch { items.value = []; }
 }
 watch(() => form.supplier, async (name) => {
@@ -1292,6 +1306,9 @@ async function onItemSelect(line, opt) {
   if (opt?.item_name) { line.item_name = opt.item_name; }
   if (opt?.tax_code !== undefined) { line.tax_code = opt.tax_code || ""; }
   if (opt?.description) { line.description = opt.description; }
+  if (opt?.hsn_code !== undefined) { line.hsn_code = opt.hsn_code || ""; }
+  line.uom = opt?.stock_uom || "Nos";
+  line._standardRate = flt(opt?.mrp) || flt(opt?.rate) || 0;
   // Carry the Item master's own Default Expense Account onto the line, so
   // the backend fallback in save_doc (Cost of Goods Sold) is only used when
   // the Item genuinely has no expense_account of its own.
@@ -1304,11 +1321,14 @@ async function onItemSelect(line, opt) {
       if (doc?.item_name) line.item_name = doc.item_name;
       if (doc?.tax_code) line.tax_code = doc.tax_code;
       if (doc?.expense_account) line.expense_account = doc.expense_account;
+      if (doc?.hsn_code) line.hsn_code = doc.hsn_code;
+      if (doc?.stock_uom) line.uom = doc.stock_uom;
+      line._standardRate = flt(doc?.mrp) || flt(doc?.standard_buying_rate) || flt(doc?.standard_rate) || line._standardRate || 0;
     } catch {}
   }
   // Resolve has_batch_no so the Batch No field shows up for batch-tracked
   // items when Update Inventory on Submit is on — mirrors PurchaseReceipts.vue.
-  line.batch_no = ""; line.batchOptions = [];
+  line.batch_no = ""; line.batch_expiry_date = ""; line._batchQty = null; line.batchOptions = [];
   if (line.item_code) {
     try {
       line.has_batch_no = (await apiList("Item", { fields: ["has_batch_no"], filters: [["name", "=", line.item_code]], limit: 1 }))[0]?.has_batch_no ? 1 : 0;
@@ -1346,14 +1366,49 @@ async function fetchBillLineBatches(line, q = "") {
     line.batchOptions = rows.map(b => ({
       value: b.batch_no,
       label: (b.qty !== undefined && b.qty !== null) ? `${b.batch_no} (Qty: ${b.qty})` : b.batch_no,
+      qty: flt(b.qty),
+      expiry_date: b.expiry_date || "",
     }));
+    // Keep the already-selected batch's Qty/expiry in sync with fresh data.
+    if (line.batch_no) {
+      const m = line.batchOptions.find(o => o.value === line.batch_no);
+      if (m) { line._batchQty = m.qty; line.batch_expiry_date = m.expiry_date; }
+    }
   } catch { if (line.item_code === itemCode) line.batchOptions = []; }
 }
-function onBillLineBatchSelect(line, opt) { line.batch_no = opt?.value ?? opt; }
-function onBillLineBatchCreate(line, val) { line.batch_no = val; }
+function onBillLineBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+  const m = line.batchOptions.find(o => o.value === line.batch_no);
+  line._batchQty = m ? m.qty : null;
+  line.batch_expiry_date = m ? m.expiry_date : "";
+}
+function onBillLineBatchCreate(line, val) { line.batch_no = val; line._batchQty = null; line.batch_expiry_date = ""; }
 function addLine() { lines.value.push(blankLine()); }
 function removeLine(id) { if (lines.value.length > 1) lines.value = lines.value.filter(l => l.id !== id); }
-function calcLine(l) { l.amount = Math.round(flt(l.qty) * flt(l.rate) * 100) / 100; }
+function fmtN(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function calcLine(l) {
+  if (l.discount_percentage > 100) l.discount_percentage = 100;
+  if (l.discount_percentage < 0)   l.discount_percentage = 0;
+  const base = Math.round(flt(l.qty) * flt(l.rate) * 100) / 100;
+  const disc = Math.round(base * flt(l.discount_percentage) / 100 * 100) / 100;
+  l.discount_amount = disc;
+  l.amount = base - disc;
+}
+// Returns a human-readable error string when the entered Qty exceeds the
+// selected batch's available stock, or "" when the row is fine. Mirrors
+// Invoices.vue's batchQtyError().
+function batchQtyError(line) {
+  if (!line.has_batch_no || !line.item_code) return "";
+  if (!line.batch_no) return `${line.item_name || line.item_code} is batch-tracked — select a Batch No`;
+  if (line._batchQty == null) return "";
+  if (flt(line.qty) > flt(line._batchQty)) {
+    return `${line.item_name || line.item_code} — Batch ${line.batch_no} exceeds stock (Available: ${line._batchQty}, Entered: ${flt(line.qty)})`;
+  }
+  return "";
+}
 const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
 
 // Group tax by template name → { name, rate, amount }
@@ -1387,11 +1442,12 @@ async function copyLastItems() {
     const r = await apiGET("zoho_books_clone.api.docs.get_party_last_items", { party_type: "Supplier", party: form.supplier, limit: 20 });
     if (r?.items?.length) {
       lines.value = r.items.map(it => ({
-        id: _id++, item_code: it.item_code || "", description: it.description || it.item_name || "",
-        qty: flt(it.qty) || 1, rate: flt(it.rate) || 0,
+        id: _id++, item_code: it.item_code || "", item_name: it.item_name || "", description: it.description || it.item_name || "",
+        hsn_code: it.hsn_code || "", qty: flt(it.qty) || 1, rate: flt(it.rate) || 0, uom: it.uom || "Nos",
+        _standardRate: flt(it.mrp) || 0, discount_percentage: flt(it.discount_percentage) || 0, discount_amount: flt(it.discount_amount) || 0,
         amount: Math.round(flt(it.qty || 1) * flt(it.rate || 0) * 100) / 100,
         expense_account: it.expense_account || "",
-        has_batch_no: 0, batch_no: "", batchOptions: [],
+        has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null,
       }));
       const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
       if (codes.length) {
@@ -1417,13 +1473,28 @@ async function saveBill(submit) {
   // StockEntry.validate() rejects batch-tracked rows with no batch_no.
   const activeLines = lines.value.filter(l => l.item_code && flt(l.qty) > 0);
   if (form.update_stock) {
+    const batchErr = activeLines.map(batchQtyError).find(Boolean);
+    if (batchErr) { toast.error(batchErr); return; }
     for (const l of activeLines) {
-      if (!l.has_batch_no) continue;
-      if (!l.batch_no) { toast.error(`${l.item_name || l.item_code} is batch-tracked — Batch No is required`); return; }
+      if (!l.has_batch_no || !l.batch_no) continue;
       const existing = await apiList("Batch", { fields: ["name", "disabled", "item"], filters: [["name", "=", l.batch_no]], limit: 1 }).catch(() => []);
       if (existing.length && existing[0].disabled) { toast.error(`Batch "${l.batch_no}" is disabled and can't be used.`); return; }
       if (existing.length && existing[0].item && existing[0].item !== l.item_code) {
         toast.error(`Batch "${l.batch_no}" already exists for item "${existing[0].item}", not "${l.item_code}".`); return;
+      }
+      // Pre-create new Batch records (mirrors PurchaseReceipts.vue) so the
+      // auto-generated Stock Entry can resolve batch_no as a valid Link on
+      // submit, and so the Exp Date typed in the row is actually saved onto
+      // the Batch instead of being silently dropped.
+      if (!existing.length) {
+        await apiSave({
+          doctype: "Batch",
+          batch_no: l.batch_no,
+          item: l.item_code,
+          warehouse: form.set_warehouse || null,
+          expiry_date: l.batch_expiry_date || null,
+          batch_qty: 0,
+        });
       }
     }
   }
@@ -1455,10 +1526,14 @@ async function saveBill(submit) {
       conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
       items: activeLines.map(l => ({
         doctype: "Purchase Invoice Item", item_code: l.item_code,
+        item_name: l.item_name || l.item_code,
         description: l.description || l.item_code,
-        qty: flt(l.qty) || 1, rate: flt(l.rate), amount: flt(l.amount),
+        hsn_code: l.hsn_code || "", uom: l.uom || "Nos",
+        qty: flt(l.qty) || 1, rate: flt(l.rate), mrp: flt(l._standardRate) || 0, amount: flt(l.amount),
+        discount_percentage: flt(l.discount_percentage) || 0, discount_amount: flt(l.discount_amount) || 0,
         tax_code: l.tax_code || "", expense_account: l.expense_account || "",
         batch_no: (form.update_stock && l.has_batch_no) ? l.batch_no : "",
+        batch_expiry_date: (form.update_stock && l.has_batch_no) ? (l.batch_expiry_date || "") : "",
       })),
       taxes,
     };
@@ -1466,7 +1541,7 @@ async function saveBill(submit) {
 
     // Pre-create Batch records for batch-tracked lines so the auto-generated
     // Stock Entry can resolve batch_no as a valid Link on submit — mirrors
-    // PurchaseReceipts.vue.
+    // PurchaseReceipts.vue / StockEntries.vue.
     if (form.update_stock) {
       for (const l of activeLines) {
         if (!l.has_batch_no || !l.batch_no) continue;
@@ -1475,6 +1550,7 @@ async function saveBill(submit) {
           await apiSave({
             doctype: "Batch", batch_no: l.batch_no, item: l.item_code,
             warehouse: form.set_warehouse || null, batch_qty: 0,
+            expiry_date: l.batch_expiry_date || null,
           });
         }
       }
@@ -1735,8 +1811,12 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .inv-ab-caret { font-size: 10px; opacity: .6; margin-left: 1px; }
 
 /* ── Edit drawer ── */
-.bill-edit-drawer { width: 720px;right: -720px;max-width: 96vw; transition: right .22s ease; position: fixed; top: 0; bottom: 0; max-width: 96vw; z-index: 8100; background: #fff; display: flex; flex-direction: column; }
+.bill-edit-drawer { width: 1020px;right: -1020px;max-width: 96vw; transition: right .22s ease; position: fixed; top: 0; bottom: 0; max-width: 96vw; z-index: 8100; background: #fff; display: flex; flex-direction: column; }
 .bill-edit-drawer.open { right: 0; }
+
+/* ── Bill Add/Edit drawer: sit beside the sidebar, not over it ── */
+.bill-addedit-bg { left: var(--bv-sidebar-w, 220px) !important; }
+.bv-app-sidebar-collapsed .bill-addedit-bg { left: var(--bv-sidebar-w-narrow, 56px) !important; }
 
 /* ── View drawer ── */
 .bill-view-drawer { width: 900px; right: -900px; transition: right .22s ease; position: fixed; top: 0; bottom: 0; background: #f5f6f8; display: flex; flex-direction: column; overflow-y: auto; }
@@ -1889,6 +1969,58 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .po-item-num-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .po-item-hint { font-size: 12px; font-style: italic; color: #6b7280; background: #f0f4ff; border-radius: 8px; padding: 10px 12px; line-height: 1.5; margin-top: auto; }
 .po-item-count { font-size: 11px; font-weight: 600; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 12px; padding: 1px 8px; margin-left: 4px; }
+
+/* ── Line items table (mirrors Invoices.vue) ── */
+.po-items-table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+.po-items-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.po-items-table thead th {
+  background: #f8fafc; border-bottom: 1px solid #e5e7eb;
+  font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+  letter-spacing: .02em; text-align: left; padding: 8px 4px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.po-items-table .th-num { width: 4%; }
+.po-items-table .th-item { width: 22%; }
+.po-items-table .th-hsn { width: 9%; }
+.po-items-table .th-uom { width: 6%; }
+.po-items-table .th-mrp { width: 6%; }
+.po-items-table .th-qty { width: 5%; }
+.po-items-table .th-rate { width: 8%; }
+.po-items-table .th-disc { width: 6%; }
+.po-items-table .th-batch { width: 9%; }
+.po-items-table .th-expiry { width: 9%; }
+.po-items-table .th-subtotal { width: 12%; text-align: right; }
+.po-items-table .th-rm { width: 4%; }
+.po-items-row { border-bottom: 1px solid #f0f2f8; }
+.po-items-row:hover { background: #fafbfe; }
+.po-items-row td { padding: 8px 3px; vertical-align: middle; overflow: hidden; }
+.po-items-row .td-num { text-align: center; }
+.po-items-row .td-rm { text-align: center; }
+.po-items-row .td-subtotal { text-align: right; white-space: normal; word-break: break-word; }
+.po-row-subtotal-label { display: block; font-size: 9.5px; font-weight: 700; color: #9ca3af; letter-spacing: .08em; }
+.po-row-subtotal-amt { display: block; font-size: 15px; font-weight: 800; color: #111827; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.po-items-row .inv-fi,
+.po-items-row select.inv-fi { height: 36px; box-sizing: border-box; }
+.po-items-row .ss-wrap,
+.po-items-row :deep(.ss-trigger) { height: 36px; box-sizing: border-box; display: flex; align-items: center; }
+.po-items-row .td-hsn .inv-fi,
+.po-items-row .td-mrp .inv-fi,
+.po-items-row .td-qty .inv-fi,
+.po-items-row .td-rate .inv-fi,
+.po-items-row .td-disc .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11.5px; }
+.po-items-row .td-uom .inv-fi { width: 100%; box-sizing: border-box; padding: 0 16px 0 6px; font-size: 11.5px; }
+.po-items-row .td-batch, .po-items-row .td-expiry { white-space: normal; }
+.po-items-row .td-expiry span { display: flex; align-items: center; height: 36px; }
+.po-items-row .td-expiry .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11px; }
+.po-items-error-row, .po-items-warn-row { border-bottom: 1px solid #f0f2f8; }
+.po-items-error-row td, .po-items-warn-row td { padding: 0; }
+.po-items-banner-inner {
+  padding: 6px 12px 10px 44px; font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 5px; white-space: normal;
+}
+.po-items-error-row .po-items-banner-inner { color: #dc2626; }
+.po-items-warn-row .po-items-banner-inner { color: #9ca3af; font-weight: 500; }
+
 .po-totals { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-top: 16px; }
 .po-totals-right { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
 .po-total-row { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; color: #374151; padding: 3px 0; }

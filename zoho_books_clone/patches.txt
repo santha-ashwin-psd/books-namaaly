@@ -7,7 +7,10 @@ zoho_books_clone.patches.v1_2.seed_tax_templates_per_company
 zoho_books_clone.patches.v1_3.seed_landed_cost_charge_accounts
 
 [post_model_sync]
-# Reads/writes Item.is_sales_item and Item.is_purchase_item — these are new
-# columns added via the Item DocType JSON, so this patch must run AFTER
-# schema sync creates them, not before (pre_model_sync would hit "Unknown
-# column" since the ALTER TABLE hasn't happened yet).
+# Seeds the "Stock Received But Not Billed" (GR/IR) account for every
+# existing company and back-fills Books Company.default_inventory_account /
+# stock_received_not_billed / default_cogs_account — these are new columns
+# added via books_company.json, so this patch must run AFTER schema sync
+# creates them, not before (pre_model_sync would hit "Unknown column" since
+# the ALTER TABLE hasn't happened yet).
+zoho_books_clone.patches.v1_4.seed_grir_and_inventory_defaults

@@ -406,6 +406,14 @@
                   <input type="number" class="ad-input ad-input--prefixed" v-model="form.standard_buying_rate" min="0" placeholder="0.00"/>
                 </div>
               </div>
+              <div class="ad-field">
+                <label class="ad-label">MRP (₹)</label>
+                <div class="ad-input-prefix-wrap">
+                  <span class="ad-input-prefix">₹</span>
+                  <input type="number" class="ad-input ad-input--prefixed" v-model="form.mrp" min="0" placeholder="0.00"/>
+                </div>
+                <div class="ad-hint" style="margin-top:6px">If left blank, Selling Rate is used as the MRP on invoices.</div>
+              </div>
             </div>
           </div>
 
@@ -673,7 +681,7 @@ const bomOptions      = ref([]);   // Active, submitted BOMs for the item being 
 const form = reactive({
   name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
   stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
-  standard_rate: 0, standard_buying_rate: 0, gst_rate: 18, tax_code: "",
+  standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
   income_account: "", expense_account: "",
   is_sales_item: 1, is_purchase_item: 1,
   is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
@@ -1089,7 +1097,7 @@ function openAdd(presetType) {
   Object.assign(form, {
     name: "", item_code: "", item_name: "", item_group: "", item_type: defaultType,
     stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
-    standard_rate: 0, standard_buying_rate: 0, gst_rate: 18, tax_code: "",
+    standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
     income_account:  defaultAccounts.value.income,
     expense_account: defaultAccounts.value.expense,
     is_stock_item: d.is_stock !== undefined ? d.is_stock : 1,
@@ -1118,7 +1126,7 @@ async function openEdit(row) {
   drawerMode.value = "edit"; drawerTab.value = "basic";
   Object.assign(form, {
     ...row,
-    hsn_code: "", description: "", standard_buying_rate: 0, brand: "",
+    hsn_code: "", description: "", standard_buying_rate: 0, mrp: 0, brand: "",
     tax_code: "", income_account: "", expense_account: "",
     valuation_method: "FIFO", default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
@@ -1132,6 +1140,7 @@ async function openEdit(row) {
       description:          full.description          || "",
       standard_rate:        flt(full.standard_rate),
       standard_buying_rate: flt(full.standard_buying_rate),
+      mrp:                  flt(full.mrp),
       tax_code:             full.tax_code             || "",
       income_account:       full.income_account       || defaultAccounts.value.income,
       expense_account:      full.expense_account      || defaultAccounts.value.expense,
@@ -1214,6 +1223,7 @@ async function saveItem({ close = true } = {}) {
       item_group: form.item_group || "Products", item_type: form.item_type, stock_uom: form.stock_uom,
       hsn_code: form.hsn_code, description: form.description, disabled: form.disabled ? 1 : 0, brand: form.brand || "",
       standard_rate: flt(form.standard_rate), standard_buying_rate: flt(form.standard_buying_rate),
+      mrp: flt(form.mrp),
       tax_code: form.tax_code,
       income_account: form.income_account, expense_account: form.expense_account,
       is_stock_item: form.is_stock_item ? 1 : 0, has_batch_no: form.is_stock_item ? (form.has_batch_no ? 1 : 0) : 0,

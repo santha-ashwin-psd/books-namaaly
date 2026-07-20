@@ -16,7 +16,12 @@ def get_columns():
 
 
 ASSET_TYPES     = ("Asset", "Cash", "Bank", "Receivable", "Stock")
-LIABILITY_TYPES = ("Liability", "Payable", "Tax")
+# "Stock Received But Not Billed" (GR/IR clearing) is a credit-normal
+# liability — goods received but not yet billed. Must be listed here, or it
+# falls outside ASSET+LIABILITY+EQUITY and gets swept into "Net Profit" by
+# the NOT IN %(bs_types)s query below (misclassifying a balance-sheet-
+# permanent liability as a period P&L result).
+LIABILITY_TYPES = ("Liability", "Payable", "Tax", "Stock Received But Not Billed")
 EQUITY_TYPES    = ("Equity",)
 
 

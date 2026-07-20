@@ -67,6 +67,13 @@ export const NAV = [
   { path: "/inventory/batches",             label: "Batch Tracking",   icon: "qr",         module: "inventory"  },
   { path: "/inventory/settings",            label: "Settings",         icon: "gear",       module: "inventory"  },
 
+  // { section: "Assets" },
+  // { path: "/assets",                        label: "Assets",           icon: "box",        module: "inventory"  },
+  // { path: "/assets/asset-category",         label: "Asset Category",   icon: "folder",     module: "inventory"  },
+  // { path: "/assets/department",             label: "Department",       icon: "users",      module: "inventory"  },
+  // { path: "/assets/depreciation-schedule",  label: "Depreciation Schedule", icon: "calendar", module: "inventory"  },
+  // { path: "/assets/maintenance-log",        label: "Maintenance Log",  icon: "gear",       module: "inventory"  },
+
   { section: "Quality" },
   { path: "/quality/inspections",           label: "Inspections",      icon: "shield",     module: "inventory"  },
   { path: "/quality/templates",             label: "QC Templates",     icon: "file",       module: "inventory"  },

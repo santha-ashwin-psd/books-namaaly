@@ -7,7 +7,17 @@ to automatically create Stock Entries that keep inventory in sync with
 invoicing.
 
   Audit-2: Sales Invoice submit  → Material Issue  (stock deducted)
+           GL: DR COGS / CR Inventory (at valuation rate)
   Audit-3: Purchase Invoice submit → Material Receipt (stock added)
+           GL: DR Inventory / CR Stock Received But Not Billed (GR/IR)
+           The Purchase Invoice itself clears GR/IR (DR GRIR / CR AP) for
+           stock items — see accounts.inventory_gl / post_purchase_invoice.
+
+Return documents (Sales/Purchase Invoice with is_return=1) carry negative
+qty and flip the physical direction: a Sales Invoice return restocks via a
+Material Receipt (valued at current moving-average rate); a debit note
+(Purchase Invoice is_return=1) de-stocks via a Material Issue (valued at the
+original purchase rate). See _is_return_doc / _apply_current_valuation_rate.
 
 If an item has no warehouse resolved, or is not a stock item, that row is
 silently skipped so that non-inventory invoices continue to work.  If the
@@ -27,26 +37,38 @@ def on_sales_invoice_submit(doc, method=None):
     checked (direct/cash sale with no Delivery Note). Normally the Delivery Note
     owns the stock movement, so a plain invoice posts no stock — preventing
     double counting.
+
+    Return invoices (is_return=1) carry negative qty and represent goods
+    coming BACK IN — build a Material Receipt instead of an Issue, valued at
+    the item's current moving-average rate (row.rate here is the original
+    selling price, not cost — see _apply_current_valuation_rate).
     """
     if not flt(getattr(doc, "update_stock", 0)):
         return
-    rows = _stock_rows(doc, direction="issue", zero_rate=True)
+    is_return = _is_return_doc(doc)
+    rows = _stock_rows(doc, direction="issue", zero_rate=not is_return)
     if not rows:
         return
 
+    if is_return:
+        _apply_current_valuation_rate(rows)
+        entry_type = "Material Receipt"
+        verb, verb_done = "restock (return)", "restocked"
+    else:
+        entry_type = "Material Issue"
+        verb, verb_done = "deduction", "deducted"
+
     se = _build_stock_entry(
-        entry_type="Material Issue",
+        entry_type=entry_type,
         posting_date=doc.posting_date or today(),
         company=doc.company,
-        remarks=_("Auto stock deduction — Sales Invoice {0}").format(doc.name),
+        remarks=_("Auto stock {0} — Sales Invoice {1}").format(verb, doc.name),
         rows=rows,
         ref_doctype=doc.doctype,
         ref_docname=doc.name,
     )
     frappe.msgprint(
-        _("Stock deducted automatically via {0}.").format(
-            frappe.bold(se.name)
-        ),
+        _("Stock {0} automatically via {1}.").format(verb_done, frappe.bold(se.name)),
         indicator="green",
         alert=True,
     )
@@ -62,26 +84,33 @@ def on_purchase_invoice_submit(doc, method=None):
     Receive stock for a Purchase Invoice ONLY when 'Update Inventory on Submit'
     is checked (direct purchase with no Purchase Receipt). Normally the Purchase
     Receipt owns the stock movement, so a plain bill posts no stock.
+
+    Debit notes (is_return=1) carry negative qty and represent goods going
+    BACK OUT — build a Material Issue instead of a Receipt, valued at the
+    original line rate (the same rate the goods were capitalized at on
+    receipt), so it reverses the exact inventory value that was added.
     """
     if not flt(getattr(doc, "update_stock", 0)):
         return
+    is_return = _is_return_doc(doc)
     rows = _stock_rows(doc, direction="receipt")
     if not rows:
         return
 
+    entry_type = "Material Issue" if is_return else "Material Receipt"
+    verb, verb_done = ("de-stock (return)", "reduced") if is_return else ("receipt", "received")
+
     se = _build_stock_entry(
-        entry_type="Material Receipt",
+        entry_type=entry_type,
         posting_date=doc.posting_date or today(),
         company=doc.company,
-        remarks=_("Auto stock receipt — Purchase Invoice {0}").format(doc.name),
+        remarks=_("Auto stock {0} — Purchase Invoice {1}").format(verb, doc.name),
         rows=rows,
         ref_doctype=doc.doctype,
         ref_docname=doc.name,
     )
     frappe.msgprint(
-        _("Stock received automatically via {0}.").format(
-            frappe.bold(se.name)
-        ),
+        _("Stock {0} automatically via {1}.").format(verb_done, frappe.bold(se.name)),
         indicator="green",
         alert=True,
     )
@@ -160,6 +189,28 @@ def on_purchase_receipt_cancel(doc, method=None):
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def _is_return_doc(doc) -> bool:
+    """True for Sales/Purchase Invoice return documents (Credit/Debit Note style)."""
+    return bool(flt(getattr(doc, "is_return", 0)))
+
+
+def _apply_current_valuation_rate(rows: list[dict]) -> None:
+    """
+    Overwrite each row's basic_rate with the item's current moving-average
+    valuation rate (from Bin).
+
+    Used for return RECEIPTS (e.g. a Sales Invoice return coming back into
+    stock) where row['basic_rate'] would otherwise be the original selling
+    price captured in _stock_rows — wrong for valuing returned stock and for
+    approximating the COGS reversal. This app doesn't lot-track the exact
+    rate booked on the original sale, so this is the same "current average
+    cost" approximation the Profit-wise report already documents and uses.
+    """
+    from zoho_books_clone.inventory.utils import get_valuation_rate
+    for row in rows:
+        row["basic_rate"] = flt(get_valuation_rate(row["item_code"], row["warehouse"]))
+
+
 def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
     """
     Return a list of dicts (one per item row) for items that:
@@ -172,7 +223,12 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
     zero_rate: when True (Delivery Note issue), leave basic_rate at 0 so the
         Stock Entry controller values the issue at FIFO cost (not the selling
         price). Receipts pass the line rate (purchase cost).
+
+    Return documents (doc.is_return=1) carry NEGATIVE qty by design — the
+    physical stock movement uses the magnitude; the caller decides the
+    actual direction (entry_type) by inspecting doc.is_return itself.
     """
+    is_return = _is_return_doc(doc)
     default_warehouse = _default_warehouse(doc.company)
     rows = []
 
@@ -186,6 +242,8 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
         accepted_qty = getattr(row, "accepted_qty", None)
         if accepted_qty is not None and accepted_qty != "":
             qty = flt(accepted_qty)
+        if is_return:
+            qty = abs(qty)
         if not item_code or qty <= 0:
             continue
 

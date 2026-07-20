@@ -14,6 +14,7 @@ class SalesInvoice(Document):
 
     def validate(self):
         self.validate_items()
+        self.validate_batches()
         self.calculate_totals()
         self.set_outstanding_amount()
         self.validate_accounts()
@@ -48,6 +49,66 @@ class SalesInvoice(Document):
             else:
                 item.discount_amount = flt(item.discount_amount)
             item.amount = round(base - item.discount_amount, 2)
+
+    def validate_batches(self):
+        """For batch-tracked items, a Batch No is mandatory and the row's Qty
+        can never exceed that batch's currently available stock (live SLE
+        balance, summed across warehouses) — e.g. Batch B1 has 50 in stock:
+        an invoice line for 40 is fine, 60 is rejected.
+
+        Skipped for return invoices (credit notes): those carry negative qty
+        and put stock back in, so the "don't oversell a batch" check doesn't
+        apply the same way.
+        """
+        if self.is_return:
+            return
+        for item in self.items:
+            if not item.item_code or flt(item.qty) <= 0:
+                continue
+            has_batch_no = frappe.db.get_value("Item", item.item_code, "has_batch_no")
+            if not has_batch_no:
+                item.batch_no = None
+                item.batch_expiry_date = None
+                continue
+
+            if not item.batch_no:
+                frappe.throw(_(
+                    "Row #{0}: {1} is a batch-tracked item — Batch No is required"
+                ).format(item.idx, item.item_name or item.item_code))
+
+            batch = frappe.db.get_value(
+                "Batch", item.batch_no, ["item", "expiry_date", "disabled"], as_dict=True
+            )
+            if not batch:
+                frappe.throw(_(
+                    "Row #{0}: Batch {1} does not exist"
+                ).format(item.idx, item.batch_no))
+            if batch.item and batch.item != item.item_code:
+                frappe.throw(_(
+                    "Row #{0}: Batch {1} belongs to item {2}, not {3}"
+                ).format(item.idx, item.batch_no, batch.item, item.item_code))
+            if batch.disabled:
+                frappe.throw(_(
+                    "Row #{0}: Batch {1} is disabled and cannot be sold"
+                ).format(item.idx, item.batch_no))
+            if batch.expiry_date and self.posting_date and getdate(batch.expiry_date) < getdate(self.posting_date):
+                frappe.throw(_(
+                    "Row #{0}: Batch {1} expired on {2} and cannot be invoiced"
+                ).format(item.idx, item.batch_no, batch.expiry_date))
+
+            item.batch_expiry_date = batch.expiry_date
+
+            available_qty = flt(frappe.db.sql("""
+                SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
+                WHERE item_code = %s AND batch_no = %s AND is_cancelled = 0
+            """, (item.item_code, item.batch_no))[0][0] or 0)
+
+            if flt(item.qty) > available_qty:
+                frappe.throw(_(
+                    "Row #{0}: {1} — Batch {2} exceeds available stock "
+                    "(Available: {3}, Entered: {4})"
+                ).format(item.idx, item.item_name or item.item_code, item.batch_no,
+                         available_qty, flt(item.qty)))
 
     def calculate_totals(self):
         subtotal = sum(flt(i.amount) for i in self.items)

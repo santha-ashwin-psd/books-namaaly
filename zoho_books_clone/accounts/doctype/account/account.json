@@ -91,7 +91,7 @@
    "fieldname": "account_type",
    "fieldtype": "Select",
    "label": "Account Type",
-   "options": "Asset\nLiability\nIncome\nExpense\nEquity\nBank\nCash\nReceivable\nPayable\nTax\nStock\nStock Adjustment\nCost of Goods Sold\nWork In Progress\nTemporary",
+   "options": "Asset\nLiability\nIncome\nExpense\nEquity\nBank\nCash\nReceivable\nPayable\nTax\nStock\nStock Adjustment\nStock Received But Not Billed\nCost of Goods Sold\nWork In Progress\nTemporary",
    "reqd": 1,
    "in_list_view": 1,
    "idx": 3,

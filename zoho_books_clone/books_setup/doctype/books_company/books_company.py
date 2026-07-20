@@ -45,6 +45,35 @@ class BooksCompany(Document):
             if not self.smtp_from_email:
                 self.smtp_from_email = self.smtp_login
 
+        self._validate_inventory_accounts()
+
+    def _validate_inventory_accounts(self):
+        """
+        Guard the perpetual-inventory default accounts: wrong type/company
+        here would silently misroute every purchase/receipt/return GL entry
+        for this company, with nothing downstream re-checking it.
+        """
+        checks = (
+            ("default_inventory_account", ["Stock"]),
+            ("stock_received_not_billed", ["Stock Received But Not Billed"]),
+            ("default_cogs_account", ["Cost of Goods Sold", "Expense"]),
+        )
+        for field, expected_types in checks:
+            account = self.get(field)
+            if not account:
+                continue
+            acc = frappe.db.get_value("Account", account, ["account_type", "company"], as_dict=True)
+            if not acc:
+                continue
+            if acc.company and acc.company != self.company_name:
+                frappe.throw(_(
+                    "{0}: account {1} belongs to company {2}, not {3}."
+                ).format(self.meta.get_label(field), account, acc.company, self.company_name))
+            if acc.account_type not in expected_types:
+                frappe.throw(_(
+                    "{0}: account {1} must be of type {2}, found {3}."
+                ).format(self.meta.get_label(field), account, "/".join(expected_types), acc.account_type or "None"))
+
     def after_insert(self):
         """Seed Chart of Accounts + default Fiscal Year for this company.
 
@@ -55,6 +84,7 @@ class BooksCompany(Document):
         try:
             from zoho_books_clone.books_setup.bootstrap import bootstrap_company_data
             bootstrap_company_data(self.company_name, self._fy_start())
+            self._set_inventory_account_defaults()
         except Exception as exc:
             # Log but never block the insert — a missing FY is recoverable;
             # a rolled-back company creation is not.
@@ -63,6 +93,37 @@ class BooksCompany(Document):
                 f"'{self.company_name}': {exc}",
                 "Books Bootstrap",
             )
+
+    def _set_inventory_account_defaults(self):
+        """Point inventory account fields at the freshly seeded CoA leaves."""
+        mapping = {
+            "default_inventory_account": ("Stock In Hand", "Stock"),
+            "stock_received_not_billed": (
+                "Stock Received But Not Billed",
+                "Stock Received But Not Billed",
+            ),
+            "default_cogs_account": ("Cost of Goods Sold", "Cost of Goods Sold"),
+        }
+        updates = {}
+        for field, (acct_name, acct_type) in mapping.items():
+            if self.get(field):
+                continue
+            acct = (
+                frappe.db.get_value(
+                    "Account",
+                    {"account_name": acct_name, "company": self.company_name, "is_group": 0},
+                    "name",
+                )
+                or frappe.db.get_value(
+                    "Account",
+                    {"account_type": acct_type, "company": self.company_name, "is_group": 0},
+                    "name",
+                )
+            )
+            if acct:
+                updates[field] = acct
+        if updates:
+            self.db_set(updates, update_modified=False)
 
     def _fy_start(self) -> str:
         """Return the MM-DD fiscal year start string derived from fiscal_year_start_month."""

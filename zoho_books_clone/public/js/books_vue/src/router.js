@@ -17,6 +17,12 @@ import InventoryItemGroups  from "./pages/InventoryItemGroups.vue";
 import InventoryWarehouses  from "./pages/InventoryWarehouses.vue";
 import InventoryBatches     from "./pages/InventoryBatches.vue";
 import InventorySettings    from "./pages/InventorySettings.vue";
+import Asset                from "./pages/Asset.vue";
+import AssetDetails         from "./pages/AssetDetails.vue";
+import AssetCategory        from "./pages/AssetCategory.vue";
+import Department           from "./pages/Department.vue";
+import DepreciationSchedule from "./pages/DepreciationSchedule.vue";
+import MaintenanceLog       from "./pages/MaintenanceLog.vue";
 import OpeningStockBatchEntry from "./pages/OpeningStockBatchEntry.vue";
 import SettingsProfile       from "./pages/SettingsProfile.vue";
 import SettingsCompany       from "./pages/SettingsCompany.vue";
@@ -174,6 +180,42 @@ const routes = [
     path: "/inventory/settings",
     name: "inventory-settings",
     component: InventorySettings,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets",
+    name: "assets-assets",
+    component: Asset,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/:id",
+    name: "asset-details",
+    component: AssetDetails,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/asset-category",
+    name: "assets-asset-category",
+    component: AssetCategory,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/department",
+    name: "assets-department",
+    component: Department,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/depreciation-schedule",
+    name: "assets-depreciation-schedule",
+    component: DepreciationSchedule,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/maintenance-log",
+    name: "assets-maintenance-log",
+    component: MaintenanceLog,
     meta: { module: "inventory" },
   },
   {

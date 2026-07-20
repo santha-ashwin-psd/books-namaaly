@@ -526,6 +526,77 @@
       <div v-else class="empty-msg">Run the report to see results.</div>
     </div>
 
+    <!-- Stock vs GL Reconciliation -->
+    <div v-if="activeReport === 'stockgl'" class="books-card report-card">
+      <div class="books-card-title">Stock Ledger vs Inventory GL</div>
+      <div style="font-size:11.5px;color:#94a3b8;margin-bottom:12px">
+        Compares the operational Stock Ledger (Bin valuation) against the financial General Ledger
+        (Inventory Asset account balance). These are two independently-maintained ledgers — this
+        check is the tripwire that catches drift immediately instead of at year-end audit.
+      </div>
+      <template v-if="stockGlLoading"><div class="loading-shimmer" style="height:160px;border-radius:8px"></div></template>
+      <template v-else-if="stockGl">
+        <div class="bs-balance-check" :class="stockGl.is_reconciled ? 'bs-ok' : 'bs-bad'">
+          <span class="bs-bc-icon">{{ stockGl.is_reconciled ? '✓' : '✕' }}</span>
+          Bin Stock Value = Inventory GL Balance
+          <span class="bs-bc-eq">{{ fmt(stockGl.total_bin_value) }} vs {{ fmt(stockGl.total_gl_balance) }}
+            <template v-if="!stockGl.is_reconciled"> (diff {{ fmt(stockGl.total_difference) }})</template>
+          </span>
+        </div>
+
+        <div v-if="stockGl.grir_account" style="margin-top:12px;font-size:12.5px;color:#64748b">
+          Stock Received But Not Billed (GR/IR): <span class="mono-sm fw-600">{{ fmt(stockGl.grir_balance) }}</span>
+          <span style="color:#94a3b8"> — goods received, awaiting bill. Nonzero is normal.</span>
+        </div>
+
+        <table v-if="stockGl.accounts?.length" class="books-table aging-table" style="width:100%;margin-top:16px">
+          <thead>
+            <tr>
+              <th>Inventory Account</th>
+              <th class="ta-r">Bin Stock Value</th>
+              <th class="ta-r">GL Balance</th>
+              <th class="ta-r">Difference</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in stockGl.accounts" :key="row.account">
+              <td>{{ row.account }}</td>
+              <td class="ta-r mono-sm">{{ fmt(row.bin_stock_value) }}</td>
+              <td class="ta-r mono-sm">{{ fmt(row.gl_balance) }}</td>
+              <td class="ta-r mono-sm" :class="row.is_reconciled ? '' : 'text-danger fw-700'">{{ fmt(row.difference) }}</td>
+              <td><span class="badge" :class="row.is_reconciled ? 'badge-blue' : 'badge-danger'">{{ row.is_reconciled ? 'OK' : 'DRIFT' }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-if="stockGl.items?.length" style="margin-top:20px">
+          <div class="books-card-title" style="font-size:13px;margin-bottom:10px">Item-level Bin Detail</div>
+          <table class="books-table aging-table" style="width:100%">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Warehouse</th>
+                <th class="ta-r">Qty</th>
+                <th class="ta-r">Valuation Rate</th>
+                <th class="ta-r">Stock Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in stockGl.items" :key="row.item_code + row.warehouse">
+                <td>{{ row.item_name || row.item_code }}</td>
+                <td>{{ row.warehouse }}</td>
+                <td class="ta-r mono-sm">{{ fmtN(row.actual_qty) }}</td>
+                <td class="ta-r mono-sm">{{ fmtAmt(row.valuation_rate) }}</td>
+                <td class="ta-r mono-sm">{{ fmtAmt(row.stock_value) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <div v-else class="empty-msg">{{stockGlRan ? 'No stock on hand for this company.' : 'Run the report to see results.'}}</div>
+    </div>
+
   </div>
 </template>
 
@@ -568,6 +639,10 @@ const customersRan     = ref(false);
 const profitReport   = ref([]);
 const profitLoading  = ref(false);
 const profitRan      = ref(false);
+
+const stockGl        = ref(null);
+const stockGlLoading = ref(false);
+const stockGlRan     = ref(false);
 
 const bsBalanced = computed(() => {
   if (!bs.value) return false;
@@ -630,6 +705,12 @@ async function runReport() {
     try { profitReport.value = await apiGET("zoho_books_clone.db.queries.get_profit_wise_report", args) || []; }
     catch { profitReport.value = []; }
     profitLoading.value = false;
+  }
+  if (activeReport.value === "stockgl") {
+    stockGlLoading.value = true; stockGlRan.value = true;
+    try { stockGl.value = await apiGET("zoho_books_clone.db.queries.get_inventory_reconciliation", { company }) || null; }
+    catch { stockGl.value = null; }
+    stockGlLoading.value = false;
   }
 }
 
@@ -709,6 +790,7 @@ const reports = [
   { key: "ar",  label: "AR Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
   { key: "ap",  label: "AP Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>` },
   { key: "tb",  label: "Trial Balance",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },
+  { key: "stockgl", label: "Stock vs GL", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>` },
 ];
 </script>
 
@@ -822,8 +904,9 @@ const reports = [
 .empty-msg { text-align: center; padding: 32px; color: var(--text-3); font-size: 13px; }
 
 .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
-.badge-blue  { background: #E7F5FF; color: #1971C2; }
-.badge-muted { background: #F1F3F5; color: #868E96; }
+.badge-blue   { background: #E7F5FF; color: #1971C2; }
+.badge-muted  { background: #F1F3F5; color: #868E96; }
+.badge-danger { background: #FFF5F5; color: #C92A2A; }
 
 @media (max-width: 768px) {
   .date-range-bar { padding: 12px 14px; gap: 8px; }

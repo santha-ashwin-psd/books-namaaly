@@ -339,6 +339,9 @@
                 <div class="iv-field"><label class="nim-label">Selling Rate (₹)</label><input type="number" class="nim-input" v-model.number="form.standard_rate" min="0"/></div>
                 <div class="iv-field"><label class="nim-label">Buying Rate (₹)</label><input type="number" class="nim-input" v-model.number="form.standard_buying_rate" min="0"/></div>
               </div>
+              <div class="iv-field"><label class="nim-label">MRP (₹)</label><input type="number" class="nim-input" v-model.number="form.mrp" min="0"/>
+                <div class="text-muted" style="font-size:11.5px;margin-top:5px">If left blank, Selling Rate is used as the MRP on invoices.</div>
+              </div>
               <div class="iv-field"><label class="nim-label">Tax Template <span style="color:#dc2626">*</span></label>
                 <select class="nim-input" v-model="form.tax_code">
                   <option value="">— Select —</option>
@@ -434,7 +437,7 @@ const expenseAccounts = ref([]);
 const form = reactive({
   name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
   stock_uom: "Nos", hsn_code: "", description: "", disabled: 0,
-  standard_rate: 0, standard_buying_rate: 0, tax_code: "",
+  standard_rate: 0, standard_buying_rate: 0, mrp: 0, tax_code: "",
   income_account: "", expense_account: "",
   is_stock_item: 1, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0,
@@ -483,6 +486,7 @@ async function openEdit() {
     disabled: item.value.disabled ? 1 : 0,
     standard_rate: flt(item.value.standard_rate),
     standard_buying_rate: flt(item.value.standard_buying_rate),
+    mrp: flt(item.value.mrp),
     tax_code: item.value.tax_code || "",
     income_account: item.value.income_account || "",
     expense_account: item.value.expense_account || "",
@@ -541,6 +545,7 @@ async function saveItem() {
       stock_uom: form.stock_uom, hsn_code: form.hsn_code,
       description: form.description, disabled: form.disabled,
       standard_rate: flt(form.standard_rate), standard_buying_rate: flt(form.standard_buying_rate),
+      mrp: flt(form.mrp),
       tax_code: form.tax_code,
       income_account: form.income_account, expense_account: form.expense_account,
       is_stock_item: form.is_stock_item, valuation_method: form.valuation_method,

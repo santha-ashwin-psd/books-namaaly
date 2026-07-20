@@ -64,9 +64,58 @@ class CreditNote(Document):
         if not self.grand_total:
             frappe.throw(_("Credit Note has zero value — cannot submit"))
         self._make_gl_entries()
+        self._maybe_restock_items()
         # If this CN is linked to an invoice, restore outstanding on that invoice
         if self.return_against:
             self._update_source_invoice_outstanding()
+
+    def _maybe_restock_items(self):
+        """
+        Physically restock returned goods when 'Restock Returned Items' is
+        checked — a plain Credit Note only reverses Income/AR and, before
+        this, never touched stock or cost at all (a customer return that
+        never restored inventory or reversed COGS).
+
+        Builds a Material Receipt Stock Entry (reusing stock_link's helpers)
+        valued at each item's current moving-average rate — this app doesn't
+        lot-track the exact COGS rate booked on the original sale, so this
+        is the same approximation the Sales Invoice return path and the
+        Profit-wise report already use.
+
+        Deliberately does NOT post a separate DR Inventory / CR COGS entry:
+        the Stock Entry's own GL posting already debits Inventory and
+        credits Stock Adjustment (this reference doctype isn't a purchase
+        voucher, so inventory_gl.is_purchase_stock_receipt is False). Adding
+        a second GL leg here would double-count the Inventory debit.
+        get_profit_and_loss already nets Stock Adjustment against
+        Income/Expense/COGS the same way COGS would be, so the P&L bottom
+        line is unaffected by which of the two accounts is used.
+        """
+        if not flt(getattr(self, "restock_items", 0)):
+            return
+        from zoho_books_clone.inventory.stock_link import (
+            _apply_current_valuation_rate,
+            _build_stock_entry,
+            _stock_rows,
+        )
+        rows = _stock_rows(self, direction="issue", zero_rate=False)
+        if not rows:
+            return
+        _apply_current_valuation_rate(rows)
+        se = _build_stock_entry(
+            entry_type="Material Receipt",
+            posting_date=self.posting_date or today(),
+            company=self.company,
+            remarks=_("Auto stock restock — Credit Note {0}").format(self.name),
+            rows=rows,
+            ref_doctype=self.doctype,
+            ref_docname=self.name,
+        )
+        frappe.msgprint(
+            _("Stock restocked automatically via {0}.").format(frappe.bold(se.name)),
+            indicator="green",
+            alert=True,
+        )
 
     def _make_gl_entries(self):
         if not self.debit_to:
@@ -148,6 +197,8 @@ class CreditNote(Document):
             [{"voucher_type": self.doctype, "voucher_no": self.name}],
             cancel=True,
         )
+        from zoho_books_clone.inventory.stock_link import _cancel_linked_entries
+        _cancel_linked_entries(self.doctype, self.name)
         # Undo the outstanding adjustment on the source invoice
         if self.return_against:
             si = frappe.db.get_value(

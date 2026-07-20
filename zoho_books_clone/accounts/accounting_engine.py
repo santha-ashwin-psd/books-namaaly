@@ -127,6 +127,11 @@ def post_sales_invoice(doc) -> None:
     """
     DR Receivable / CR Income (+ tax accounts) on Sales Invoice submit.
 
+    COGS is NOT posted here. Stock leaving the warehouse (Delivery Note or
+    Sales Invoice with Update Inventory) creates a Material Issue Stock Entry
+    that posts DR COGS / CR Inventory at valuation rate. Posting COGS again on
+    this invoice would double-count cost of sales.
+
     Return invoices (is_return=1, used for Credit Notes) carry negative
     qty/rate, so grand_total/net_total/tax_amount come out negative here.
     A ledger must never store a negative debit or credit — normalize by
@@ -191,53 +196,78 @@ def post_sales_invoice(doc) -> None:
 
 def post_purchase_invoice(doc) -> None:
     """
-    DR Expense (net_total) + DR ITC Tax Accounts / CR Payable (grand_total).
+    Perpetual inventory (Model B — GR/IR) purchase posting:
 
-    Correctly separates:
-      - Net purchase cost   → Expense account (debit = net_total)
-      - Input Tax Credit    → Each tax line's account_head (debit = tax_amount)
-      - Total payable       → AP account (credit = grand_total)
+      Stock items     → DR Stock Received But Not Billed (clears receipt credit)
+      Non-stock items → DR Expense Account
+      Input Tax Credit → DR each tax line's account_head
+      Total payable    → CR Accounts Payable (grand_total)
 
-    This ensures GST ITC is tracked per tax type in the GL, enabling accurate
-    GSTR-2A reconciliation via get_itc_ledger().
+    Stock quantity/value is capitalized on the Material Receipt Stock Entry
+    (DR Inventory / CR GRIR). This invoice only clears GRIR for stock lines —
+    it must NOT debit Inventory again, or stock would be double-capitalized.
     """
-    _require(doc, "credit_to",       "Credit To (Accounts Payable) account")
-    _require(doc, "expense_account", "Expense Account")
+    from zoho_books_clone.accounts.inventory_gl import (
+        build_purchase_invoice_debit_lines,
+        classify_purchase_item_amounts,
+        get_grir_account,
+    )
+
+    _require(doc, "credit_to", "Credit To (Accounts Payable) account")
+
+    split = classify_purchase_item_amounts(doc)
+    # Fallback when the bill has no item rows with amounts: treat full net as expense
+    stock_total = split["stock_total"]
+    expense_total = split["expense_total"]
+    if not stock_total and not expense_total:
+        expense_total = flt(doc.net_total)
+        split["has_expense"] = expense_total > 0
+
+    if split["has_expense"]:
+        _require(doc, "expense_account", "Expense Account")
+
+    if split.get("unconfirmed_stock_items"):
+        frappe.msgprint(
+            _(
+                "{0}: stock item(s) {1} were posted to Expense, not Inventory — "
+                "no Purchase Receipt or 'Update Stock' was found to confirm the "
+                "goods were actually received. Capitalize via a Purchase Receipt "
+                "or check 'Update Stock' on this bill to record them as inventory."
+            ).format(doc.name, ", ".join(sorted(set(split["unconfirmed_stock_items"])))),
+            indicator="orange",
+            alert=True,
+        )
 
     net_total   = flt(doc.net_total)
     grand_total = flt(doc.grand_total)
     total_tax   = flt(doc.total_tax) if hasattr(doc, "total_tax") else (grand_total - net_total)
 
-    gl_map = [
-        # DR Expense account for net purchase cost (excluding tax)
-        {
-            "account":      doc.expense_account,
-            "debit":        net_total,
-            "credit":       0,
-            "voucher_type": doc.doctype,
-            "voucher_no":   doc.name,
-            "posting_date": doc.posting_date,
-            "company":      doc.company,
-            "fiscal_year":  doc.fiscal_year or "",
-            "cost_center":  doc.cost_center or "",
-            "remarks":      f"Purchase cost (net) — Bill {doc.name}",
-        },
-        # CR Payable for full amount owed to supplier
-        {
-            "account":      doc.credit_to,
-            "debit":        0,
-            "credit":       grand_total,
-            "voucher_type": doc.doctype,
-            "voucher_no":   doc.name,
-            "posting_date": doc.posting_date,
-            "party_type":   "Supplier",
-            "party":        doc.supplier,
-            "company":      doc.company,
-            "fiscal_year":  doc.fiscal_year or "",
-            "cost_center":  doc.cost_center or "",
-            "remarks":      f"Payable to {doc.supplier} — Bill {doc.name}",
-        },
-    ]
+    grir_account = get_grir_account(doc.company) if stock_total else None
+    debit_lines = build_purchase_invoice_debit_lines(
+        doc,
+        stock_total=stock_total,
+        expense_total=expense_total,
+        grir_account=grir_account,
+        expense_account=getattr(doc, "expense_account", None),
+    )
+    if not debit_lines:
+        frappe.throw(_("Purchase Invoice {0} has no net amount to post").format(doc.name))
+
+    gl_map = list(debit_lines)
+    gl_map.append({
+        "account":      doc.credit_to,
+        "debit":        0,
+        "credit":       grand_total,
+        "voucher_type": doc.doctype,
+        "voucher_no":   doc.name,
+        "posting_date": doc.posting_date,
+        "party_type":   "Supplier",
+        "party":        doc.supplier,
+        "company":      doc.company,
+        "fiscal_year":  doc.fiscal_year or "",
+        "cost_center":  doc.cost_center or "",
+        "remarks":      f"Payable to {doc.supplier} — Bill {doc.name}",
+    })
 
     # Separate TDS (deduction) lines from ITC (addition) lines
     tds_total = flt(0)
@@ -246,11 +276,10 @@ def post_purchase_invoice(doc) -> None:
             tds_total += abs(flt(tax.tax_amount))
 
     # grand_total already reflects TDS deduction (vendor receives net).
-    # Balance: CR AP (grand_total) + CR TDS Payable (tds_total) = DR Expense + DR ITC.
+    # Balance: CR AP (grand_total) + CR TDS Payable (tds_total) = DR cost legs + DR ITC.
     if tds_total > 0:
         tds_payable_acct = _get_tds_payable(doc.company)
         if tds_payable_acct:
-            # CR TDS Payable — withheld amount goes to government; AP stays at grand_total (net)
             gl_map.append({
                 "account":      tds_payable_acct,
                 "debit":        0,
@@ -264,7 +293,6 @@ def post_purchase_invoice(doc) -> None:
                 "remarks":      f"TDS withheld — Bill {doc.name}",
             })
         else:
-            # No TDS Payable account — gross up AP so GL stays balanced
             for entry in gl_map:
                 if entry["account"] == doc.credit_to:
                     entry["credit"] = round(grand_total + tds_total, 2)
@@ -274,7 +302,7 @@ def post_purchase_invoice(doc) -> None:
     tax_lines_posted = flt(0)
     for tax in (doc.taxes or []):
         if _is_tds_line(tax):
-            continue  # TDS handled above via TDS Payable, not as ITC debit
+            continue
 
         tax_amount = flt(tax.tax_amount)
         if not tax_amount:
@@ -282,7 +310,6 @@ def post_purchase_invoice(doc) -> None:
 
         account = tax.account_head
         if not account:
-            # No specific account — fall into the expense line (already included in net fallback)
             continue
 
         gl_map.append({
@@ -299,14 +326,18 @@ def post_purchase_invoice(doc) -> None:
         })
         tax_lines_posted += tax_amount
 
-    # If no tax lines had account_heads, the tax was already included in the
-    # expense debit via grand_total fallback. We need to adjust: swap net_total
-    # debit back to grand_total so the entry remains balanced.
-    non_tds_tax = total_tax + tds_total  # total_tax already has TDS as negative; add back abs to get non-TDS portion
+    # If no tax lines had account_heads, fold non-TDS tax into the primary cost debit
+    # (prefer expense leg; else GRIR) so the entry remains balanced.
+    non_tds_tax = total_tax + tds_total
     if not tax_lines_posted and non_tds_tax:
+        fold_account = (
+            getattr(doc, "expense_account", None)
+            if expense_total
+            else grir_account
+        )
         for entry in gl_map:
-            if entry["account"] == doc.expense_account:
-                entry["debit"] = net_total + non_tds_tax
+            if fold_account and entry["account"] == fold_account and entry.get("debit"):
+                entry["debit"] = round(flt(entry["debit"]) + non_tds_tax, 2)
                 entry["remarks"] = f"Purchase cost (gross, no ITC accounts) — Bill {doc.name}"
                 break
 
@@ -317,9 +348,11 @@ def post_purchase_invoice(doc) -> None:
 
 def post_debit_note(doc, return_type: str = "expense") -> None:
     """
-    Post GL for a Debit Note (Purchase Invoice with is_return=1).
-      Goods Returned → DR AP / CR Inventory  (stock leaves, liability reduces)
-      Overcharged etc → DR AP / CR Expense   (cost is reversed)
+    Post GL for a Debit Note (Purchase Invoice with is_return=1), split PER
+    LINE by stock vs non-stock (see inventory_gl.classify_debit_note_item_amounts)
+    instead of forcing the whole document into one bucket:
+      Stock lines    → DR AP / CR Inventory  (stock leaves, liability reduces)
+      Non-stock lines → DR AP / CR Expense   (cost is reversed)
     Tax lines with an account_head also reverse the ITC taken on the original
     bill (CR the input-tax account), so the payable reduction stays tax-inclusive.
 
@@ -327,7 +360,15 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
     are negative — post their absolute values on the reversing sides. The DN
     must sit as a DEBIT balance on AP (see apply_debit_note_to_bill), so the
     amounts here have to be positive.
+
+    The legacy `return_type` param is kept only as a fallback for the rare
+    case the per-line split resolves to nothing (e.g. no item rows).
     """
+    from zoho_books_clone.accounts.inventory_gl import (
+        classify_debit_note_item_amounts,
+        get_inventory_account,
+    )
+
     ap_account = getattr(doc, "credit_to", None) or _acct_by_type(doc.company, "Payable")
     if not ap_account:
         frappe.log_error(
@@ -336,25 +377,18 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
         )
         return
 
-    if return_type == "inventory":
-        cr_account = _acct_by_type(doc.company, "Stock")
-        cr_label = "Inventory"
-    else:
-        cr_account = (
-            getattr(doc, "expense_account", None)
-            or _acct_by_type(doc.company, "Expense")
-        )
-        cr_label = "Expense"
-
-    if not cr_account:
-        frappe.log_error(
-            f"Debit Note {doc.name}: no {cr_label} account found. GL skipped.",
-            "Debit Note GL"
-        )
-        return
-
     amount = abs(flt(doc.grand_total))
     fy = getattr(doc, "fiscal_year", "") or ""
+
+    split = classify_debit_note_item_amounts(doc)
+    stock_total = split["stock_total"]
+    expense_total = split["expense_total"]
+    if not stock_total and not expense_total:
+        # No item-level amounts resolved — fall back to the legacy whole-doc flag.
+        if return_type == "inventory":
+            stock_total = amount
+        else:
+            expense_total = amount
 
     gl_map = [
         {
@@ -392,17 +426,60 @@ def post_debit_note(doc, return_type: str = "expense") -> None:
         })
         tax_reversed += tax_amount
 
-    gl_map.append({
-        "account":      cr_account,
-        "debit":        0,
-        "credit":       round(amount - tax_reversed, 2),
-        "voucher_type": doc.doctype,
-        "voucher_no":   doc.name,
-        "posting_date": doc.posting_date,
-        "company":      doc.company,
-        "fiscal_year":  fy,
-        "remarks":      f"Debit Note — {cr_label} reversal — {doc.name}",
-    })
+    # Fold any rounding/leftover-tax difference into whichever cost bucket is
+    # non-zero so the entry always balances exactly against (amount - tax_reversed).
+    remainder = round(amount - tax_reversed, 2)
+    cost_total = round(stock_total + expense_total, 2)
+    diff = round(remainder - cost_total, 2)
+    if diff:
+        if expense_total or not stock_total:
+            expense_total = round(expense_total + diff, 2)
+        else:
+            stock_total = round(stock_total + diff, 2)
+
+    if flt(stock_total):
+        inventory_account = get_inventory_account(doc.company) or _acct_by_type(doc.company, "Stock")
+        if not inventory_account:
+            frappe.log_error(
+                f"Debit Note {doc.name}: no Inventory account found. GL skipped.",
+                "Debit Note GL"
+            )
+            return
+        gl_map.append({
+            "account":      inventory_account,
+            "debit":        0,
+            "credit":       round(stock_total, 2),
+            "voucher_type": doc.doctype,
+            "voucher_no":   doc.name,
+            "posting_date": doc.posting_date,
+            "company":      doc.company,
+            "fiscal_year":  fy,
+            "remarks":      f"Debit Note — Inventory reversal — {doc.name}",
+        })
+
+    if flt(expense_total):
+        expense_account = (
+            getattr(doc, "expense_account", None)
+            or _acct_by_type(doc.company, "Expense")
+        )
+        if not expense_account:
+            frappe.log_error(
+                f"Debit Note {doc.name}: no Expense account found. GL skipped.",
+                "Debit Note GL"
+            )
+            return
+        gl_map.append({
+            "account":      expense_account,
+            "debit":        0,
+            "credit":       round(expense_total, 2),
+            "voucher_type": doc.doctype,
+            "voucher_no":   doc.name,
+            "posting_date": doc.posting_date,
+            "company":      doc.company,
+            "fiscal_year":  fy,
+            "remarks":      f"Debit Note — Expense reversal — {doc.name}",
+        })
+
     make_gl_entries(gl_map)
 
 

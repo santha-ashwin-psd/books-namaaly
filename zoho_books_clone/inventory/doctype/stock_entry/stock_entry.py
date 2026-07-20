@@ -413,7 +413,8 @@ class StockEntry(Document):
         """
         Audit-4: Post GL entries so inventory movements reflect in accounting.
         Material Issue:    DR COGS / CR Inventory Asset   (stock leaves)
-        Material Receipt:  DR Inventory Asset / CR Stock Adjustment  (stock arrives)
+        Material Receipt:  DR Inventory Asset / CR GRIR (purchase-linked)
+                           or CR Stock Adjustment (manual / opening)
         Material Transfer: no net GL impact (value stays in inventory).
         Manufacture:       DR Work In Progress / CR Inventory Asset  (raw materials consumed)
                             DR Inventory Asset / CR Work In Progress  (FG + scrap received)
@@ -429,7 +430,15 @@ class StockEntry(Document):
         ):
             return
 
-        inventory_account = self._get_account_by_type("Stock")
+        from zoho_books_clone.accounts.inventory_gl import (
+            get_cogs_account,
+            get_grir_account,
+            get_inventory_account,
+            get_stock_adjustment_account,
+            is_purchase_stock_receipt,
+        )
+
+        inventory_account = get_inventory_account(self.company) or self._get_account_by_type("Stock")
         if not inventory_account:
             frappe.log_error(
                 f"Stock Entry {self.name}: no Stock-type account found for company "
@@ -440,11 +449,7 @@ class StockEntry(Document):
 
         if self.stock_entry_type == "Material Issue":
             # Stock leaving — debit COGS, credit Inventory
-            # Try: "Cost of Goods Sold" → "Expense" → skip with log
-            cogs_account = (
-                self._get_account_by_type("Cost of Goods Sold")
-                or self._get_account_by_type("Expense")
-            )
+            cogs_account = get_cogs_account(self.company)
             if not cogs_account:
                 frappe.log_error(
                     f"Stock Entry {self.name}: no COGS or Expense account found for company "
@@ -643,13 +648,38 @@ class StockEntry(Document):
                 return
         else:
             # Material Receipt / Stock Adjustment — debit Inventory, credit the
-            # contra. Honor a user-chosen adjustment account when provided.
-            adj_account = (
-                getattr(self, "adjustment_account", None)
-                or self._get_account_by_type("Stock Adjustment")
-                or self._get_account_by_type("Temporary")
-                or inventory_account   # fallback: self-balancing on same account
+            # contra.
+            #
+            # Purchase-linked receipts (PR / PI update_stock) credit GR/IR so the
+            # later Purchase Invoice can clear that liability instead of
+            # expensing the goods. Manual / opening receipts still use Stock
+            # Adjustment (or a user-chosen adjustment_account).
+            use_grir = (
+                self.stock_entry_type == "Material Receipt"
+                and is_purchase_stock_receipt(getattr(self, "reference_doctype", None))
             )
+            if use_grir:
+                adj_account = get_grir_account(self.company)
+                if not adj_account:
+                    frappe.log_error(
+                        f"Stock Entry {self.name}: purchase receipt has no GR/IR account "
+                        f"for company '{self.company}'. Falling back to Stock Adjustment.",
+                        "Inventory GL Posting",
+                    )
+                    adj_account = (
+                        getattr(self, "adjustment_account", None)
+                        or get_stock_adjustment_account(self.company)
+                        or inventory_account
+                    )
+                contra_remarks = f"Stock received not billed (GR/IR) — {self.name}"
+            else:
+                adj_account = (
+                    getattr(self, "adjustment_account", None)
+                    or get_stock_adjustment_account(self.company)
+                    or inventory_account
+                )
+                contra_remarks = f"Stock received — {self.name}"
+
             gl_map = [
                 {
                     "account":      inventory_account,
@@ -669,7 +699,7 @@ class StockEntry(Document):
                     "voucher_no":   self.name,
                     "posting_date": self.posting_date,
                     "company":      self.company,
-                    "remarks":      f"Stock received — {self.name}",
+                    "remarks":      contra_remarks,
                 },
             ]
 

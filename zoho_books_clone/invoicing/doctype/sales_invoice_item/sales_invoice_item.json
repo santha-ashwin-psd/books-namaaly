@@ -17,7 +17,9 @@
   "tax_code",
   "hsn_code",
   "discount_percentage",
-  "discount_amount"
+  "discount_amount",
+  "batch_no",
+  "batch_expiry_date"
  ],
  "fields": [
   {
@@ -101,6 +103,22 @@
    "fieldtype": "Currency",
    "label": "Discount Amount",
    "read_only": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "in_list_view": 1,
+   "description": "Required for batch-tracked items. Qty sold from this row cannot exceed the batch's currently available stock."
+  },
+  {
+   "fieldname": "batch_expiry_date",
+   "fieldtype": "Date",
+   "label": "Batch Expiry Date",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Auto-filled from the selected Batch."
   },
   {
    "fieldname": "quality_inspection",
