@@ -1180,6 +1180,10 @@ async function openEdit(b) {
         tax_code: i.tax_code || "", expense_account: i.expense_account || "", collapsed: false,
         has_batch_no: 0, batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "", batchOptions: [], _batchQty: null,
       }));
+      // Recompute discount_amount/amount from qty, rate & discount_percentage
+      // rather than trusting the stored amount as-is — keeps the edit form
+      // in sync even if the saved doc's amount predates a discount fix.
+      lines.value.forEach(calcLine);
       // Resolve has_batch_no per item so the Batch No field shows for
       // batch-tracked items already on this draft bill.
       const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
@@ -1461,6 +1465,9 @@ async function copyLastItems() {
         tax_code: it.tax_code || "", expense_account: it.expense_account || "",
         has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null,
       }));
+      // Recompute amount from qty/rate/discount so copied rows reflect any
+      // discount% the source bill had, instead of the pre-discount base.
+      lines.value.forEach(calcLine);
       // get_party_last_items() returns whatever the source bill had saved for
       // tax_code, but that can be stale (template renamed/disabled since, or
       // the source line simply never had one). Re-pull each item's *current*

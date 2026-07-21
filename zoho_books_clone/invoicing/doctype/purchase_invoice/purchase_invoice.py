@@ -16,7 +16,13 @@ class PurchaseInvoice(Document):
         if not self.items:
             frappe.throw(_("Please add at least one item"))
         for item in self.items:
-            item.amount = round(flt(item.qty) * flt(item.rate), 2)
+            base = round(flt(item.qty) * flt(item.rate), 2)
+            item.discount_percentage = flt(item.discount_percentage)
+            if item.discount_percentage:
+                item.discount_amount = round(base * item.discount_percentage / 100, 2)
+            else:
+                item.discount_amount = flt(item.discount_amount)
+            item.amount = round(base - item.discount_amount, 2)
         self.calculate_totals()
         self.set_outstanding_amount()
         self.validate_accounts()
@@ -28,7 +34,7 @@ class PurchaseInvoice(Document):
                 self.fiscal_year = ""
 
     def calculate_totals(self):
-        net = sum(flt(i.qty) * flt(i.rate) for i in self.items)
+        net = sum(flt(i.amount) for i in self.items)
         for tax in (self.taxes or []):
             if flt(tax.rate) and not flt(tax.tax_amount):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
