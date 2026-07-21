@@ -14,3 +14,9 @@ zoho_books_clone.patches.v1_3.seed_landed_cost_charge_accounts
 # creates them, not before (pre_model_sync would hit "Unknown column" since
 # the ALTER TABLE hasn't happened yet).
 zoho_books_clone.patches.v1_4.seed_grir_and_inventory_defaults
+
+# Renames the GR/IR account's display name from "Stock Received But Not
+# Billed" to "Stock Received" for every company. account_type is left
+# unchanged (still "Stock Received But Not Billed") since it's a fixed
+# Select option used by GL posting / balance sheet logic.
+zoho_books_clone.patches.v1_5.rename_grir_account

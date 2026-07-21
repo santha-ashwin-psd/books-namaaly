@@ -99,7 +99,7 @@ class BooksCompany(Document):
         mapping = {
             "default_inventory_account": ("Stock In Hand", "Stock"),
             "stock_received_not_billed": (
-                "Stock Received But Not Billed",
+                "Stock Received",
                 "Stock Received But Not Billed",
             ),
             "default_cogs_account": ("Cost of Goods Sold", "Cost of Goods Sold"),

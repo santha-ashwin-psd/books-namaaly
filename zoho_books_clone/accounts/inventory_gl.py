@@ -56,7 +56,7 @@ def get_grir_account(company: str) -> str | None:
         return company_default
 
     return (
-        _acct_by_name(company, "Stock Received But Not Billed")
+        _acct_by_name(company, "Stock Received")
         or _acct_by_type(company, GRIR_ACCOUNT_TYPE)
     )
 

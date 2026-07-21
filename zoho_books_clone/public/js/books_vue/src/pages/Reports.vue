@@ -545,7 +545,7 @@
         </div>
 
         <div v-if="stockGl.grir_account" style="margin-top:12px;font-size:12.5px;color:#64748b">
-          Stock Received But Not Billed (GR/IR): <span class="mono-sm fw-600">{{ fmt(stockGl.grir_balance) }}</span>
+          Stock Received (GR/IR): <span class="mono-sm fw-600">{{ fmt(stockGl.grir_balance) }}</span>
           <span style="color:#94a3b8"> — goods received, awaiting bill. Nonzero is normal.</span>
         </div>
 

@@ -32,7 +32,7 @@ COA = [
     ("Current Liabilities",   "Liability",  "Liabilities",         1),
     ("Accounts Payable",      "Payable",    "Current Liabilities", 0),
     # GR/IR clearing — credited when goods are received, debited when billed
-    ("Stock Received But Not Billed", "Stock Received But Not Billed", "Current Liabilities", 0),
+    ("Stock Received", "Stock Received But Not Billed", "Current Liabilities", 0),
     ("CGST Payable",          "Tax",        "Current Liabilities", 0),
     ("SGST Payable",          "Tax",        "Current Liabilities", 0),
     ("IGST Payable",          "Tax",        "Current Liabilities", 0),

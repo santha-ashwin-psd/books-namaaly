@@ -486,7 +486,7 @@
    "fieldname": "stock_received_not_billed",
    "fieldtype": "Link",
    "options": "Account",
-   "label": "Stock Received But Not Billed",
+   "label": "Stock Received",
    "description": "GR/IR clearing liability. Credited on goods receipt, debited when the purchase invoice is booked."
   },
   {
