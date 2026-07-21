@@ -93,17 +93,23 @@ def _get_round_off_account(company: str) -> str | None:
         return None
 
 
-def _append_round_off_entry(gl_map: list[dict], doc) -> None:
+def _append_round_off_entry(gl_map: list[dict], doc, invert: bool = False) -> None:
     """Append the GL line for doc.round_off, if any, so debits == credits.
 
-    round_off = grand_total - (net_total + tax_total). A positive round_off
-    means the debit leg (grand_total) exceeds the credit legs (net + tax),
-    so the difference must be *credited*; a negative round_off is the
-    reverse and must be *debited*.
+    round_off = grand_total - (net_total + tax_total). On a Sales Invoice
+    grand_total sits on the *debit* leg (Receivable), so a positive
+    round_off means debit > credit and the difference must be *credited*
+    here (invert=False). On a Purchase Invoice grand_total sits on the
+    *credit* leg (Payable) instead — the polarity is reversed, so a
+    positive round_off there means credit > debit and the difference must
+    be *debited* here (invert=True). Passing the wrong value doesn't fail
+    loudly; it silently doubles the imbalance instead of closing it.
     """
     round_off = flt(getattr(doc, "round_off", 0))
     if not round_off:
         return
+    if invert:
+        round_off = -round_off
     account = _get_round_off_account(doc.company)
     if not account:
         frappe.throw(_("Please set up a Round Off account for {0} to submit this invoice").format(doc.company))
@@ -314,8 +320,14 @@ def post_purchase_invoice(doc) -> None:
 
         gl_map.append({
             "account":      account,
-            "debit":        tax_amount,
-            "credit":       0,
+            # _is_tds_line() only catches negatives whose description/tax_type
+            # text matches a TDS-ish pattern — any other negative-rate tax
+            # component (return adjustment, differently-worded withholding,
+            # etc.) must still be flipped into the credit column here, same
+            # as post_sales_invoice's tax loop, so debit/credit never go
+            # negative.
+            "debit":        tax_amount if tax_amount > 0 else 0,
+            "credit":       -tax_amount if tax_amount < 0 else 0,
             "voucher_type": doc.doctype,
             "voucher_no":   doc.name,
             "posting_date": doc.posting_date,
@@ -341,6 +353,7 @@ def post_purchase_invoice(doc) -> None:
                 entry["remarks"] = f"Purchase cost (gross, no ITC accounts) — Bill {doc.name}"
                 break
 
+    _append_round_off_entry(gl_map, doc, invert=True)
     make_gl_entries(gl_map)
 
 

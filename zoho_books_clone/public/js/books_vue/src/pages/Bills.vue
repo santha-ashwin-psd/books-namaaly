@@ -210,49 +210,52 @@
                 placeholder="Select vendor…" :createable="true" createDoctype="Supplier"
                 @search="fetchVendors" @select="onVendorSelect" />
             </div>
-            <div class="add-details-grid" style="margin-top:14px">
-              <div>
-                <label class="inv-lbl">Bill Date <span class="inv-req">*</span></label>
-                <input v-model="form.posting_date" type="date" class="inv-fi" />
-              </div>
-              <div>
-                <label class="inv-lbl">Due Date</label>
-                <input v-model="form.due_date" type="date" class="inv-fi" />
-              </div>
-              <div>
-                <label class="inv-lbl">Vendor Bill #</label>
-                <input v-model="form.bill_no" type="text" class="inv-fi" placeholder="Vendor's invoice number" maxlength="50" />
-              </div>
-              <div>
-                <label class="inv-lbl">Vendor Bill Date</label>
-                <input v-model="form.bill_date" type="date" class="inv-fi" />
-              </div>
-              <div>
-                <label class="inv-lbl">Cost Center</label>
-                <select v-model="form.cost_center" class="inv-fi">
-                  <option value="">— Select —</option>
-                  <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Inventory toggle -->
-            <div style="margin-top:14px">
-              <div class="inv-inv-block" :class="form.update_stock ? 'inv-on' : 'inv-off'">
-                <div class="inv-inv-toggle-row">
-                  <div class="inv-inv-icon" v-html="icon('box', 16)"></div>
-                  <div class="inv-inv-text">
-                    <div class="inv-inv-title">Update Inventory on Submit</div>
-                    <div class="inv-inv-sub">Stock increases in the selected warehouse when this bill is submitted</div>
-                  </div>
-                  <label class="inv-inv-switch">
-                    <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
-                    <span class="inv-inv-slider"></span>
-                  </label>
+            <!-- Lower section: field rows on the left, inventory toggle card on the right -->
+            <div class="bill-details-lower">
+              <div class="bill-details-lower-main add-details-grid" style="margin-top:14px">
+                <div>
+                  <label class="inv-lbl">Bill Date <span class="inv-req">*</span></label>
+                  <input v-model="form.posting_date" type="date" class="inv-fi" />
                 </div>
-                <div v-if="form.update_stock" class="inv-inv-wh-row">
-                  <label class="inv-lbl" style="margin-bottom:6px">Receiving Warehouse <span style="color:#dc2626">*</span></label>
-                  <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse where stock will be received…" :createable="true" createDoctype="Warehouse" @search="fetchWarehouses" @create="fetchWarehouses('')" />
+                <div>
+                  <label class="inv-lbl">Due Date</label>
+                  <input v-model="form.due_date" type="date" class="inv-fi" />
+                </div>
+                <div>
+                  <label class="inv-lbl">Vendor Bill #</label>
+                  <input v-model="form.bill_no" type="text" class="inv-fi" placeholder="Vendor's invoice number" maxlength="50" />
+                </div>
+                <div>
+                  <label class="inv-lbl">Vendor Bill Date</label>
+                  <input v-model="form.bill_date" type="date" class="inv-fi" />
+                </div>
+                <div>
+                  <label class="inv-lbl">Cost Center</label>
+                  <select v-model="form.cost_center" class="inv-fi">
+                    <option value="">— Select —</option>
+                    <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Inventory toggle card -->
+              <div class="bill-details-toggle-col">
+                <div class="inv-inv-block" :class="form.update_stock ? 'inv-on' : 'inv-off'">
+                  <div class="inv-inv-toggle-row">
+                    <div class="inv-inv-icon" v-html="icon('box', 16)"></div>
+                    <div class="inv-inv-text">
+                      <div class="inv-inv-title">Update Inventory on Submit</div>
+                      <div class="inv-inv-sub">Stock increases in the selected warehouse when this bill is submitted</div>
+                    </div>
+                    <label class="inv-inv-switch">
+                      <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
+                      <span class="inv-inv-slider"></span>
+                    </label>
+                  </div>
+                  <div v-if="form.update_stock" class="inv-inv-wh-row">
+                    <label class="inv-lbl" style="margin-bottom:6px">Receiving Warehouse <span style="color:#dc2626">*</span></label>
+                    <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse where stock will be received…" :createable="true" createDoctype="Warehouse" @search="fetchWarehouses" @create="fetchWarehouses('')" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -352,7 +355,7 @@
                       <template v-if="form.update_stock && line.has_batch_no">
                         <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Select batch"
                           createable @search="q => fetchBillLineBatches(line, q)" @select="opt => onBillLineBatchSelect(line, opt)" @create="val => onBillLineBatchCreate(line, val)" style="font-size:12px"
-                          :title="batchQtyError(line) || (!line.batchOptions.length ? 'No batches with stock yet' : '')"/>
+                          :title="batchQtyError(line) || (!line.batchOptions.length ? 'No existing batches — type a new code to create one' : '')"/>
                       </template>
                       <span v-else style="color:#cbd5e1;font-size:12px">—</span>
                     </td>
@@ -370,7 +373,7 @@
                     <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> {{ batchQtyError(line) }}</div></td>
                   </tr>
                   <tr v-else-if="form.update_stock && line.has_batch_no && !line.batchOptions.length" class="po-items-warn-row">
-                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No batches with stock yet — type a new code to create one</div></td>
+                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No existing batches for this item — type a new code to create one</div></td>
                   </tr>
                   </template>
                 </tbody>
@@ -391,7 +394,8 @@
                   <span>TDS u/s {{ form.tds_section }} ({{ form.tds_rate }}%)</span>
                   <span style="color:#d97706">− {{ fmtCur(tdsAmount) }}</span>
                 </div>
-                <div class="po-total-row grand"><span>Grand Total</span><span>{{ fmtCur(grandTotal - tdsAmount) }}</span></div>
+                <div v-if="roundOff" class="po-total-row" style="font-size:12px;color:#6b7280"><span>Round Off</span><span>{{ roundOff>0?'+':'' }}{{ fmtCur(roundOff) }}</span></div>
+                <div class="po-total-row grand"><span>Grand Total</span><span>{{ fmtCur(grandTotal) }}</span></div>
               </div>
             </div>
           </div>
@@ -1280,7 +1284,12 @@ watch(() => form.supplier, async (name) => {
   if (!name) { form.tds_applicable = false; form.tds_section = ""; form.tds_rate = 0; supplierState.value = ""; return; }
   try {
     const doc = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Supplier", name });
-    supplierState.value = doc?.state || stateFromGstin(doc?.tax_id) || "";
+    // Vendors here don't reliably carry a State field, and falling back to ""
+    // would push computeTaxRows() into the inter-state (IGST) branch, which
+    // silently zeroes out tax on any template that only defines CGST/SGST.
+    // Default to Tamil Nadu — same fixed default Invoices.vue uses for
+    // place_of_supply — so an unset vendor state is treated as intra-state.
+    supplierState.value = doc?.state || stateFromGstin(doc?.tax_id) || "33-Tamil Nadu";
     if (doc?.tds_applicable) {
       form.tds_applicable = true;
       form.tds_section = doc.tds_section || "";
@@ -1313,8 +1322,12 @@ async function onItemSelect(line, opt) {
   // the backend fallback in save_doc (Cost of Goods Sold) is only used when
   // the Item genuinely has no expense_account of its own.
   line.expense_account = opt?.expense_account || "";
-  if (!opt?.description && opt?.value) {
-    // description not in option cache — fetch from Item doc directly
+  if (opt?.value) {
+    // Always re-confirm against the live Item doc (mirrors Invoices.vue's
+    // onItemChange) rather than trusting the cached search-list option —
+    // that cache can be stale or, for tax_code specifically, was previously
+    // only refreshed when description happened to be blank, which silently
+    // left tax_code unset whenever a real description was cached instead.
     try {
       const doc = await apiGet("Item", opt.value);
       if (doc?.description) line.description = doc.description;
@@ -1397,28 +1410,31 @@ function calcLine(l) {
   l.discount_amount = disc;
   l.amount = base - disc;
 }
-// Returns a human-readable error string when the entered Qty exceeds the
-// selected batch's available stock, or "" when the row is fine. Mirrors
-// Invoices.vue's batchQtyError().
+// Returns a human-readable error string when a batch-tracked line has no
+// Batch No selected yet, or "" when the row is fine. Unlike Invoices.vue's
+// batchQtyError() (which blocks selling more than a batch currently has),
+// this is a *receiving* bill — Update Inventory on submit ADDS to whatever
+// batch is chosen (existing or brand-new), it never draws stock down, so
+// there's no "exceeds available stock" ceiling to enforce here.
 function batchQtyError(line) {
   if (!line.has_batch_no || !line.item_code) return "";
   if (!line.batch_no) return `${line.item_name || line.item_code} is batch-tracked — select a Batch No`;
-  if (line._batchQty == null) return "";
-  if (flt(line.qty) > flt(line._batchQty)) {
-    return `${line.item_name || line.item_code} — Batch ${line.batch_no} exceeds stock (Available: ${line._batchQty}, Entered: ${flt(line.qty)})`;
-  }
   return "";
 }
 const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
-
-// Group tax by template name → { name, rate, amount }
 const taxLines = computed(() =>
   computeTaxRows(lines.value, taxTemplates.value, billTaxCtx())
     .map(r => ({ template: r.description, description: r.description, tax_type: r.tax_type, rate: r.rate, account_head: r.account_head, amount: r.amount }))
 );
 const taxAmount = computed(() => taxLines.value.reduce((s, t) => s + t.amount, 0));
-const grandTotal = computed(() => subtotal.value + taxAmount.value);
 const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math.round(subtotal.value * form.tds_rate / 100 * 100) / 100 : 0);
+// GST rule (Sec 170, CGST Act): the total is rounded off to the nearest
+// rupee, with the adjustment shown as its own "Round Off" line — mirrors
+// Invoices.vue's preRoundTotal/roundOff, and keeps this preview in sync
+// with what purchase_invoice.py's calculate_totals() will actually save.
+const preRoundTotal = computed(() => subtotal.value + taxAmount.value - tdsAmount.value);
+const roundOff = computed(() => Math.round((Math.round(preRoundTotal.value) - preRoundTotal.value) * 100) / 100);
+const grandTotal = computed(() => Math.round(preRoundTotal.value));
 
 // View drawer tax summary
 const viewSubtotal = computed(() => viewItems.value.reduce((s, i) => s + flt(i.amount), 0));
@@ -1446,15 +1462,25 @@ async function copyLastItems() {
         hsn_code: it.hsn_code || "", qty: flt(it.qty) || 1, rate: flt(it.rate) || 0, uom: it.uom || "Nos",
         _standardRate: flt(it.mrp) || 0, discount_percentage: flt(it.discount_percentage) || 0, discount_amount: flt(it.discount_amount) || 0,
         amount: Math.round(flt(it.qty || 1) * flt(it.rate || 0) * 100) / 100,
-        expense_account: it.expense_account || "",
+        tax_code: it.tax_code || "", expense_account: it.expense_account || "",
         has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null,
       }));
+      // get_party_last_items() returns whatever the source bill had saved for
+      // tax_code, but that can be stale (template renamed/disabled since, or
+      // the source line simply never had one). Re-pull each item's *current*
+      // Default Tax Template from the Item master so copied rows always match
+      // what a fresh item pick would give — mirrors onItemSelect()'s fallback.
       const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
       if (codes.length) {
         try {
-          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", codes]], limit: codes.length });
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no", "tax_code"], filters: [["name", "in", codes]], limit: codes.length });
           const flagMap = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.has_batch_no ? 1 : 0]));
-          lines.value.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBillLineBatches(l, ""); });
+          const taxMap  = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.tax_code || ""]));
+          lines.value.forEach(l => {
+            l.has_batch_no = flagMap[l.item_code] || 0;
+            if (!l.tax_code && taxMap[l.item_code]) l.tax_code = taxMap[l.item_code];
+            if (l.has_batch_no) fetchBillLineBatches(l, "");
+          });
         } catch {}
       }
       toast.success(`Copied ${r.items.length} item(s) from ${r.source || "last bill"}`);
@@ -1810,9 +1836,34 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .inv-dl-menu-sub { font-size: 11px; color: #9ca3af; white-space: nowrap; }
 .inv-ab-caret { font-size: 10px; opacity: .6; margin-left: 1px; }
 
-/* ── Edit drawer ── */
-.bill-edit-drawer { width: 1020px;right: -1020px;max-width: 96vw; transition: right .22s ease; position: fixed; top: 0; bottom: 0; max-width: 96vw; z-index: 8100; background: #fff; display: flex; flex-direction: column; }
+/* ── Edit drawer ──
+   Fills from the sidebar's right edge to the viewport's right edge — same
+   effect as Invoices' .inv-addedit-bg .inv-addedit-panel { width:100% }
+   trick, just achieved without nesting the panel inside the bg div (Bills'
+   markup keeps them as siblings). Because width is expressed relative to
+   the sidebar variable, and right controls the open/closed slide, the
+   panel's implicit left edge always lands exactly at the sidebar boundary
+   when open — no gap, no need to also pin `left` (which would break the
+   slide-to-off-screen trick used for the closed state). */
+.bill-edit-drawer {
+  width: calc(100% - var(--bv-sidebar-w, 220px));
+  right: calc(-1 * (100% - var(--bv-sidebar-w, 220px)));
+  max-width: 96vw;
+  transition: right .22s ease;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 8100;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
 .bill-edit-drawer.open { right: 0; }
+.bv-app-sidebar-collapsed .bill-edit-drawer {
+  width: calc(100% - var(--bv-sidebar-w-narrow, 56px));
+  right: calc(-1 * (100% - var(--bv-sidebar-w-narrow, 56px)));
+}
+.bv-app-sidebar-collapsed .bill-edit-drawer.open { right: 0; }
 
 /* ── Bill Add/Edit drawer: sit beside the sidebar, not over it ── */
 .bill-addedit-bg { left: var(--bv-sidebar-w, 220px) !important; }
@@ -1916,6 +1967,14 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .add-card-body { padding: 16px; transition: all .18s ease; }
 .add-card-body.collapsed { display: none; }
 .add-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bill-details-lower { display: flex; align-items: stretch; gap: 16px; }
+.bill-details-lower-main { flex: 1 1 auto; min-width: 0; }
+.bill-details-toggle-col { width: 280px; flex-shrink: 0; display: flex; }
+.bill-details-toggle-col .inv-inv-block { width: 100%; }
+@media (max-width: 900px) {
+  .bill-details-lower { flex-direction: column; }
+  .bill-details-toggle-col { width: 100%; }
+}
 .add-line-num { display: inline-block; width: 20px; text-align: center; color: #9ca3af; font-size: 12px; }
 .add-line-amount { text-align: right; font-size: 12.5px; font-weight: 600; padding: 4px 8px; color: #374151; }
 .add-line-del { background: none; border: 1px solid rgba(220,38,38,.3); border-radius: 4px; padding: 3px 5px; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; }
@@ -2073,7 +2132,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 
 /* ── Small desktop (≤ 1024px) ── */
 @media (max-width: 1024px) {
-  .bill-edit-drawer { width: 660px; right: -660px; }
+  /* .bill-edit-drawer keeps filling sidebar-edge-to-viewport-edge (see base
+     rule above) — it's already responsive via the calc(), no fixed width
+     needed here. Only the (unrelated) view drawer still uses a fixed width. */
   .bill-view-drawer { width: 780px; right: -780px; }
 
   .bk-kpi-grid  { grid-template-columns: repeat(3, 1fr); }

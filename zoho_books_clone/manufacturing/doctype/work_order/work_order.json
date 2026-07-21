@@ -184,6 +184,15 @@
    "options": "Work Order Item"
   },
   {
+   "fieldname": "items_loaded_for_qty",
+   "fieldtype": "Float",
+   "label": "Materials Loaded For Qty",
+   "default": "0",
+   "hidden": 1,
+   "read_only": 1,
+   "description": "Internal. Snapshot of Qty to Manufacture at the moment the Raw Material/Operations tables were last loaded or refreshed from the BOM. Used to detect a Work Order where Qty was edited afterward without re-syncing materials, which would otherwise under/over-consume raw materials and mis-value the finished good."
+  },
+  {
    "fieldname": "sec_wo_ops",
    "fieldtype": "Section Break",
    "label": "Operations"

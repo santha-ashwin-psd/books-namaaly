@@ -33,9 +33,19 @@ class PurchaseInvoice(Document):
             if flt(tax.rate) and not flt(tax.tax_amount):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
         tax_total = sum(flt(t.tax_amount) for t in (self.taxes or []))
-        self.net_total   = round(net, 2)
-        self.total_tax   = round(tax_total, 2)
-        self.grand_total = round(net + tax_total, 2)
+        self.net_total = round(net, 2)
+        self.total_tax = round(tax_total, 2)
+        # GST rule (Sec 170, CGST Act): the invoice total is rounded off to
+        # the nearest rupee, with the adjustment shown as its own "Round
+        # Off" line — same treatment as Sales Invoice. Without this, the
+        # paise-level remainder between (net + tax) and the whole-rupee
+        # grand_total previously had nowhere to go, so the AP credit posted
+        # in post_purchase_invoice() (which uses grand_total) could land a
+        # few paise off from the debit legs (which use net_total/tax_total)
+        # — an out-of-balance GL entry that made_gl_entries() would reject.
+        pre_round_total = net + tax_total
+        self.grand_total = round(pre_round_total)
+        self.round_off = round(self.grand_total - pre_round_total, 2)
 
     def set_outstanding_amount(self):
         if self.docstatus == 0:

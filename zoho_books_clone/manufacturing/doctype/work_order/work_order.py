@@ -45,7 +45,50 @@ class WorkOrder(Document):
 		if flt(self.produced_qty) > flt(self.qty):
 			frappe.throw(_("Produced Qty cannot exceed Qty to Manufacture."))
 
+		self._check_materials_current()
 		self.calculate_operating_cost()
+
+	def _check_materials_current(self):
+		"""Guard against the Raw Material/Operations tables being stale for the
+		current Qty to Manufacture -- e.g. materials were loaded from the BOM
+		at qty 5, then Qty was edited to 10 in the form without clicking
+		"Load / Refresh Materials from BOM" (or an API caller passed items
+		once and later PATCHed qty without recomputing them).
+
+		complete_work_order()'s raw-material consumption and operating-cost
+		absorption are both proportional to `self.qty` (see
+		manufacturing.work_order_engine.complete_work_order:
+		consumption_ratio = (qty_manufactured + process_loss_qty) / self.qty).
+		If the Raw Material rows' required_qty is still sized for a different
+		qty than self.qty, that proportion is silently wrong -- a full
+		completion consumes and costs the WRONG total of raw material against
+		the ACTUAL qty produced, with no error anywhere to surface it. This
+		check turns that into a loud, immediate one instead.
+
+		items_loaded_for_qty is a snapshot written whenever materials are
+		(re)loaded from the BOM -- either by the client calling
+		get_bom_breakdown (see WorkOrder.vue::loadFromBom) or by
+		set_items_and_operations_from_bom() above. It is intentionally NOT
+		compared against the BOM itself row-by-row: legitimate manual edits
+		(added/removed rows, hand-adjusted quantities, or a Material
+		Substitution swapping an item_code) are a supported workflow and must
+		not trip this check as long as they were made without changing qty
+		afterward. A value of 0 means the Work Order predates this field (or
+		was created before it was ever set) -- treated as "unknown basis" and
+		skipped rather than blocking existing/legacy documents.
+		"""
+		if not self.items_loaded_for_qty:
+			return
+		tolerance = max(flt(self.qty) * 0.001, 0.0001)
+		if abs(flt(self.qty) - flt(self.items_loaded_for_qty)) > tolerance:
+			frappe.throw(_(
+				"Raw Materials/Operations were loaded from BOM {0} for Qty to "
+				"Manufacture {1}, but Qty to Manufacture is now {2}. Click "
+				"'Load / Refresh Materials from BOM' to rescale them, or "
+				"restore the original Qty. Saving with mismatched Qty would "
+				"consume and cost raw materials for the wrong quantity when "
+				"this Work Order is completed."
+			).format(self.bom, self.items_loaded_for_qty, self.qty))
 
 	def calculate_operating_cost(self):
 		"""Recompute Planned/Actual/Total Operating Cost from the Operations
@@ -133,6 +176,8 @@ class WorkOrder(Document):
 				"hour_rate": row["hour_rate"],
 				"cost": row["cost"],
 			})
+
+		self.items_loaded_for_qty = flt(self.qty)
 
 	def on_submit(self):
 		self.db_set("status", "Submitted")

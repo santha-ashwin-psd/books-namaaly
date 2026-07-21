@@ -131,6 +131,9 @@
                   {{ breakdownLoading ? 'Loading…' : 'Load / Refresh Materials from BOM' }}
                 </button>
                 <div class="bomx-field-hint">Rescales raw materials &amp; operations from the BOM at the current qty. Overwrites any manual edits below.</div>
+                <div v-if="materialsStale" class="bomx-field-hint" style="color:var(--bx-red);font-weight:600;margin-top:4px">
+                  ⚠ Qty to Manufacture changed to {{ fmt(wo.qty) }} since materials were last loaded for {{ fmt(wo.items_loaded_for_qty) }}. Raw material quantities below are stale — click "Load / Refresh Materials from BOM" above before saving, or this Work Order will consume/cost the wrong amount of material when completed.
+                </div>
               </div>
 
               <div class="bomx-section-lbl">Warehouses</div>
@@ -753,6 +756,7 @@ function emptyWO() {
     status: "Draft",
     produced_qty: 0,
     process_loss_qty: 0,
+    items_loaded_for_qty: 0,
     source_warehouse: "",
     wip_warehouse: "",
     fg_warehouse: "",
@@ -1113,11 +1117,32 @@ async function loadFromBom() {
       wo.value.fg_warehouse = r.default_fg_warehouse;
     if (!wo.value.scrap_warehouse && r.default_scrap_warehouse)
       wo.value.scrap_warehouse = r.default_scrap_warehouse;
+
+    // Snapshot the qty these tables were just synced to, so a later edit to
+    // Qty to Manufacture without clicking this button again can be detected
+    // (see materialsStale below and Work Order's own server-side check).
+    wo.value.items_loaded_for_qty = flt(wo.value.qty);
   } catch (e) {
     toast(e.message, "error");
   }
   breakdownLoading.value = false;
 }
+
+// True once Qty to Manufacture has drifted away from the qty the Raw
+// Material/Operations tables were last loaded/refreshed for -- e.g. the
+// person bumped Qty up after already loading materials, without clicking
+// "Load / Refresh Materials from BOM" again. Required Qty on every raw
+// material row is still sized for the OLD qty in that state, so saving as-is
+// would silently under/over-consume raw materials and mis-value the
+// finished good once this Work Order is completed. Ignores brand-new/empty
+// Work Orders (nothing loaded yet) and legacy docs saved before this field
+// existed (items_loaded_for_qty of 0/falsy -- basis unknown, not our call to
+// flag).
+const materialsStale = computed(() => {
+  if (!wo.value.items_loaded_for_qty || !wo.value.items || !wo.value.items.length) return false;
+  const tolerance = Math.max(flt(wo.value.qty) * 0.001, 0.0001);
+  return Math.abs(flt(wo.value.qty) - flt(wo.value.items_loaded_for_qty)) > tolerance;
+});
 
 function addMaterial() { wo.value.items.push(EMPTY_MATERIAL()); }
 function removeMaterial(idx) { wo.value.items.splice(idx, 1); }
@@ -1141,6 +1166,7 @@ async function save() {
   if (!wo.value.fg_warehouse) return toast("Finished Goods Warehouse is required", "error");
   if (!wo.value.items || !wo.value.items.length) return toast("Load raw materials from the BOM first", "error");
   if (!hasSourceWarehouse()) return toast("Default Source Warehouse is required (or set a Source Warehouse on every raw material row)", "error");
+  if (materialsStale.value) return toast("Qty to Manufacture changed since materials were loaded — click 'Load / Refresh Materials from BOM' first", "error");
 
 
   saving.value = true;
@@ -1166,6 +1192,7 @@ async function submitWO() {
   if (!wo.value.fg_warehouse) return toast("Finished Goods Warehouse is required", "error");
   if (!wo.value.items || !wo.value.items.length) return toast("Load raw materials from the BOM first", "error");
   if (!hasSourceWarehouse()) return toast("Default Source Warehouse is required (or set a Source Warehouse on every raw material row)", "error");
+  if (materialsStale.value) return toast("Qty to Manufacture changed since materials were loaded — click 'Load / Refresh Materials from BOM' first", "error");
 
   submitting.value = true;
 

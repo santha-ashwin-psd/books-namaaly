@@ -21,6 +21,37 @@ class Item(Document):
             self.is_stock_item = 1
 
         self._validate_inventory_account()
+        self._validate_uom_conversions()
+
+    def _validate_uom_conversions(self):
+        """
+        Guard the UOM Conversions child table:
+          - no duplicate UOM rows (including a row that just duplicates stock_uom
+            itself — that relationship is implicit and always 1, it doesn't need
+            a row)
+          - conversion_factor must be > 0 (a zero or negative factor would either
+            divide-by-zero or silently invert stock math downstream wherever
+            qty_in_stock_uom is computed from it)
+        """
+        seen_uoms = set()
+        for row in self.get("uom_conversions") or []:
+            if not row.uom:
+                frappe.throw(_("Row {0}: UOM is required in UOM Conversions").format(row.idx))
+
+            if row.uom == self.stock_uom:
+                frappe.throw(_(
+                    "Row {0}: {1} is already this item's Stock UOM — 1 {1} = 1 {1} is "
+                    "implicit and doesn't need a conversion row."
+                ).format(row.idx, row.uom))
+
+            if row.uom in seen_uoms:
+                frappe.throw(_("Row {0}: UOM {1} is listed more than once in UOM Conversions").format(row.idx, row.uom))
+            seen_uoms.add(row.uom)
+
+            if flt(row.conversion_factor) <= 0:
+                frappe.throw(_(
+                    "Row {0}: Conversion Factor for {1} must be greater than 0"
+                ).format(row.idx, row.uom))
 
     def _validate_inventory_account(self):
         """

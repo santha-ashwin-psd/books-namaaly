@@ -139,6 +139,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "round_off",
+   "fieldtype": "Currency",
+   "label": "Round Off",
+   "read_only": 1
+  },
+  {
    "fieldname": "grand_total",
    "fieldtype": "Currency",
    "in_list_view": 1,

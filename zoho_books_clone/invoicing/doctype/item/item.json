@@ -247,6 +247,32 @@
    "default": "Nos"
   },
   {
+   "fieldname": "purchase_uom",
+   "fieldtype": "Link",
+   "label": "Purchase UOM",
+   "options": "UOM",
+   "description": "UOM auto-populated on new Purchase Order / Purchase Invoice rows for this item. Defaults to Stock UOM if not set."
+  },
+  {
+   "fieldname": "sales_uom",
+   "fieldtype": "Link",
+   "label": "Sales UOM",
+   "options": "UOM",
+   "description": "UOM auto-populated on new Sales Order / Sales Invoice rows for this item. Defaults to Stock UOM if not set."
+  },
+  {
+   "fieldname": "section_uom_conversions",
+   "fieldtype": "Section Break",
+   "label": "UOM Conversions"
+  },
+  {
+   "fieldname": "uom_conversions",
+   "fieldtype": "Table",
+   "label": "UOM Conversions",
+   "options": "Item UOM Conversion Detail",
+   "description": "Define how many Stock UOM units make up 1 unit of each alternate UOM (e.g. Pack = 15 Kg). Only needed for items bought/sold in a UOM other than the Stock UOM."
+  },
+  {
    "creation": "2026-03-17 11:02:53.037714",
    "modified": "2026-03-17 11:02:53.037714",
    "modified_by": "Administrator",
