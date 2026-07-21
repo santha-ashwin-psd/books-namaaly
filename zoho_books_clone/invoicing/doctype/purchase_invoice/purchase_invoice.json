@@ -121,6 +121,38 @@
    "options": "Purchase Invoice Item"
   },
   {
+   "fieldname": "section_discount",
+   "fieldtype": "Section Break",
+   "label": "Discount"
+  },
+  {
+   "default": "Percentage",
+   "fieldname": "discount_type",
+   "fieldtype": "Select",
+   "label": "Discount Type",
+   "options": "Percentage\nAmount"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.discount_type=='Percentage'",
+   "fieldname": "additional_discount_percentage",
+   "fieldtype": "Float",
+   "label": "Discount Percentage",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_discount",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "additional_discount_amount",
+   "fieldtype": "Currency",
+   "label": "Discount Amount",
+   "options": "currency",
+   "read_only_depends_on": "eval:doc.discount_type=='Percentage'"
+  },
+  {
    "fieldname": "taxes",
    "fieldtype": "Table",
    "label": "Taxes",

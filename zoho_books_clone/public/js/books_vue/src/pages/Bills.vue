@@ -381,6 +381,29 @@
               <div style="font-size:12px;color:#6b7280">Tax is applied per item via Item Tax Template.</div>
               <div class="po-totals-right">
                 <div class="po-total-row"><span>Subtotal</span><span>{{ fmtCur(subtotal) }}</span></div>
+                <div class="po-total-row" style="align-items:center">
+                  <span>Discount</span>
+                  <span style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                    <select v-model="form.discount_type" class="inv-fi" style="width:74px;padding:2px 4px">
+                      <option value="Percentage">%</option>
+                      <option value="Amount">₹</option>
+                    </select>
+                    <input
+                      v-if="form.discount_type==='Percentage'"
+                      v-model.number="form.additional_discount_percentage"
+                      type="number" min="0" max="100" step="0.1"
+                      class="inv-fi" style="width:72px;text-align:right" placeholder="0"
+                    />
+                    <input
+                      v-else
+                      v-model.number="form.additional_discount_amount"
+                      type="number" min="0" :max="subtotal" step="0.01"
+                      class="inv-fi" style="width:90px;text-align:right" placeholder="0"
+                    />
+                  </span>
+                </div>
+                <div v-if="discountAmount" class="po-total-row"><span>Discount Amount</span><span>-{{ fmtCur(discountAmount) }}</span></div>
+                <div class="po-total-row"><span>Net Total</span><span>{{ fmtCur(netTotal) }}</span></div>
                 <template v-for="tl in taxLines" :key="tl.template">
                   <div class="po-total-row"><span>{{ tl.template }} ({{ tl.rate }}%)</span><span>{{ fmtCur(tl.amount) }}</span></div>
                 </template>
@@ -573,35 +596,45 @@
               <div v-if="viewLoading" style="padding:24px;text-align:center;color:#9ca3af">Loading details…</div>
 
               <template v-else>
-                <!-- Line items cards -->
+                <!-- Line items table -->
                 <template v-if="viewItems.length">
                   <div class="inv-sec-lbl">Line Items <span class="po-item-count">{{ viewItems.length }} item{{ viewItems.length !== 1 ? 's' : '' }}</span></div>
-                  <div class="vi-line-cards">
-                    <div v-for="(it, idx) in viewItems" :key="idx" class="vi-line-card">
-                      <div class="vi-line-card-header">
-                        <span class="vi-line-num">#{{ idx + 1 }}</span>
-                        <span class="vi-line-name">{{ it.item_name || it.item_code }}</span>
-                        <span class="vi-line-amount">{{ fmtCur(it.amount) }}</span>
-                      </div>
-                      <div v-if="it.description" class="vi-line-desc">{{ it.description }}</div>
-                      <div class="vi-line-meta">
-                        <div class="vi-line-meta-item">
-                          <span class="vi-meta-lbl">Qty</span>
-                          <span class="vi-meta-val">{{ flt(it.qty) }}</span>
-                        </div>
-                        <div class="vi-line-meta-item">
-                          <span class="vi-meta-lbl">Rate</span>
-                          <span class="vi-meta-val">{{ fmtCur(it.rate) }}</span>
-                        </div>
-                        <div class="vi-line-meta-item vi-line-tax" v-if="it.tax_code">
-                          <span class="vi-tax-badge">TAX</span>
-                          <span class="vi-meta-val" style="color:#4f46e5">{{ it.tax_code }}</span>
-                        </div>
-                        <div class="vi-line-meta-item vi-line-tax" v-else>
-                          <span class="vi-notax-badge">NO TAX</span>
-                        </div>
-                      </div>
-                    </div>
+                  <div class="inv-items-wrap">
+                    <table class="inv-items-table">
+                      <thead>
+                        <tr>
+                          <th style="width:36px">#</th>
+                          <th>Item &amp; Description</th>
+                          <th>HSN/SAC</th>
+                          <th>UOM</th>
+                          <th class="th-r">MRP (₹)</th>
+                          <th class="th-r">Qty</th>
+                          <th class="th-r">Rate (₹)</th>
+                          <th class="th-r">Disc %</th>
+                          <th>Batch No</th>
+                          <th>Exp Date</th>
+                          <th class="th-r">Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(it, idx) in viewItems" :key="idx">
+                          <td class="inv-item-num">{{ idx + 1 }}</td>
+                          <td>
+                            <div class="inv-item-name">{{ it.item_name || it.item_code }}</div>
+                            <div v-if="it.description" class="inv-item-desc">{{ it.description }}</div>
+                          </td>
+                          <td class="inv-dash">{{ it.hsn_code || '—' }}</td>
+                          <td class="inv-dash">{{ it.uom || '—' }}</td>
+                          <td class="td-r inv-dash">{{ flt(it.mrp) ? fmtN(it.mrp) : '—' }}</td>
+                          <td class="td-r">{{ flt(it.qty) }}</td>
+                          <td class="td-r">{{ fmtN(it.rate) }}</td>
+                          <td class="td-r inv-dash">{{ flt(it.discount_percentage) ? flt(it.discount_percentage) + '%' : '—' }}</td>
+                          <td class="inv-dash">{{ it.batch_no || '—' }}</td>
+                          <td class="inv-dash">{{ it.batch_expiry_date ? fmtDate(it.batch_expiry_date) : '—' }}</td>
+                          <td class="td-r" style="font-weight:600">{{ fmtN(it.amount) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
                   <!-- Totals -->
@@ -610,6 +643,10 @@
                       <div class="po-view-total-row">
                         <span>Subtotal</span>
                         <span>{{ fmtCur(viewSubtotal) }}</span>
+                      </div>
+                      <div v-if="viewAdditionalDiscount" class="po-view-total-row">
+                        <span>Discount{{ viewDoc.discount_type==='Percentage' && viewDoc.additional_discount_percentage ? ' (' + viewDoc.additional_discount_percentage + '%)' : '' }}</span>
+                        <span>-{{ fmtCur(viewAdditionalDiscount) }}</span>
                       </div>
                       <template v-if="viewGstLines.length">
                         <div v-for="tl in viewGstLines" :key="tl.template" class="po-view-total-row po-view-tax-row">
@@ -842,7 +879,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { apiList, apiSave, apiGet, apiGET, apiSubmit, apiDelete, apiPOST, resolveCompany, refreshCsrfToken } from "../api/client.js";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
-import { computeTaxRows } from "../composables/useTaxCalc.js";
+import { computeTaxRows, computeDiscountAmount, applyDiscountToLines } from "../composables/useTaxCalc.js";
 import { stateFromGstin } from "../composables/useCountryState.js";
 import { COUNTRIES, statesFor } from "../composables/useCountryState.js";
 import { useToast } from "../composables/useToast.js";
@@ -945,7 +982,7 @@ const copyingLast = ref(false);
 
 let _id = 1;
 const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", _standardRate: 0, discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", expense_account: "", collapsed: false, has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null });
-const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
+const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
 const vendorAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false,
@@ -1155,7 +1192,7 @@ const timelineSteps = computed(() => {
 
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
+  Object.assign(form, { supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
   lines.value = [blankLine()];
   Object.assign(billCollapsed, { details: false, billing: true, lines: false, remarks: true });
@@ -1164,7 +1201,7 @@ function openNew() {
 }
 async function openEdit(b) {
   editingName.value = b.name;
-  Object.assign(form, { supplier: b.supplier || "", posting_date: b.posting_date || todayStr(), due_date: b.due_date || "", bill_no: b.bill_no || "", bill_date: b.bill_date || "", remarks: b.remark || "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0 });
+  Object.assign(form, { supplier: b.supplier || "", posting_date: b.posting_date || todayStr(), due_date: b.due_date || "", bill_no: b.bill_no || "", bill_date: b.bill_date || "", remarks: b.remark || "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
   lines.value = [blankLine()];
   fetchVendors(""); fetchItems(""); fetchWarehouses("");
@@ -1209,6 +1246,9 @@ async function openEdit(b) {
       form.tds_rate = Math.abs(Number(tdsTax.rate) || 0) || (TDS_RATES[form.tds_section] ?? 10);
     }
     if (doc?.remark) form.remarks = doc.remark;
+    if (doc?.discount_type) form.discount_type = doc.discount_type;
+    if (doc?.additional_discount_percentage) form.additional_discount_percentage = flt(doc.additional_discount_percentage);
+    if (doc?.additional_discount_amount) form.additional_discount_amount = flt(doc.additional_discount_amount);
     if (doc?.update_stock !== undefined) form.update_stock = doc.update_stock ? 1 : 0;
     if (doc?.set_warehouse) form.set_warehouse = doc.set_warehouse;
     if (doc?.billing_address) form.billing_address = doc.billing_address;
@@ -1255,7 +1295,10 @@ async function openView(b) {
       status: doc.status ?? viewDoc.value.status,
       due_date: doc.due_date || viewDoc.value.due_date,
       cost_center: doc.cost_center, set_warehouse: doc.set_warehouse, billing_address: doc.billing_address,
-      billing_address_name: doc.billing_address_name, remark: doc.remark || "" };
+      billing_address_name: doc.billing_address_name, remark: doc.remark || "",
+      discount_type: doc.discount_type || "Percentage",
+      additional_discount_percentage: doc.additional_discount_percentage,
+      additional_discount_amount: doc.additional_discount_amount };
     // Resolve billing address object for card display
     if (doc?.billing_address_name && !viewAddressCache.value[doc.billing_address_name]) {
       apiGet("Address", doc.billing_address_name).then(a => { if (a) viewAddressCache.value = { ...viewAddressCache.value, [doc.billing_address_name]: a }; }).catch(() => {});
@@ -1422,22 +1465,37 @@ function batchQtyError(line) {
   return "";
 }
 const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
+// Common invoice-level discount, applied on the subtotal before tax —
+// mirrors PurchaseInvoice.calculate_discount() in purchase_invoice.py.
+const discountAmount = computed(() => computeDiscountAmount(
+  subtotal.value,
+  form.discount_type,
+  form.discount_type === "Amount" ? form.additional_discount_amount : form.additional_discount_percentage,
+));
+// Keep the Amount field in sync for display when type=Percentage (read-only there).
+watch(discountAmount, (v) => { if (form.discount_type === "Percentage") form.additional_discount_amount = v; });
+// Net total after the invoice-level discount, before tax.
+const netTotal = computed(() => Math.round((subtotal.value - discountAmount.value) * 100) / 100);
+// Lines with the discount spread proportionally, so per-line tax_code/rate
+// taxation is computed on each item's correct post-discount taxable value.
+const discountedLines = computed(() => applyDiscountToLines(lines.value, discountAmount.value));
 const taxLines = computed(() =>
-  computeTaxRows(lines.value, taxTemplates.value, billTaxCtx())
+  computeTaxRows(discountedLines.value, taxTemplates.value, billTaxCtx())
     .map(r => ({ template: r.description, description: r.description, tax_type: r.tax_type, rate: r.rate, account_head: r.account_head, amount: r.amount }))
 );
 const taxAmount = computed(() => taxLines.value.reduce((s, t) => s + t.amount, 0));
-const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math.round(subtotal.value * form.tds_rate / 100 * 100) / 100 : 0);
+const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math.round(netTotal.value * form.tds_rate / 100 * 100) / 100 : 0);
 // GST rule (Sec 170, CGST Act): the total is rounded off to the nearest
 // rupee, with the adjustment shown as its own "Round Off" line — mirrors
 // Invoices.vue's preRoundTotal/roundOff, and keeps this preview in sync
 // with what purchase_invoice.py's calculate_totals() will actually save.
-const preRoundTotal = computed(() => subtotal.value + taxAmount.value - tdsAmount.value);
+const preRoundTotal = computed(() => netTotal.value + taxAmount.value - tdsAmount.value);
 const roundOff = computed(() => Math.round((Math.round(preRoundTotal.value) - preRoundTotal.value) * 100) / 100);
 const grandTotal = computed(() => Math.round(preRoundTotal.value));
 
 // View drawer tax summary
 const viewSubtotal = computed(() => viewItems.value.reduce((s, i) => s + flt(i.amount), 0));
+const viewAdditionalDiscount = computed(() => flt(viewDoc.value?.additional_discount_amount));
 // Show the *actual saved* tax lines, split into positive taxes (GST) and the
 // negative TDS deduction — so the summary reconciles with the Grand Total
 // instead of recomputing from items (which misses TDS and reads "No taxes").
@@ -1531,8 +1589,10 @@ async function saveBill(submit) {
   drawerSaving.value = true;
   try {
     const company = await resolveCompany();
-    // Split CGST/SGST/IGST (input) by supplier vs company state.
-    const taxes = computeTaxRows(lines.value.filter(l => l.item_code), taxTemplates.value, billTaxCtx())
+    // Split CGST/SGST/IGST (input) by supplier vs company state. Uses the
+    // discount-spread lines so per-item tax is computed on the post-discount
+    // taxable value, matching the on-screen preview.
+    const taxes = computeTaxRows(discountedLines.value.filter(l => l.item_code), taxTemplates.value, billTaxCtx())
       .map(r => ({ doctype: "Tax Line", charge_type: "On Net Total", account_head: r.account_head, description: r.description, rate: r.rate, tax_type: r.tax_type, tax_amount: r.amount }));
     if (form.tds_applicable && form.tds_rate > 0 && form.tds_section) {
       taxes.push({
@@ -1553,6 +1613,9 @@ async function saveBill(submit) {
       cost_center: form.cost_center || "",
       currency: form.currency || "INR",
       conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
+      discount_type: form.discount_type || "Percentage",
+      additional_discount_percentage: form.discount_type === "Percentage" ? flt(form.additional_discount_percentage) : 0,
+      additional_discount_amount: flt(discountAmount.value),
       items: activeLines.map(l => ({
         doctype: "Purchase Invoice Item", item_code: l.item_code,
         item_name: l.item_name || l.item_code,

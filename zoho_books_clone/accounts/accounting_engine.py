@@ -248,6 +248,24 @@ def post_purchase_invoice(doc) -> None:
     grand_total = flt(doc.grand_total)
     total_tax   = flt(doc.total_tax) if hasattr(doc, "total_tax") else (grand_total - net_total)
 
+    # classify_purchase_item_amounts() sums each line's item.amount, which
+    # only reflects *per-line* discounts — it knows nothing about the
+    # invoice-level additional_discount_amount (see
+    # PurchaseInvoice.calculate_discount()), which is subtracted separately
+    # when net_total is derived. Left as-is, stock_total + expense_total
+    # would equal the pre-additional-discount subtotal, so the debit side
+    # would overstate cost by the discount and the ledger wouldn't balance
+    # against the (already-discounted) AP credit — same bug as GST invoices
+    # that ignored the additional discount before line-item tax was applied.
+    # Prorate both buckets down to net_total, keeping their split intact.
+    line_total = round(stock_total + expense_total, 2)
+    if line_total and abs(line_total - net_total) > 0.005:
+        ratio = net_total / line_total
+        stock_total = round(stock_total * ratio, 2)
+        # Assign the rounding remainder to expense_total so the two buckets
+        # always sum to exactly net_total (never a stray paisa short/over).
+        expense_total = round(net_total - stock_total, 2)
+
     grir_account = get_grir_account(doc.company) if stock_total else None
     debit_lines = build_purchase_invoice_debit_lines(
         doc,
