@@ -59,8 +59,19 @@ class SalesInvoice(Document):
         Skipped for return invoices (credit notes): those carry negative qty
         and put stock back in, so the "don't oversell a batch" check doesn't
         apply the same way.
+
+        Also skipped entirely when update_stock is off: a plain
+        accounting-only Sales Invoice (stock is owned by a separate Delivery
+        Note, or this item was never meant to hit the stock ledger from here)
+        never touches a batch, so demanding one here would block an
+        otherwise-valid invoice for no reason.
         """
         if self.is_return:
+            return
+        if not flt(getattr(self, "update_stock", 0)):
+            for item in self.items:
+                item.batch_no = None
+                item.batch_expiry_date = None
             return
         for item in self.items:
             if not item.item_code or flt(item.qty) <= 0:

@@ -289,6 +289,31 @@
    "default": "Nos"
   },
   {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Conversion Factor",
+   "description": "How many Stock UOM units make up 1 of this row's UOM. Looked up from the Item's UOM Conversions on save; 1 when UOM already is the Stock UOM.",
+   "default": "1",
+   "reqd": 0,
+   "hidden": 0,
+   "read_only": 1,
+   "in_list_view": 0,
+   "no_copy": 0,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "qty_in_stock_uom",
+   "fieldtype": "Float",
+   "label": "Qty in Stock UOM",
+   "description": "accepted_qty \u00d7 conversion_factor \u2014 the quantity this receipt line adds to stock, in the Item Stock UOM.",
+   "reqd": 0,
+   "hidden": 0,
+   "read_only": 1,
+   "in_list_view": 0,
+   "no_copy": 0,
+   "print_hide": 1
+  },
+  {
    "fieldname": "rate",
    "fieldtype": "Currency",
    "label": "Rate",

@@ -339,12 +339,7 @@
                     <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
                     <td class="td-uom">
                       <select v-model="line.uom" class="inv-fi">
-                        <option value="Nos">Nos</option>
-                        <option value="Kg">Kg</option>
-                        <option value="Ltr">Ltr</option>
-                        <option value="Hrs">Hrs</option>
-                        <option value="Pcs">Pcs</option>
-                        <option value="Box">Box</option>
+                        <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                       </select>
                     </td>
                     <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
@@ -942,6 +937,7 @@ const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const billCollapsed = reactive({ details: false, billing: true, lines: false, remarks: true });
 const viewLoading = ref(false), viewItems = ref([]), viewPayments = ref([]), viewTaxes = ref([]), viewDebitApps = ref([]);
 const vendors = ref([]), items = ref([]), lines = ref([]), taxAccountHead = ref(""), taxTemplates = ref([]);
+const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box"]);
 const companyGstState = ref(""), supplierState = ref("");
 const gstAccounts = ref({ input_cgst:"", input_sgst:"", input_igst:"" });
 const sortCol = ref("posting_date"), sortDir = ref("desc");
@@ -1766,6 +1762,9 @@ onMounted(async () => {
   document.addEventListener('click', onDocClickForDownloadMenu);
   await load();
   loadTaxAccount(); fetchCostCenters();
+  apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
+    .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
+    .catch(() => {});
   // Cross-document deep link: /purchases?open=PINV-...
   useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(x => x.name === n) || { name: n }) });
 });

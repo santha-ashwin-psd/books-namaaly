@@ -429,6 +429,51 @@ def get_item_price(item_code: str, price_list: str, uom: str | None = None,
     return ItemPrice.get_price(item_code, price_list, uom=uom, as_of_date=as_of_date)
 
 
+# ── UOM Conversion ─────────────────────────────────────────────────────────────
+#
+# Single source of truth for "how many stock_uom units is 1 of this UOM".
+# Every transaction doctype (Purchase Order/Invoice Item, Sales Order/Invoice
+# Item, Stock Entry Detail, ...) must call this instead of reading an Item's
+# uom_conversions table directly, so the lookup/fallback rules below only
+# live in one place.
+
+def get_conversion_factor(item_code: str, uom: str | None) -> float:
+    """
+    Return the factor to multiply a qty entered in `uom` by to get the
+    equivalent qty in the item's stock_uom.
+
+    Rules:
+      - No item_code, no uom, or uom == the item's stock_uom → 1.0
+        (entry UOM already IS the stock UOM; conversion is a no-op).
+      - uom matches a row in the item's `uom_conversions` child table →
+        that row's conversion_factor.
+      - uom is set but has no matching row (e.g. a stale/typo'd UOM, or
+        the item's conversions were never configured for it) → falls back
+        to 1.0 rather than throwing, so a bad/missing UOM never silently
+        multiplies a quantity by some unrelated factor; callers that need
+        to *require* a configured conversion should check for that
+        explicitly rather than rely on this function to fail loudly.
+    """
+    if not item_code or not uom:
+        return 1.0
+
+    stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+    if not stock_uom or uom == stock_uom:
+        return 1.0
+
+    factor = frappe.db.get_value(
+        "Item UOM Conversion Detail",
+        {"parent": item_code, "parenttype": "Item", "uom": uom},
+        "conversion_factor",
+    )
+    return flt(factor) if factor else 1.0
+
+
+def get_qty_in_stock_uom(item_code: str, qty: float, uom: str | None) -> float:
+    """Convenience wrapper: qty entered in `uom` → equivalent qty in stock_uom."""
+    return flt(qty) * get_conversion_factor(item_code, uom)
+
+
 # ── Stock Ledger History ──────────────────────────────────────────────────────
 
 def get_stock_ledger(

@@ -55,7 +55,12 @@ def get_gl_entries(
 
 @frappe.whitelist()
 def get_account_balance(account: str, as_of_date: str | None = None) -> float:
-    """Net balance (debit - credit) for an account, optionally up to a date."""
+    """Closing balance (opening_balance + debit - credit) for an account,
+    optionally up to a date. Includes the Account's `opening_balance` field
+    so this matches the closing balance shown by get_account_ledger() —
+    GL entries alone don't carry the opening balance, it's a static field
+    on the Account doc.
+    """
     params: dict = {"account": account}
     date_cond = ""
     if as_of_date:
@@ -67,13 +72,24 @@ def get_account_balance(account: str, as_of_date: str | None = None) -> float:
         FROM `tabGeneral Ledger Entry`
         WHERE account = %(account)s AND is_cancelled = 0 {date_cond}
     """, params, as_dict=True)
-    return flt(result[0].balance) if result else 0.0
+    gl_balance = flt(result[0].balance) if result else 0.0
+    opening = flt(frappe.db.get_value("Account", account, "opening_balance") or 0)
+    return opening + gl_balance
 
 @frappe.whitelist()
 def get_account_balances_bulk(
     accounts: list[str], as_of_date: str | None = None
 ) -> dict[str, float]:
-    """Return {account_name: balance} for a list of accounts (single query)."""
+    """Return {account_name: closing_balance} for a list of accounts (single
+    query). Includes each Account's `opening_balance` field, same as
+    get_account_balance(), so results are consistent with the ledger view.
+    """
+    # Called from the SPA via GET, where list args travel as a JSON-encoded
+    # string (e.g. `?accounts=["A","B"]`) — Frappe doesn't auto-parse those
+    # into a Python list, so without this the string's *characters* get
+    # counted as the "accounts", producing a broken SQL placeholder count.
+    if isinstance(accounts, str):
+        accounts = frappe.parse_json(accounts)
     if not accounts:
         return {}
     placeholders = ", ".join(["%s"] * len(accounts))
@@ -84,7 +100,14 @@ def get_account_balances_bulk(
         WHERE account IN ({placeholders}) AND is_cancelled = 0 {date_cond}
         GROUP BY account
     """, accounts, as_dict=True)
-    return {r.account: flt(r.balance) for r in rows}
+    gl_balances = {r.account: flt(r.balance) for r in rows}
+
+    openings = frappe.get_all(
+        "Account", filters={"name": ["in", accounts]}, fields=["name", "opening_balance"]
+    )
+    opening_map = {o.name: flt(o.opening_balance) for o in openings}
+
+    return {a: opening_map.get(a, 0.0) + gl_balances.get(a, 0.0) for a in accounts}
 
 
 # ── Invoices ──────────────────────────────────────────────────────────────────

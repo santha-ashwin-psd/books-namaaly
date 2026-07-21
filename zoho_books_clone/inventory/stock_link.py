@@ -240,8 +240,25 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
         # doctypes (Delivery Note, Sales Invoice, ...) don't have this field,
         # so getattr falls through to the full qty exactly as before.
         accepted_qty = getattr(row, "accepted_qty", None)
-        if accepted_qty is not None and accepted_qty != "":
+        has_accepted_qty = accepted_qty is not None and accepted_qty != ""
+        if has_accepted_qty:
             qty = flt(accepted_qty)
+
+        # Phase 4: Purchase Invoice/Receipt Item rows may be entered in a
+        # Purchase UOM distinct from the item's stock_uom — row.qty (or
+        # accepted_qty) above is in THAT uom, while Bin/Batch/the Stock
+        # Ledger always deal in stock_uom. Use the row's own
+        # already-computed conversion_factor (set by
+        # PurchaseInvoiceItem.validate() / PurchaseReceiptItem.validate())
+        # to switch to the stock-uom equivalent here, and scale basic_rate
+        # down to match below so the auto-generated Stock Entry's amount
+        # still equals this line's true value. Sales-side rows don't carry
+        # conversion_factor at all, so it falls back to 1 (no-op) and they're
+        # unaffected.
+        conversion_factor = flt(getattr(row, "conversion_factor", None) or 1)
+        if conversion_factor != 1.0:
+            qty = flt(qty) * conversion_factor
+
         if is_return:
             qty = abs(qty)
         if not item_code or qty <= 0:
@@ -275,7 +292,10 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
             "item_code":  item_code,
             "item_name":  getattr(row, "item_name", None) or item_code,
             "qty":        qty,
-            "basic_rate": 0 if zero_rate else flt(getattr(row, "rate", 0)),
+            # rate was entered per conversion_factor's uom (e.g. per Pack) —
+            # divide by the same factor so basic_rate lines up with the
+            # stock-uom qty above (no-op when conversion_factor is 1).
+            "basic_rate": 0 if zero_rate else flt(getattr(row, "rate", 0)) / conversion_factor,
             "warehouse":  warehouse,
             # Batch-tracked receipts (e.g. Purchase Receipt rows) carry their
             # own batch_no — forward it so the auto-generated Stock Entry

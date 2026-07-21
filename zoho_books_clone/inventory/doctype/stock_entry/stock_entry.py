@@ -97,7 +97,7 @@ class StockEntry(Document):
         if not direction.get("s"):
             return  # entry type has no source-warehouse leg (e.g. Stock Adjustment)
 
-        from zoho_books_clone.inventory.utils import get_batches_for_outgoing
+        from zoho_books_clone.inventory.utils import get_batches_for_outgoing, get_conversion_factor
 
         new_items = []
         changed = False
@@ -114,9 +114,18 @@ class StockEntry(Document):
                 new_items.append(row)
                 continue
 
+            # Batch balances (Batch.batch_qty) and Bin.actual_qty are always
+            # stock_uom-denominated -- convert this row's entry-uom qty to
+            # stock_uom before asking which batches can cover it, or a row
+            # entered in a Purchase/Sales UOM (e.g. "2 Pack") would only ever
+            # be checked against "2" units of batch stock instead of the
+            # 30 Kg it actually represents.
+            conversion_factor = get_conversion_factor(row.item_code, row.uom)
+            stock_qty = flt(row.qty) * conversion_factor
+
             valuation_method = frappe.db.get_value("Item", row.item_code, "valuation_method")
             allocations = get_batches_for_outgoing(
-                row.item_code, row.s_warehouse, flt(row.qty), valuation_method
+                row.item_code, row.s_warehouse, stock_qty, valuation_method
             )
             changed = True
 
@@ -129,7 +138,16 @@ class StockEntry(Document):
                 row_dict.pop("name", None)   # let Frappe assign fresh child names
                 row_dict["idx"] = None
                 row_dict["batch_no"] = alloc["batch_no"]
-                row_dict["qty"] = alloc["qty"]
+                # alloc["qty"] comes back in stock_uom (that's what we asked
+                # get_batches_for_outgoing to cover) -- convert back to this
+                # row's own entry uom so qty/basic_rate/amount stay in the
+                # terms they were entered in. qty_in_stock_uom is re-derived
+                # from this further down (_validate_items), landing back on
+                # alloc["qty"].
+                row_dict["qty"] = (
+                    round(flt(alloc["qty"]) / conversion_factor, 4)
+                    if conversion_factor else flt(alloc["qty"])
+                )
                 new_items.append(row_dict)
 
         if changed:
@@ -138,6 +156,8 @@ class StockEntry(Document):
     def _validate_items(self):
         if not self.items:
             frappe.throw(_("At least one item is required in the Stock Entry."))
+
+        from zoho_books_clone.inventory.utils import get_conversion_factor
 
         direction = SE_TYPE_DIRECTION.get(self.stock_entry_type, {})
         self._auto_assign_outgoing_batches(direction)
@@ -155,6 +175,18 @@ class StockEntry(Document):
                 row.s_warehouse = self.from_warehouse
             if direction.get("t") and not row.t_warehouse:
                 row.t_warehouse = self.to_warehouse
+
+            # Phase 4: resolve this row's stock_uom-equivalent qty up front.
+            # Computed directly here (not just read off row.qty_in_stock_uom)
+            # so it's correct even for rows that were just built as raw dicts
+            # in _auto_assign_outgoing_batches above and haven't been through
+            # StockEntryDetail's own validate() yet -- every stock-balance
+            # check and the SLE itself must key off this, not row.qty, since
+            # Bin/Batch/SLE quantities are always stock_uom-denominated while
+            # row.qty is whatever UOM this row was entered in.
+            row.conversion_factor = get_conversion_factor(row.item_code, row.uom)
+            row.qty_in_stock_uom = round(flt(row.qty) * flt(row.conversion_factor), 4)
+            stock_qty = flt(row.qty_in_stock_uom)
 
             # Validate warehouse requirements.
             # Manufacture is the one type where a single Stock Entry mixes two
@@ -191,12 +223,12 @@ class StockEntry(Document):
                     {"item_code": row.item_code, "warehouse": row.s_warehouse},
                     "actual_qty",
                 ) or 0)
-                if available < flt(row.qty):
+                if available < stock_qty:
                     frappe.throw(_(
                         "Row {0}: Insufficient stock for item <b>{1}</b> in warehouse <b>{2}</b>. "
                         "Available: {3}, Required: {4}."
                     ).format(i, row.item_code, row.s_warehouse,
-                             frappe.bold(available), frappe.bold(flt(row.qty))))
+                             frappe.bold(available), frappe.bold(stock_qty)))
 
             # Batch validation: items flagged Has Batch No must carry a Batch No
             # on every line, and the batch itself must actually exist (it should
@@ -227,11 +259,11 @@ class StockEntry(Document):
                 # since a warehouse can hold several batches of the same item).
                 if direction.get("s") and row.s_warehouse:
                     batch_qty = flt(frappe.db.get_value("Batch", row.batch_no, "batch_qty") or 0)
-                    if batch_qty < flt(row.qty):
+                    if batch_qty < stock_qty:
                         frappe.throw(_(
                             "Row {0}: Insufficient stock in batch <b>{1}</b>. "
                             "Available: {2}, Required: {3}."
-                        ).format(i, row.batch_no, frappe.bold(batch_qty), frappe.bold(flt(row.qty))))
+                        ).format(i, row.batch_no, frappe.bold(batch_qty), frappe.bold(stock_qty)))
             elif row.batch_no:
                 # Item isn't batch-tracked but a batch_no slipped through (e.g. stale
                 # client state) — clear it rather than silently posting bad data.
@@ -248,7 +280,12 @@ class StockEntry(Document):
                     from zoho_books_clone.inventory.utils import get_valuation_rate
                     avg_rate = get_valuation_rate(row.item_code, row.s_warehouse)
                     if avg_rate:
-                        row.basic_rate = avg_rate
+                        # get_valuation_rate() is always per stock_uom (it
+                        # reads straight off the Bin) -- scale it up to this
+                        # row's own entry uom (e.g. per Pack) by its
+                        # conversion_factor so row.amount (= qty * basic_rate,
+                        # both in entry-uom terms) still comes out right.
+                        row.basic_rate = avg_rate * (flt(row.conversion_factor) or 1)
                 except Exception:
                     pass  # fall back to 0
 
@@ -283,14 +320,29 @@ class StockEntry(Document):
         direction = SE_TYPE_DIRECTION.get(self.stock_entry_type, {})
 
         for row in self.items:
-            rate = flt(row.basic_rate)
+            # Phase 4: the Stock Ledger/Bin/Batch always deal in stock_uom,
+            # never the row's entry uom -- post qty_in_stock_uom (set on
+            # every row by _validate_items, which has already run by the
+            # time on_submit -> _make_sle executes), not row.qty.
+            #
+            # row.amount (= row.qty * row.basic_rate, both in entry-uom
+            # terms, from _validate_items) is already the correct total
+            # monetary value for this row regardless of UOM -- dividing it
+            # by the stock-uom qty gives the equivalent per-stock-uom rate,
+            # so SLE valuation and row.amount/the GL entries built from
+            # total_incoming_value/total_outgoing_value always agree, even
+            # when conversion_factor != 1. Falls back to basic_rate (already
+            # per stock_uom when conversion_factor is 1, the common case)
+            # if stock_qty is somehow zero.
+            stock_qty = flt(row.qty_in_stock_uom) or flt(row.qty)
+            rate = (flt(row.amount) / stock_qty) if stock_qty else flt(row.basic_rate)
 
             # Outgoing SLE (from source warehouse)
             if direction.get("s") and row.s_warehouse:
                 self._create_sle(
                     item_code=row.item_code,
                     warehouse=row.s_warehouse,
-                    actual_qty=-flt(row.qty),
+                    actual_qty=-stock_qty,
                     incoming_rate=0,
                     valuation_rate=rate,
                     stock_value_difference=-flt(row.amount),
@@ -302,7 +354,7 @@ class StockEntry(Document):
                 self._create_sle(
                     item_code=row.item_code,
                     warehouse=row.t_warehouse,
-                    actual_qty=flt(row.qty),
+                    actual_qty=stock_qty,
                     incoming_rate=rate,
                     valuation_rate=rate,
                     stock_value_difference=flt(row.amount),

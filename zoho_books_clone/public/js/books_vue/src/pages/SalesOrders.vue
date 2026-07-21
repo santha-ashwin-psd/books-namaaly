@@ -457,14 +457,7 @@
                           <div class="po-item-field">
                             <label>UOM</label>
                             <select v-model="line.uom" class="inv-fi">
-                              <option value="Nos">Nos</option>
-                              <option value="Kg">Kg</option>
-                              <option value="Ltr">Ltr</option>
-                              <option value="Hrs">Hrs</option>
-                              <option value="Pcs">Pcs</option>
-                              <option value="Box">Box</option>
-                              <option value="Mtr">Mtr</option>
-                              <option value="Set">Set</option>
+                              <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                             </select>
                           </div>
                           <div class="po-item-field">
@@ -1186,6 +1179,7 @@ const viewLoading = ref(false), viewItems = ref([]);
 const fulfill = reactive({ lines: [], computed_status: "" });
 const links = reactive({ sales_invoices: [], delivery_challans: [] });
 const customers = ref([]), items = ref([]), lines = ref([]), taxAccountHead = ref(""), taxTemplates = ref([]);
+const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box", "Mtr", "Set"]);
 const addressLoading = ref(false);
 const sortCol = ref("transaction_date"), sortDir = ref("desc");
 const actionRunning = ref(false);
@@ -1909,6 +1903,9 @@ onMounted(async () => { setCompany(window.__booksCompany || "");
   document.addEventListener('click', onDocClickForDownloadMenu);
   await load();
   loadTaxAccount();
+  apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
+    .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
+    .catch(() => {});
   useOpenFromQuery({
     route,
     openByName: (n) => openView(list.value.find(x => x.name === n) || { name: n }),

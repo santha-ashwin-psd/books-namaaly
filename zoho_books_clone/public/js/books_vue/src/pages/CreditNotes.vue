@@ -302,9 +302,7 @@
                       <div class="cn-item-field">
                         <label>UOM</label>
                         <select v-model="line.uom" class="inv-fi">
-                          <option>Nos</option><option>Kg</option><option>Ltr</option>
-                          <option>Hrs</option><option>Pcs</option><option>Box</option>
-                          <option>Mtr</option><option>Set</option>
+                          <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </div>
                     </div>
@@ -777,6 +775,7 @@ const viewLoading = ref(false), viewItems = ref([]), viewApplications = ref([]),
 const viewTaxes = computed(() => (viewDoc.value?.taxes || []).filter(t => flt(t.tax_amount) !== 0 || flt(t.rate) !== 0));
 const viewSubtotal = computed(() => viewItems.value.reduce((s, i) => s + Math.abs(flt(i.amount)), 0));
 const customers = ref([]), items = ref([]), invoices = ref([]), lines = ref([]);
+const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box", "Mtr", "Set"]);
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 const _balances = ref({});
 function balanceFor(name) { return flt(_balances.value[name] || 0); }
@@ -1418,6 +1417,9 @@ function exportCSV() {
 
 onMounted(async () => {
   await load();
+  apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
+    .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
+    .catch(() => {});
   useOpenFromQuery({
     route,
     openByName: (n) => openView(list.value.find(x => x.name === n) || { name: n }),

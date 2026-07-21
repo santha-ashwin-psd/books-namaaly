@@ -357,7 +357,7 @@ import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, resolveCompany 
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
-import { flt, fmtDate } from "../utils/format.js";
+import { flt, fmtDate, fmt } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import QuickCreateDrawer from "../components/QuickCreateDrawer.vue";
 import JournalTab from "../components/JournalTab.vue";
@@ -398,7 +398,13 @@ async function fetchPaidThroughAccounts(q = "") {
     const filters = [["is_group","=",0],["disabled","=",0],["company","=",company],["account_type","in",["Bank","Cash"]]];
     if (q) filters.push(["name","like",`%${q}%`]);
     const rows = await apiList("Account", { fields:["name","account_type"], filters, limit:30, order:"name asc" });
-    paidThroughOptions.value = rows.map(r => ({ label: r.name, value: r.name }));
+    let balances = {};
+    if (rows.length) {
+      try {
+        balances = await apiGET("zoho_books_clone.db.queries.get_account_balances_bulk", { accounts: rows.map(r => r.name) }) || {};
+      } catch { balances = {}; }
+    }
+    paidThroughOptions.value = rows.map(r => ({ label: `${r.name}  ·  ${fmt(balances[r.name] || 0)}`, value: r.name }));
   } catch { paidThroughOptions.value = []; }
 }
 const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});

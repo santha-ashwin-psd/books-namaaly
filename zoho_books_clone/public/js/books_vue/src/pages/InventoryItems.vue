@@ -503,6 +503,30 @@
             </div>
           </div>
 
+          <div class="ad-section">
+            <div class="ad-section-title">Purchase Unit Conversion</div>
+            <div class="ad-toggle-sub" style="margin-bottom:10px">
+              If you buy this item in a different unit than you manufacture with (e.g. buy in Box, use in Kg), set that here. Purchase Orders/Invoices/Receipts entered in the Purchase UOM are auto-converted to Stock UOM ({{ form.stock_uom || 'Nos' }}) before hitting inventory and manufacturing.
+            </div>
+            <div class="ad-grid-2">
+              <div class="ad-field">
+                <label class="ad-label">Purchase UOM</label>
+                <select class="ad-input" v-model="form.purchase_uom">
+                  <option value="">— Same as Stock UOM —</option>
+                  <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
+                </select>
+              </div>
+              <div class="ad-field">
+                <label class="ad-label">1 {{ form.purchase_uom || 'Purchase Unit' }} =</label>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input type="number" class="ad-input" v-model.number="form.purchase_conversion_factor"
+                         min="0" step="any" :disabled="!form.purchase_uom" style="flex:1"/>
+                  <span class="text-muted" style="font-size:12.5px;white-space:nowrap">{{ form.stock_uom || 'Nos' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="ad-section" v-if="form.is_stock_item">
             <div class="ad-section-title">Manufacturing</div>
 
@@ -690,6 +714,7 @@ const form = reactive({
   inspection_required_before_purchase: 0, inspection_required_before_delivery: 0,
   inspection_required_before_manufacture: 0,
   has_variants: 0,
+  purchase_uom: "", purchase_conversion_factor: 1,
 });
 
 // ── Variants ──
@@ -1111,6 +1136,7 @@ function openAdd(presetType) {
     default_bom: "", quality_inspection_required: 0, min_order_qty: 0, lead_time_days: 0,
     inspection_required_before_purchase: 0, inspection_required_before_delivery: 0,
     inspection_required_before_manufacture: 0,
+    purchase_uom: "", purchase_conversion_factor: 1,
   });
   // Auto-select warehouse matching type
   if (d.warehouse_type && warehouses.value.length) {
@@ -1164,6 +1190,12 @@ async function openEdit(row) {
       inspection_required_before_manufacture: full.inspection_required_before_manufacture ? 1 : 0,
       min_order_qty:                flt(full.min_order_qty),
       lead_time_days:                full.lead_time_days ? parseInt(full.lead_time_days) : 0,
+      purchase_uom: full.purchase_uom || "",
+      purchase_conversion_factor: (() => {
+        const rows = full.uom_conversions || [];
+        const match = rows.find(r => r.uom === full.purchase_uom);
+        return match ? flt(match.conversion_factor) : 1;
+      })(),
     });
     // Load BOM options for the picker now that we know the item's name/type.
     if (full.item_type === "Finished Good" || full.item_type === "Work In Progress") {
@@ -1193,6 +1225,8 @@ function validateItem() {
     [!!form.is_stock_item && !form.default_warehouse, "Default Warehouse is required when Track Inventory is on", "inventory"],
     [form.item_type !== "Work In Progress" && !form.is_sales_item && !form.is_purchase_item,
       "Enable Sales Item and/or Purchase Item — an item unusable in both won't show up anywhere", "basic"],
+    [!!form.purchase_uom && form.purchase_uom !== form.stock_uom && flt(form.purchase_conversion_factor) <= 0,
+      "Enter how many " + (form.stock_uom || "Stock UOM") + " make up 1 " + form.purchase_uom, "inventory"],
   ];
   for (const [bad, msg, tab] of checks) {
     if (bad) { drawerTab.value = tab; toast(msg, "error"); return false; }
@@ -1241,6 +1275,10 @@ async function saveItem({ close = true } = {}) {
       quality_inspection_required: (form.inspection_required_before_purchase || form.inspection_required_before_delivery || form.inspection_required_before_manufacture) ? 1 : 0,
       min_order_qty: flt(form.min_order_qty),
       lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : 0,
+      purchase_uom: form.purchase_uom || "",
+      uom_conversions: (!!form.purchase_uom && form.purchase_uom !== form.stock_uom)
+        ? [{ uom: form.purchase_uom, conversion_factor: flt(form.purchase_conversion_factor) }]
+        : [],
     };
     if (isEdit) doc.name = form.name;
     const saved = await apiSave(doc);

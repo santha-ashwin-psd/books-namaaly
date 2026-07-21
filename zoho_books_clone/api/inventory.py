@@ -187,10 +187,43 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
         items = frappe.get_all(
             "Item",
             filters={"name": ["in", item_codes]},
-            fields=["name", "item_name", "item_group", "stock_uom", "disabled", "has_batch_no"],
+            fields=["name", "item_name", "item_group", "stock_uom", "disabled",
+                    "has_batch_no", "purchase_uom"],
         )
         for it in items:
             item_map[it.name] = it
+
+    # Phase 5 (readability, not correctness -- Bin.actual_qty above is
+    # already the authoritative stock_uom balance): batch-fetch each item's
+    # configured Purchase UOM conversion factor in one query, so the report
+    # can additionally show "= 2 Packs" next to the Kg balance for operators
+    # used to thinking in purchase units. Items with no Purchase UOM
+    # configured (or no matching conversion row) simply don't get this
+    # extra field -- the stock_uom qty/uom above is unaffected either way.
+    purchase_conversion = {}
+    purchase_item_codes = [
+        code for code in item_codes
+        if item_map.get(code) and item_map[code].get("purchase_uom")
+        and item_map[code]["purchase_uom"] != item_map[code].get("stock_uom")
+    ]
+    if purchase_item_codes:
+        conv_rows = frappe.get_all(
+            "Item UOM Conversion Detail",
+            filters={"parent": ["in", purchase_item_codes], "parenttype": "Item"},
+            fields=["parent", "uom", "conversion_factor"],
+        )
+        for c in conv_rows:
+            purchase_conversion[(c.parent, c.uom)] = flt(c.conversion_factor)
+
+    def _purchase_display(item_code, stock_qty):
+        """Return (purchase_uom, purchase_qty) for the readability columns,
+        or (None, None) if this item has no usable Purchase UOM conversion."""
+        item = item_map.get(item_code) or {}
+        p_uom = item.get("purchase_uom")
+        factor = purchase_conversion.get((item_code, p_uom)) if p_uom else None
+        if not p_uom or not factor:
+            return None, None
+        return p_uom, round(flt(stock_qty) / factor, 2)
 
     # For group warehouses aggregate all child bins by item_code
     if is_group_wh:
@@ -218,8 +251,12 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
             agg[b.item_code]["ordered_qty"]   += flt(b.ordered_qty)
             agg[b.item_code]["projected_qty"] += flt(b.projected_qty)
             agg[b.item_code]["stock_value"]   += flt(b.stock_value)
-        return [dict(r, below_reorder=r["actual_qty"] < r["reorder_level"] if r["reorder_level"] else False)
-                for r in agg.values()]
+        out = []
+        for r in agg.values():
+            r["below_reorder"] = r["actual_qty"] < r["reorder_level"] if r["reorder_level"] else False
+            r["purchase_uom"], r["purchase_qty"] = _purchase_display(r["item_code"], r["actual_qty"])
+            out.append(r)
+        return out
 
     result = []
     seen_codes = set()
@@ -229,6 +266,7 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
         if item_group and item.get("item_group") != item_group:
             continue
         seen_codes.add(b.item_code)
+        purchase_uom, purchase_qty = _purchase_display(b.item_code, b.actual_qty)
         result.append({
             "item_code":       b.item_code,
             "item_name":       item.get("item_name") or b.item_code,
@@ -245,6 +283,8 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
             "reorder_qty":     flt(b.reorder_qty),
             "below_reorder":   flt(b.actual_qty) < flt(b.reorder_level) if b.reorder_level else False,
             "has_batch_no":    1 if item.get("has_batch_no") else 0,
+            "purchase_uom":    purchase_uom,
+            "purchase_qty":    purchase_qty,
         })
 
     # Also show items that have this warehouse as default_warehouse but no Bin yet (0 stock)
@@ -277,6 +317,8 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
                     "reorder_qty":    flt(it.reorder_qty),
                     "below_reorder":  False,
                     "no_stock_entry": True,
+                    "purchase_uom":   None,
+                    "purchase_qty":   None,
                 })
         except Exception:
             pass
@@ -358,9 +400,24 @@ def get_item_stock_detail(item_code, warehouse=None):
 
     item = frappe.get_value(
         "Item", item_code,
-        ["item_name", "stock_uom", "item_group", "standard_rate"],
+        ["item_name", "stock_uom", "item_group", "standard_rate", "purchase_uom"],
         as_dict=True,
     ) or {}
+
+    total_qty = sum(flt(b.actual_qty) for b in bins)
+
+    # Phase 5 (readability, not correctness -- the qty/value figures above
+    # already come straight off Bin, the authoritative stock_uom balance):
+    # if this item has a configured Purchase UOM with a real conversion row,
+    # surface the "as purchased" equivalent of the total too, e.g. "= 2 Packs"
+    # alongside the Kg total, for operators used to thinking in purchase units.
+    purchase_uom = purchase_qty = None
+    if item.get("purchase_uom") and item["purchase_uom"] != item.get("stock_uom"):
+        from zoho_books_clone.inventory.utils import get_conversion_factor
+        factor = get_conversion_factor(item_code, item["purchase_uom"])
+        if factor and factor != 1:
+            purchase_uom = item["purchase_uom"]
+            purchase_qty = round(total_qty / factor, 2)
 
     return {
         "item_code":    item_code,
@@ -368,6 +425,8 @@ def get_item_stock_detail(item_code, warehouse=None):
         "stock_uom":    item.get("stock_uom") or "Nos",
         "item_group":   item.get("item_group") or "",
         "selling_rate": flt(item.get("standard_rate")),
+        "purchase_uom": purchase_uom,
+        "purchase_qty": purchase_qty,
         "warehouses":   [
             {
                 "warehouse":     b.warehouse,
@@ -380,7 +439,7 @@ def get_item_stock_detail(item_code, warehouse=None):
             }
             for b in bins
         ],
-        "total_qty":   sum(flt(b.actual_qty) for b in bins),
+        "total_qty":   total_qty,
         "total_value": sum(flt(b.stock_value) for b in bins),
     }
 

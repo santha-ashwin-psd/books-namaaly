@@ -388,6 +388,30 @@
                 <div class="iv-field"><label class="nim-label">Reorder Level</label><input type="number" class="nim-input" v-model.number="form.reorder_level" min="0"/></div>
                 <div class="iv-field"><label class="nim-label">Reorder Qty</label><input type="number" class="nim-input" v-model.number="form.reorder_qty" min="0"/></div>
               </div>
+
+              <div class="iv-field" style="margin-top:18px;padding-top:14px;border-top:1px solid #e5e7eb">
+                <label class="nim-label" style="font-weight:600">Purchase Unit Conversion</label>
+                <div class="text-muted" style="font-size:11.5px;margin-bottom:10px">
+                  If you buy this item in a different unit than you manufacture with (e.g. buy in Box, use in Kg), set that here. Purchases/receipts entered in the Purchase UOM are auto-converted to Stock UOM ({{ form.stock_uom || 'Nos' }}) before hitting inventory and manufacturing.
+                </div>
+              </div>
+              <div class="iv-fg2">
+                <div class="iv-field">
+                  <label class="nim-label">Purchase UOM</label>
+                  <select class="nim-input" v-model="form.purchase_uom">
+                    <option value="">— Same as Stock UOM —</option>
+                    <option v-for="u in UOM_LIST" :key="u" :value="u">{{ u }}</option>
+                  </select>
+                </div>
+                <div class="iv-field">
+                  <label class="nim-label">1 {{ form.purchase_uom || 'Purchase Unit' }} =</label>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <input type="number" class="nim-input" v-model.number="form.purchase_conversion_factor"
+                           min="0" step="any" :disabled="!form.purchase_uom" style="flex:1"/>
+                    <span class="text-muted" style="font-size:12.5px;white-space:nowrap">{{ form.stock_uom || 'Nos' }}</span>
+                  </div>
+                </div>
+              </div>
             </template>
           </div>
 
@@ -441,6 +465,7 @@ const form = reactive({
   income_account: "", expense_account: "",
   is_stock_item: 1, valuation_method: "FIFO", default_warehouse: "",
   reorder_level: 0, reorder_qty: 0,
+  purchase_uom: "", purchase_conversion_factor: 1,
 });
 
 const DRAWER_TABS    = [{ k:"basic", l:"Basic Info" }, { k:"pricing", l:"Pricing & Tax" }, { k:"inventory", l:"Inventory" }];
@@ -495,6 +520,12 @@ async function openEdit() {
     default_warehouse: item.value.default_warehouse || "",
     reorder_level: flt(item.value.reorder_level),
     reorder_qty: flt(item.value.reorder_qty),
+    purchase_uom: item.value.purchase_uom || "",
+    purchase_conversion_factor: (() => {
+      const rows = item.value.uom_conversions || [];
+      const match = rows.find(r => r.uom === item.value.purchase_uom);
+      return match ? flt(match.conversion_factor) : 1;
+    })(),
   });
 
   // Load dropdowns in background
@@ -532,12 +563,22 @@ async function saveItem() {
     [!form.income_account,                            "Income account is required",  "pricing"],
     [!form.expense_account,                           "Expense account is required", "pricing"],
     [!!form.is_stock_item && !form.default_warehouse, "Default Warehouse is required when Track Inventory is on", "inventory"],
+    [!!form.purchase_uom && form.purchase_uom !== form.stock_uom && flt(form.purchase_conversion_factor) <= 0,
+      "Enter how many " + (form.stock_uom || "Stock UOM") + " make up 1 " + form.purchase_uom, "inventory"],
   ];
   for (const [bad, msg, tab] of checks) {
     if (bad) { drawerTab.value = tab; toast(msg, "error"); return; }
   }
   saving.value = true;
   try {
+    // Purchase UOM only needs a conversion row when it actually differs
+    // from the Stock UOM — if they're the same (or Purchase UOM is left
+    // blank), no conversion is needed and any prior conversion row for it
+    // is cleared.
+    const needsConversion = !!form.purchase_uom && form.purchase_uom !== form.stock_uom;
+    const uomConversions = needsConversion
+      ? [{ uom: form.purchase_uom, conversion_factor: flt(form.purchase_conversion_factor) }]
+      : [];
     const doc = {
       doctype: "Item", name: form.name,
       item_name: form.item_name, item_code: form.item_code,
@@ -551,6 +592,8 @@ async function saveItem() {
       is_stock_item: form.is_stock_item, valuation_method: form.valuation_method,
       default_warehouse: form.default_warehouse,
       reorder_level: flt(form.reorder_level), reorder_qty: flt(form.reorder_qty),
+      purchase_uom: form.purchase_uom || "",
+      uom_conversions: uomConversions,
     };
     await apiSave(doc);
     toast("Item updated");

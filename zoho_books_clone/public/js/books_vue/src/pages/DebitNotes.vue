@@ -294,9 +294,7 @@
                       <div class="dn-item-field">
                         <label>UOM</label>
                         <select v-model="line.uom" class="inv-fi">
-                          <option>Nos</option><option>Kg</option><option>Ltr</option>
-                          <option>Hrs</option><option>Pcs</option><option>Box</option>
-                          <option>Mtr</option><option>Set</option>
+                          <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </div>
                     </div>
@@ -757,6 +755,7 @@ const drawerOpen = ref(false), drawerSaving = ref(false), editingName = ref("");
 const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const viewLoading = ref(false), viewItems = ref([]), viewApplications = ref([]), viewBalance = ref(0), viewReason = ref("");
 const vendors = ref([]), items = ref([]), bills = ref([]), lines = ref([]);
+const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box", "Mtr", "Set"]);
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 
 // Balance cache by DN name
@@ -1366,7 +1365,12 @@ function exportCSV() {
   toast.success(`CSV exported — ${rows.length} note(s)`);
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
+    .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
+    .catch(() => {});
+});
 </script>
 
 <style scoped>

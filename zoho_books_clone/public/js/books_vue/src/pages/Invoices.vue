@@ -528,12 +528,7 @@
                       <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
                       <td class="td-uom">
                         <select v-model="line.uom" class="inv-fi">
-                          <option value="Nos">Nos</option>
-                          <option value="Kg">Kg</option>
-                          <option value="Ltr">Ltr</option>
-                          <option value="Hrs">Hrs</option>
-                          <option value="Pcs">Pcs</option>
-                          <option value="Box">Box</option>
+                          <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </td>
                       <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
@@ -1547,6 +1542,7 @@ const customers    = ref([]);
 const salesPersons = ref([]);
 const priceLists = ref([]);
 const items        = ref([]);
+const uomList      = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box"]);
 const activeFilter = ref("all");
 const search       = ref("");
 const selectedRows = ref(new Set());
@@ -2119,8 +2115,12 @@ function onLineBatchSelect(line, opt) {
 // Returns a human-readable error string when the entered Qty exceeds the
 // selected batch's available stock, or "" when the row is fine. Used both to
 // show an inline warning and to block Save/Submit until it's resolved.
+// Batch selection is only mandatory when this invoice will actually move
+// stock (form.update_stock) — a plain accounting-only invoice (Delivery Note
+// or nothing owns the stock movement) never touches a batch, so requiring
+// one here would block otherwise-valid invoices for no reason.
 function batchQtyError(line) {
-  if (!line.has_batch_no || !line.item_code) return "";
+  if (!line.has_batch_no || !line.item_code || !form.update_stock) return "";
   if (!line.batch_no) return `${line.item_name || line.item_code} is batch-tracked — select a Batch No`;
   if (line._batchQty == null) return "";
   if (flt(line.qty) > flt(line._batchQty)) {
@@ -2891,6 +2891,9 @@ onMounted(async () => {
   console.log("[BooksCompany][Invoices.vue] onMounted() start, window.__booksCompany =", window.__booksCompany);
   await load();
   loadCustomers(); loadSalesPersons(); loadItems(); loadTaxAccount(); loadBranding(); loadPriceLists();
+  apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
+    .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
+    .catch(() => {});
   try { setCompany(window.__booksCompany || await resolveCompany()); } catch {}
 
   // Cross-document deep link: /invoices?open=INV-...
