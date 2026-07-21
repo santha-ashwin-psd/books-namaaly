@@ -45,7 +45,10 @@
   "sec_source",
   "supplier",
   "reference_doctype",
-  "reference_name"
+  "reference_name",
+  "col_expense",
+  "paid_through",
+  "expense_type"
  ],
  "fields": [
   {
@@ -99,6 +102,25 @@
    "fieldtype": "Dynamic Link",
    "label": "Reference Name",
    "options": "reference_doctype"
+  },
+  {
+   "fieldname": "col_expense",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paid_through",
+   "fieldtype": "Link",
+   "label": "Paid Through",
+   "options": "Account",
+   "description": "Cash/Bank this charge was paid from. Required only when Reference DocType/Name is blank — on submit, LCV auto-creates and submits an Expense entry (Dr this charge's account / Cr Paid Through) so the charge has a proper audit trail, then reclassifies it into Inventory as usual."
+  },
+  {
+   "fieldname": "expense_type",
+   "fieldtype": "Select",
+   "label": "Expense Type",
+   "options": "Travel\nFood & Meals\nAccommodation\nOffice Supplies\nUtilities\nMarketing\nSoftware\nHardware\nTraining\nMiscellaneous",
+   "default": "Miscellaneous",
+   "description": "Used only for the auto-created Expense entry when no Reference DocType/Name is set."
   }
  ],
  "permissions": []

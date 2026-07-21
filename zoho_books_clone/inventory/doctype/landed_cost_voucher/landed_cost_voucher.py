@@ -121,6 +121,14 @@ class LandedCostVoucher(Document):
         for row in self.charges:
             if flt(row.amount) <= 0:
                 frappe.throw(_("Row {0}: Charge Amount must be greater than zero.").format(row.idx))
+            if not (row.reference_doctype and row.reference_name) and not row.paid_through:
+                frappe.throw(
+                    _(
+                        "Row {0}: set either a Reference DocType/Name (if this charge was "
+                        "already booked elsewhere) or a Paid Through account (so an Expense "
+                        "entry can be created for it automatically on submit)."
+                    ).format(row.idx)
+                )
 
     def _validate_no_duplicate_charge_capitalization(self):
         """Block capitalizing the same sourced charge through more than one
@@ -198,6 +206,7 @@ class LandedCostVoucher(Document):
     # ── Submit / Cancel ──────────────────────────────────────────────────
 
     def on_submit(self):
+        self._create_expense_entries()
         total_capitalized = self._create_valuation_sles()
         self.db_set("total_capitalized_amount", total_capitalized, update_modified=False)
         self._post_gl_entries(total_capitalized)
@@ -214,6 +223,50 @@ class LandedCostVoucher(Document):
             # GL-side failure never blocks the (higher-priority) stock
             # reversal that already happened above.
             frappe.log_error(frappe.get_traceback(), "Landed Cost GL reversal failed")
+
+    def _create_expense_entries(self):
+        """For every charge row with no existing Reference DocType/Name (i.e.
+        nothing was already booked for it via a separate Bill/Journal Entry),
+        auto-create and submit a proper Expense record: Dr this charge's
+        account / Cr Paid Through. This gives the charge a real audit-trail
+        entry visible in the Expenses module/reports before _post_gl_entries
+        reclassifies it out of that same account and into Inventory — net
+        effect is Dr Inventory / Cr Paid Through, same as before, but now
+        with a traceable Expense document in between instead of a bare GL
+        credit with nothing backing it.
+
+        Rows that already carry a reference (an existing Bill/Journal Entry)
+        are left untouched — creating another Expense for those would
+        double-book the charge.
+        """
+        for row in self.charges:
+            if row.reference_doctype and row.reference_name:
+                continue
+            if not row.paid_through:
+                # _validate_rows() already enforces this at save time, but
+                # guard again here in case a row was force-set between save
+                # and submit.
+                frappe.throw(
+                    _("Row {0}: Paid Through is required to auto-create its Expense entry.").format(row.idx)
+                )
+
+            expense = frappe.get_doc({
+                "doctype": "Expense",
+                "posting_date": self.posting_date,
+                "expense_type": row.expense_type or "Miscellaneous",
+                "description": row.description or f"Landed cost charge — {self.name}",
+                "amount": flt(row.amount),
+                "expense_account": row.account,
+                "paid_through": row.paid_through,
+                "company": self.company,
+                "vendor": row.supplier or None,
+                "reference_no": self.name,
+            })
+            expense.insert(ignore_permissions=True)
+            expense.submit()
+
+            row.db_set("reference_doctype", "Expense", update_modified=False)
+            row.db_set("reference_name", expense.name, update_modified=False)
 
     def _create_valuation_sles(self) -> float:
         """One value-only Stock Ledger Entry per item row that still has some

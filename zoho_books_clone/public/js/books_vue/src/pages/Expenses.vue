@@ -363,6 +363,7 @@ import QuickCreateDrawer from "../components/QuickCreateDrawer.vue";
 import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
+import { useRoute, useRouter } from "vue-router";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -585,7 +586,17 @@ async function uploadAttachment(file, doctype, docname) {
   const data = await res.json();
   return data?.message?.file_url || data?.file_url || null;
 }
-onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); });
+const route = useRoute();
+const router = useRouter();
+function _openFromQuery() {
+  const name = route.query.view;
+  if (!name) return;
+  openView({ name });
+  // Normalize the URL back so a page refresh doesn't re-open the drawer.
+  router.replace({ path: "/expenses" });
+}
+
+onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); _openFromQuery(); });
 </script>
 
 <style scoped>

@@ -79,6 +79,7 @@
                 <div class="coa-split-row-name" :class="{'fw-700':row.is_group}">{{row.account_name||row.name}}</div>
                 <div class="coa-split-row-type">{{row.account_type || row.root_type}}<span v-if="row.is_group"> · Group</span></div>
               </div>
+              <div v-if="!row.is_group" class="coa-split-row-bal" :class="(balances[row.name]||0) < 0 ? 'coa-cr' : 'coa-dr'">{{ fmtBal(balances[row.name]) }}</div>
             </div>
           </template>
         </div>
@@ -99,6 +100,13 @@
               <div class="coa-detail-name">{{selectedAccount.account_name || selectedAccount.name}}</div>
             </div>
             <div style="display:flex;gap:8px">
+            <div class="coa-detail-balance coa-detail-balance-opening" v-if="!selectedAccount.is_group">
+            <div class="coa-detail-balance-lbl">Opening Balance</div>
+            <div class="coa-detail-balance-val" :class="(selectedAccount.opening||0) < 0 ? 'coa-cr' : 'coa-dr'">
+              {{ fmtBal(selectedAccount.opening) }}
+              <span class="coa-detail-balance-tag">{{ (selectedAccount.opening||0) < 0 ? '(Cr)' : '(Dr)' }}</span>
+            </div>
+          </div>
             <div class="coa-detail-balance" v-if="!selectedAccount.is_group">
             <div class="coa-detail-balance-lbl">Closing Balance</div>
             <div class="coa-detail-balance-val" :class="(balances[selectedAccount.name]||0) < 0 ? 'coa-cr' : 'coa-dr'">
@@ -1074,6 +1082,7 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
   text-overflow: ellipsis; white-space: nowrap;
 }
 .coa-split-row-type { font-size: 11.5px; color: #9ca3af; margin-top: 1px; }
+.coa-split-row-bal { font-size: 12px; font-weight: 700; flex-shrink: 0; white-space: nowrap; margin-left: 6px; }
 .coa-split-detail { flex: 1; overflow-y: auto; min-width: 0; }
 .coa-split-empty {
   height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;

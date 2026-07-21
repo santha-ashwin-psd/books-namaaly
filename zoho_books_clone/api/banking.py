@@ -279,9 +279,9 @@ def get_account_ledger(account: str, from_date: str = None, to_date: str = None)
 
     where = " AND ".join(conditions)
 
-    opening = 0.0
+    opening = flt(frappe.db.get_value("Account", account, "opening_balance") or 0)
     if from_date:
-        opening = flt(frappe.db.sql(
+        opening += flt(frappe.db.sql(
             f"""
             SELECT SUM(debit) - SUM(credit)
             FROM `tabGeneral Ledger Entry`

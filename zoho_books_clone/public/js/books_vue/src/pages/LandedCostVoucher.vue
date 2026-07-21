@@ -168,9 +168,12 @@
               <table class="inv-table" style="font-size:13px">
                 <thead>
                   <tr>
-                    <th style="width:260px">Expense Account</th>
-                    <th class="ta-r" style="width:130px">Amount</th>
+                    <th style="width:220px">Expense Account</th>
+                    <th class="ta-r" style="width:120px">Amount</th>
                     <th>Description (optional)</th>
+                    <th style="width:200px">Paid Through</th>
+                    <th style="width:150px">Expense Type</th>
+                    <th v-if="readOnly" style="width:110px">Expense</th>
                     <th v-if="!readOnly" style="width:36px"></th>
                   </tr>
                 </thead>
@@ -192,6 +195,30 @@
                     <td>
                       <input class="inv-fi" v-model="c.description" :disabled="readOnly" placeholder="e.g. Inward Freight — KPN Logistics"/>
                     </td>
+                    <td>
+                      <SearchableSelect
+                        v-model="c.paid_through"
+                        :options="payThroughOptions"
+                        placeholder="— Cash/Bank —"
+                        :disabled="readOnly || !!(c.reference_doctype && c.reference_name)"
+                        compact
+                      />
+                    </td>
+                    <td>
+                      <select class="inv-fi" v-model="c.expense_type" :disabled="readOnly">
+                        <option v-for="t in expenseTypeOptions" :key="t" :value="t">{{ t }}</option>
+                      </select>
+                    </td>
+                    <td v-if="readOnly">
+                      <a v-if="c.reference_doctype === 'Expense' && c.reference_name"
+                         href="#" class="mono-sm" style="color:#3B5BDB;font-weight:600"
+                         @click.prevent="viewLinkedExpense(c.reference_name)">
+                        {{ c.reference_name }}
+                      </a>
+                      <span v-else class="c-muted" style="font-size:11.5px">
+                        {{ c.reference_doctype ? c.reference_doctype + " " + c.reference_name : "—" }}
+                      </span>
+                    </td>
                     <td v-if="!readOnly" style="text-align:center">
                       <button class="inv-act-btn" style="color:#dc2626" @click="removeCharge(idx)"><span v-html="icon('trash',13)"></span></button>
                     </td>
@@ -202,6 +229,9 @@
             <div v-else class="lcv-empty-box">No charges added yet.</div>
             <div v-if="!readOnly" class="lcv-add-row" @click="addCharge">
               <span v-html="icon('plus',13)"></span> Add Charge
+            </div>
+            <div v-if="!readOnly && lcv.charges.length" style="font-size:11.5px;color:#94a3b8;margin:-4px 0 8px 2px">
+              Paid Through is required unless this charge is already booked on another document (Bill/Journal Entry) — on submit, a new Expense entry is auto-created for it and then reclassified into stock value.
             </div>
 
             <!-- Item allocation preview -->
@@ -421,12 +451,30 @@ const accounts = ref([]);
 const accountOptions = computed(() =>
   accounts.value.map(a => ({ value: a.name, label: a.account_name || a.name }))
 );
+const payThroughAccounts = ref([]);
+const payThroughOptions = computed(() =>
+  payThroughAccounts.value.map(a => ({ value: a.name, label: a.account_name || a.name }))
+);
+const expenseTypeOptions = [
+  "Travel", "Food & Meals", "Accommodation", "Office Supplies", "Utilities",
+  "Marketing", "Software", "Hardware", "Training", "Miscellaneous",
+];
 
 async function loadAccounts() {
   try {
     accounts.value = await apiList("Account", {
       fields: ["name", "account_name", "account_type"],
       filters: [["is_group", "=", 0], ["disabled", "=", 0], ["account_type", "=", "Expense"]],
+      limit: 100000,
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+async function loadPayThroughAccounts() {
+  try {
+    payThroughAccounts.value = await apiList("Account", {
+      fields: ["name", "account_name", "account_type"],
+      filters: [["is_group", "=", 0], ["disabled", "=", 0], ["account_type", "in", ["Cash", "Bank"]]],
       limit: 100000,
     });
   } catch (e) { /* non-fatal */ }
@@ -489,11 +537,14 @@ async function loadDetail(name) {
   detailLoading.value = false;
 }
 
-onMounted(() => { loadList(); loadAccounts(); loadPRList(); loadPIList(); });
+onMounted(() => { loadList(); loadAccounts(); loadPayThroughAccounts(); loadPRList(); loadPIList(); });
 
 // ── Charges ──────────────────────────────────────────────────
 function addCharge() {
-  lcv.value.charges.push({ description: "", account: "", amount: 0 });
+  lcv.value.charges.push({ description: "", account: "", amount: 0, paid_through: "", expense_type: "Miscellaneous" });
+}
+function viewLinkedExpense(expenseName) {
+  router.push({ path: "/expenses", query: { view: expenseName } });
 }
 function removeCharge(idx) {
   lcv.value.charges.splice(idx, 1);
@@ -645,6 +696,11 @@ async function save() {
   }
   if (!lcv.value.charges.length) {
     toast("Add at least one charge.", "error"); return;
+  }
+  const badRow = lcv.value.charges.find(c => !(c.reference_doctype && c.reference_name) && !c.paid_through);
+  if (badRow) {
+    toast("Every charge needs a Paid Through account (or must already be linked to a Bill/Journal Entry).", "error");
+    return;
   }
   saving.value = true;
   try {
