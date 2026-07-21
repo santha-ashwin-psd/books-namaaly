@@ -1138,14 +1138,14 @@ function downloadSOPdf(mode = 'pdf') {
     companyName: doc.company || window.__booksCompany || "",
   });
   if (mode === 'print') {
-    const win = window.open('', '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open('', '_blank');
     if (!win) { toast('Pop-up blocked — allow pop-ups to print', 'error'); return; }
     win.document.write(html); win.document.close();
     setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
   } else {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open(objectUrl, '_blank');
     if (!win) { URL.revokeObjectURL(objectUrl); toast('Pop-up blocked — allow pop-ups to download', 'error'); return; }
     win.addEventListener('load', () => {
       try { win.document.title = `${doc.name}.pdf`; win.focus(); win.print(); } catch {}

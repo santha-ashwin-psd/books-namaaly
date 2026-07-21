@@ -130,14 +130,21 @@ function _renderClassic(doc, cfg) {
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;background:#fff;font-size:12.5px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .sheet{max-width:880px;margin:0 auto;padding:40px}
-  .frame{border:2px solid ${brand};padding:0}
-  .frame-in{border:1px solid #d8d8d8;margin:4px;padding:26px 30px}
+  .frame{border:1.5px solid #1c1c1c;padding:30px 34px}
   /* Letterhead */
-  .lh{text-align:center;border-bottom:2px solid ${brand};padding-bottom:16px;margin-bottom:6px}
-  .lh img{max-height:54px;max-width:160px;object-fit:contain;margin:0 auto 8px;display:block}
-  .lh .co{font-size:24px;font-weight:700;letter-spacing:.02em;color:#111}
-  .lh .meta{font-size:10.5px;color:#666;margin-top:4px;font-family:Arial,sans-serif}
-  .title{text-align:center;font-size:15px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:${brand};margin:16px 0 18px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;font-family:Arial,Helvetica,sans-serif}
+  .hdr-l .co{font-size:23px;font-weight:800;color:#111;letter-spacing:-.01em;font-family:Arial,Helvetica,sans-serif}
+  .hdr-l .addr{font-size:11px;font-weight:700;color:#111;margin-top:8px;line-height:1.55}
+  .hdr-l .contact{margin-top:8px;font-size:11px;color:#111;display:flex;flex-direction:column;gap:4px}
+  .hdr-l .contact .ci{display:flex;align-items:center;gap:6px}
+  .hdr-l .contact svg{width:12px;height:12px;flex-shrink:0}
+  .hdr-r{flex-shrink:0}
+  .hdr-r img{max-height:70px;max-width:120px;object-fit:contain;display:block}
+  .title{text-align:center;font-size:19px;font-weight:800;letter-spacing:.05em;color:#111;margin:28px 0 20px;font-family:Arial,Helvetica,sans-serif}
+  .hdr-bot{display:flex;justify-content:space-between;align-items:flex-end;font-family:Arial,sans-serif;font-size:11.5px;color:#111;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #ddd}
+  .hdr-bot .hb-r{text-align:right}
+  .hdr-bot .hb-r div+div{margin-top:3px}
+  .hdr-bot b{font-weight:700}
   /* Parties row */
   .pr{display:flex;justify-content:space-between;gap:24px;margin-bottom:6px;font-family:Arial,sans-serif}
   .pr .blk{font-size:12px}
@@ -171,15 +178,26 @@ function _renderClassic(doc, cfg) {
   .sig div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#777;text-align:center}
   .ft{text-align:center;margin-top:18px;font-size:9.5px;color:#999;font-family:Arial,sans-serif;font-style:italic}
   @media print{.sheet{padding:0;max-width:none}}
-</style></head><body><div class="sheet"><div class="frame"><div class="frame-in">
-  <div class="lh">
-    ${logo ? `<img src="${_esc(logo)}"/>` : ""}
-    <div class="co">${_esc(doc.company || cfg.companyName || "")}</div>
-    ${_state.companyAddress ? `<div class="meta">${_esc([_state.companyAddress, [_state.companyCity, _state.companyState, _state.companyPincode].filter(Boolean).join(", ")].filter(Boolean).join(" · "))}</div>` : ""}
-    ${(_state.companyPhone || _state.companyEmail) ? `<div class="meta">${[_state.companyPhone, _state.companyEmail].filter(Boolean).join("  ·  ")}</div>` : ""}
-    ${(doc.company_gstin || doc.gstin || _state.companyGstin) ? `<div class="meta">GSTIN: ${_esc(doc.company_gstin || doc.gstin || _state.companyGstin)}</div>` : ""}
+</style></head><body><div class="sheet"><div class="frame">
+  <div class="hdr">
+    <div class="hdr-l">
+      <div class="co">${_esc(doc.company || cfg.companyName || "")}</div>
+      ${_state.companyAddress ? `<div class="addr">${_esc(_state.companyAddress)}${(_state.companyCity || _state.companyState || _state.companyPincode) ? `,<br/>${_esc([_state.companyCity, _state.companyState].filter(Boolean).join(", "))}${_state.companyPincode ? ", " + _esc(_state.companyPincode) : ""}` : ""}</div>` : ""}
+      ${(_state.companyPhone || _state.companyEmail) ? `<div class="contact">
+        ${_state.companyPhone ? `<span class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>${_esc(_state.companyPhone)}</span>` : ""}
+        ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M4 4h16v16H4z" fill="none"/><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
+      </div>` : ""}
+    </div>
+    ${logo ? `<div class="hdr-r"><img src="${_esc(logo)}"/></div>` : ""}
   </div>
   <div class="title">${_esc(cfg.title)}</div>
+  <div class="hdr-bot">
+    <div class="hb-l">${(doc.company_gstin || doc.gstin || _state.companyGstin) ? `<b>GSTIN :</b> ${_esc(doc.company_gstin || doc.gstin || _state.companyGstin)}` : ""}</div>
+    <div class="hb-r">
+      <div><b>${_esc(cfg.title)} No. :</b> ${_esc(doc.name || "")}</div>
+      <div><b>Date :</b> ${_esc(docDate)}</div>
+    </div>
+  </div>
   <div class="pr">
     <div class="blk">
       <div class="l">${_esc(cfg.partyLabel)}</div>
@@ -188,9 +206,6 @@ function _renderClassic(doc, cfg) {
       ${doc.customer_gstin || doc.supplier_gstin ? `<div class="sub">GSTIN: ${_esc(doc.customer_gstin || doc.supplier_gstin)}</div>` : ""}
     </div>
     <div class="blk r">
-      <div class="l">${_esc(cfg.title)} No.</div>
-      <div class="nm">${_esc(doc.name || "")}</div>
-      <div class="kv"><div class="l">Date</div><div class="sub">${_esc(docDate)}</div></div>
       ${doc.due_date ? `<div class="kv"><div class="l">Due Date</div><div class="sub">${_esc(doc.due_date)}</div></div>` : ""}
       ${doc.valid_till ? `<div class="kv"><div class="l">Valid Till</div><div class="sub">${_esc(doc.valid_till)}</div></div>` : ""}
       ${doc.po_no ? `<div class="kv"><div class="l">PO Number</div><div class="sub">${_esc(doc.po_no)}</div></div>` : ""}
@@ -226,7 +241,7 @@ function _renderClassic(doc, cfg) {
   </div>
   <div class="sig"><div>Prepared By</div><div>Authorised Signatory</div><div>Receiver's Signature</div></div>
   <div class="ft">This is a computer-generated document. · ${_esc(doc.company || "")} · ${_esc(doc.name)} · Printed ${_today()}</div>
-</div></div></div></body></html>`;
+</div></div></body></html>`;
 }
 
 // ── TEMPLATE 2: "Modern" — rounded cards, soft, contemporary ──────────────────

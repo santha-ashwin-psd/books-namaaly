@@ -32,7 +32,7 @@ from frappe.utils import flt, nowdate
 
 from zoho_books_clone.utils.access import assert_can
 from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
-from zoho_books_clone.inventory.utils import get_valuation_rate
+from zoho_books_clone.inventory.utils import get_valuation_rate, get_conversion_factor
 
 
 def _get_work_order(work_order):
@@ -230,12 +230,14 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
             except Exception:
                 pass  # If sub-BOM can't be loaded, fall through to include item as-is
 
+        conv = get_conversion_factor(r.item_code, r.uom)
+        stock_uom = frappe.db.get_value("Item", r.item_code, "stock_uom") or r.uom
         result.append({
             "item_code": r.item_code,
             "item_name": r.item_name,
-            "required_qty": flt(r.qty) * ratio,
-            "uom": r.uom,
-            "rate": flt(r.rate),
+            "required_qty": flt(r.qty) * conv * ratio,
+            "uom": stock_uom,
+            "rate": flt(r.rate) / conv if conv else flt(r.rate),
             "amount": flt(r.rate) * flt(r.qty) * ratio,
             "source_warehouse": r.source_warehouse or "",
         })
@@ -295,12 +297,14 @@ def _explode_packing_bom(bom_doc, ratio, qty_to_pack):
             "source_warehouse": "",
         })
     for r in (bom_doc.packing_items or []):
+        conv = get_conversion_factor(r.item_code, r.uom)
+        stock_uom = frappe.db.get_value("Item", r.item_code, "stock_uom") or r.uom
         result.append({
             "item_code": r.item_code,
             "item_name": r.item_name,
-            "required_qty": flt(r.qty) * ratio,
-            "uom": r.uom,
-            "rate": flt(r.rate),
+            "required_qty": flt(r.qty) * conv * ratio,
+            "uom": stock_uom,
+            "rate": flt(r.rate) / conv if conv else flt(r.rate),
             "amount": flt(r.rate) * flt(r.qty) * ratio,
             "source_warehouse": "",
         })

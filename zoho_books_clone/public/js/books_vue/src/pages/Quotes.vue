@@ -2195,7 +2195,7 @@ async function downloadQuotePdf(mode = 'pdf') {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const objectUrl = URL.createObjectURL(blob);
   if (mode === 'print') {
-    const win = window.open(objectUrl, "_blank", "width=820,height=1060,scrollbars=yes");
+    const win = window.open(objectUrl, "_blank");
     if (!win) { URL.revokeObjectURL(objectUrl); toast.error("Pop-up blocked — allow pop-ups to print"); return; }
     win.addEventListener("load", () => { try { win.focus(); win.print(); } catch {} });
   } else {

@@ -236,6 +236,13 @@
                     <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
                   </select>
                 </div>
+                <div>
+                  <label class="inv-lbl">Place of Supply</label>
+                  <select v-model="form.place_of_supply" class="inv-fi">
+                    <option value="">— Select State —</option>
+                    <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
               </div>
 
               <!-- Inventory toggle card -->
@@ -321,6 +328,7 @@
                     <th class="th-qty">QTY</th>
                     <th class="th-rate">RATE (₹)</th>
                     <th class="th-disc">DISC %</th>
+                    <th class="th-tax">TAX TEMPLATE</th>
                     <th class="th-batch">BATCH NO</th>
                     <th class="th-expiry">EXP DATE</th>
                     <th class="th-subtotal">SUBTOTAL</th>
@@ -338,14 +346,21 @@
                     </td>
                     <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
                     <td class="td-uom">
-                      <select v-model="line.uom" class="inv-fi">
+                      <select v-model="line.uom" class="inv-fi" @change="calcLine(line)">
                         <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                       </select>
+                      <div v-if="lineConversionHint(line)" class="uom-conv-hint">{{ lineConversionHint(line) }}</div>
                     </td>
                     <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
                     <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" :class="{'field-error': line.qty > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.qty = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
                     <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" :class="{'field-error': line.rate > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.rate = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
                     <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
+                    <td class="td-tax">
+                      <select v-model="line.tax_code" class="inv-fi">
+                        <option value="">— No Tax —</option>
+                        <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
+                      </select>
+                    </td>
                     <td class="td-batch">
                       <template v-if="form.update_stock && line.has_batch_no">
                         <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Select batch"
@@ -365,10 +380,10 @@
                     <td class="td-rm"><button @click="removeLine(line.id)" class="po-item-card-rm"><span v-html="icon('x',16)"></span></button></td>
                   </tr>
                   <tr v-if="form.update_stock && line.has_batch_no && batchQtyError(line)" class="po-items-error-row">
-                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> {{ batchQtyError(line) }}</div></td>
+                    <td colspan="13"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> {{ batchQtyError(line) }}</div></td>
                   </tr>
                   <tr v-else-if="form.update_stock && line.has_batch_no && !line.batchOptions.length" class="po-items-warn-row">
-                    <td colspan="12"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No existing batches for this item — type a new code to create one</div></td>
+                    <td colspan="13"><div class="po-items-banner-inner"><span v-html="icon('alert-circle',12)"></span> No existing batches for this item — type a new code to create one</div></td>
                   </tr>
                   </template>
                 </tbody>
@@ -613,6 +628,7 @@
                           <th class="th-r">Disc %</th>
                           <th>Batch No</th>
                           <th>Exp Date</th>
+                          <th>Tax Template</th>
                           <th class="th-r">Amount (₹)</th>
                         </tr>
                       </thead>
@@ -631,6 +647,7 @@
                           <td class="td-r inv-dash">{{ flt(it.discount_percentage) ? flt(it.discount_percentage) + '%' : '—' }}</td>
                           <td class="inv-dash">{{ it.batch_no || '—' }}</td>
                           <td class="inv-dash">{{ it.batch_expiry_date ? fmtDate(it.batch_expiry_date) : '—' }}</td>
+                          <td class="inv-dash">{{ taxTemplateLabel(it.tax_code) }}</td>
                           <td class="td-r" style="font-weight:600">{{ fmtN(it.amount) }}</td>
                         </tr>
                       </tbody>
@@ -681,6 +698,10 @@
                 <div v-if="viewDoc.cost_center" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
                   <span style="color:#6b7280;font-weight:600">Cost Center:</span>
                   <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:5px;padding:2px 10px;font-weight:600">{{ viewDoc.cost_center }}</span>
+                </div>
+                <div v-if="viewDoc.place_of_supply" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
+                  <span style="color:#6b7280;font-weight:600">Place of Supply:</span>
+                  <span style="background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;border-radius:5px;padding:2px 10px;font-weight:600">{{ viewDoc.place_of_supply }}</span>
                 </div>
                 <div v-if="viewDoc.set_warehouse" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
                   <span style="color:#6b7280;font-weight:600">Receiving Warehouse:</span>
@@ -903,6 +924,24 @@ import TimelineStepper from "../components/TimelineStepper.vue";
 import JournalTab from "../components/JournalTab.vue";
 
 const TDS_RATES = { "194C": 1, "194J": 10, "194A": 10, "194H": 5, "194I": 10, "192": 0, "195": 20, "Other": 10 };
+const INDIAN_STATES = [
+  "01-Jammu and Kashmir","02-Himachal Pradesh","03-Punjab","04-Chandigarh","05-Uttarakhand",
+  "06-Haryana","07-Delhi","08-Rajasthan","09-Uttar Pradesh","10-Bihar","11-Sikkim",
+  "12-Arunachal Pradesh","13-Nagaland","14-Manipur","15-Mizoram","16-Tripura","17-Meghalaya",
+  "18-Assam","19-West Bengal","20-Jharkhand","21-Odisha","22-Chhattisgarh","23-Madhya Pradesh",
+  "24-Gujarat","26-Dadra and Nagar Haveli","27-Maharashtra","29-Karnataka","30-Goa",
+  "31-Lakshadweep","32-Kerala","33-Tamil Nadu","34-Puducherry","35-Andaman and Nicobar Islands",
+  "36-Telangana","37-Andhra Pradesh","38-Ladakh","97-Other Territory",
+];
+// Vendor "state" may be stored as plain text ("Tamil Nadu") while the Place of
+// Supply dropdown uses GST-coded labels ("33-Tamil Nadu"). Match on the name
+// portion so auto-fill lands on a real dropdown option — same approach as
+// Invoices.vue's matchIndianState.
+function matchIndianState(raw) {
+  const clean = String(raw || "").replace(/^\s*\d+\s*-\s*/, "").trim().toLowerCase();
+  if (!clean) return "";
+  return INDIAN_STATES.find(s => s.split("-").slice(1).join("-").toLowerCase() === clean) || "";
+}
 
 const { toast } = useToast();
 const route = useRoute();
@@ -924,14 +963,14 @@ function downloadBillPdf(mode = 'pdf') {
     companyName: doc.company || window.__booksCompany || "",
   });
   if (mode === 'print') {
-    const win = window.open('', '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open('', '_blank');
     if (!win) { toast('Pop-up blocked \u2014 allow pop-ups to print', 'error'); return; }
     win.document.write(html); win.document.close();
     setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
   } else {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open(objectUrl, '_blank');
     if (!win) { URL.revokeObjectURL(objectUrl); toast('Pop-up blocked \u2014 allow pop-ups to download', 'error'); return; }
     win.addEventListener('load', () => {
       try { win.document.title = `${doc.name}.pdf`; win.focus(); win.print(); } catch {}
@@ -974,15 +1013,16 @@ const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const billCollapsed = reactive({ details: false, billing: true, lines: false, remarks: true });
 const viewLoading = ref(false), viewItems = ref([]), viewPayments = ref([]), viewTaxes = ref([]), viewDebitApps = ref([]);
 const vendors = ref([]), items = ref([]), lines = ref([]), taxAccountHead = ref(""), taxTemplates = ref([]);
+function taxTemplateLabel(code){ if(!code) return '—'; const t=taxTemplates.value.find(x=>x.name===code); return t ? (t.template_name||t.name) : code; }
 const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box"]);
-const companyGstState = ref(""), supplierState = ref("");
+const companyGstState = ref("");
 const gstAccounts = ref({ input_cgst:"", input_sgst:"", input_igst:"" });
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 const copyingLast = ref(false);
 
 let _id = 1;
 const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", _standardRate: 0, discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", expense_account: "", collapsed: false, has_batch_no: 0, batch_no: "", batch_expiry_date: "", batchOptions: [], _batchQty: null });
-const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
+const form = reactive({ supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", place_of_supply: "33-Tamil Nadu", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
 const vendorAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false,
@@ -1104,7 +1144,7 @@ async function loadTaxAccount() {
 function billTaxCtx() {
   return {
     companyState: companyGstState.value,
-    placeOfSupply: supplierState.value,
+    placeOfSupply: form.place_of_supply,
     gst: { cgst: gstAccounts.value.input_cgst, sgst: gstAccounts.value.input_sgst, igst: gstAccounts.value.input_igst },
     defaultAccount: taxAccountHead.value,
   };
@@ -1192,7 +1232,7 @@ const timelineSteps = computed(() => {
 
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
+  Object.assign(form, { supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", place_of_supply: "33-Tamil Nadu", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
   lines.value = [blankLine()];
   Object.assign(billCollapsed, { details: false, billing: true, lines: false, remarks: true });
@@ -1201,7 +1241,7 @@ function openNew() {
 }
 async function openEdit(b) {
   editingName.value = b.name;
-  Object.assign(form, { supplier: b.supplier || "", posting_date: b.posting_date || todayStr(), due_date: b.due_date || "", bill_no: b.bill_no || "", bill_date: b.bill_date || "", remarks: b.remark || "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
+  Object.assign(form, { supplier: b.supplier || "", posting_date: b.posting_date || todayStr(), due_date: b.due_date || "", bill_no: b.bill_no || "", bill_date: b.bill_date || "", remarks: b.remark || "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", place_of_supply: "33-Tamil Nadu", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
   lines.value = [blankLine()];
   fetchVendors(""); fetchItems(""); fetchWarehouses("");
@@ -1230,6 +1270,17 @@ async function openEdit(b) {
           const flagMap = Object.fromEntries(itemRows.map(r => [r.name, r.has_batch_no ? 1 : 0]));
           lines.value.forEach(l => { l.has_batch_no = flagMap[l.item_code] || 0; if (l.has_batch_no) fetchBillLineBatches(l, ""); });
         } catch {}
+        try {
+          await Promise.all(codes.map(async (code) => {
+            const itemDoc = await apiGet("Item", code);
+            lines.value.forEach(l => {
+              if (l.item_code === code) {
+                l._stock_uom = itemDoc?.stock_uom || "Nos";
+                l._uom_conversions = itemDoc?.uom_conversions || [];
+              }
+            });
+          }));
+        } catch {}
       }
     }
     if (doc?.currency) form.currency = doc.currency;
@@ -1253,6 +1304,7 @@ async function openEdit(b) {
     if (doc?.set_warehouse) form.set_warehouse = doc.set_warehouse;
     if (doc?.billing_address) form.billing_address = doc.billing_address;
     if (doc?.cost_center) form.cost_center = doc.cost_center;
+    if (doc?.place_of_supply) form.place_of_supply = doc.place_of_supply;
     // Load vendor addresses and restore selected dropdown
     if (b.supplier) {
       await fetchVendorAddresses(b.supplier);
@@ -1294,7 +1346,7 @@ async function openView(b) {
       docstatus: doc.docstatus ?? viewDoc.value.docstatus,
       status: doc.status ?? viewDoc.value.status,
       due_date: doc.due_date || viewDoc.value.due_date,
-      cost_center: doc.cost_center, set_warehouse: doc.set_warehouse, billing_address: doc.billing_address,
+      cost_center: doc.cost_center, place_of_supply: doc.place_of_supply, set_warehouse: doc.set_warehouse, billing_address: doc.billing_address,
       billing_address_name: doc.billing_address_name, remark: doc.remark || "",
       discount_type: doc.discount_type || "Percentage",
       additional_discount_percentage: doc.additional_discount_percentage,
@@ -1319,12 +1371,12 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "mrp", "stock_uom", "hsn_code", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
-    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, mrp: x.mrp || x.standard_buying_rate || x.standard_rate || 0, stock_uom: x.stock_uom || "Nos", hsn_code: x.hsn_code || "", description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "mrp", "stock_uom", "purchase_uom", "hsn_code", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
+    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, mrp: x.mrp || x.standard_buying_rate || x.standard_rate || 0, stock_uom: x.stock_uom || "Nos", purchase_uom: x.purchase_uom || "", hsn_code: x.hsn_code || "", description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
   } catch { items.value = []; }
 }
 watch(() => form.supplier, async (name) => {
-  if (!name) { form.tds_applicable = false; form.tds_section = ""; form.tds_rate = 0; supplierState.value = ""; return; }
+  if (!name) { form.tds_applicable = false; form.tds_section = ""; form.tds_rate = 0; form.place_of_supply = "33-Tamil Nadu"; return; }
   try {
     const doc = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Supplier", name });
     // Vendors here don't reliably carry a State field, and falling back to ""
@@ -1332,7 +1384,8 @@ watch(() => form.supplier, async (name) => {
     // silently zeroes out tax on any template that only defines CGST/SGST.
     // Default to Tamil Nadu — same fixed default Invoices.vue uses for
     // place_of_supply — so an unset vendor state is treated as intra-state.
-    supplierState.value = doc?.state || stateFromGstin(doc?.tax_id) || "33-Tamil Nadu";
+    // This is just the auto-fill; the field itself is user-editable below.
+    form.place_of_supply = matchIndianState(doc?.state) || matchIndianState(stateFromGstin(doc?.tax_id)) || "33-Tamil Nadu";
     if (doc?.tds_applicable) {
       form.tds_applicable = true;
       form.tds_section = doc.tds_section || "";
@@ -1359,7 +1412,9 @@ async function onItemSelect(line, opt) {
   if (opt?.tax_code !== undefined) { line.tax_code = opt.tax_code || ""; }
   if (opt?.description) { line.description = opt.description; }
   if (opt?.hsn_code !== undefined) { line.hsn_code = opt.hsn_code || ""; }
-  line.uom = opt?.stock_uom || "Nos";
+  line.uom = opt?.purchase_uom || opt?.stock_uom || "Nos";
+  line._stock_uom = opt?.stock_uom || "Nos";
+  line._uom_conversions = [];
   line._standardRate = flt(opt?.mrp) || flt(opt?.rate) || 0;
   // Carry the Item master's own Default Expense Account onto the line, so
   // the backend fallback in save_doc (Cost of Goods Sold) is only used when
@@ -1378,7 +1433,9 @@ async function onItemSelect(line, opt) {
       if (doc?.tax_code) line.tax_code = doc.tax_code;
       if (doc?.expense_account) line.expense_account = doc.expense_account;
       if (doc?.hsn_code) line.hsn_code = doc.hsn_code;
-      if (doc?.stock_uom) line.uom = doc.stock_uom;
+      if (doc?.stock_uom) line._stock_uom = doc.stock_uom;
+      if (!line.uom) line.uom = doc?.purchase_uom || doc?.stock_uom || "Nos";
+      line._uom_conversions = doc?.uom_conversions || [];
       line._standardRate = flt(doc?.mrp) || flt(doc?.standard_buying_rate) || flt(doc?.standard_rate) || line._standardRate || 0;
     } catch {}
   }
@@ -1444,6 +1501,16 @@ function removeLine(id) { if (lines.value.length > 1) lines.value = lines.value.
 function fmtN(n) {
   if (n == null) return '—';
   return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function lineConversionHint(line) {
+  const stockUom = line._stock_uom;
+  if (!stockUom || !line.uom || line.uom === stockUom) return "";
+  const rows = line._uom_conversions || [];
+  const match = rows.find(r => r.uom === line.uom);
+  const factor = match ? flt(match.conversion_factor) : 0;
+  if (!factor) return "";
+  const converted = flt(line.qty) * factor;
+  return `= ${fmtN(converted)} ${stockUom}`;
 }
 function calcLine(l) {
   if (l.discount_percentage > 100) l.discount_percentage = 100;
@@ -1611,6 +1678,7 @@ async function saveBill(submit) {
       billing_address: form.billing_address || "",
       billing_address_name: form.billing_address_name || "",
       cost_center: form.cost_center || "",
+      place_of_supply: form.place_of_supply || "",
       currency: form.currency || "INR",
       conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
       discount_type: form.discount_type || "Percentage",
@@ -2004,7 +2072,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .inv-rec-pay-btn:hover { background: #155fd4; }
 
 /* ── Line items table ── */
-.inv-items-wrap { margin-top: 16px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.inv-items-wrap { margin-top: 16px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: scroll; }
 .inv-items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .inv-items-table th { padding: 9px 12px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; text-align: left; }
 .inv-items-table td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; }
@@ -2108,16 +2176,17 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
   overflow: hidden; text-overflow: ellipsis;
 }
 .po-items-table .th-num { width: 4%; }
-.po-items-table .th-item { width: 22%; }
+.po-items-table .th-item { width: 16%; }
 .po-items-table .th-hsn { width: 9%; }
 .po-items-table .th-uom { width: 6%; }
 .po-items-table .th-mrp { width: 6%; }
 .po-items-table .th-qty { width: 5%; }
 .po-items-table .th-rate { width: 8%; }
 .po-items-table .th-disc { width: 6%; }
-.po-items-table .th-batch { width: 9%; }
-.po-items-table .th-expiry { width: 9%; }
-.po-items-table .th-subtotal { width: 12%; text-align: right; }
+.po-items-table .th-tax { width: 9%; }
+.po-items-table .th-batch { width: 8%; }
+.po-items-table .th-expiry { width: 8%; }
+.po-items-table .th-subtotal { width: 11%; text-align: right; }
 .po-items-table .th-rm { width: 4%; }
 .po-items-row { border-bottom: 1px solid #f0f2f8; }
 .po-items-row:hover { background: #fafbfe; }
@@ -2135,8 +2204,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .po-items-row .td-mrp .inv-fi,
 .po-items-row .td-qty .inv-fi,
 .po-items-row .td-rate .inv-fi,
-.po-items-row .td-disc .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11.5px; }
+.po-items-row .td-disc .inv-fi,
+.po-items-row .td-tax .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11.5px; }
 .po-items-row .td-uom .inv-fi { width: 100%; box-sizing: border-box; padding: 0 16px 0 6px; font-size: 11.5px; }
+.uom-conv-hint { font-size: 10px; color: #6b7280; margin-top: 2px; white-space: nowrap; }
 .po-items-row .td-batch, .po-items-row .td-expiry { white-space: normal; }
 .po-items-row .td-expiry span { display: flex; align-items: center; height: 36px; }
 .po-items-row .td-expiry .inv-fi { width: 100%; box-sizing: border-box; padding: 0 6px; font-size: 11px; }

@@ -507,6 +507,7 @@
                       <th class="th-qty">QTY</th>
                       <th class="th-rate">RATE ({{ currencySymbol }})</th>
                       <th class="th-disc">DISC %</th>
+                      <th class="th-tax">TAX TEMPLATE</th>
                       <th class="th-batch">BATCH NO</th>
                       <th class="th-expiry">EXP DATE</th>
                       <th class="th-subtotal">SUBTOTAL</th>
@@ -535,7 +536,7 @@
                       <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/></td>
                       <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/></td>
                       <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
-                      <td class="td-tax" style="display:none;">
+                      <td class="td-tax">
                         <select v-model="line.tax_code" class="inv-fi">
                           <option value="">— No Tax —</option>
                           <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
@@ -921,6 +922,9 @@
                       <th class="th-r">Qty</th>
                       <th class="th-r">Rate (₹)</th>
                       <th class="th-r">Discount (₹)</th>
+                      <th>Tax Template</th>
+                      <th>Batch No</th>
+                      <th>Expiry Date</th>
                       <th class="th-r">Amount (₹)</th>
                     </tr>
                   </thead>
@@ -936,6 +940,9 @@
                       <td class="td-r" >{{ flt(it.qty) }}</td>
                       <td class="td-r" >{{ fmtN(it.rate) }}</td>
                       <td class="td-r inv-dash">{{ lineDiscount(it) ? fmtN(lineDiscount(it)) : '—' }}</td>
+                      <td class="inv-dash">{{ taxTemplateLabel(it.tax_code) }}</td>
+                      <td class="inv-dash">{{ it.batch_no || '—' }}</td>
+                      <td class="inv-dash">{{ it.batch_expiry_date ? fmtDate(it.batch_expiry_date) : '—' }}</td>
                       <td class="td-r" style="font-weight:600">{{ fmtN(it.amount) }}</td>
                     </tr>
                   </tbody>
@@ -1598,6 +1605,7 @@ async function fetchWarehouses(q=""){try{const co=await resolveCompany();const r
 const costCenters = ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
 const taxTemplates = ref([]);
+function taxTemplateLabel(code){ if(!code) return '—'; const t=taxTemplates.value.find(x=>x.name===code); return t ? (t.template_name||t.name) : code; }
 const companyGstState = ref("");                              // for GST intra/inter split
 const gstAccounts = ref({ output_cgst:"", output_sgst:"", output_igst:"" });
 
@@ -1932,7 +1940,7 @@ async function downloadInvoicePdf(mode = 'pdf') {
 
   if (mode === 'print') {
     // Open rendered HTML in a new window and trigger print dialog
-    const win = window.open('', '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open('', '_blank');
     if (!win) { toast('Pop-up blocked — allow pop-ups to print', 'error'); return; }
     win.document.write(html);
     win.document.close();
@@ -1941,7 +1949,7 @@ async function downloadInvoicePdf(mode = 'pdf') {
     // Download as PDF via browser's print-to-PDF using a hidden iframe
     const blob = new Blob([html], { type: 'text/html' });
     const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, '_blank', 'width=820,height=1060,scrollbars=yes');
+    const win = window.open(objectUrl, '_blank');
     if (!win) { toast('Pop-up blocked — allow pop-ups to download', 'error'); URL.revokeObjectURL(objectUrl); return; }
     win.addEventListener('load', () => {
       try {
@@ -2095,7 +2103,7 @@ async function fetchLineBatches(line, q = "") {
     if (line.item_code !== itemCode) return; // item changed again while awaiting
     line.batchOptions = rows.map(b => ({
       value: b.batch_no,
-      label: b.batch_no,
+      label: `${b.batch_no}(qty:${flt(b.qty)})`,
       qty: flt(b.qty),
       expiry_date: b.expiry_date || "",
     }));
@@ -3123,16 +3131,16 @@ watch(() => route.query, (q) => {
   overflow: hidden; text-overflow: ellipsis;
 }
 .po-items-table .th-num { width: 4%; }
-.po-items-table .th-item { width: 22%; }
+.po-items-table .th-item { width: 16%; }
 .po-items-table .th-hsn { width: 10%; }
 .po-items-table .th-uom { width: 6%; }
 .po-items-table .th-qty { width: 5%; }
 .po-items-table .th-rate { width: 9%; }
 .po-items-table .th-mrp { width: 6%; }
 .po-items-table .th-disc { width: 6%; }
-.po-items-table .th-tax { width: 0; }
-.po-items-table .th-batch { width: 8%; }
-.po-items-table .th-expiry { width: 10%; }
+.po-items-table .th-tax { width: 9%; }
+.po-items-table .th-batch { width: 7%; }
+.po-items-table .th-expiry { width: 8%; }
 .po-items-table .th-availqty { width: 0; }
 .po-items-table .th-subtotal { width: 10%; text-align: right; }
 .po-items-table .th-rm { width: 4%; }
