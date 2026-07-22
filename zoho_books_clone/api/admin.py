@@ -549,6 +549,10 @@ def get_company_settings():
         "company_phone": "",
         "company_email": "",
         "company_website": "",
+        "bank_name": "",
+        "bank_branch": "",
+        "bank_account_no": "",
+        "bank_ifsc": "",
         # Reminder / auto-send — now per-company on Books Company
         "auto_send_invoice": 0,
         "send_payment_reminders": 0,
@@ -592,6 +596,22 @@ def get_company_settings():
         settings = frappe.get_doc("Books Settings", "Books Settings")
         result["invoice_prefix"] = settings.get("invoice_prefix") or "INV"
         result["auto_reconcile"] = settings.get("auto_reconcile") or 0
+    except Exception:
+        pass
+
+    # Default Bank Account — shown on printed invoices. Bank Account isn't
+    # reliably linked back to Books Company, so just take whichever account
+    # is flagged default (falling back to the first one that exists).
+    try:
+        bank_name = frappe.db.get_value("Bank Account", {"is_default": 1}, "name")
+        if not bank_name:
+            bank_name = frappe.db.get_value("Bank Account", {}, "name", order_by="creation asc")
+        if bank_name:
+            bank = frappe.get_doc("Bank Account", bank_name)
+            result["bank_name"]       = bank.bank_name or ""
+            result["bank_branch"]     = bank.branch or ""
+            result["bank_account_no"] = bank.account_number or ""
+            result["bank_ifsc"]       = bank.ifsc_code or ""
     except Exception:
         pass
 

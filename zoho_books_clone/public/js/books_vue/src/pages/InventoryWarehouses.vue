@@ -320,9 +320,16 @@
               — {{ selectedChild.warehouse_name || selectedChild.name }}
             </span>
             <span v-else class="wh-stock-scope">— All ({{ selectedWH.warehouse_name || selectedWH.name }})</span>
-            <span v-if="stockItems.length" class="wh-stock-count">{{ stockItems.length }}</span>
+            <span v-if="filteredStockItems.length" class="wh-stock-count">{{ filteredStockItems.length }}</span>
           </div>
           <div class="wh-stock-actions">
+            <div class="wh-tb-search-wrap wh-item-search-wrap">
+              <span v-html="icon('search')" class="wh-tb-search-icon"></span>
+              <input v-model="itemSearch" class="wh-tb-search-input" placeholder="Search item…" />
+              <button v-if="itemSearch" class="wh-item-search-clear" @click="itemSearch = ''" title="Clear">
+                <span v-html="icon('x', 11)"></span>
+              </button>
+            </div>
             <button v-if="selectedChild" class="wh-action-btn" @click="selectedChild = null; loadStockForWarehouse(selectedWH.name)">
               <span v-html="icon('x', 12)"></span> Clear
             </button>
@@ -347,10 +354,17 @@
           <div class="wh-stock-empty-sub">No stock found in this warehouse group yet</div>
         </div>
 
+        <!-- Search matched nothing -->
+        <div v-else-if="!filteredStockItems.length" class="wh-stock-empty">
+          <div style="font-size:36px;margin-bottom:10px">🔍</div>
+          <div class="wh-stock-empty-title">No matching items</div>
+          <div class="wh-stock-empty-sub">No item matches "{{ itemSearch }}" in this stock list</div>
+        </div>
+
         <!-- Stock data: mobile cards + desktop table (toggled via CSS) -->
         <template v-else>
         <div class="wh-tbl-mobile">
-          <div v-for="r in stockItems" :key="'mc-' + r.item_code" class="wh-stock-mc">
+          <div v-for="r in filteredStockItems" :key="'mc-' + r.item_code" class="wh-stock-mc">
             <div class="wh-smc-top">
               <div class="wh-smc-name-wrap">
                 <div class="wh-smc-name">{{ r.item_name }}</div>
@@ -430,7 +444,7 @@
               </tr>
             </thead>
             <tbody>
-              <template v-for="r in stockItems" :key="r.item_code">
+              <template v-for="r in filteredStockItems" :key="r.item_code">
               <tr class="wh-tr" :class="{ 'wh-tr-clickable': r.has_batch_no }" @click="r.has_batch_no && toggleBatches(r.item_code)">
                 <td class="wh-td wh-td-c">
                   <span v-if="r.has_batch_no" class="wh-expand-chevron" :class="{ 'wh-expand-chevron--open': expandedRows[r.item_code] }">
@@ -754,6 +768,7 @@ const stockLoading   = ref(false);
 const warehouseBatches = ref({});
 const expandedRows     = ref({});
 const search         = ref("");
+const itemSearch     = ref("");
 const filterType     = ref("All");
 const filterDDOpen   = ref(false);
 
@@ -832,14 +847,24 @@ const adjustTargetWH = computed(() => {
   return null;
 });
 
+// Stock items filtered by the item search box (matches item code or name)
+const filteredStockItems = computed(() => {
+  const q = itemSearch.value.toLowerCase().trim();
+  if (!q) return stockItems.value;
+  return stockItems.value.filter((r) =>
+    (r.item_code || "").toLowerCase().includes(q) ||
+    (r.item_name || "").toLowerCase().includes(q)
+  );
+});
+
 const whStats = computed(() => {
-  if (!stockItems.value.length) return { value: 0, items: 0, reserved: 0, ordered: 0, projected: 0 };
+  if (!filteredStockItems.value.length) return { value: 0, items: 0, reserved: 0, ordered: 0, projected: 0 };
   return {
-    value:     stockItems.value.reduce((s, r) => s + flt(r.stock_value),   0),
-    items:     stockItems.value.length,
-    reserved:  stockItems.value.reduce((s, r) => s + flt(r.reserved_qty),  0),
-    ordered:   stockItems.value.reduce((s, r) => s + flt(r.ordered_qty),   0),
-    projected: stockItems.value.reduce((s, r) => s + flt(r.projected_qty), 0),
+    value:     filteredStockItems.value.reduce((s, r) => s + flt(r.stock_value),   0),
+    items:     filteredStockItems.value.length,
+    reserved:  filteredStockItems.value.reduce((s, r) => s + flt(r.reserved_qty),  0),
+    ordered:   filteredStockItems.value.reduce((s, r) => s + flt(r.ordered_qty),   0),
+    projected: filteredStockItems.value.reduce((s, r) => s + flt(r.projected_qty), 0),
   };
 });
 
@@ -871,6 +896,7 @@ async function loadStockForWarehouse(name) {
   stockItems.value = [];
   warehouseBatches.value = {};
   expandedRows.value = {};
+  itemSearch.value = "";
   try {
     const [stock, batches] = await Promise.all([
       apiGET("zoho_books_clone.api.inventory.get_stock_summary", { warehouse: name }),
@@ -1329,6 +1355,36 @@ onMounted(() => { load(); loadItems(); });
   box-sizing: border-box;
 }
 .wh-tb-search-input:focus { border-color: #3b82f6; background: #fff; }
+
+/* ── Item search (inside stock section header) ── */
+.wh-item-search-wrap {
+  flex: 0 0 220px;
+}
+.wh-item-search-wrap .wh-tb-search-input {
+  padding-right: 26px;
+}
+.wh-item-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: #e2e8f0;
+  color: #64748b;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.wh-item-search-clear:hover { background: #cbd5e1; color: #334155; }
+@media (max-width: 640px) {
+  .wh-stock-actions { flex-wrap: wrap; }
+  .wh-item-search-wrap { flex: 1 1 100%; order: -1; }
+}
 
 /* ── Filter dropdown ── */
 .wh-dd-backdrop {

@@ -52,7 +52,7 @@
   "billing_address",
   "remarks",
   "customer_gstin",
-  "irn",
+  "customer_mobile",
   "einvoice_status",
   "ack_no",
   "ack_date",
@@ -351,6 +351,12 @@
    "fieldname": "customer_gstin",
    "fieldtype": "Data",
    "label": "Customer GSTIN"
+  },
+  {
+   "fetch_from": "customer.mobile_no",
+   "fieldname": "customer_mobile",
+   "fieldtype": "Data",
+   "label": "Customer Mobile"
   },
   {
    "fieldname": "irn",

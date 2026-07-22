@@ -647,6 +647,41 @@ def save_doc(doc):
     name = doc.get("name")
     if name and frappe.db.exists(doctype, name):
         d = frappe.get_doc(doctype, name)
+
+        # Item.name is autoname="field:item_code" -- Frappe only derives `name`
+        # from that field on insert, never on update. If we just d.update(doc)
+        # + d.save() here, the item_code field silently changes while the doc's
+        # real identity (name) does not, desyncing it from every other doctype's
+        # item_code link (Stock Ledger Entry, invoice/PO lines, BOM, etc). Rename
+        # explicitly first so the identity and the displayed code stay in sync.
+        if doctype == "Item":
+            new_item_code = (doc.get("item_code") or "").strip()
+            if new_item_code and new_item_code != d.name:
+                old_item_code = d.name
+                frappe.rename_doc(doctype, old_item_code, new_item_code)
+
+                # frappe.rename_doc only auto-updates fields with fieldtype
+                # Link/Dynamic Link and options="Item". These five child tables
+                # store item_code as plain Data (copied at the time the SO/PO/
+                # Quotation/DN/Purchase Receipt line was created), so rename_doc
+                # has no way to know they reference this Item -- left alone they'd
+                # keep pointing at the old, now-renamed code forever, breaking
+                # Order->Invoice conversion, DN-vs-SO reconciliation, and PO->Bill/
+                # Receipt matching, all of which join on item_code.
+                for _dt in (
+                    "Sales Order Item", "Quotation Item",
+                    "Purchase Order Item", "Purchase Receipt Item",
+                    "Delivery Note Item",
+                ):
+                    frappe.db.set_value(
+                        _dt, {"item_code": old_item_code}, "item_code", new_item_code,
+                        update_modified=False,
+                    )
+
+                d = frappe.get_doc(doctype, new_item_code)
+                doc["name"] = new_item_code
+                name = new_item_code
+
         is_submitted = d.docstatus == 1
         d.update(doc)
         if is_submitted:

@@ -1771,6 +1771,21 @@ function lineTaxBreakup(line) {
   });
 }
 function lineTaxTotal(line) { return lineTaxBreakup(line).reduce((s,t)=>s+t.amount,0); }
+
+// Attach per-item CGST/SGST/IGST % (and the taxable/pre-tax amount) to a set
+// of print-ready item rows, so the printed table can show a rate column per
+// tax component the same way the physical/reference invoice does.
+function withItemTaxRates(items, placeOfSupply){
+  return (items||[]).map(it=>{
+    const rows = it.tax_code && flt(it.amount) ? computeTaxRows(
+      [{ amount: flt(it.amount), tax_code: it.tax_code }],
+      taxTemplates.value,
+      { companyState: companyGstState.value, placeOfSupply: placeOfSupply ?? form.place_of_supply, defaultAccount: taxAccountHead.value }
+    ) : [];
+    const rate = (type) => rows.find(r=>r.tax_type===type)?.rate || 0;
+    return { ...it, taxable_amount: flt(it.amount), cgst_rate: rate("CGST"), sgst_rate: rate("SGST"), igst_rate: rate("IGST") };
+  });
+}
 // Line Total (incl. GST) must be rounded ONCE on the combined value — adding
 // the already-rounded Amount to the already-rounded GST (double rounding)
 // overstates it by a paisa vs. the source invoice's printed Amount column
@@ -1794,12 +1809,13 @@ const previewData = computed(()=>({
   name: editingName.value||"INV-PREVIEW",
   customer: form.customer,
   customer_name: customers.value.find(c=>c.name===form.customer)?.customer_name||form.customer,
+  customer_company_name: customers.value.find(c=>c.name===form.customer)?.company_name||"",
   posting_date: form.posting_date,
   due_date: form.due_date,
   po_no: form.po_no,
   place_of_supply: form.place_of_supply,
   billing_address: form.billing_address,
-  items: lines.value.filter(l=>l.item_code||l.item_name),
+  items: withItemTaxRates(lines.value.filter(l=>l.item_code||l.item_name)),
   taxes: taxLines.value.map(tl=>({description:tl.template,rate:tl.rate,amount:tl.amount})),
   subtotal: subtotal.value,
   discountAmount: discountAmount.value,
@@ -1919,12 +1935,18 @@ async function downloadInvoicePdf(mode = 'pdf') {
     name: inv.name,
     customer: inv.customer,
     customer_name: inv.customer_name,
+    customer_company_name: customers.value.find(c=>c.name===inv.customer)?.company_name||"",
     posting_date: inv.posting_date,
     due_date: inv.due_date,
     po_no: inv.po_no,
     place_of_supply: inv.place_of_supply,
-    billing_address: inv.billing_address_display || '',
-    items: inv.items || [],
+    billing_address: inv.billing_address || '',
+    billing_address_name: inv.billing_address_name || '',
+    shipping_address: inv.shipping_address || '',
+    shipping_address_name: inv.shipping_address_name || '',
+    customer_gstin: inv.customer_gstin || '',
+    customer_mobile: inv.customer_mobile || '',
+    items: withItemTaxRates(inv.items || [], inv.place_of_supply),
     taxes: inv.taxes || [],
     subtotal: inv.net_total != null ? flt(inv.net_total) : flt(inv.grand_total) - flt(inv.total_tax),
     totalTax: flt(inv.total_tax),
@@ -2014,7 +2036,7 @@ async function load() {
   loading.value=false;
 }
 async function loadCustomers() {
-  try { const r=await apiList("Customer",{fields:["name","customer_name"],filters:[["disabled","=",0]],limit:100000,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
+  try { const r=await apiList("Customer",{fields:["name","customer_name","company_name"],filters:[["disabled","=",0]],limit:100000,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
 }
 async function loadSalesPersons() {
   try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:100000,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
@@ -2885,9 +2907,13 @@ function printViewInvoice() {
   if (!inv) return;
   printInvoice({
     name:inv.name, customer:inv.customer, customer_name:inv.customer_name,
+    customer_company_name: customers.value.find(c=>c.name===inv.customer)?.company_name||"",
     posting_date:inv.posting_date, due_date:inv.due_date, po_no:inv.po_no,
-    place_of_supply:inv.place_of_supply, billing_address:inv.billing_address_display||"",
-    items:inv.items||[], taxes:inv.taxes||[],
+    place_of_supply:inv.place_of_supply,
+    billing_address:inv.billing_address||"", billing_address_name:inv.billing_address_name||"",
+    shipping_address:inv.shipping_address||"", shipping_address_name:inv.shipping_address_name||"",
+    customer_gstin:inv.customer_gstin||"", customer_mobile:inv.customer_mobile||"",
+    items:withItemTaxRates(inv.items||[], inv.place_of_supply), taxes:inv.taxes||[],
     subtotal:(inv.net_total != null ? flt(inv.net_total) : flt(inv.grand_total)-flt(inv.total_tax)),
     totalTax:flt(inv.total_tax), grandTotal:flt(inv.grand_total),
     terms:inv.terms||"", company:inv.company||window.__booksCompany||"",

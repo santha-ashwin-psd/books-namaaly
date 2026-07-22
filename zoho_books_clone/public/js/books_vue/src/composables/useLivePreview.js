@@ -15,6 +15,10 @@ const _state = reactive({
   companyPincode: "",
   companyPhone: "",
   companyEmail: "",
+  bankName: "",
+  bankBranch: "",
+  bankAccountNo: "",
+  bankIfsc: "",
 });
 
 async function _loadBranding(company) {
@@ -39,6 +43,10 @@ async function _loadBranding(company) {
     _state.companyPincode  = d.company_pincode || "";
     _state.companyPhone    = d.company_phone || "";
     _state.companyEmail    = d.company_email || "";
+    _state.bankName        = d.bank_name || "";
+    _state.bankBranch      = d.bank_branch || "";
+    _state.bankAccountNo   = d.bank_account_no || "";
+    _state.bankIfsc        = d.bank_ifsc || "";
   } catch {}
 }
 
@@ -87,6 +95,23 @@ function _logoSrc(url) {
   if (url.startsWith("data:") || url.startsWith("http")) return url;
   return (window.frappe?.boot?.site_url || window.location.origin).replace(/\/$/, "") + url;
 }
+// formatAddress() (used across the SPA when an address is picked) always
+// joins fields in this fixed order, one per line: address_line1,
+// [address_line2], city, state, pincode, [country]. Reflow that into the
+// two-line "street, street2" / "City, State - Pincode" layout used on print.
+function _formatAddrLines(raw) {
+  let lines = String(raw || "").split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  if (lines.length > 1 && /^india$/i.test(lines[lines.length - 1])) lines.pop();
+  if (lines.length <= 1) return lines;
+  let pincode = "";
+  if (/^\d{4,8}$/.test(lines[lines.length - 1])) pincode = lines.pop();
+  const state = lines.length ? lines.pop() : "";
+  const city = lines.length ? lines.pop() : "";
+  const streetLine = lines.join(", ");
+  const cityStateLine = [city, state].filter(Boolean).join(", ") + (pincode ? " - " + pincode : "");
+  return [streetLine, cityStateLine].filter(Boolean);
+}
 
 // ── TEMPLATE 1: "Classic" — formal letterhead, ruled frame ────────────────────
 function _renderClassic(doc, cfg) {
@@ -98,48 +123,60 @@ function _renderClassic(doc, cfg) {
   const party    = doc[cfg.partyField] || doc.customer || doc.supplier || "";
   const docDate  = doc.posting_date || doc.transaction_date || "";
   const includeMrp = cfg.includeMrp && (doc.items || []).some(it => Number(it.mrp) > 0);
+  const hasIgst  = (doc.items || []).some(it => Number(it.igst_rate) > 0);
+  const hasCgst  = (doc.items || []).some(it => Number(it.cgst_rate) > 0 || Number(it.sgst_rate) > 0);
+  const includeGst = cfg.includeGst !== false && (hasIgst || hasCgst);
   const totalTax = doc.total_taxes_and_charges ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0);
   const roundOff = doc.grand_total != null ? Math.round((doc.grand_total - (netTotal + totalTax)) * 100) / 100 : 0;
   const amountWords = doc.in_words || _numberToWords(Math.round(doc.grand_total || 0));
 
+  function _fmtExpiry(d) {
+    if (!d) return "";
+    const dt = new Date(d);
+    if (isNaN(dt)) return "";
+    return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }).replace(/ /g, "-");
+  }
   const items = (doc.items || []).map((it, i) => `
     <tr>
       <td class="c">${i + 1}</td>
       <td>
         <div class="inm">${_esc(it.item_name || it.item_code)}</div>
         ${it.description && it.description !== it.item_name ? `<div class="ids">${_esc(it.description)}</div>` : ""}
+        ${it.batch_no ? `<div class="ids">Batch: ${_esc(it.batch_no)} (${Number(it.qty || 0)})${it.batch_expiry_date ? ` (exp ${_fmtExpiry(it.batch_expiry_date)})` : ""}</div>` : ""}
       </td>
-      ${cfg.includeHsn ? `<td class="c">${_esc(it.gst_hsn_code || it.hsn_code || "—")}</td>` : ""}
-      <td class="r">${Number(it.qty || 0)}</td>
-      <td class="c">${_esc(it.uom || "Nos")}</td>
-      <td class="r">${_fmt(it.rate, currency)}</td>
-      ${cfg.includeDiscount ? `<td class="c">${Number(it.discount_percentage || 0)}%</td>` : ""}
-      ${includeMrp ? `<td class="r">${it.mrp ? _fmt(it.mrp, currency) : "—"}</td>` : ""}
-      <td class="r b">${_fmt(it.amount, currency)}</td>
+      ${cfg.includeHsn ? `<td class="c nw">${_esc(it.gst_hsn_code || it.hsn_code || "—")}</td>` : ""}
+      <td class="r nw">${Number(it.qty || 0)}</td>
+      <td class="c nw">${_esc(it.uom || "Nos")}</td>
+      <td class="r nw">${_fmt(it.rate, currency)}</td>
+      ${cfg.includeDiscount ? `<td class="c nw">${Number(it.discount_percentage || 0)}%</td>` : ""}
+      ${includeGst ? `<td class="r nw">${_fmt(it.taxable_amount != null ? it.taxable_amount : it.amount, currency)}</td>` : ""}
+      ${includeGst ? (hasIgst ? `<td class="c nw">${Number(it.igst_rate || 0).toFixed(2)}%</td>` : `<td class="c nw">${Number(it.cgst_rate || 0).toFixed(2)}%</td><td class="c nw">${Number(it.sgst_rate || 0).toFixed(2)}%</td>`) : ""}
+      ${includeMrp ? `<td class="r nw">${it.mrp ? _fmt(it.mrp, currency) : "—"}</td>` : ""}
+      <td class="r b nw">${_fmt(it.amount, currency)}</td>
     </tr>`).join("");
   const taxRows = (doc.taxes || []).map(t => {
     const label = t.description || t.account_head || "";
     const hasRate = t.rate && !/%/.test(label);
     return `<tr><td class="tl">${_esc(label)}${hasRate ? ` (${Number(t.rate)}%)` : ""}</td><td class="r">${_fmt(t.tax_amount || 0, currency)}</td></tr>`;
   }).join("");
-  const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0) + (includeMrp ? 1 : 0);
+  const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0) + (includeMrp ? 1 : 0) + (includeGst ? (hasIgst ? 2 : 3) : 0);
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <title>${_esc(cfg.title)} — ${_esc(doc.name)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;background:#fff;font-size:12.5px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .sheet{max-width:880px;margin:0 auto;padding:40px}
-  .frame{border:1.5px solid #1c1c1c;padding:30px 34px}
+  .sheet{max-width:980px;margin:0 auto;padding:40px}
+  .frame{border:1.5px solid #1c1c1c;padding:28px 30px}
   /* Letterhead */
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;font-family:Arial,Helvetica,sans-serif}
-  .hdr-l .co{font-size:23px;font-weight:800;color:#111;letter-spacing:-.01em;font-family:Arial,Helvetica,sans-serif}
-  .hdr-l .addr{font-size:11px;font-weight:700;color:#111;margin-top:8px;line-height:1.55}
-  .hdr-l .contact{margin-top:8px;font-size:11px;color:#111;display:flex;flex-direction:column;gap:4px}
+  .hdr-l .co{font-size:29px;font-weight:700;color:#111;letter-spacing:-.01em;font-family:Arial,Helvetica,sans-serif}
+  .hdr-l .addr{font-size:11px;font-weight:600;color:#111;margin-top:8px;line-height:1.55}
+  .hdr-l .contact{margin-top:8px;font-size:11px;color:#111;display:flex;flex-direction:row;flex-wrap:wrap;gap:16px}
   .hdr-l .contact .ci{display:flex;align-items:center;gap:6px}
   .hdr-l .contact svg{width:12px;height:12px;flex-shrink:0}
   .hdr-r{flex-shrink:0}
-  .hdr-r img{max-height:70px;max-width:120px;object-fit:contain;display:block}
+  .hdr-r img{max-height:110px;max-width:170px;object-fit:contain;display:block}
   .title{text-align:center;font-size:19px;font-weight:800;letter-spacing:.05em;color:#111;margin:28px 0 20px;font-family:Arial,Helvetica,sans-serif}
   .hdr-bot{display:flex;justify-content:space-between;align-items:flex-end;font-family:Arial,sans-serif;font-size:11.5px;color:#111;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #ddd}
   .hdr-bot .hb-r{text-align:right}
@@ -154,17 +191,28 @@ function _renderClassic(doc, cfg) {
   .pr .sub{color:#555;font-size:11px;margin-top:2px;white-space:pre-line;line-height:1.45}
   .pr .kv{margin-top:6px}
   hr.sep{border:none;border-top:1px solid #ddd;margin:16px 0}
+  /* Billing / Shipping address table */
+  .addr-table{display:flex;border:1.5px solid #1c1c1c;margin:10px 0 16px;font-family:Arial,sans-serif}
+  .addr-col{flex:1;min-width:0}
+  .addr-col+.addr-col{border-left:1.5px solid #1c1c1c}
+  .addr-h{font-size:12px;font-weight:700;color:#111;padding:8px 12px;border-bottom:1.5px solid #1c1c1c}
+  .addr-body{padding:10px 12px}
+  .addr-ct{font-size:12px;color:#111;margin-bottom:2px}
+  .addr-nm{font-size:12px;font-weight:700;color:#111;margin-bottom:4px}
+  .addr-ln{font-size:12px;color:#111;line-height:1.6}
   /* Table */
   table.it{width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;margin-top:4px}
-  table.it th{background:${brand};color:#fff;padding:9px 10px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;text-align:left;border:1px solid ${brand}}
+  table.it th{background:#fff;color:#111;padding:9px 9px;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;text-align:left;border:1px solid #1c1c1c;white-space:nowrap}
   table.it th.r{text-align:right}table.it th.c{text-align:center}
-  table.it td{padding:9px 10px;border:1px solid #dcdcdc;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
+  table.it td{padding:11px 9px;border:1px solid #1c1c1c;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
+  table.it td.nw{white-space:nowrap}
   .it .inm{font-weight:700;color:#1a1a1a;font-family:Georgia,serif}
   .it .ids{font-size:10.5px;color:#666;margin-top:2px}
   .it .r{text-align:right}.it .c{text-align:center}.it .b{font-weight:700}
   /* Totals */
   .tot-wrap{display:flex;justify-content:space-between;gap:20px;margin-top:16px;align-items:flex-start}
-  .tot-left{flex:1;min-width:0}
+  .tot-left{flex:1;min-width:0;display:flex;gap:20px;align-items:flex-start}
+  .tot-left>div{flex:1;min-width:0}
   .tt{width:300px;flex-shrink:0;border:1px solid #ccc;font-family:Arial,sans-serif}
   .tt tr td{padding:7px 14px;font-size:12.5px;border-bottom:1px solid #eee}
   .tt .tl{color:#555}.tt .r{text-align:right}
@@ -174,6 +222,9 @@ function _renderClassic(doc, cfg) {
   .notes .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
   .words{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;font-weight:700;line-height:1.5}
   .words .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;font-family:Arial,sans-serif}
+  .bank{font-family:Arial,sans-serif;font-size:11.5px;color:#333;line-height:1.65;margin-bottom:12px}
+  .bank .h{font-weight:700;color:#111;font-size:12px;margin-bottom:4px}
+  .bank b{font-weight:700;color:#111}
   .sig{display:flex;justify-content:space-between;gap:40px;margin-top:40px;font-family:Arial,sans-serif}
   .sig div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#777;text-align:center}
   .ft{text-align:center;margin-top:18px;font-size:9.5px;color:#999;font-family:Arial,sans-serif;font-style:italic}
@@ -182,53 +233,71 @@ function _renderClassic(doc, cfg) {
   <div class="hdr">
     <div class="hdr-l">
       <div class="co">${_esc(doc.company || cfg.companyName || "")}</div>
-      ${_state.companyAddress ? `<div class="addr">${_esc(_state.companyAddress)}${(_state.companyCity || _state.companyState || _state.companyPincode) ? `,<br/>${_esc([_state.companyCity, _state.companyState].filter(Boolean).join(", "))}${_state.companyPincode ? ", " + _esc(_state.companyPincode) : ""}` : ""}</div>` : ""}
+      ${_state.companyAddress ? `<div class="addr">${_esc(_state.companyAddress)}${(_state.companyCity || _state.companyPincode) ? `,<br/>${_esc(_state.companyCity || "")}${_state.companyPincode ? ", " + _esc(_state.companyPincode) : ""}` : ""}</div>` : ""}
       ${(_state.companyPhone || _state.companyEmail) ? `<div class="contact">
-        ${_state.companyPhone ? `<span class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>${_esc(_state.companyPhone)}</span>` : ""}
-        ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M4 4h16v16H4z" fill="none"/><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
+        ${_state.companyPhone ? `<span class="ci"><svg viewBox="0 0 24 24" fill="#111"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.24.2 2.45.57 3.57a1 1 0 0 1-.25 1.02z"/></svg>${_esc(_state.companyPhone)}</span>` : ""}
+        ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="#111"><path d="M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zm2.4.2 7.1 6.2a.8.8 0 0 0 1 0l7.1-6.2a.6.6 0 0 0-.4-1H4.8a.6.6 0 0 0-.4 1"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
       </div>` : ""}
     </div>
     ${logo ? `<div class="hdr-r"><img src="${_esc(logo)}"/></div>` : ""}
   </div>
   <div class="title">${_esc(cfg.title)}</div>
-  <div class="hdr-bot">
+  <div class="hdr-bot" style="border-bottom:none">
     <div class="hb-l">${(doc.company_gstin || doc.gstin || _state.companyGstin) ? `<b>GSTIN :</b> ${_esc(doc.company_gstin || doc.gstin || _state.companyGstin)}` : ""}</div>
     <div class="hb-r">
       <div><b>${_esc(cfg.title)} No. :</b> ${_esc(doc.name || "")}</div>
       <div><b>Date :</b> ${_esc(docDate)}</div>
     </div>
   </div>
-  <div class="pr">
-    <div class="blk">
-      <div class="l">${_esc(cfg.partyLabel)}</div>
-      <div class="nm">${_esc(party)}</div>
-      ${doc.address_display ? `<div class="sub">${_esc(doc.address_display)}</div>` : ""}
-      ${doc.customer_gstin || doc.supplier_gstin ? `<div class="sub">GSTIN: ${_esc(doc.customer_gstin || doc.supplier_gstin)}</div>` : ""}
-    </div>
-    <div class="blk r">
-      ${doc.due_date ? `<div class="kv"><div class="l">Due Date</div><div class="sub">${_esc(doc.due_date)}</div></div>` : ""}
-      ${doc.valid_till ? `<div class="kv"><div class="l">Valid Till</div><div class="sub">${_esc(doc.valid_till)}</div></div>` : ""}
-      ${doc.po_no ? `<div class="kv"><div class="l">PO Number</div><div class="sub">${_esc(doc.po_no)}</div></div>` : ""}
-      ${doc.place_of_supply ? `<div class="kv"><div class="l">Place of Supply</div><div class="sub">${_esc(doc.place_of_supply)}</div></div>` : ""}
-    </div>
-  </div>
-  ${doc.shipping_address ? `<hr class="sep"/><div class="pr"><div class="blk"><div class="l">Ship To</div><div class="sub">${_esc(doc.shipping_address)}</div></div></div>` : ""}
+  ${(() => {
+    const billLines = _formatAddrLines(doc.billing_address || doc.address_display || "");
+    const shipLines = _formatAddrLines(doc.shipping_address || doc.billing_address || doc.address_display || "");
+    const gstin = doc.customer_gstin || doc.supplier_gstin || "";
+    const phone = doc.customer_mobile || doc.contact_mobile || doc.contact_phone || "";
+    const contactNm = doc.contact_display || "";
+    const companyNm = doc.customer_company_name || doc.supplier_company_name || "";
+    const col = (label, lines) => `
+      <div class="addr-col">
+        <div class="addr-h">${label}</div>
+        <div class="addr-body">
+          ${contactNm ? `<div class="addr-ct">${_esc(contactNm)}</div>` : ""}
+          <div class="addr-nm">${_esc(party)}</div>
+          ${companyNm ? `<div class="addr-nm">${_esc(companyNm)}</div>` : ""}
+          ${lines.map(l => `<div class="addr-ln">${_esc(l)}</div>`).join("")}
+          ${gstin ? `<div class="addr-ln"><b>GSTIN :</b> ${_esc(gstin)}</div>` : ""}
+          ${phone ? `<div class="addr-ln"><b>Phone :</b> ${_esc(phone)}</div>` : ""}
+        </div>
+      </div>`;
+    if (!billLines.length && !shipLines.length && !gstin && !phone && !companyNm) return "";
+    return `<div class="addr-table">${col("Billing Address", billLines)}${col("Shipping Address", shipLines)}</div>`;
+  })()}
   <table class="it">
     <thead><tr>
       <th class="c" style="width:30px">#</th><th>Item &amp; Description</th>
-      ${cfg.includeHsn ? `<th class="c" style="width:72px">HSN/SAC</th>` : ""}
-      <th class="r" style="width:46px">Qty</th><th class="c" style="width:48px">UOM</th>
-      <th class="r" style="width:90px">Rate</th>
-      ${cfg.includeDiscount ? `<th class="c" style="width:52px">Disc</th>` : ""}
-      ${includeMrp ? `<th class="r" style="width:80px">MRP</th>` : ""}
-      <th class="r" style="width:100px">Amount</th>
+      ${cfg.includeHsn ? `<th class="c" style="width:78px">HSN/SAC</th>` : ""}
+      <th class="r" style="width:44px">Qty</th><th class="c" style="width:50px">UOM</th>
+      <th class="r" style="width:82px">Rate</th>
+      ${cfg.includeDiscount ? `<th class="c" style="width:56px">Disc</th>` : ""}
+      ${includeGst ? `<th class="r" style="width:82px">Taxable</th>` : ""}
+      ${includeGst ? (hasIgst ? `<th class="c" style="width:58px">IGST</th>` : `<th class="c" style="width:58px">CGST</th><th class="c" style="width:58px">SGST</th>`) : ""}
+      ${includeMrp ? `<th class="r" style="width:76px">MRP</th>` : ""}
+      <th class="r" style="width:96px">Amount</th>
     </tr></thead>
     <tbody>${items || `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">No items</td></tr>`}</tbody>
   </table>
   <div class="tot-wrap">
     <div class="tot-left">
-      ${doc.terms || doc.customer_note ? `<div class="notes"><div class="h">${doc.customer_note ? "Note" : "Terms &amp; Conditions"}</div>${_esc(doc.customer_note || doc.terms)}</div>` : ""}
-      ${doc.remarks ? `<div class="notes"><div class="h">Remarks</div>${_esc(doc.remarks)}</div>` : ""}
+      <div>
+        ${doc.terms || doc.customer_note ? `<div class="notes"><div class="h">${doc.customer_note ? "Note" : "Terms &amp; Conditions"}</div>${_esc(doc.customer_note || doc.terms)}</div>` : ""}
+        ${doc.remarks ? `<div class="notes"><div class="h">Remarks</div>${_esc(doc.remarks)}</div>` : ""}
+        ${_state.bankName || _state.bankAccountNo ? `<div class="bank">
+          <div class="h">Bank Details :</div>
+          ${_state.bankName ? `Bank Name : ${_esc(_state.bankName)}<br/>` : ""}
+          ${_state.bankBranch ? `Branch : ${_esc(_state.bankBranch)}<br/>` : ""}
+          ${_state.bankAccountNo ? `Account No. : ${_esc(_state.bankAccountNo)}<br/>` : ""}
+          ${_state.bankIfsc ? `IFSC : ${_esc(_state.bankIfsc)}` : ""}
+        </div>` : ""}
+      </div>
       <div class="words"><div class="h">Total Amount in Words</div>${_esc(amountWords)}</div>
     </div>
     <table class="tt">
