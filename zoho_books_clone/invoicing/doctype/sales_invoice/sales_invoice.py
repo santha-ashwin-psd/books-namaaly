@@ -126,7 +126,13 @@ class SalesInvoice(Document):
         self.calculate_discount(subtotal)
         net = subtotal - flt(self.additional_discount_amount)
         for tax in (self.taxes or []):
-            if flt(tax.rate) and not flt(tax.tax_amount):
+            # A rate-based tax line is always derived from the current net
+            # total — recompute on every save so later edits to items/
+            # discounts are reflected, not just the first time the row goes
+            # from 0 to non-zero. Only tax lines with no rate (rate=0, e.g.
+            # a manually entered flat charge) keep whatever tax_amount the
+            # user typed in directly.
+            if flt(tax.rate):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
         tax_total = sum(flt(t.tax_amount) for t in (self.taxes or []))
         self.net_total = round(net, 2)

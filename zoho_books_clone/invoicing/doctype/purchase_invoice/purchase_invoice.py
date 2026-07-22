@@ -38,7 +38,7 @@ class PurchaseInvoice(Document):
         self.calculate_discount(subtotal)
         net = subtotal - flt(self.additional_discount_amount)
         for tax in (self.taxes or []):
-            if flt(tax.rate) and not flt(tax.tax_amount):
+            if flt(tax.rate):
                 tax.tax_amount = round(net * flt(tax.rate) / 100, 2)
         tax_total = sum(flt(t.tax_amount) for t in (self.taxes or []))
         self.net_total = round(net, 2)
@@ -159,10 +159,18 @@ class PurchaseInvoice(Document):
             is_stock = frappe.db.get_value("Item", row.item_code, "is_stock_item")
             if not is_stock:
                 continue
+            # Match PurchaseOrder._update_ordered_qty: Bin.ordered_qty lives
+            # in stock UOM, so release the stock-uom equivalent (e.g. a
+            # "10 Box" line at conversion_factor 10 must release 100, not 10)
+            # or ordered_qty for that item drifts out of sync with what the
+            # PO actually added.
+            from zoho_books_clone.inventory.utils import get_conversion_factor
+            factor = flt(get_conversion_factor(row.item_code, getattr(row, "uom", None)) or 1)
+            row_qty = flt(row.qty) * factor
             update_bin(
                 item_code=row.item_code,
                 warehouse=wh,
-                ordered_qty_delta=direction * flt(row.qty),
+                ordered_qty_delta=direction * row_qty,
                 company=self.company or "",
             )
 

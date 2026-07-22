@@ -727,6 +727,7 @@ import { useConfirm } from "../composables/useConfirm.js";
 import { useLivePreview } from "../composables/useLivePreview.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
+import { computeTaxRows } from "../composables/useTaxCalc.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import BulkActionBar from "../components/BulkActionBar.vue";
@@ -786,6 +787,14 @@ const costCenters = ref([]);
 const form = reactive({ customer: "", posting_date: todayStr(), return_against: "", reason: "Price Adjustment", notes: "", cost_center: "" });
 const invoiceSummary = reactive({ data: null, loading: false });
 const cnTaxes = ref([]);
+// Whether the source invoice's tax breakup was inter-state (IGST) rather than
+// intra-state (CGST+SGST) — detected once from the inherited tax rows, since
+// the CN form itself doesn't collect a place of supply. Used to steer which
+// component rows apply when taxes are recalculated per remaining line below.
+const cnIsInterState = ref(false);
+function detectInterState(rows) {
+  return (rows || []).some(t => /igst/i.test(t.description || "") || /igst/i.test(t.tax_type || "") || /igst/i.test(t.account_head || ""));
+}
 const taxTemplates = ref([]);
 const taxAccountHead = ref("");
 
@@ -885,27 +894,18 @@ function toggle(n) { const s = new Set(selected.value); s.has(n) ? s.delete(n) :
 function toggleAll(e) { selected.value = e.target.checked ? new Set(sorted.value.map(c => c.name)) : new Set(); }
 
 const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
-const cnTaxLines = computed(() => {
-  // If invoice is selected, inherit its taxes applied against the subtotal
-  if (cnTaxes.value.length) {
-    return cnTaxes.value.map(t => ({
-      description: t.description || t.tax_type || "Tax",
-      rate: Number(t.rate || 0),
-      amount: Math.round(subtotal.value * Number(t.rate || 0) / 100 * 100) / 100,
-    }));
-  }
-  // Otherwise aggregate from per-line tax_code selections (mirrors Invoices.vue)
-  const map = {};
-  for (const l of lines.value) {
-    if (!l.tax_code || !l.amount) continue;
-    const tmpl = taxTemplates.value.find(t => t.name === l.tax_code);
-    const rate = tmpl?.rate ?? 0;
-    if (!rate) continue;
-    if (!map[l.tax_code]) map[l.tax_code] = { description: l.tax_code, rate, amount: 0 };
-    map[l.tax_code].amount += Math.round(flt(l.amount) * rate / 100 * 100) / 100;
-  }
-  return Object.values(map);
-});
+// Only lines that will actually be saved (has an item + qty), each taxed by
+// its OWN tax_code — fixes taxes over-applying when items are removed after
+// inheriting from an invoice: previously every inherited tax rate was applied
+// to the whole remaining subtotal regardless of which items it belonged to.
+const cnActiveLines = computed(() => lines.value.filter(l => l.item_code && flt(l.qty) > 0));
+const cnTaxCtx = computed(() => ({
+  companyState: "same",
+  placeOfSupply: cnIsInterState.value ? "different" : "same",
+  defaultAccount: taxAccountHead.value,
+}));
+const cnTaxRows  = computed(() => computeTaxRows(cnActiveLines.value, taxTemplates.value, cnTaxCtx.value));
+const cnTaxLines = computed(() => cnTaxRows.value.map(t => ({ description: t.description, rate: t.rate, amount: t.amount, tax_type: t.account_head })));
 const cnGrandTotal = computed(() => subtotal.value + cnTaxLines.value.reduce((s, t) => s + t.amount, 0));
 
 const appliedTotal = computed(() => viewApplications.value.reduce((s, a) => s + flt(a.amount), 0));
@@ -948,6 +948,7 @@ function openNew() {
   Object.assign(form, { customer: "", posting_date: todayStr(), return_against: "", reason: "Price Adjustment", notes: "", cost_center: "" });
   invoiceSummary.data = null; invoiceSummary.loading = false;
   cnTaxes.value = [];
+  cnIsInterState.value = false;
   lines.value = [blankLine()];
   Object.assign(cnCollapsed, { customer: false, items: false, notes: true });
   fetchCustomers(""); fetchItems(""); fetchInvoices(""); fetchTaxTemplates(); fetchCostCenters();
@@ -977,6 +978,7 @@ async function openEdit(c) {
     cnTaxes.value = (doc?.taxes || [])
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
+    cnIsInterState.value = detectInterState(doc?.taxes || []);
     if (doc?.remarks) form.notes = doc.remarks;
     if (doc?.cost_center) form.cost_center = doc.cost_center;
   } catch {}
@@ -1035,7 +1037,7 @@ async function fetchInvoices(q = "") {
     invoices.value = r.map(x => ({ ...x, label: `${x.name} · ₹${Number(x.outstanding_amount||0).toLocaleString("en-IN",{minimumFractionDigits:2})} due${x.customer_name ? ` · ${x.customer_name}` : ""}`, value: x.name }));
   } catch { invoices.value = []; }
 }
-function onCustomerSelect(_opt) { form.return_against = ""; invoiceSummary.data = null; cnTaxes.value = []; fetchInvoices(""); }
+function onCustomerSelect(_opt) { form.return_against = ""; invoiceSummary.data = null; cnTaxes.value = []; cnIsInterState.value = false; fetchInvoices(""); }
 async function onInvoiceSelect(opt) {
   const invName = opt?.value ?? opt;
   invoiceSummary.data = null;
@@ -1051,6 +1053,7 @@ async function onInvoiceSelect(opt) {
     cnTaxes.value = (doc?.taxes || [])
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
+    cnIsInterState.value = detectInterState(doc?.taxes || []);
     if (doc?.items?.length) {
       lines.value = doc.items.map(i => ({
         id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
@@ -1106,19 +1109,16 @@ async function fetchTaxTemplates() {
     taxAccountHead.value = r[0]?.name || "";
   } catch {}
   try {
-    const co = await resolveCompany();
     const templates = await apiList("Tax Template", {
-      fields: ["name"], filters: [["disabled","=",0]], limit: 50
+      fields: ["name","template_name","tax_type"], filters: [["disabled","=",0]], limit: 50
     });
-    const withRates = await Promise.all((templates || []).map(async t => {
+    const withRows = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
-        const rate = doc?.taxes?.[0]?.tax_rate ?? doc?.taxes?.[0]?.rate ?? 0;
-        const account = doc?.taxes?.[0]?.account_head || taxAccountHead.value;
-        return { name: t.name, rate: Number(rate), account };
-      } catch { return { name: t.name, rate: 0, account: taxAccountHead.value }; }
+        return { name: t.name, title: t.template_name || t.name, tax_type: t.tax_type || doc?.tax_type || "GST", taxes: doc?.taxes || [] };
+      } catch { return { name: t.name, title: t.template_name || t.name, tax_type: t.tax_type || "GST", taxes: [] }; }
     }));
-    taxTemplates.value = withRates;
+    taxTemplates.value = withRows;
   } catch { taxTemplates.value = []; }
 }
 async function fetchCostCenters() {
@@ -1189,12 +1189,20 @@ async function saveCN(submit) {
         amount: flt(l.amount), tax_code: l.tax_code || "",
       }));
 
-    const taxPayload = cnTaxes.value.length
-      ? cnTaxes.value
-      : cnTaxLines.value.map(tl => {
+    // IMPORTANT: build the tax payload from the CURRENT line items (each
+    // taxed by its own tax_code), not the old cnTaxes snapshot inherited from
+    // the source invoice — that snapshot was the source invoice's full
+    // breakup and stayed the same size no matter how many items got removed
+    // here, so it used to apply every original rate against whatever
+    // subtotal remained.
+    const recomputedTaxes = cnTaxRows.value.map(t => ({ tax_type: t.account_head, description: t.description, rate: t.rate }));
+    const taxPayload = recomputedTaxes.length
+      ? recomputedTaxes
+      : (cnTaxes.value.length ? cnTaxes.value : cnTaxLines.value.map(tl => {
           const tmpl = taxTemplates.value.find(t => t.name === tl.description);
-          return { tax_type: tmpl?.account || taxAccountHead.value, description: tl.description, rate: tl.rate };
-        });
+          const account = tmpl?.taxes?.[0]?.account_head || taxAccountHead.value;
+          return { tax_type: account, description: tl.description, rate: tl.rate };
+        }));
     const taxesJson = JSON.stringify(taxPayload);
     if (!editingName.value && submit === 1) {
       // New + submit → backend API which wires GL accounts and CN- naming

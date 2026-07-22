@@ -247,15 +247,19 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
         # Phase 4: Purchase Invoice/Receipt Item rows may be entered in a
         # Purchase UOM distinct from the item's stock_uom — row.qty (or
         # accepted_qty) above is in THAT uom, while Bin/Batch/the Stock
-        # Ledger always deal in stock_uom. Use the row's own
-        # already-computed conversion_factor (set by
-        # PurchaseInvoiceItem.validate() / PurchaseReceiptItem.validate())
-        # to switch to the stock-uom equivalent here, and scale basic_rate
-        # down to match below so the auto-generated Stock Entry's amount
-        # still equals this line's true value. Sales-side rows don't carry
-        # conversion_factor at all, so it falls back to 1 (no-op) and they're
-        # unaffected.
-        conversion_factor = flt(getattr(row, "conversion_factor", None) or 1)
+        # Ledger always deal in stock_uom. Recompute the factor live here
+        # via get_conversion_factor() rather than trusting row.conversion_factor:
+        # that field is only as fresh as the last save, and the row we get
+        # in this hook can be the doc as it existed when queued rather than
+        # a fully re-validated instance — a stale/zero conversion_factor
+        # would silently post raw purchase-uom qty as if it were stock_uom
+        # (e.g. 10 Box landing as 10 Kg instead of 100 Kg). Recomputing
+        # straight from the Item's UOM Conversions is cheap and always
+        # correct. Sales-side rows (Delivery Note, Sales Invoice) have no
+        # uom mismatch scenario here — get_conversion_factor returns 1.0
+        # for them (uom == stock_uom), a no-op.
+        from zoho_books_clone.inventory.utils import get_conversion_factor
+        conversion_factor = flt(get_conversion_factor(item_code, getattr(row, "uom", None)) or 1)
         if conversion_factor != 1.0:
             qty = flt(qty) * conversion_factor
 

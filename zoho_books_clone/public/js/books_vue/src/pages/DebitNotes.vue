@@ -332,7 +332,7 @@
             <div class="dn-form-totals">
               <div v-if="dnTaxLines.length" class="dn-tax-note">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Tax rates inherited from bill {{ form.return_against }}
+                Tax is recalculated live from each item's own Tax Template — change an item's template above to update it
               </div>
               <div class="po-totals" style="justify-content:flex-end">
                 <div class="po-totals-right" style="min-width:260px">
@@ -708,6 +708,7 @@ import { useConfirm } from "../composables/useConfirm.js";
 import { useLivePreview } from "../composables/useLivePreview.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
+import { computeTaxRows } from "../composables/useTaxCalc.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
@@ -777,6 +778,14 @@ const dnCollapsed = reactive({ vendor: false, items: false, notes: true });
 const billSummary = reactive({ data: null, loading: false });
 
 const dnTaxes = ref([]);
+// Whether the source bill's tax breakup was inter-state (IGST) rather than
+// intra-state (CGST+SGST) — detected once from the inherited tax rows, since
+// the DN form itself doesn't collect a place of supply. Used to steer which
+// component rows apply when taxes are recalculated per remaining line below.
+const dnIsInterState = ref(false);
+function detectInterState(rows) {
+  return (rows || []).some(t => /igst/i.test(t.description || "") || /igst/i.test(t.tax_type || "") || /igst/i.test(t.account_head || ""));
+}
 const taxTemplates = ref([]);
 const taxAccountHead = ref("");
 const applyModal = reactive({ open: false, saving: false, dnName: "", balance: 0, bill: "", originBill: "", amount: 0, openBills: [], summary: null, summaryLoading: false });
@@ -880,7 +889,18 @@ function toggle(n) { const s = new Set(selected.value); s.has(n) ? s.delete(n) :
 function toggleAll(e) { selected.value = e.target.checked ? new Set(sorted.value.map(d => d.name)) : new Set(); }
 
 const subtotal    = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
-const dnTaxLines  = computed(() => dnTaxes.value.map(t => ({ description: t.description || t.tax_type || "Tax", rate: Number(t.rate || 0), amount: Math.round(subtotal.value * Number(t.rate || 0) / 100 * 100) / 100 })));
+// Only lines that will actually be saved (has an item + qty), each taxed by
+// its OWN tax_code — this is what fixes taxes over-applying when items are
+// removed: previously every inherited tax rate was applied to the whole
+// remaining subtotal regardless of which items it actually belonged to.
+const dnActiveLines = computed(() => lines.value.filter(l => l.item_code && flt(l.qty) > 0));
+const dnTaxCtx = computed(() => ({
+  companyState: "same",
+  placeOfSupply: dnIsInterState.value ? "different" : "same",
+  defaultAccount: taxAccountHead.value,
+}));
+const dnTaxRows   = computed(() => computeTaxRows(dnActiveLines.value, taxTemplates.value, dnTaxCtx.value));
+const dnTaxLines  = computed(() => dnTaxRows.value.map(t => ({ description: t.description, rate: t.rate, amount: t.amount, tax_type: t.account_head })));
 const dnGrandTotal = computed(() => subtotal.value + dnTaxLines.value.reduce((s, t) => s + t.amount, 0));
 
 const timelineSteps = computed(() => {
@@ -924,6 +944,7 @@ function openNew() {
   Object.assign(form, { supplier: "", posting_date: todayStr(), return_against: "", reason: "Vendor Overcharge", notes: "", cost_center: "" });
   billSummary.data = null; billSummary.loading = false;
   dnTaxes.value = [];
+  dnIsInterState.value = false;
   lines.value = [blankLine()];
   Object.assign(dnCollapsed, { vendor: false, items: false, notes: true });
   fetchVendors(""); fetchItems(""); fetchBills(""); fetchTaxTemplates(); fetchCostCenters();
@@ -953,6 +974,7 @@ async function openEdit(d) {
     dnTaxes.value = (doc?.taxes || [])
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
+    dnIsInterState.value = detectInterState(doc?.taxes || []);
     if (doc?.remarks) form.notes = doc.remarks;
     if (doc?.cost_center) form.cost_center = doc.cost_center;
   } catch {}
@@ -1031,6 +1053,7 @@ async function onBillSelect(opt) {
     dnTaxes.value = (doc?.taxes || [])
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
+    dnIsInterState.value = detectInterState(doc?.taxes || []);
     if (doc?.items?.length) {
       lines.value = doc.items.map(i => ({
         id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
@@ -1087,8 +1110,14 @@ async function fetchTaxTemplates() {
     taxAccountHead.value = r?.[0]?.name || "";
   } catch {}
   try {
-    const templates = await apiList("Tax Template", { fields: ["name","template_name"], filters: [["disabled","=",0]], limit: 50 });
-    taxTemplates.value = (templates || []).map(t => ({ name: t.name, title: t.template_name || t.name }));
+    const templates = await apiList("Tax Template", { fields: ["name","template_name","tax_type"], filters: [["disabled","=",0]], limit: 50 });
+    const withRows = await Promise.all((templates || []).map(async t => {
+      try {
+        const doc = await apiGet("Tax Template", t.name);
+        return { name: t.name, title: t.template_name || t.name, tax_type: t.tax_type || doc?.tax_type || "GST", taxes: doc?.taxes || [] };
+      } catch { return { name: t.name, title: t.template_name || t.name, tax_type: t.tax_type || "GST", taxes: [] }; }
+    }));
+    taxTemplates.value = withRows;
   } catch { taxTemplates.value = []; }
 }
 
@@ -1106,9 +1135,15 @@ async function saveDN(submit) {
       discount_percentage: flt(l.discount_percentage), discount_amount: flt(l.discount_amount),
       amount: flt(l.amount), tax_code: l.tax_code || "",
     }));
-    const taxPayload = dnTaxes.value.length
-      ? dnTaxes.value
-      : dnTaxLines.value.map(tl => ({ tax_type: taxAccountHead.value, description: tl.description, rate: tl.rate }));
+    // IMPORTANT: build the tax payload from the CURRENT line items (each
+    // taxed by its own tax_code), not the old dnTaxes snapshot inherited from
+    // the source bill — that snapshot was the source bill's full breakup and
+    // stayed the same size no matter how many items got removed here, so it
+    // used to apply every original rate against whatever subtotal remained.
+    const recomputedTaxes = dnTaxRows.value.map(t => ({ tax_type: t.account_head, description: t.description, rate: t.rate }));
+    const taxPayload = recomputedTaxes.length
+      ? recomputedTaxes
+      : (dnTaxes.value.length ? dnTaxes.value : dnTaxLines.value.map(tl => ({ tax_type: taxAccountHead.value, description: tl.description, rate: tl.rate })));
     if (!editingName.value) {
       const r = await apiPOST("zoho_books_clone.api.docs.create_debit_note", {
         vendor: form.supplier,

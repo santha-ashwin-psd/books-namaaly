@@ -628,16 +628,66 @@ def post_journal_entry(doc) -> None:
 
 # ─── Expense ───────────────────────────────────────────────────────────────────
 
+def _get_expense_itc_account(company: str) -> str | None:
+    """Account that captures GST paid on a standalone Expense as claimable
+    Input Tax Credit, mirroring how Purchase Invoice posts each tax line's
+    account_head instead of folding GST into the expense line — otherwise
+    tax paid on petty/employee expenses is lost inside the expense account
+    (overstating P&L expense) and never surfaces as reclaimable ITC."""
+    acct = frappe.db.get_value(
+        "Account",
+        {"account_name": ["like", "%Input Tax Credit%"], "company": company, "is_group": 0},
+        "name",
+    ) or frappe.db.get_value(
+        "Account",
+        {"account_type": "Tax", "account_name": ["like", "%ITC%"], "company": company, "is_group": 0},
+        "name",
+    )
+    if acct:
+        return acct
+
+    parent = (
+        frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Current Asset%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_type": "Asset"}, "name")
+    )
+    if not parent:
+        return None
+    try:
+        doc = frappe.get_doc({
+            "doctype": "Account",
+            "account_name": "Input Tax Credit — Expenses",
+            "company": company,
+            "account_type": "Tax",
+            "parent_account": parent,
+            "is_group": 0,
+        })
+        doc.insert(ignore_permissions=True)
+        return doc.name
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Input Tax Credit account auto-create failed for {company}")
+        return None
+
+
 def post_expense(doc) -> None:
-    """DR Expense Account / CR Paid-Through (Bank or Cash) on Expense submit."""
+    """DR Expense Account (net) + DR Input Tax Credit (GST) / CR Paid-Through
+    (Bank or Cash) on Expense submit.
+
+    GST on the expense is split into its own ITC account rather than folded
+    into the expense line, so the expense P&L line reflects the true net
+    cost and the GST component remains visible/claimable as input credit —
+    same treatment as the tax lines on a Purchase Invoice.
+    """
     _require(doc, "expense_account", "Expense Account")
     _require(doc, "paid_through",    "Paid Through Account")
 
-    total = flt(doc.total_amount) or flt(doc.amount)
+    net = flt(doc.amount)
+    tax = flt(doc.tax_amount)
+    total = flt(doc.total_amount) or (net + tax)
+
     gl_map = [
         {
             "account":      doc.expense_account,
-            "debit":        total,
+            "debit":        net if net else total,
             "credit":       0,
             "voucher_type": doc.doctype,
             "voucher_no":   doc.name,
@@ -658,16 +708,65 @@ def post_expense(doc) -> None:
             "remarks":      doc.description or doc.name,
         },
     ]
+
+    if tax and net:
+        itc_account = _get_expense_itc_account(doc.company)
+        if itc_account:
+            gl_map.append({
+                "account":      itc_account,
+                "debit":        tax,
+                "credit":       0,
+                "voucher_type": doc.doctype,
+                "voucher_no":   doc.name,
+                "posting_date": doc.posting_date,
+                "company":      doc.company,
+                "cost_center":  doc.cost_center or "",
+                "remarks":      f"ITC on Expense {doc.name}",
+            })
+        else:
+            # No ITC account resolvable — fall back to the old behaviour
+            # (fold tax into the expense line) rather than posting an
+            # unbalanced entry.
+            gl_map[0]["debit"] = total
+
     make_gl_entries(gl_map)
 
 
 # ─── Expense Claim ─────────────────────────────────────────────────────────────
 
+def _get_expense_claim_line_account(company: str, expense_type: str, default_exp_acct: str | None) -> str | None:
+    """Resolve the GL account for one Expense Claim line by its expense_type
+    (Travel, Meals & Entertainment, Software & Subscriptions, etc.) instead
+    of posting every line to the same generic Expense account regardless of
+    category — otherwise categorized spend is invisible in the P&L and the
+    expense_type field on the row is purely cosmetic.
+
+    Falls back to the generic default account (and finally None) if no
+    category-specific account can be found, so approval never breaks for a
+    company that hasn't set up per-category accounts.
+    """
+    if expense_type:
+        acct = frappe.db.get_value(
+            "Account",
+            {
+                "account_name": ["like", f"%{expense_type}%"],
+                "company": company,
+                "account_type": "Expense",
+                "is_group": 0,
+            },
+            "name",
+        )
+        if acct:
+            return acct
+    return default_exp_acct
+
+
 def post_expense_claim(doc) -> None:
-    """DR Expense Account per line / CR Employee Payable on Expense Claim approval."""
+    """DR Expense Account per line (by category) / CR Employee Payable on Expense Claim approval."""
     _require(doc, "payable_account", "Payable Account")
 
-    # Resolve a default expense account for lines that don't carry one
+    # Resolve a default/fallback expense account for lines whose category
+    # doesn't match a dedicated account
     default_exp_acct = frappe.db.get_value(
         "Account",
         {"account_type": "Expense", "company": doc.company, "is_group": 0},
@@ -676,7 +775,9 @@ def post_expense_claim(doc) -> None:
 
     gl_map = []
     for row in (doc.expenses or []):
-        exp_acct = default_exp_acct
+        exp_acct = _get_expense_claim_line_account(
+            doc.company, getattr(row, "expense_type", None), default_exp_acct
+        )
         if not exp_acct:
             frappe.throw(
                 _("No Expense Account found for company {0}. "

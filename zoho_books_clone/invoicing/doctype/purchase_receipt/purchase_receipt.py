@@ -99,10 +99,17 @@ class PurchaseReceipt(Document):
             is_stock = frappe.db.get_value("Item", row.item_code, "is_stock_item")
             if not is_stock:
                 continue
+            # Bin.ordered_qty lives in stock UOM (see PurchaseOrder /
+            # PurchaseInvoice) — release the stock-uom equivalent, not the
+            # raw purchase-UOM qty, so a "10 Box" line (stock_uom Kg,
+            # conversion_factor 10) releases 100, matching what the PO added.
+            from zoho_books_clone.inventory.utils import get_conversion_factor
+            factor = flt(get_conversion_factor(row.item_code, getattr(row, "uom", None)) or 1)
+            row_qty = flt(row.qty) * factor
             update_bin(
                 item_code=row.item_code,
                 warehouse=wh,
-                ordered_qty_delta=direction * flt(row.qty),
+                ordered_qty_delta=direction * row_qty,
                 company=self.company or "",
             )
 

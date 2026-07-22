@@ -45,13 +45,37 @@ class PaymentEntry(Document):
                 validate_account_type(self.paid_from, ["Bank", "Cash"])
                 validate_account_type(self.paid_to,   ["Payable"])
 
+    # Which reference doctypes a given payment direction is allowed to settle.
+    # A "Receive" payment (money coming in) can only ever apply against
+    # something owed *to* the company; a "Pay" payment only against
+    # something the company owes. Nothing previously stopped a Receive
+    # payment from being allocated against a Purchase Invoice (or vice
+    # versa) — outstanding_amount on the bill would drop even though the
+    # GL posting (paid_from/paid_to) has nothing to do with that bill's own
+    # AP/AR account, leaving the two permanently out of sync.
+    _ALLOWED_REFERENCE_DOCTYPES = {
+        "Receive": {"Sales Invoice"},
+        "Pay":     {"Purchase Invoice"},
+    }
+
     def validate_references(self):
         total_allocated = sum(flt(r.allocated_amount) for r in (self.references or []))
         if total_allocated > flt(self.paid_amount):
             frappe.throw(_(
                 "Total allocated {0} exceeds paid amount {1}"
             ).format(total_allocated, self.paid_amount))
+
+        allowed = self._ALLOWED_REFERENCE_DOCTYPES.get(self.payment_type)
+
         for ref in (self.references or []):
+            if allowed and ref.reference_doctype not in allowed:
+                frappe.throw(_(
+                    "A '{0}' payment cannot be allocated against a {1} ({2}) — "
+                    "allowed reference types for '{0}' are: {3}"
+                ).format(
+                    self.payment_type, ref.reference_doctype, ref.reference_name,
+                    ", ".join(sorted(allowed)),
+                ))
             outstanding = frappe.db.get_value(
                 ref.reference_doctype, ref.reference_name, "outstanding_amount"
             )
