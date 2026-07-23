@@ -42,6 +42,7 @@
 
     <!-- ── Bulk action bar ── -->
     <BulkActionBar :count="selected.size" @clear="selected=new Set()">
+      <button @click="bulkPayment">₹ Pay Vendor</button>
       <button @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
       <button @click="bulkCancel">Cancel Submitted</button>
       <button class="bab-danger" @click="bulkDelete">Delete Drafts</button>
@@ -1855,6 +1856,40 @@ async function bulkCancel() {
   selected.value = new Set();
   toast.success(`Cancelled ${done} bill(s)${failed ? `; ${failed} failed` : ""}`);
   await load();
+}
+async function bulkPayment() {
+  if (!canWrite("bills")) { toast.error("Read-only access"); return; }
+  const payable = sorted.value.filter(b =>
+    selected.value.has(b.name) && b.docstatus === 1 && flt(b.outstanding_amount) > 0
+  );
+  if (!payable.length) {
+    toast.info("No payable bills selected — must be submitted with a balance due");
+    return;
+  }
+  const suppliers = new Set(payable.map(b => b.supplier));
+  if (suppliers.size > 1) {
+    toast.error("Select bills from a single vendor to record one payment together");
+    return;
+  }
+  const paid = await openPayment({
+    multi: true,
+    direction: "pay",
+    party: payable[0].supplier,
+    partyLabel: payable[0].supplier_name || payable[0].supplier,
+    invoices: payable.map(b => ({
+      name: b.name,
+      due_date: b.due_date,
+      outstanding_amount: flt(b.outstanding_amount),
+    })),
+    getDefaultsEndpoint: "zoho_books_clone.api.docs.get_bill_payment_defaults",
+    sendEndpoint: "zoho_books_clone.api.docs.record_vendor_payment_multi",
+    paramKey: "bill_name",
+  });
+  if (paid) {
+    selected.value = new Set();
+    toast.success(`Payment recorded across ${payable.length} bill(s)`);
+    await load();
+  }
 }
 async function bulkEmail() {
   if (!canWrite("bills")) { toast("Read-only access", "error"); return; }

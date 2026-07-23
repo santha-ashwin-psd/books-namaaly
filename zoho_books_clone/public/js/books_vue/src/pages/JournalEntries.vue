@@ -330,8 +330,8 @@
                       <option v-for="cc in costCenters" :key="cc" :value="cc">{{cc}}</option>
                     </select>
                   </td>
-                  <td><input v-model="line.dr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" :disabled="normalSide(line.account)==='Credit'" @input="line.cr=''"/></td>
-                  <td><input v-model="line.cr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" :disabled="normalSide(line.account)==='Debit'" @input="line.dr=''"/></td>
+                  <td><input v-model="line.dr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" @input="line.cr=''"/></td>
+                  <td><input v-model="line.cr" type="number" min="0" step="0.01" class="jen-ci" style="text-align:right" placeholder="0.00" @input="line.dr=''"/></td>
                   <td style="font-size:11px;color:#868e96;padding:0 6px">{{flt(line.dr)>0?'Dr':flt(line.cr)>0?'Cr':'—'}}</td>
                   <td style="padding:4px 6px">
                     <button @click="removeLine(line.id)" class="b-icon-btn danger" style="padding:3px 5px"><span v-html="icon('x',12)"></span></button>
@@ -395,14 +395,12 @@
                   <label class="jen-lmc-amount-lbl">Debit (Dr)</label>
                   <input v-model="line.dr" type="number" min="0" step="0.01"
                     class="jen-lmc-amount-input jen-lmc-amount-input--dr"
-                    :disabled="normalSide(line.account)==='Credit'"
                     placeholder="0.00" @input="line.cr=''"/>
                 </div>
                 <div class="jen-lmc-amount-cell jen-lmc-amount-cell--cr">
                   <label class="jen-lmc-amount-lbl">Credit (Cr)</label>
                   <input v-model="line.cr" type="number" min="0" step="0.01"
                     class="jen-lmc-amount-input jen-lmc-amount-input--cr"
-                    :disabled="normalSide(line.account)==='Debit'"
                     placeholder="0.00" @input="line.dr=''"/>
                 </div>
               </div>
@@ -599,22 +597,8 @@ const allEntries  = ref([]);
 const accounts    = ref([]);
 const accountTypeMap = ref({}); // { accountName: account_type }
 
-// Which side (Debit/Credit) an account's balance normally moves on. Accounts
-// not listed here (Tax, Stock Adjustment, Temporary — types that can
-// legitimately swing either way depending on the transaction) are left
-// unrestricted rather than guessed.
-const NORMAL_BALANCE = {
-  Asset: "Debit", Bank: "Debit", Cash: "Debit", Expense: "Debit", "Cost of Goods Sold": "Debit",
-  Liability: "Credit", Income: "Credit", Equity: "Credit",
-};
-function normalSide(accountName) {
-  return NORMAL_BALANCE[accountTypeMap.value[accountName]] || null;
-}
 function onAccountChange(line, value) {
   line.account = value;
-  const side = normalSide(value);
-  if (side === "Debit") line.cr = "";
-  else if (side === "Credit") line.dr = "";
 }
 const costCenters = ref([]);
 const loading     = ref(true);

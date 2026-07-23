@@ -101,6 +101,7 @@
   <!-- ── Bulk actions bar ── -->
   <div v-if="selectedRows.size>0" class="inv-bulk-bar">
     <span class="inv-bulk-count">{{ selectedRows.size }} selected</span>
+    <button class="inv-bulk-btn inv-bulk-pay" @click="bulkPayment">₹ Record Payment</button>
     <button class="inv-bulk-btn" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
     <button class="inv-bulk-btn" @click="bulkCancel">Cancel Submitted</button>
     <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete">Delete Drafts</button>
@@ -911,8 +912,8 @@
 
             <template v-else>
               <!-- Line items table -->
-              <div v-if="viewInv.items&&viewInv.items.length" class="inv-items-wrap">
-                <table class="inv-items-table">
+              <div v-if="viewInv.items&&viewInv.items.length" class="inv-items-wrap" style="overflow:scroll;">
+                <table class="inv-items-table"  style="overflow:scroll;">
                   <thead>
                     <tr>
                       <th style="width:36px">#</th>
@@ -2799,6 +2800,41 @@ async function bulkCancel() {
   if (done) toast(`Cancelled ${done} invoice(s)${failed?`, ${failed} failed`:""}`);
   await load();
 }
+async function bulkPayment() {
+  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  const payable = sorted.value.filter(i =>
+    selectedRows.value.has(i.name) && i.docstatus === 1 && flt(i.outstanding_amount) > 0
+  );
+  if (!payable.length) {
+    toast("No payable invoices selected — must be submitted with a balance due", "info");
+    return;
+  }
+  const customers = new Set(payable.map(i => i.customer));
+  if (customers.size > 1) {
+    toast("Select invoices from a single customer to record one payment together", "error");
+    return;
+  }
+  const { openPayment: openShared } = usePaymentDialog();
+  const paymentName = await openShared({
+    multi: true,
+    direction: "receive",
+    party: payable[0].customer,
+    partyLabel: payable[0].customer_name || payable[0].customer,
+    invoices: payable.map(i => ({
+      name: i.name,
+      due_date: i.due_date,
+      outstanding_amount: flt(i.outstanding_amount),
+    })),
+    getDefaultsEndpoint: "zoho_books_clone.api.books_data.get_payment_defaults",
+    sendEndpoint: "zoho_books_clone.api.books_data.record_payment_multi",
+    paramKey: "invoice_name",
+  });
+  if (paymentName) {
+    selectedRows.value = new Set();
+    toast(`Payment recorded across ${payable.length} invoice(s)`);
+    await load();
+  }
+}
 async function bulkEmail() {
   if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
   const sel=sorted.value.filter(i=>selectedRows.value.has(i.name));
@@ -3056,6 +3092,8 @@ watch(() => route.query, (q) => {
 .inv-bulk-btn:hover { border-color:#374151; }
 .inv-bulk-danger { border-color:rgba(220,38,38,.3); color:#dc2626; }
 .inv-bulk-danger:hover { background:#fee2e2; }
+.inv-bulk-pay { border-color:rgba(26,110,247,.3); color:#1a6ef7; }
+.inv-bulk-pay:hover { background:#eaf1ff; }
 .inv-bulk-clear { background:none; border:none; color:#6b7280; font-size:12px; cursor:pointer; margin-left:auto; }
 .inv-bulk-clear:hover { color:#374151; }
 

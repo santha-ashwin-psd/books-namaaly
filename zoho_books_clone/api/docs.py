@@ -1300,6 +1300,162 @@ def record_vendor_payment(bill_name, amount_paid=None, payment_date=None,
     return {"payment_entry": pe.name, "bill": bill.name}
 
 
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def record_vendor_payment_multi(
+    supplier=None, amount_paid=None, payment_date=None,
+    payment_mode="Cash", paid_from=None, bank_charges=0,
+    reference_no=None, notes=None, allocations=None, save_as_draft=False,
+    # accept the receive-side dialog's key names too, for symmetry
+    amount_received=None, deposit_to=None,
+):
+    """Vendor-side equivalent of books_data.record_payment_multi — records a
+    single Payment Entry (Pay) against MULTIPLE Purchase Invoices (bills) for
+    one supplier at once.
+
+    allocations: JSON list (or already-parsed list) of
+        [{"bill": "PINV-0001", "allocated_amount": 3000}, ...]
+    ("invoice"/"reference_name" keys are also accepted per row, for symmetry
+    with the customer-side allocations shape.)
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("payments", write=True)
+
+    if not supplier:
+        frappe.throw("supplier is required to record a payment.")
+    amount = flt(amount_paid or amount_received or 0)
+    if amount <= 0:
+        frappe.throw("Amount must be greater than zero.")
+    if not payment_date:
+        payment_date = today()
+    if isinstance(save_as_draft, str):
+        save_as_draft = save_as_draft.lower() in ("true", "1", "yes")
+    if isinstance(allocations, str):
+        allocations = json.loads(allocations or "[]")
+    if not allocations:
+        frappe.throw("At least one bill allocation is required.")
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    bank_charges = flt(bank_charges)
+
+    # Normalise + validate allocation rows before touching any bill.
+    clean_allocations = []
+    total_allocated = 0.0
+    for row in allocations:
+        bill_name = row.get("bill") or row.get("invoice") or row.get("reference_name")
+        amt = flt(row.get("allocated_amount"))
+        if not bill_name:
+            frappe.throw("Each allocation row must include a bill name.")
+        if amt <= 0:
+            continue  # skip zero/blank rows rather than failing the whole payment
+        clean_allocations.append({"bill": bill_name, "allocated_amount": amt})
+        total_allocated += amt
+
+    if not clean_allocations:
+        frappe.throw("At least one bill must have an allocated amount greater than 0.")
+
+    # Total allocated across bills must exactly match the amount paid.
+    # (No advance/on-account concept yet — over/under-allocation is rejected
+    # so cash and allocations never silently drift apart.)
+    if round(total_allocated, 2) != round(amount, 2):
+        frappe.throw(
+            f"Total allocated ({total_allocated}) must equal Amount "
+            f"({amount}). Adjust the per-bill amounts or the total."
+        )
+
+    bills = {}
+    company = None
+    currency = None
+    for row in clean_allocations:
+        bill = frappe.get_doc("Purchase Invoice", row["bill"])
+        if bill.docstatus != 1:
+            frappe.throw(f"Bill {bill.name} must be submitted before recording payment.")
+        if bill.supplier != supplier:
+            frappe.throw(f"Bill {bill.name} does not belong to supplier {supplier}.")
+        outstanding = flt(getattr(bill, "outstanding_amount", None))
+        if not outstanding:
+            outstanding = flt(bill.grand_total) - flt(getattr(bill, "advance_paid", 0))
+        if row["allocated_amount"] > outstanding + 0.005:
+            frappe.throw(
+                f"Allocated amount {row['allocated_amount']} exceeds outstanding "
+                f"{outstanding} for bill {bill.name}."
+            )
+        bills[bill.name] = (bill, outstanding)
+        company = company or (bill.company or _get_company(frappe.session.user))
+        currency = currency or (bill.currency or "INR")
+
+    # Fiscal year lock — block payments into a locked or closed period
+    validate_fiscal_year(payment_date, company)
+
+    bank = paid_from or deposit_to or frappe.db.get_value(
+        "Account", {"account_type": ["in", ["Bank", "Cash"]], "company": company, "is_group": 0}, "name"
+    )
+    if not bank:
+        frappe.throw("Could not find a Cash/Bank account. Please set one up under Accounts.")
+    ap = frappe.db.get_value(
+        "Account", {"account_type": "Payable", "company": company, "is_group": 0}, "name"
+    )
+    if not ap:
+        frappe.throw(
+            f"No Payable account found for company '{company}'. "
+            "Please ensure the Chart of Accounts is set up under Accounts."
+        )
+
+    pe = frappe.new_doc("Payment Entry")
+    pe.payment_type          = "Pay"
+    pe.company                = company
+    pe.posting_date           = payment_date
+    pe.payment_date           = payment_date
+    pe.mode_of_payment        = payment_mode
+    pe.party_type             = "Supplier"
+    pe.party                  = supplier
+    pe.party_name             = frappe.db.get_value("Supplier", supplier, "supplier_name") or supplier
+    pe.paid_from              = bank
+    pe.paid_to                = ap
+    pe.paid_amount            = amount
+    pe.received_amount        = amount
+    pe.source_exchange_rate   = 1
+    pe.target_exchange_rate   = 1
+    pe.currency                = currency or "INR"
+    pe.reference_no           = reference_no or f"PMT-{supplier}-{len(clean_allocations)}bills"
+    pe.reference_date         = payment_date
+    bill_list_str              = ", ".join(bills.keys())
+    pe.remarks                 = notes or f"Payment against {bill_list_str}"
+
+    for row in clean_allocations:
+        bill, outstanding = bills[row["bill"]]
+        pe.append("references", {
+            "reference_doctype":  "Purchase Invoice",
+            "reference_name":     bill.name,
+            "due_date":           bill.due_date,
+            "total_amount":       flt(bill.grand_total),
+            "outstanding_amount": outstanding,
+            "allocated_amount":   row["allocated_amount"],
+        })
+
+    if bank_charges > 0:
+        net_paid = amount - bank_charges
+        pe.paid_amount = net_paid if net_paid > 0 else amount
+        charge_note = f" | Bank Charges: \u20b9{bank_charges:,.2f} (Net paid: \u20b9{pe.paid_amount:,.2f})"
+        pe.remarks = (pe.remarks or "") + charge_note
+
+    pe.flags.ignore_permissions = True
+    pe.flags.ignore_mandatory = True
+    pe.insert()
+    if not save_as_draft:
+        pe.submit()
+        _create_bank_transaction(pe)
+    frappe.db.commit()
+
+    return {
+        "status":        "draft" if save_as_draft else "submitted",
+        "payment_entry": pe.name,
+        "supplier":      supplier,
+        "amount":        amount,
+        "bills":         list(bills.keys()),
+    }
+
+
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def cancel_bill_with_payments(bill_name):
     """Cancel linked Payment Entries first, then cancel the Bill (mirror of invoice cascade)."""
@@ -3688,7 +3844,7 @@ def get_vendor_transactions(vendor, limit=50):
     txns = []
 
     for b in frappe.get_all("Purchase Invoice",
-        filters={"supplier": vendor, "is_return": 0},
+        filters={"supplier": vendor, "is_return": 0, "docstatus": ["!=", 2]},
         fields=["name", "posting_date", "grand_total", "outstanding_amount", "docstatus", "status"],
         order_by="posting_date desc", limit_page_length=limit):
         txns.append({
@@ -3698,7 +3854,7 @@ def get_vendor_transactions(vendor, limit=50):
         })
 
     for d in frappe.get_all("Purchase Invoice",
-        filters={"supplier": vendor, "is_return": 1},
+        filters={"supplier": vendor, "is_return": 1, "docstatus": ["!=", 2]},
         fields=["name", "posting_date", "grand_total", "docstatus", "return_against", "status"],
         order_by="posting_date desc", limit_page_length=limit):
         txns.append({
@@ -3712,7 +3868,7 @@ def get_vendor_transactions(vendor, limit=50):
     pes = frappe.db.sql("""
         SELECT name, payment_date, paid_amount, mode_of_payment, docstatus
         FROM `tabPayment Entry`
-        WHERE party_type='Supplier' AND party=%s AND payment_type='Pay'
+        WHERE party_type='Supplier' AND party=%s AND payment_type='Pay' AND docstatus!=2
         ORDER BY payment_date DESC LIMIT %s
     """, (vendor, limit), as_dict=True)
     for p in pes:
@@ -3913,7 +4069,7 @@ def get_customer_transactions(customer, limit=50):
     txns = []
 
     for i in frappe.get_all("Sales Invoice",
-        filters={"customer": customer, "is_return": 0},
+        filters={"customer": customer, "is_return": 0, "docstatus": ["!=", 2]},
         fields=["name", "posting_date", "grand_total", "outstanding_amount", "docstatus", "status"],
         order_by="posting_date desc", limit_page_length=limit):
         txns.append({
@@ -3923,7 +4079,7 @@ def get_customer_transactions(customer, limit=50):
         })
 
     for c in frappe.get_all("Sales Invoice",
-        filters={"customer": customer, "is_return": 1},
+        filters={"customer": customer, "is_return": 1, "docstatus": ["!=", 2]},
         fields=["name", "posting_date", "grand_total", "docstatus", "return_against", "status"],
         order_by="posting_date desc", limit_page_length=limit):
         txns.append({
@@ -3936,7 +4092,7 @@ def get_customer_transactions(customer, limit=50):
     pes = frappe.db.sql("""
         SELECT name, payment_date, paid_amount, mode_of_payment, docstatus
         FROM `tabPayment Entry`
-        WHERE party_type='Customer' AND party=%s AND payment_type='Receive'
+        WHERE party_type='Customer' AND party=%s AND payment_type='Receive' AND docstatus!=2
         ORDER BY payment_date DESC LIMIT %s
     """, (customer, limit), as_dict=True)
     for p in pes:

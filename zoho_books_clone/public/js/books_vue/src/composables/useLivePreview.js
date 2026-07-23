@@ -400,7 +400,27 @@ function _renderClassic(doc, cfg) {
       ${hasIgst ? `<td class="r">${r.igstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.igstAmt)}</td>` : `<td class="r">${r.cgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.cgstAmt)}</td><td class="r">${r.sgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.sgstAmt)}</td>`}
     </tr>`).join("")}
   </tbody></table>` : ""}
-</div></div></body></html>`;
+</div></div>
+<script>
+  (function () {
+    function syncAddrWidth() {
+      var tbl = document.querySelector('table.it');
+      var addr = document.querySelector('.addr-table');
+      if (!tbl || !addr) return;
+      var w = tbl.getBoundingClientRect().width;
+      if (w > 0) addr.style.width = w + 'px';
+    }
+    // Run after layout has settled (fonts/images can still shift table width
+    // right after DOMContentLoaded, so re-check on load and once more on the
+    // next frame).
+    document.addEventListener('DOMContentLoaded', syncAddrWidth);
+    window.addEventListener('load', function () {
+      syncAddrWidth();
+      requestAnimationFrame(syncAddrWidth);
+    });
+  })();
+<\/script>
+</body></html>`;
 }
 
 // ── TEMPLATE 2: "Modern" — rounded cards, soft, contemporary ──────────────────

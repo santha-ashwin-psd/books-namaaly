@@ -4,7 +4,8 @@
       <div class="pmd-dialog">
         <div class="pmd-header">
           <span class="pmd-title">
-            {{ state.direction === "pay" ? "Pay Vendor" : "Record Payment" }} — {{ state.name }}
+            {{ state.direction === "pay" ? "Pay Vendor" : "Record Payment" }}
+            — {{ state.multi ? (state.partyLabel || state.party) : state.name }}
           </span>
           <button class="pmd-close" @click="onCancel" :disabled="saving">✕</button>
         </div>
@@ -14,81 +15,134 @@
           <div class="pmd-party-info">
             <div class="pmd-party-name">{{ state.partyLabel || state.party }}</div>
             <div class="pmd-balance">
-              Balance {{ state.direction === "pay" ? "Payable" : "Due" }}:
-              <strong>{{ fmt(state.balance) }}</strong>
+              {{ state.multi ? "Total Outstanding" : (state.direction === "pay" ? "Balance Payable" : "Balance Due") }}:
+              <strong>{{ fmt(state.multi ? totalOutstanding : state.balance) }}</strong>
             </div>
           </div>
         </div>
 
         <div class="pmd-body">
-          <div class="pmd-grid">
-            <div class="pmd-field">
-              <label class="pmd-lbl">Amount <span class="pmd-req">*</span></label>
-              <input v-model.number="form.amount" type="number" min="0.01" step="0.01" class="pmd-input pmd-money" />
-            </div>
-            <div class="pmd-field">
-              <label class="pmd-lbl">Payment Date <span class="pmd-req">*</span></label>
-              <input v-model="form.date" type="date" class="pmd-input" />
-            </div>
-            <div class="pmd-field">
-              <label class="pmd-lbl">Mode</label>
-              <select v-model="form.mode" class="pmd-input">
-                <option>Cash</option>
-                <option>Cheque</option>
-                <option>Bank Transfer</option>
-                <option>UPI</option>
-                <option>NEFT</option>
-                <option>RTGS</option>
-                <option>IMPS</option>
-                <option>Credit Card</option>
-                <option>Debit Card</option>
-                <option>DD</option>
-              </select>
-            </div>
-            <div class="pmd-field">
-              <label class="pmd-lbl">Reference #</label>
-              <input v-model="form.ref" class="pmd-input" placeholder="Cheque / Txn #" />
-            </div>
-            <div class="pmd-field pmd-full">
-              <label class="pmd-lbl">
-                {{ accountFieldLabel }}
-                <span class="pmd-hint">({{ isCashMode ? "Cash-in-Hand ledger" : "Bank ledger" }})</span>
-              </label>
-              <select v-model="form.bank" class="pmd-input">
-                <option value="">— Select —</option>
-                <option v-for="a in filteredAccounts" :key="a.name" :value="a.name">{{ a.name }}</option>
-              </select>
-              <div v-if="!filteredAccounts.length" class="pmd-warn">
-                No {{ isCashMode ? "Cash" : "Bank" }} account found for this company. Set one up under Accounts first.
-              </div>
-            </div>
-            <div class="pmd-field">
-              <label class="pmd-lbl">Bank Charges</label>
-              <input v-model.number="form.charges" type="number" min="0" step="0.01" class="pmd-input pmd-money" />
-            </div>
-            <div class="pmd-field pmd-full">
-              <label class="pmd-lbl">Notes</label>
-              <textarea v-model="form.notes" class="pmd-input" rows="2"></textarea>
-            </div>
+          <div v-if="state.multi && loadingInvoices" class="pmd-loading">Loading outstanding {{ state.direction === "pay" ? "bills" : "invoices" }}…</div>
+          <div v-else-if="state.multi && !invoices.length" class="pmd-empty">
+            This {{ state.direction === "pay" ? "vendor" : "customer" }} has no outstanding {{ state.direction === "pay" ? "bills" : "invoices" }}.
           </div>
 
-          <div class="pmd-summary">
-            <div><span>Total Balance</span><strong>{{ fmt(state.balance) }}</strong></div>
-            <div><span>{{ state.direction === "pay" ? "Paying" : "Receiving" }}</span><strong>{{ fmt(form.amount) }}</strong></div>
-            <div class="pmd-after">
-              <span>Balance After</span>
-              <strong :style="`color:${(state.balance - form.amount) > 0 ? '#dc2626' : '#059669'}`">
-                {{ fmt(Math.max(0, state.balance - form.amount)) }}
-              </strong>
+          <template v-else>
+            <div class="pmd-grid">
+              <div class="pmd-field">
+                <label class="pmd-lbl">Amount <span class="pmd-req">*</span></label>
+                <input v-model.number="form.amount" type="number" min="0.01" step="0.01" class="pmd-input pmd-money" />
+              </div>
+              <div class="pmd-field">
+                <label class="pmd-lbl">Payment Date <span class="pmd-req">*</span></label>
+                <input v-model="form.date" type="date" class="pmd-input" />
+              </div>
+              <div class="pmd-field">
+                <label class="pmd-lbl">Mode</label>
+                <select v-model="form.mode" class="pmd-input">
+                  <option>Cash</option>
+                  <option>Cheque</option>
+                  <option>Bank Transfer</option>
+                  <option>UPI</option>
+                  <option>NEFT</option>
+                  <option>RTGS</option>
+                  <option>IMPS</option>
+                  <option>Credit Card</option>
+                  <option>Debit Card</option>
+                  <option>DD</option>
+                </select>
+              </div>
+              <div class="pmd-field">
+                <label class="pmd-lbl">Reference #</label>
+                <input v-model="form.ref" class="pmd-input" placeholder="Cheque / Txn #" />
+              </div>
+              <div class="pmd-field pmd-full">
+                <label class="pmd-lbl">
+                  {{ accountFieldLabel }}
+                  <span class="pmd-hint">({{ isCashMode ? "Cash-in-Hand ledger" : "Bank ledger" }})</span>
+                </label>
+                <select v-model="form.bank" class="pmd-input">
+                  <option value="">— Select —</option>
+                  <option v-for="a in filteredAccounts" :key="a.name" :value="a.name">{{ a.name }}</option>
+                </select>
+                <div v-if="!filteredAccounts.length" class="pmd-warn">
+                  No {{ isCashMode ? "Cash" : "Bank" }} account found for this company. Set one up under Accounts first.
+                </div>
+              </div>
+              <div class="pmd-field" v-if="!state.multi">
+                <label class="pmd-lbl">Bank Charges</label>
+                <input v-model.number="form.charges" type="number" min="0" step="0.01" class="pmd-input pmd-money" />
+              </div>
+              <div class="pmd-field pmd-full">
+                <label class="pmd-lbl">Notes</label>
+                <textarea v-model="form.notes" class="pmd-input" rows="2"></textarea>
+              </div>
             </div>
-          </div>
+
+            <!-- Multi-invoice picker -->
+            <template v-if="state.multi">
+              <div class="pmd-invoices-head">
+                <span class="pmd-lbl">Apply to {{ state.direction === "pay" ? "Bills" : "Invoices" }}</span>
+                <button class="pmd-link-btn" type="button" @click="autoAllocate" :disabled="!form.amount">
+                  Auto-allocate (oldest due first)
+                </button>
+              </div>
+              <div class="pmd-table">
+                <div class="pmd-row pmd-row-head">
+                  <div class="pmd-col pmd-col-check"></div>
+                  <div class="pmd-col pmd-col-inv">{{ state.direction === "pay" ? "Bill" : "Invoice" }}</div>
+                  <div class="pmd-col pmd-col-due">Due Date</div>
+                  <div class="pmd-col pmd-col-amt">Outstanding</div>
+                  <div class="pmd-col pmd-col-amt">Allocate</div>
+                </div>
+                <div v-for="row in invoices" :key="row.name" class="pmd-row">
+                  <div class="pmd-col pmd-col-check">
+                    <input type="checkbox" v-model="row.checked" @change="onCheckToggle(row)" />
+                  </div>
+                  <div class="pmd-col pmd-col-inv">{{ row.name }}</div>
+                  <div class="pmd-col pmd-col-due">{{ fmtDate(row.due_date) }}</div>
+                  <div class="pmd-col pmd-col-amt">{{ fmt(row.outstanding_amount) }}</div>
+                  <div class="pmd-col pmd-col-amt">
+                    <input
+                      type="number" min="0" step="0.01" class="pmd-alloc-input"
+                      :disabled="!row.checked"
+                      v-model.number="row.allocated"
+                      @input="clampAlloc(row)"
+                    />
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div class="pmd-summary">
+              <div v-if="!state.multi"><span>Total Balance</span><strong>{{ fmt(state.balance) }}</strong></div>
+              <div><span>{{ state.direction === "pay" ? "Paying" : "Receiving" }}</span><strong>{{ fmt(form.amount) }}</strong></div>
+
+              <template v-if="state.multi">
+                <div><span>Total Allocated</span><strong :class="allocDiff !== 0 ? 'pmd-red' : ''">{{ fmt(totalAllocated) }}</strong></div>
+                <div class="pmd-after" v-if="allocDiff !== 0">
+                  <span>{{ allocDiff > 0 ? "Unallocated" : "Over-allocated" }}</span>
+                  <strong class="pmd-red">{{ fmt(Math.abs(allocDiff)) }}</strong>
+                </div>
+              </template>
+              <div class="pmd-after" v-else>
+                <span>Balance After</span>
+                <strong :style="`color:${(state.balance - form.amount) > 0 ? '#dc2626' : '#059669'}`">
+                  {{ fmt(Math.max(0, state.balance - form.amount)) }}
+                </strong>
+              </div>
+            </div>
+            <div v-if="state.multi && allocDiff !== 0" class="pmd-warn">
+              Total allocated must equal Amount before you can save. Use Auto-allocate or adjust the amounts above.
+            </div>
+          </template>
         </div>
 
         <div class="pmd-footer">
           <button class="pmd-btn pmd-btn-ghost" @click="onCancel" :disabled="saving">Cancel</button>
           <button
             class="pmd-btn pmd-btn-primary"
-            :disabled="saving || !form.amount || form.amount <= 0 || !$canWrite('payments')"
+            :disabled="saving || !canSave || !$canWrite('payments')"
             :title="!$canWrite('payments') ? 'Read-only access' : ''"
             @click="onSave"
           >
@@ -110,6 +164,8 @@ const { state, complete, cancel } = usePaymentDialog();
 const { toast } = useToast();
 
 const saving = ref(false);
+const loadingInvoices = ref(false);
+const invoices = ref([]); // multi mode only: [{ name, due_date, outstanding_amount, checked, allocated }]
 // Full account objects: [{ name, account_type: "Cash" | "Bank" }, ...]
 const allAccounts = ref([]);
 const form = reactive({ amount: 0, date: "", mode: "Cash", ref: "", bank: "", charges: 0, notes: "" });
@@ -123,9 +179,30 @@ const filteredAccounts = computed(() =>
   allAccounts.value.filter(a => a.account_type === (isCashMode.value ? "Cash" : "Bank"))
 );
 const accountFieldLabel = computed(() => {
-  if (state.direction === "pay") return isCashMode.value ? "Paid From" : "Paid From";
+  if (state.direction === "pay") return "Paid From";
   return isCashMode.value ? "Received Into" : "Deposit To";
 });
+
+const totalOutstanding = computed(() =>
+  invoices.value.reduce((s, r) => s + (Number(r.outstanding_amount) || 0), 0)
+);
+const totalAllocated = computed(() =>
+  invoices.value.filter(r => r.checked).reduce((s, r) => s + (Number(r.allocated) || 0), 0)
+);
+const allocDiff = computed(() => round2((form.amount || 0) - totalAllocated.value));
+
+const canSave = computed(() => {
+  if (!form.amount || form.amount <= 0) return false;
+  if (state.multi) return invoices.value.length > 0 && allocDiff.value === 0;
+  return true;
+});
+
+function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+function fmtDate(d) {
+  if (!d) return "—";
+  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
+  catch { return d; }
+}
 
 // Whenever Mode switches (e.g. Cash -> UPI), re-point the selected account to
 // the matching bucket so a stale Bank/Cash selection can't linger under the
@@ -136,17 +213,86 @@ watch(() => form.mode, () => {
   }
 });
 
+function onCheckToggle(row) {
+  if (!row.checked) {
+    row.allocated = 0;
+    form.amount = round2(totalAllocated.value);
+    return;
+  }
+  // When freshly checked, default the allocation to whatever cash is left,
+  // capped at this invoice's outstanding.
+  const remaining = round2((form.amount || 0) - totalAllocated.value);
+  row.allocated = Math.max(0, Math.min(row.outstanding_amount, remaining || row.outstanding_amount));
+  form.amount = round2(totalAllocated.value);
+}
+
+function clampAlloc(row) {
+  if (row.allocated < 0) row.allocated = 0;
+  if (row.allocated > row.outstanding_amount) row.allocated = row.outstanding_amount;
+  // A manual edit to one invoice's allocation is the user making a deliberate
+  // partial payment against it — follow that intent by re-syncing the total
+  // Amount to match, rather than blocking save on a stale mismatch.
+  form.amount = round2(totalAllocated.value);
+}
+
+function autoAllocate() {
+  // Invoices are sorted oldest-due-first by the backend, so a straight FIFO
+  // walk gives the standard "pay oldest bills first" allocation.
+  let remaining = round2(form.amount || 0);
+  for (const row of invoices.value) {
+    if (remaining <= 0) {
+      row.checked = false;
+      row.allocated = 0;
+      continue;
+    }
+    const take = Math.min(row.outstanding_amount, remaining);
+    row.checked = true;
+    row.allocated = round2(take);
+    remaining = round2(remaining - take);
+  }
+}
+
 watch(() => state.open, async (open) => {
   if (!open) return;
   Object.assign(form, {
-    amount: state.balance || 0,
+    amount: state.multi ? 0 : (state.balance || 0),
     date: new Date().toISOString().slice(0, 10),
     mode: "Cash", ref: "", bank: "", charges: 0, notes: "",
   });
   allAccounts.value = [];
+  invoices.value = [];
+
+  if (state.multi) {
+    loadingInvoices.value = true;
+    try {
+      // Invoices handed in directly (e.g. from a multiselect on the list page)
+      // came from a deliberate user selection, so pre-check them and allocate
+      // their full outstanding amount. Invoices fetched via `invoicesEndpoint`
+      // (e.g. a customer's whole open-invoice list) start unchecked since
+      // that's a browse list, not a selection.
+      const preselected = Array.isArray(state.invoices) && state.invoices.length > 0;
+      const list = state.invoices || (state.invoicesEndpoint
+        ? (await apiGET(state.invoicesEndpoint, { customer: state.party })).invoices || []
+        : []);
+      invoices.value = list.map(r => ({
+        ...r,
+        checked: preselected,
+        allocated: preselected ? round2(Number(r.outstanding_amount) || 0) : 0,
+      }));
+      if (preselected) {
+        form.amount = round2(invoices.value.reduce((s, r) => s + (Number(r.outstanding_amount) || 0), 0));
+      }
+    } catch (e) {
+      toast("Failed to load invoices: " + (e.message || ""), "error");
+    }
+    loadingInvoices.value = false;
+  }
+
   if (state.getDefaultsEndpoint) {
     try {
-      const params = { [state.paramKey]: state.name };
+      const params = state.multi
+        ? { [state.paramKey || "invoice_name"]: invoices.value[0]?.name }
+        : { [state.paramKey]: state.name };
       const d = await apiGET(state.getDefaultsEndpoint, params);
       if (d?.bank_accounts) {
         // Normalize: backend returns {name, account_type}; tolerate plain strings too.
@@ -158,7 +304,9 @@ watch(() => state.open, async (open) => {
       // Select the account matching the (possibly just-set) mode, not just index 0.
       const bucket = isCashMode.value ? "Cash" : "Bank";
       form.bank = allAccounts.value.find(a => a.account_type === bucket)?.name || "";
-    } catch {}
+    } catch (e) {
+      toast("Failed to load payment accounts: " + (e.message || ""), "error");
+    }
   }
 });
 
@@ -178,21 +326,46 @@ async function onSave() {
     toast(`Mode is "${form.mode}" but the selected account is a ${chosen.account_type} account. Please pick a ${expectedType} account.`, "error");
     return;
   }
+
+  if (state.multi && allocDiff.value !== 0) {
+    toast("Total allocated must equal amount received", "error");
+    return;
+  }
+
   saving.value = true;
   try {
-    const payload = {
-      [state.paramKey]: state.name,
-      amount_received: form.amount,
-      amount_paid: form.amount,
-      payment_date: form.date,
-      payment_mode: form.mode,
-      deposit_to: form.bank || "",
-      paid_from: form.bank || "",
-      bank_charges: form.charges || 0,
-      reference_no: form.ref || "",
-      notes: form.notes || "",
-      save_as_draft: 0,
-    };
+    let payload;
+    if (state.multi) {
+      const allocations = invoices.value
+        .filter(r => r.checked && r.allocated > 0)
+        .map(r => ({ invoice: r.name, allocated_amount: r.allocated }));
+      if (!allocations.length) { toast("Select at least one invoice", "error"); saving.value = false; return; }
+      const common = {
+        payment_date: form.date,
+        payment_mode: form.mode,
+        reference_no: form.ref || "",
+        notes: form.notes || "",
+        allocations: JSON.stringify(allocations),
+        save_as_draft: 0,
+      };
+      payload = state.direction === "pay"
+        ? { ...common, supplier: state.party, amount_paid: form.amount, paid_from: form.bank || "" }
+        : { ...common, customer: state.party, amount_received: form.amount, deposit_to: form.bank || "" };
+    } else {
+      payload = {
+        [state.paramKey]: state.name,
+        amount_received: form.amount,
+        amount_paid: form.amount,
+        payment_date: form.date,
+        payment_mode: form.mode,
+        deposit_to: form.bank || "",
+        paid_from: form.bank || "",
+        bank_charges: form.charges || 0,
+        reference_no: form.ref || "",
+        notes: form.notes || "",
+        save_as_draft: 0,
+      };
+    }
     const res = await apiPOST(state.sendEndpoint, payload);
     toast(state.direction === "pay" ? "Vendor payment recorded" : "Payment recorded", "success");
     complete(res?.payment_entry || res?.name || true);
@@ -241,6 +414,7 @@ function onCancel() {
 .pmd-balance { font-size: 12px; color: #0c4a6e; margin-top: 2px; }
 .pmd-balance strong { font-size:12px }
 .pmd-body { padding: 14px 18px; flex: 1; overflow-y: auto; }
+.pmd-loading, .pmd-empty { padding: 24px 0; text-align: center; color: #6b7280; font-size: 13px; }
 .pmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pmd-field { display: flex; flex-direction: column; gap: 4px; }
 .pmd-full { grid-column: 1 / -1; }
@@ -255,6 +429,24 @@ function onCancel() {
 }
 .pmd-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
 .pmd-money {  font-weight: 600; }
+.pmd-invoices-head { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; }
+.pmd-link-btn {
+  background: none; border: none; color: #2563eb; font-size: 12px; font-weight: 600;
+  cursor: pointer; padding: 0;
+}
+.pmd-link-btn:disabled { color: #9ca3af; cursor: not-allowed; }
+.pmd-table { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.pmd-row { display: grid; grid-template-columns: 26px 1.4fr 1fr 1fr 1fr; align-items: center; gap: 6px; padding: 7px 8px; border-top: 1px solid #f1f5f9; }
+.pmd-row:first-child { border-top: none; }
+.pmd-row-head { background: #f8fafc; font-size: 10.5px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .02em; }
+.pmd-col-amt { text-align: right; }
+.pmd-col-inv { font-weight: 600; color: #111827; font-size: 12px; }
+.pmd-col-due { font-size: 12px; color: #6b7280; }
+.pmd-alloc-input {
+  width: 100%; box-sizing: border-box; text-align: right;
+  border: 1px solid #e5e7eb; border-radius: 6px; padding: 5px 6px; font-size: 12px;
+}
+.pmd-alloc-input:disabled { background: #f9fafb; color: #9ca3af; }
 .pmd-summary {
   margin-top: 12px; background: #f8fafc; border-radius: 8px; padding: 12px;
   display: flex; flex-direction: column; gap: 6px; font-size: 13px;
@@ -262,6 +454,7 @@ function onCancel() {
 .pmd-summary > div { display: flex; justify-content: space-between; color: #374151; }
 .pmd-summary strong { font-size:13px; }
 .pmd-after { border-top: 1px solid #e5e7eb; padding-top: 6px; font-weight: 700; }
+.pmd-red { color: #dc2626; }
 .pmd-footer {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 18px; border-top: 1px solid #e5e7eb; flex-shrink: 0;

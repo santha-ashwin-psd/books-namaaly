@@ -377,7 +377,7 @@
               color:activeVendorTab==='transactions'?'#E67700':'#6B7280',
               borderBottom:activeVendorTab==='transactions'?'2px solid #E67700':'2px solid transparent',marginBottom:'-2px'}">
             Transactions
-            <span v-if="vendorTxns.length" style="background:#E67700;color:#fff;padding:1px 7px;border-radius:999px;font-size:11px;margin-left:4px">{{vendorTxns.length}}</span>
+            <span v-if="vendorTxnsActive.length" style="background:#E67700;color:#fff;padding:1px 7px;border-radius:999px;font-size:11px;margin-left:4px">{{vendorTxnsActive.length}}</span>
           </button>
           <button @click="activeVendorTab='statement'; loadStatement()"
             :style="{padding:'8px 16px',fontSize:'13.5px',fontWeight:600,border:'none',background:'none',cursor:'pointer',
@@ -507,7 +507,7 @@
         <!-- Transactions tab -->
         <div v-else-if="activeVendorTab==='transactions'">
           <div v-if="detailLoading" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">Loading transactions…</div>
-          <div v-else-if="!vendorTxns.length" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">
+          <div v-else-if="!vendorTxnsActive.length" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" style="margin:0 auto 12px;display:block"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">No transactions yet</div>
             <div style="font-size:12.5px;color:#9CA3AF">Bills and payments for {{selectedVendor.supplier_name}} will appear here.</div>
@@ -561,11 +561,11 @@
 
           <!-- Load More — transactions -->
           <div v-if="vendorTxnsHasMore" class="ven-load-more-wrap">
-            <span class="ven-load-more-count">Showing {{vendorTxnsVisible.length}} of {{vendorTxns.length}}</span>
+            <span class="ven-load-more-count">Showing {{vendorTxnsVisible.length}} of {{vendorTxnsActive.length}}</span>
             <button class="ven-load-more-btn" @click="txnPage++">Load more</button>
           </div>
-          <div v-else-if="vendorTxns.length > TXN_PAGE_SIZE" class="ven-load-more-wrap ven-load-more-end">
-            All {{vendorTxns.length}} transactions shown
+          <div v-else-if="vendorTxnsActive.length > TXN_PAGE_SIZE" class="ven-load-more-wrap ven-load-more-end">
+            All {{vendorTxnsActive.length}} transactions shown
           </div>
         </div>
 
@@ -1484,18 +1484,19 @@ const stmtPage       = ref(1);
 // Transactions enriched with a running payable balance (oldest → newest).
 // vendorTxns is newest-first; we walk it in reverse to accumulate, then expose
 // the balance after each transaction keyed back onto the newest-first list.
+const vendorTxnsActive = computed(() => vendorTxns.value.filter((t) => t.docstatus !== 2 && t.status !== "Cancelled"));
 const vendorTxnsWithBalance = computed(() => {
-  const asc = [...vendorTxns.value].reverse();   // oldest first
+  const asc = [...vendorTxnsActive.value].reverse();   // oldest first
   let running = 0;
   const balById = new Map();
   for (const t of asc) {
     running += Number(t.amount || 0);            // Bill +, Payment/Debit Note −
     balById.set(t.type + "-" + t.name, running);
   }
-  return vendorTxns.value.map(t => ({ ...t, balance: balById.get(t.type + "-" + t.name) || 0 }));
+  return vendorTxnsActive.value.map(t => ({ ...t, balance: balById.get(t.type + "-" + t.name) || 0 }));
 });
 const vendorTxnsVisible  = computed(() => vendorTxnsWithBalance.value.slice(0, txnPage.value  * TXN_PAGE_SIZE));
-const vendorTxnsHasMore  = computed(() => vendorTxns.value.length > txnPage.value  * TXN_PAGE_SIZE);
+const vendorTxnsHasMore  = computed(() => vendorTxnsActive.value.length > txnPage.value  * TXN_PAGE_SIZE);
 
 // Human-friendly status label for a transaction row
 function txnStatusLabel(t) {

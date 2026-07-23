@@ -563,6 +563,230 @@ def record_payment(
     }
 
 
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_customer_outstanding_invoices(customer, company=None):
+    """All submitted Sales Invoices for `customer` that still have money owed.
+
+    Used to populate the invoice picker in the multi-invoice payment dialog.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("payments", write=False)
+
+    if not customer:
+        frappe.throw("customer is required.")
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    if not company:
+        company = frappe.db.get_default("company")
+
+    filters = {
+        "customer": customer,
+        "docstatus": 1,
+        "outstanding_amount": [">", 0],
+    }
+    if company:
+        filters["company"] = company
+
+    rows = frappe.get_all(
+        "Sales Invoice",
+        filters=filters,
+        fields=["name", "posting_date", "due_date", "grand_total",
+                "outstanding_amount", "currency", "status"],
+        order_by="due_date asc, posting_date asc",
+    )
+
+    return {
+        "customer": customer,
+        "company": company,
+        "invoices": rows,
+        "total_outstanding": sum(flt(r.outstanding_amount) for r in rows),
+    }
+
+
+def _resolve_payment_accounts(company, payment_mode, deposit_to=None):
+    """Shared account-resolution logic used by both record_payment and
+    record_payment_multi. Returns (company, deposit_to, debtors_account).
+    """
+    if not deposit_to:
+        acct_type = "Cash" if payment_mode == "Cash" else "Bank"
+        rows = frappe.db.sql(
+            """SELECT name FROM `tabAccount`
+               WHERE account_type = %s AND LOWER(company) = LOWER(%s)
+                 AND is_group = 0 AND disabled = 0
+               LIMIT 1""",
+            (acct_type, company), as_dict=True
+        )
+        deposit_to = rows[0]["name"] if rows else None
+
+    if not deposit_to:
+        frappe.throw("Could not find a Cash/Bank account. Please set one up under Accounts.")
+
+    # The deposit_to account's own company is authoritative.
+    company = frappe.db.get_value("Account", deposit_to, "company") or company
+
+    rows = frappe.db.sql(
+        """SELECT name FROM `tabAccount`
+           WHERE account_type = 'Receivable' AND LOWER(company) = LOWER(%s)
+             AND is_group = 0
+           LIMIT 1""",
+        (company,), as_dict=True
+    )
+    debtors_account = rows[0]["name"] if rows else None
+
+    if not debtors_account:
+        frappe.throw(
+            f"No Receivable account found for company '{company}'. "
+            "Please ensure the Chart of Accounts is set up under Accounts."
+        )
+
+    return company, deposit_to, debtors_account
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def record_payment_multi(
+    customer=None, amount_received=None, payment_date=None,
+    payment_mode="Cash", deposit_to=None, bank_charges=0,
+    reference_no=None, notes=None, allocations=None, save_as_draft=False,
+):
+    """Record a single Payment Entry against MULTIPLE Sales Invoices at once.
+
+    allocations: JSON list (or already-parsed list) of
+        [{"invoice": "SINV-0001", "allocated_amount": 3000}, ...]
+    The Payment Entry doctype already supports a multi-row `references`
+    child table and validates/settles each row independently — this just
+    builds that child table from `allocations` instead of a single invoice.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("payments", write=True)
+
+    if not customer:
+        frappe.throw("customer is required to record a payment.")
+    if amount_received is None:
+        frappe.throw("amount_received is required.")
+    if not payment_date:
+        payment_date = frappe.utils.nowdate()
+    if isinstance(save_as_draft, str):
+        save_as_draft = save_as_draft.lower() in ("true", "1", "yes")
+    if isinstance(allocations, str):
+        allocations = json.loads(allocations or "[]")
+    if not allocations:
+        frappe.throw("At least one invoice allocation is required.")
+
+    amount_received = flt(amount_received)
+    bank_charges    = flt(bank_charges)
+
+    if not amount_received:
+        frappe.throw("Amount Received is required and must be greater than 0.")
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    # Normalise + validate allocation rows before touching any invoice.
+    clean_allocations = []
+    total_allocated = 0.0
+    for row in allocations:
+        inv_name = row.get("invoice") or row.get("invoice_name") or row.get("reference_name")
+        amt = flt(row.get("allocated_amount"))
+        if not inv_name:
+            frappe.throw("Each allocation row must include an invoice name.")
+        if amt <= 0:
+            continue  # skip zero/blank rows rather than failing the whole payment
+        clean_allocations.append({"invoice": inv_name, "allocated_amount": amt})
+        total_allocated += amt
+
+    if not clean_allocations:
+        frappe.throw("At least one invoice must have an allocated amount greater than 0.")
+
+    # Total allocated across invoices must exactly match the amount received.
+    # (No advance/on-account concept yet — over/under-allocation is rejected
+    # so cash and allocations never silently drift apart.)
+    if round(total_allocated, 2) != round(amount_received, 2):
+        frappe.throw(
+            f"Total allocated ({total_allocated}) must equal Amount Received "
+            f"({amount_received}). Adjust the per-invoice amounts or the total."
+        )
+
+    invoices = {}
+    company = None
+    currency = None
+    for row in clean_allocations:
+        inv = frappe.get_doc("Sales Invoice", row["invoice"])
+        if inv.customer != customer:
+            frappe.throw(f"Invoice {inv.name} does not belong to customer {customer}.")
+        outstanding = flt(getattr(inv, "outstanding_amount", None))
+        if not outstanding:
+            outstanding = flt(inv.grand_total) - flt(getattr(inv, "advance_paid", 0))
+        if row["allocated_amount"] > outstanding + 0.005:
+            frappe.throw(
+                f"Allocated amount {row['allocated_amount']} exceeds outstanding "
+                f"{outstanding} for invoice {inv.name}."
+            )
+        invoices[inv.name] = (inv, outstanding)
+        company = company or (inv.company or frappe.db.get_default("company"))
+        currency = currency or (inv.currency or "INR")
+
+    # Fiscal year lock — block payments into a locked or closed period
+    validate_fiscal_year(payment_date, company)
+
+    company, deposit_to, debtors_account = _resolve_payment_accounts(
+        company, payment_mode, deposit_to
+    )
+
+    pe = frappe.new_doc("Payment Entry")
+    pe.payment_type               = "Receive"
+    pe.company                    = company
+    pe.posting_date               = payment_date
+    pe.payment_date               = payment_date
+    pe.mode_of_payment            = payment_mode
+    pe.party_type                 = "Customer"
+    pe.party                      = customer
+    pe.party_name                 = frappe.db.get_value("Customer", customer, "customer_name") or customer
+    pe.paid_from                  = debtors_account
+    pe.paid_to                    = deposit_to
+    pe.paid_amount                = amount_received
+    pe.received_amount            = amount_received
+    pe.source_exchange_rate       = 1
+    pe.target_exchange_rate       = 1
+    pe.paid_from_account_currency = currency
+    pe.paid_to_account_currency   = currency
+    pe.reference_no               = reference_no or f"PMT-{customer}-{len(clean_allocations)}invoices"
+    pe.reference_date             = payment_date
+    invoice_list_str              = ", ".join(invoices.keys())
+    pe.remarks                    = notes or f"Payment against {invoice_list_str}"
+
+    for row in clean_allocations:
+        inv, outstanding = invoices[row["invoice"]]
+        pe.append("references", {
+            "reference_doctype":  "Sales Invoice",
+            "reference_name":     inv.name,
+            "due_date":           inv.due_date,
+            "total_amount":       flt(inv.grand_total),
+            "outstanding_amount": outstanding,
+            "allocated_amount":   row["allocated_amount"],
+        })
+
+    if bank_charges > 0:
+        net_received = amount_received - bank_charges
+        pe.received_amount = net_received if net_received > 0 else amount_received
+        charge_note = f" | Bank Charges: \u20b9{bank_charges:,.2f} (Net received: \u20b9{pe.received_amount:,.2f})"
+        pe.remarks = (pe.remarks or "") + charge_note
+
+    pe.insert(ignore_permissions=True)
+    if not save_as_draft:
+        pe.flags.ignore_permissions = True
+        pe.submit()
+        _create_bank_transaction(pe)
+    frappe.db.commit()
+
+    return {
+        "status":        "draft" if save_as_draft else "submitted",
+        "payment_entry": pe.name,
+        "customer":      customer,
+        "amount":        amount_received,
+        "invoices":      list(invoices.keys()),
+    }
+
+
 # ─── Stage 2: Cash-in-Hand → Bank deposit (Contra) ────────────────────────────
 #
 # Accounting flow this implements:

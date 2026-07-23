@@ -366,7 +366,7 @@
               color:activeCustomerTab==='transactions'?'#16a34a':'#6B7280',
               borderBottom:activeCustomerTab==='transactions'?'2px solid #16a34a':'2px solid transparent',marginBottom:'-2px'}">
             Transactions
-            <span v-if="custTxns.length" style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:11px;margin-left:4px">{{custTxns.length}}</span>
+            <span v-if="custTxnsActive.length" style="background:#16a34a;color:#fff;padding:1px 7px;border-radius:999px;font-size:11px;margin-left:4px">{{custTxnsActive.length}}</span>
           </button>
           <button @click="activeCustomerTab='statement'"
             :style="{padding:'8px 16px',fontSize:'13.5px',fontWeight:600,border:'none',background:'none',cursor:'pointer',
@@ -510,7 +510,7 @@
               <div class="cus-sk-line cus-sk-line-sm" style="margin-left:auto"></div>
             </div>
           </div>
-          <div v-else-if="!custTxns.length" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">
+          <div v-else-if="!custTxnsActive.length" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" style="margin:0 auto 12px;display:block"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:6px">No transactions yet</div>
             <div style="font-size:12.5px;color:#9CA3AF">Invoices and payments for {{selectedCustomer.customer_name}} will appear here.</div>
@@ -557,11 +557,11 @@
 
           <!-- Load More — transactions -->
           <div v-if="custTxnsHasMore" class="cus-load-more-wrap">
-            <span class="cus-load-more-count">Showing {{custTxnsVisible.length}} of {{custTxns.length}}</span>
+            <span class="cus-load-more-count">Showing {{custTxnsVisible.length}} of {{custTxnsActive.length}}</span>
             <button class="cus-load-more-btn" @click="txnPage++">Load more</button>
           </div>
-          <div v-else-if="custTxns.length" class="cus-load-more-wrap cus-load-more-end">
-            All {{custTxns.length}} transactions shown
+          <div v-else-if="custTxnsActive.length" class="cus-load-more-wrap cus-load-more-end">
+            All {{custTxnsActive.length}} transactions shown
           </div>
         </div>
 
@@ -1920,8 +1920,9 @@ const sendingStmt = ref(false);
 const fmtStmt = (v) => Number(v||0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ── Load-more computed slices ──
-const custTxnsVisible   = computed(() => custTxns.value.slice(0, txnPage.value * TXN_PAGE_SIZE));
-const custTxnsHasMore   = computed(() => custTxns.value.length > txnPage.value * TXN_PAGE_SIZE);
+const custTxnsActive    = computed(() => custTxns.value.filter((t) => t.docstatus !== 2 && t.status !== "Cancelled"));
+const custTxnsVisible   = computed(() => custTxnsActive.value.slice(0, txnPage.value * TXN_PAGE_SIZE));
+const custTxnsHasMore   = computed(() => custTxnsActive.value.length > txnPage.value * TXN_PAGE_SIZE);
 const stmtInvsVisible   = computed(() => stmt.value ? stmt.value.invoices.slice(0, stmtPage.value * STMT_PAGE_SIZE) : []);
 const stmtInvsHasMore   = computed(() => stmt.value ? stmt.value.invoices.length > stmtPage.value * STMT_PAGE_SIZE : false);
 

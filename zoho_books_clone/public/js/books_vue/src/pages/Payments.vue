@@ -598,6 +598,12 @@ const tabs = [{key:"all",label:"All"},{key:"Receive",label:"Received"},{key:"Pay
 
 const list = ref([]), loading = ref(false), search = ref(""), selected = ref(new Set());
 const drawerOpen = ref(false), drawerSaving = ref(false), editingName = ref("");
+// Plain (non-reactive) guard — checked/set synchronously the instant savePayment()
+// is called, before any await. drawerSaving alone isn't enough: it's a reactive
+// ref, so the button's :disabled attribute only updates on Vue's next render —
+// two clicks that land within that window can both slip past it and each
+// insert their own Payment Entry. This flag closes that race immediately.
+let _savingInFlight = false;
 const viewOpen = ref(false), viewPmt = ref(null);
 const pmtCollapsed = reactive({ type: false, party: false, ref: false, accounts: true, alloc: false, notes: true });
 const partyOptions = ref([]), paidFromAccounts = ref([]), paidToAccounts = ref([]);
@@ -864,10 +870,12 @@ async function fetchPaidToAccounts(q = "") {
 }
 
 async function savePayment(submit) {
+  if (_savingInFlight) return; // synchronous guard — blocks a second click before Vue can disable the button
   if (!form.party) return toast.error("Party is required");
   if (!form.paid_amount || flt(form.paid_amount) <= 0) return toast.error("Amount must be greater than 0");
   if (flt(form.paid_amount) > 999999999) return toast.error("Amount cannot exceed 9 digits (max ₹999,999,999)");
   if (!form.payment_date) return toast.error("Payment date is required");
+  _savingInFlight = true;
   drawerSaving.value = true;
   try {
     const company = await resolveCompany();
@@ -895,12 +903,17 @@ async function savePayment(submit) {
     };
     if (editingName.value) doc.name = editingName.value;
     const saved = await apiSave(doc);
+    // Critical: remember the name we just created/updated. Without this, any
+    // further save call in this drawer session (accidental double-click, or
+    // Save Draft followed by Submit) would insert a brand-new Payment Entry
+    // instead of updating the one that already exists.
+    editingName.value = saved.name;
     if (submit) await apiSubmit("Payment Entry", saved.name);
     toast.success(`Payment ${saved?.name||""} ${submit?"submitted":"saved"}`);
     drawerOpen.value = false;
     await load();
   } catch (e) { toast.error(e.message || "Failed to save payment"); }
-  finally { drawerSaving.value = false; }
+  finally { drawerSaving.value = false; _savingInFlight = false; }
 }
 
 onMounted(async () => {
