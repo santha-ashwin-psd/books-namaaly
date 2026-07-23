@@ -70,6 +70,7 @@ import GSTReturn3B            from "./pages/GSTReturn3B.vue";
 import EInvoice               from "./pages/EInvoice.vue";
 import TDS                    from "./pages/TDS.vue";
 import TaxTemplates           from "./pages/TaxTemplates.vue";
+import ExpenseCategories      from "./pages/ExpenseCategories.vue";
 import Reports                from "./pages/Reports.vue";
 import PriceLists             from "./pages/PriceLists.vue";
 import RecurringBills         from "./pages/RecurringBills.vue";
@@ -279,6 +280,7 @@ const routes = [
   { path: "/purchases",         name: "purchases",        component: Bills,          meta: { module: "bills"    } },
   { path: "/purchase-orders",   name: "purchase-orders",  component: PurchaseOrders, meta: { module: "bills"    } },
   { path: "/expenses",          name: "expenses",         component: Expenses,       meta: { module: "bills"    } },
+  { path: "/expenses/categories", name: "expense-categories", component: ExpenseCategories, meta: { module: "bills" } },
   { path: "/payments",          name: "payments",         component: Payments,       meta: { module: "payments" } },
   { path: "/payments-received", name: "payments-received",component: Payments,       meta: { module: "payments" } },
   { path: "/debit-notes",       name: "debit-notes",      component: DebitNotes,     meta: { module: "bills"    } },

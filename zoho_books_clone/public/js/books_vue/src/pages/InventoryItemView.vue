@@ -204,6 +204,79 @@
         </table>
       </div>
 
+      <!-- ── Purchased / Sold To (Vendor / Customer) ───────────────── -->
+      <div class="iv-card">
+        <div class="iv-card-title">
+          Purchase &amp; Sales History
+          <span class="iv-total-chip" style="background:#eff6ff;color:#2563eb">
+            Bought: {{ fmtQty(partyTxns.total_purchased_qty) }}
+          </span>
+          <span class="iv-total-chip" style="background:#f0fdf4;color:#16a34a">
+            Sold: {{ fmtQty(partyTxns.total_sold_qty) }}
+          </span>
+        </div>
+        <div v-if="!partyTxns.rows?.length" class="iv-no-stock">
+          No purchase or sales transactions for this item yet
+        </div>
+        <template v-else>
+          <!-- Desktop/tablet: table -->
+          <div class="iv-ledger-wrap iv-ledger-table-view">
+            <table class="iv-wh-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Vendor / Customer</th>
+                  <th>Voucher</th>
+                  <th class="ta-r">Qty</th>
+                  <th class="ta-r">Rate</th>
+                  <th class="ta-r">Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in partyTxns.rows" :key="row.type + row.voucher_no">
+                  <td class="clr-muted" style="white-space:nowrap">{{ row.posting_date }}</td>
+                  <td>
+                    <span class="iv-ledger-type-badge" :class="row.type === 'Purchase' ? 'badge-out' : 'badge-in'">
+                      {{ row.type === 'Purchase' ? 'Bought from' : 'Sold to' }}
+                    </span>
+                  </td>
+                  <td class="fw-600">{{ row.party_name || row.party }}</td>
+                  <td class="iv-mono" style="font-size:11.5px;color:#2563eb">{{ row.voucher_no }}</td>
+                  <td class="ta-r fw-600" :class="row.type === 'Purchase' ? 'clr-red' : 'clr-green'">
+                    {{ fmtQty(row.qty) }} {{ row.uom }}
+                  </td>
+                  <td class="ta-r clr-muted">{{ fmt(row.rate) }}</td>
+                  <td class="ta-r clr-muted">{{ fmt(row.amount) }}</td>
+                  <td class="clr-muted" style="font-size:12px">{{ row.status }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Mobile: cards -->
+          <div class="iv-ledger-cards-view">
+            <div v-for="row in partyTxns.rows" :key="row.type + row.voucher_no" class="iv-ledger-card">
+              <div class="iv-lc-top">
+                <span class="iv-ledger-type-badge" :class="row.type === 'Purchase' ? 'badge-out' : 'badge-in'">
+                  {{ row.type === 'Purchase' ? 'Bought from' : 'Sold to' }}
+                </span>
+                <span class="iv-lc-qty" :class="row.type === 'Purchase' ? 'clr-red' : 'clr-green'">
+                  {{ fmtQty(row.qty) }} {{ row.uom }}
+                </span>
+              </div>
+              <div class="fw-600">{{ row.party_name || row.party }}</div>
+              <div class="iv-lc-voucher iv-mono">{{ row.voucher_no }}</div>
+              <div class="iv-lc-meta">
+                <span>{{ row.posting_date }}</span>
+                <span class="iv-sep">·</span>
+                <span class="clr-muted">{{ row.status }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
       <!-- ── Stock Ledger ───────────────────────────────────────── -->
       <div class="iv-card">
         <div class="iv-card-title">
@@ -272,222 +345,51 @@
 
     </template>
 
-    <!-- ── Edit Drawer ────────────────────────────────────────────── -->
-    <Teleport to="body">
-      <div v-if="showDrawer" class="iv-drawer-overlay" @click.self="showDrawer=false">
-        <div class="iv-drawer">
-          <div class="iv-drawer-header">
-            <div>
-              <div class="iv-drawer-title">Edit Item</div>
-              <div class="iv-drawer-sub">{{ item?.item_code }}</div>
-            </div>
-            <button class="iv-drawer-close" @click="showDrawer=false" v-html="icon('x', 16)"></button>
-          </div>
-
-          <!-- Tabs -->
-          <div class="iv-drawer-tabs">
-            <button v-for="t in DRAWER_TABS" :key="t.k"
-              class="iv-dtab" :class="{ 'iv-dtab--active': drawerTab === t.k }"
-              @click="drawerTab = t.k">{{ t.l }}
-            </button>
-          </div>
-
-          <!-- Form -->
-          <div class="iv-drawer-body">
-            <!-- Basic -->
-            <template v-if="drawerTab === 'basic'">
-              <div class="iv-fg2">
-                <div class="iv-field"><label class="nim-label">Item Name <span class="req">*</span></label><input class="nim-input" v-model="form.item_name"/></div>
-                <div class="iv-field"><label class="nim-label">Item Code <span class="req">*</span></label><input class="nim-input" v-model="form.item_code"/></div>
-              </div>
-              <div class="iv-field">
-                <label class="nim-label">Item Group</label>
-                <select class="nim-input" v-model="form.item_group">
-                  <option value="">— Select Group —</option>
-                  <option v-for="g in itemGroups" :key="g" :value="g">{{ g }}</option>
-                </select>
-              </div>
-              <div class="iv-field">
-                <label class="nim-label">Item Type</label>
-                <div class="iv-type-row">
-                  <button v-for="t in ITEM_TYPES" :key="t" type="button"
-                    class="iv-type-btn" :class="{ 'iv-type-btn--on': form.item_type === t }"
-                    @click="form.item_type = t">
-                    {{ ITEM_TYPE_ICONS[t] }} {{ t }}
-                  </button>
-                </div>
-              </div>
-              <div class="iv-fg2">
-                <div class="iv-field">
-                  <label class="nim-label">UOM <span class="req">*</span></label>
-                  <select class="nim-input" v-model="form.stock_uom">
-                    <option v-for="u in UOM_LIST" :key="u" :value="u">{{ u }}</option>
-                  </select>
-                </div>
-                <div class="iv-field"><label class="nim-label">HSN / SAC Code</label><input class="nim-input" v-model="form.hsn_code"/></div>
-              </div>
-              <div class="iv-field"><label class="nim-label">Description</label><textarea class="nim-input" v-model="form.description" rows="3" style="resize:vertical"></textarea></div>
-              <label class="iv-check-row">
-                <input type="checkbox" :checked="!!form.disabled" @change="form.disabled=$event.target.checked?1:0"/>
-                <span>Mark as Inactive</span>
-              </label>
-            </template>
-
-            <!-- Pricing -->
-            <template v-else-if="drawerTab === 'pricing'">
-              <div class="iv-fg2">
-                <div class="iv-field"><label class="nim-label">Selling Rate (₹)</label><input type="number" class="nim-input" v-model.number="form.standard_rate" min="0"/></div>
-                <div class="iv-field"><label class="nim-label">Buying Rate (₹)</label><input type="number" class="nim-input" v-model.number="form.standard_buying_rate" min="0"/></div>
-              </div>
-              <div class="iv-field"><label class="nim-label">MRP (₹)</label><input type="number" class="nim-input" v-model.number="form.mrp" min="0"/>
-                <div class="text-muted" style="font-size:11.5px;margin-top:5px">If left blank, Selling Rate is used as the MRP on invoices.</div>
-              </div>
-              <div class="iv-field"><label class="nim-label">Tax Template <span style="color:#dc2626">*</span></label>
-                <select class="nim-input" v-model="form.tax_code">
-                  <option value="">— Select —</option>
-                  <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.label }}</option>
-                </select>
-                <div class="text-muted" style="font-size:11.5px;margin-top:5px">Tax on transactions is determined by the selected Tax Template.</div>
-              </div>
-              <div class="iv-field"><label class="nim-label">Income Account <span style="color:#dc2626">*</span></label>
-                <select class="nim-input" v-model="form.income_account">
-                  <option value="">— Select —</option>
-                  <option v-for="a in incomeAccounts" :key="a" :value="a">{{ a }}</option>
-                </select>
-              </div>
-              <div class="iv-field"><label class="nim-label">Expense Account <span style="color:#dc2626">*</span></label>
-                <select class="nim-input" v-model="form.expense_account">
-                  <option value="">— Select —</option>
-                  <option v-for="a in expenseAccounts" :key="a" :value="a">{{ a }}</option>
-                </select>
-              </div>
-            </template>
-
-            <!-- Inventory -->
-            <template v-else>
-              <label class="iv-check-row" style="margin-bottom:14px">
-                <input type="checkbox" :checked="!!form.is_stock_item" @change="form.is_stock_item=$event.target.checked?1:0"/>
-                <span>Track Inventory (stock item)</span>
-              </label>
-              <div class="iv-fg2">
-                <div class="iv-field">
-                  <label class="nim-label">Valuation Method</label>
-                  <select class="nim-input" v-model="form.valuation_method">
-                    <option v-for="m in ['FIFO','Moving Average','LIFO']" :key="m" :value="m">{{ m }}</option>
-                  </select>
-                </div>
-                <div class="iv-field">
-                  <label class="nim-label">Default Warehouse <span v-if="form.is_stock_item" class="req">*</span></label>
-                  <select class="nim-input" v-model="form.default_warehouse">
-                    <option value="">— Select —</option>
-                    <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.label }}</option>
-                  </select>
-                </div>
-              </div>
-              <div class="iv-fg2">
-                <div class="iv-field"><label class="nim-label">Reorder Level</label><input type="number" class="nim-input" v-model.number="form.reorder_level" min="0"/></div>
-                <div class="iv-field"><label class="nim-label">Reorder Qty</label><input type="number" class="nim-input" v-model.number="form.reorder_qty" min="0"/></div>
-              </div>
-
-              <div class="iv-field" style="margin-top:18px;padding-top:14px;border-top:1px solid #e5e7eb">
-                <label class="nim-label" style="font-weight:600">Purchase Unit Conversion</label>
-                <div class="text-muted" style="font-size:11.5px;margin-bottom:10px">
-                  If you buy this item in a different unit than you manufacture with (e.g. buy in Box, use in Kg), set that here. Purchases/receipts entered in the Purchase UOM are auto-converted to Stock UOM ({{ form.stock_uom || 'Nos' }}) before hitting inventory and manufacturing.
-                </div>
-              </div>
-              <div class="iv-fg2">
-                <div class="iv-field">
-                  <label class="nim-label">Purchase UOM</label>
-                  <select class="nim-input" v-model="form.purchase_uom">
-                    <option value="">— Same as Stock UOM —</option>
-                    <option v-for="u in UOM_LIST" :key="u" :value="u">{{ u }}</option>
-                  </select>
-                </div>
-                <div class="iv-field">
-                  <label class="nim-label">1 {{ form.purchase_uom || 'Purchase Unit' }} =</label>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="number" class="nim-input" v-model.number="form.purchase_conversion_factor"
-                           min="0" step="any" :disabled="!form.purchase_uom" style="flex:1"/>
-                    <span class="text-muted" style="font-size:12.5px;white-space:nowrap">{{ form.stock_uom || 'Nos' }}</span>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-
-          <div class="iv-drawer-footer">
-            <button class="iv-btn-ghost" @click="showDrawer=false">Cancel</button>
-            <button class="iv-btn-primary" :disabled="saving" @click="saveItem">
-              <span v-if="saving" class="iv-spinner"></span>
-              {{ saving ? 'Saving…' : 'Update Item' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ItemEditDrawer ref="itemDrawer" @saved="load" />
 
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiGET, apiPOST, apiList, apiSave, resolveCompany } from "../api/client.js";
+import { apiGET } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { fmt, flt } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
+import ItemEditDrawer from "../components/ItemEditDrawer.vue";
 
 const { toast } = useToast();
 const route     = useRoute();
 const itemCode  = computed(() => route.params.itemCode);
+const itemDrawer = ref(null);
 
 // ── Data ───────────────────────────────────────────────────────────────────
 const item        = ref(null);
 const stockDetail = ref({ warehouses: [], total_qty: 0, total_value: 0 });
 const ledger      = ref([]);
 const priceLists  = ref([]);
+const partyTxns   = ref({ rows: [], total_purchased_qty: 0, total_sold_qty: 0 });
 const loading     = ref(true);
-
-// Edit drawer
-const showDrawer  = ref(false);
-const drawerTab   = ref("basic");
-const saving      = ref(false);
-const itemGroups  = ref([]);
-const warehouses  = ref([]);
-const taxTemplates = ref([]);
-const incomeAccounts  = ref([]);
-const expenseAccounts = ref([]);
-
-const form = reactive({
-  name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
-  stock_uom: "Nos", hsn_code: "", description: "", disabled: 0,
-  standard_rate: 0, standard_buying_rate: 0, mrp: 0, tax_code: "",
-  income_account: "", expense_account: "",
-  is_stock_item: 1, valuation_method: "FIFO", default_warehouse: "",
-  reorder_level: 0, reorder_qty: 0,
-  purchase_uom: "", purchase_conversion_factor: 1,
-});
-
-const DRAWER_TABS    = [{ k:"basic", l:"Basic Info" }, { k:"pricing", l:"Pricing & Tax" }, { k:"inventory", l:"Inventory" }];
-const ITEM_TYPES     = ["Product", "Service", "Raw Material", "Finished Good"];
-const ITEM_TYPE_ICONS = { Product:"📦", Service:"🛠️", "Raw Material":"⚙️", "Finished Good":"✅" };
-const UOM_LIST       = ["Nos", "Kg", "Ltr", "Mtr", "Box", "Pcs", "Set", "Dozen", "Pair", "Roll"];
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
   loading.value = true;
   item.value    = null;
   try {
-    const [full, stock, sled, pl] = await Promise.all([
+    const [full, stock, sled, pl, ptx] = await Promise.all([
       apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: itemCode.value }),
       apiGET("zoho_books_clone.api.inventory.get_item_stock_detail", { item_code: itemCode.value }),
       apiGET("zoho_books_clone.api.inventory.get_stock_ledger_entries", { item_code: itemCode.value, limit: 30 }),
       apiGET("zoho_books_clone.api.inventory.get_item_price_list", { item_code: itemCode.value }).catch(() => []),
+      apiGET("zoho_books_clone.api.inventory.get_item_party_transactions", { item_code: itemCode.value, limit: 50 })
+        .catch(() => ({ rows: [], total_purchased_qty: 0, total_sold_qty: 0 })),
     ]);
     item.value        = full;
     stockDetail.value = stock || { warehouses: [], total_qty: 0, total_value: 0 };
     ledger.value      = sled  || [];
     priceLists.value  = pl    || [];
+    partyTxns.value   = ptx   || { rows: [], total_purchased_qty: 0, total_sold_qty: 0 };
   } catch (e) {
     toast(e.message || "Failed to load item", "error");
   } finally {
@@ -496,114 +398,11 @@ async function load() {
 }
 
 // ── Open edit ──────────────────────────────────────────────────────────────
-async function openEdit() {
+// Uses the shared ItemEditDrawer component (the same Add/Edit drawer as the
+// Items list page) instead of a separate, page-local drawer implementation.
+function openEdit() {
   if (!item.value) return;
-  drawerTab.value = "basic";
-  Object.assign(form, {
-    name: item.value.name,
-    item_code: item.value.item_code || "",
-    item_name: item.value.item_name || "",
-    item_group: item.value.item_group || "",
-    item_type: item.value.item_type || "Product",
-    stock_uom: item.value.stock_uom || "Nos",
-    hsn_code: item.value.hsn_code || "",
-    description: item.value.description || "",
-    disabled: item.value.disabled ? 1 : 0,
-    standard_rate: flt(item.value.standard_rate),
-    standard_buying_rate: flt(item.value.standard_buying_rate),
-    mrp: flt(item.value.mrp),
-    tax_code: item.value.tax_code || "",
-    income_account: item.value.income_account || "",
-    expense_account: item.value.expense_account || "",
-    is_stock_item: item.value.is_stock_item ? 1 : 0,
-    valuation_method: item.value.valuation_method || "FIFO",
-    default_warehouse: item.value.default_warehouse || "",
-    reorder_level: flt(item.value.reorder_level),
-    reorder_qty: flt(item.value.reorder_qty),
-    purchase_uom: item.value.purchase_uom || "",
-    purchase_conversion_factor: (() => {
-      const rows = item.value.uom_conversions || [];
-      const match = rows.find(r => r.uom === item.value.purchase_uom);
-      return match ? flt(match.conversion_factor) : 1;
-    })(),
-  });
-
-  // Load dropdowns in background
-  loadDrawerOptions();
-  showDrawer.value = true;
-}
-
-async function loadDrawerOptions() {
-  try {
-    const [grps, whs, tt, company] = await Promise.all([
-      apiList("Item Group", { fields: ["name", "is_group"], limit: 200 }),
-      apiList("Warehouse", { fields: ["name","warehouse_name"], filters:[["disabled","=",0]], limit: 200 }),
-      apiList("Tax Template", { fields: ["name","template_name"], filters:[["disabled","=",0]], limit: 100 }),
-      resolveCompany(),
-    ]);
-    itemGroups.value = (grps || []).filter(g => !g.is_group).map(g => g.name);
-    warehouses.value = (whs || []).map(w => ({ name: w.name, label: w.warehouse_name || w.name }));
-    taxTemplates.value = (tt || []).map(t => ({ name: t.name, label: t.template_name || t.name }));
-    // Income- and expense-class leaf accounts (no root_type column on this
-    // app's Account doctype — filter by account_type directly).
-    const base = [["is_group","=",0],["company","=",company]];
-    const inc = await apiList("Account", { fields:["name"], filters:[...base,["account_type","=","Income"]], limit:500 });
-    const exp = await apiList("Account", { fields:["name"], filters:[...base,["account_type","in",["Expense","Cost of Goods Sold"]]], limit:500 });
-    incomeAccounts.value  = (inc || []).map(a => a.name);
-    expenseAccounts.value = (exp || []).map(a => a.name);
-  } catch {}
-}
-
-// ── Save ───────────────────────────────────────────────────────────────────
-async function saveItem() {
-  const checks = [
-    [!form.item_name.trim(),                          "Item name is required",       "basic"],
-    [!form.stock_uom,                                 "Default UOM is required",     "basic"],
-    [!form.tax_code,                                  "Tax Template is required",    "pricing"],
-    [!form.income_account,                            "Income account is required",  "pricing"],
-    [!form.expense_account,                           "Expense account is required", "pricing"],
-    [!!form.is_stock_item && !form.default_warehouse, "Default Warehouse is required when Track Inventory is on", "inventory"],
-    [!!form.purchase_uom && form.purchase_uom !== form.stock_uom && flt(form.purchase_conversion_factor) <= 0,
-      "Enter how many " + (form.stock_uom || "Stock UOM") + " make up 1 " + form.purchase_uom, "inventory"],
-  ];
-  for (const [bad, msg, tab] of checks) {
-    if (bad) { drawerTab.value = tab; toast(msg, "error"); return; }
-  }
-  saving.value = true;
-  try {
-    // Purchase UOM only needs a conversion row when it actually differs
-    // from the Stock UOM — if they're the same (or Purchase UOM is left
-    // blank), no conversion is needed and any prior conversion row for it
-    // is cleared.
-    const needsConversion = !!form.purchase_uom && form.purchase_uom !== form.stock_uom;
-    const uomConversions = needsConversion
-      ? [{ uom: form.purchase_uom, conversion_factor: flt(form.purchase_conversion_factor) }]
-      : [];
-    const doc = {
-      doctype: "Item", name: form.name,
-      item_name: form.item_name, item_code: form.item_code,
-      item_group: form.item_group || "Products", item_type: form.item_type,
-      stock_uom: form.stock_uom, hsn_code: form.hsn_code,
-      description: form.description, disabled: form.disabled,
-      standard_rate: flt(form.standard_rate), standard_buying_rate: flt(form.standard_buying_rate),
-      mrp: flt(form.mrp),
-      tax_code: form.tax_code,
-      income_account: form.income_account, expense_account: form.expense_account,
-      is_stock_item: form.is_stock_item, valuation_method: form.valuation_method,
-      default_warehouse: form.default_warehouse,
-      reorder_level: flt(form.reorder_level), reorder_qty: flt(form.reorder_qty),
-      purchase_uom: form.purchase_uom || "",
-      uom_conversions: uomConversions,
-    };
-    await apiSave(doc);
-    toast("Item updated");
-    showDrawer.value = false;
-    await load();
-  } catch (e) {
-    toast(e.message || "Save failed", "error");
-  } finally {
-    saving.value = false;
-  }
+  itemDrawer.value?.openEdit(item.value);
 }
 
 function fmtQty(v) {
@@ -858,71 +657,6 @@ onMounted(load);
 }
 .iv-btn-ghost:hover { background: #f9fafb; }
 
-/* ── Edit Drawer ── */
-.iv-drawer-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.45); z-index: 900;
-  display: flex; justify-content: flex-end;
-}
-.iv-drawer {
-  width: 100%; max-width: 520px; height: 100%;
-  background: #fff; display: flex; flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0,0,0,.15);
-  animation: slideInR .2s ease;
-}
-@keyframes slideInR { from { transform: translateX(100%) } to { transform: translateX(0) } }
-.iv-drawer-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 22px; border-bottom: 1px solid #e5e7eb;
-  background: linear-gradient(135deg,#1a1d23,#2d3748);
-}
-.iv-drawer-title { font-size: 15px; font-weight: 700; color: #fff; }
-.iv-drawer-sub   { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 2px; }
-.iv-drawer-close {
-  background: rgba(255,255,255,.12); border: none; cursor: pointer;
-  color: #fff; width: 30px; height: 30px; border-radius: 6px;
-  display: flex; align-items: center; justify-content: center;
-}
-.iv-drawer-tabs {
-  display: flex; gap: 0; padding: 10px 16px 0;
-  border-bottom: 1px solid #e5e7eb; overflow-x: auto; scrollbar-width: none;
-}
-.iv-drawer-tabs::-webkit-scrollbar { display: none; }
-.iv-dtab {
-  padding: 8px 14px; border: none; background: none; cursor: pointer;
-  font: inherit; font-size: 12.5px; font-weight: 600; color: #6b7280;
-  white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.iv-dtab:hover { color: #374151; }
-.iv-dtab--active { color: #2563eb; border-bottom-color: #2563eb; }
-.iv-drawer-body  { flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
-.iv-drawer-footer {
-  padding: 14px 22px; border-top: 1px solid #e5e7eb;
-  display: flex; justify-content: flex-end; gap: 8px; background: #fafafa;
-}
-
-/* Drawer form helpers */
-.iv-fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.iv-field { display: flex; flex-direction: column; gap: 4px; }
-.req { color: #dc2626; }
-.iv-type-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.iv-type-btn {
-  padding: 5px 12px; border-radius: 16px; font: inherit; font-size: 12px;
-  font-weight: 600; cursor: pointer; border: 1.5px solid #e5e7eb;
-  background: #fff; color: #374151; transition: all .1s;
-}
-.iv-type-btn--on { background: #1a1d23; color: #fff; border-color: #1a1d23; }
-.iv-check-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 600; color: #374151; cursor: pointer;
-}
-.iv-spinner {
-  display: inline-block; width: 12px; height: 12px;
-  border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
-  border-radius: 50%; animation: spin .6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg) } }
-
 /* ── Responsive ── */
 
 /* Tablet (≤ 900px) */
@@ -936,9 +670,6 @@ onMounted(load);
   /* Tables scroll horizontally on tablet */
   .iv-wh-table,
   .iv-ledger-wrap { overflow-x: auto; display: block; }
-
-  /* Drawer full-width on tablet */
-  .iv-drawer { max-width: 100%; }
 }
 
 /* Mobile (≤ 600px) */
@@ -984,17 +715,6 @@ onMounted(load);
   /* Ledger — swap table for cards on mobile */
   .iv-ledger-table-view { display: none; }
   .iv-ledger-cards-view { display: flex; flex-direction: column; gap: 8px; }
-
-  /* Drawer — full screen on mobile */
-  .iv-drawer-overlay { align-items: flex-end; }
-  .iv-drawer      { max-width: 100%; height: 92dvh; border-radius: 16px 16px 0 0; animation: slideInUp .22s ease; }
-  @keyframes slideInUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
-  .iv-drawer-header { padding: 14px 16px; border-radius: 16px 16px 0 0; }
-  .iv-drawer-body { padding: 14px 16px; }
-  .iv-drawer-footer { padding: 12px 16px; }
-  .iv-fg2         { grid-template-columns: 1fr; }
-  .iv-type-row    { gap: 5px; }
-  .iv-type-btn    { font-size: 11.5px; padding: 4px 10px; }
 
   /* Price list: hide Valid From / To on mobile */
   .iv-pl-table td:nth-child(4),

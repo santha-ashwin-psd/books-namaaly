@@ -12,7 +12,16 @@ class Expense(Document):
             self.posting_date = nowdate()
         if flt(self.amount) <= 0:
             frappe.throw(_("Amount must be greater than 0"))
+        self._validate_expense_category_company()
         self._compute_totals()
+
+    def _validate_expense_category_company(self):
+        if not self.expense_type:
+            return
+        cat_company = frappe.db.get_value("Expense Category", self.expense_type, "company")
+        if cat_company and self.company and cat_company != self.company:
+            frappe.throw(_("Expense Category {0} belongs to {1}, not {2}").format(
+                frappe.bold(self.expense_type), frappe.bold(cat_company), frappe.bold(self.company)))
 
     def _compute_totals(self):
         self.tax_amount = round(flt(self.amount) * flt(self.gst_rate) / 100, 2)

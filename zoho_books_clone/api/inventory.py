@@ -696,6 +696,72 @@ def get_stock_ledger_entries(item_code=None, warehouse=None,
     )
 
 
+@frappe.whitelist(allow_guest=False)
+def get_item_party_transactions(item_code, limit=100):
+    """
+    Buy/sell trail for a single item: every submitted Purchase Invoice and
+    Sales Invoice line that includes this item, with the vendor/customer
+    name and qty, newest first. Used by the item detail page so staff can
+    see "who did we buy/sell this to and how much".
+    """
+    limit = int(limit)
+
+    purchases = frappe.db.sql("""
+        SELECT
+            pi.name            AS voucher_no,
+            pi.posting_date    AS posting_date,
+            pi.supplier        AS party,
+            pi.supplier_name   AS party_name,
+            pi.status          AS status,
+            pii.qty            AS qty,
+            pii.uom            AS uom,
+            pii.rate           AS rate,
+            pii.amount         AS amount
+        FROM `tabPurchase Invoice Item` pii
+        INNER JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
+        WHERE pii.item_code = %(item_code)s
+          AND pi.docstatus = 1
+        ORDER BY pi.posting_date DESC, pi.creation DESC
+        LIMIT %(limit)s
+    """, {"item_code": item_code, "limit": limit}, as_dict=True)
+
+    sales = frappe.db.sql("""
+        SELECT
+            si.name            AS voucher_no,
+            si.posting_date    AS posting_date,
+            si.customer        AS party,
+            si.customer_name   AS party_name,
+            si.status          AS status,
+            sii.qty            AS qty,
+            sii.uom            AS uom,
+            sii.rate           AS rate,
+            sii.amount         AS amount
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE sii.item_code = %(item_code)s
+          AND si.docstatus = 1
+        ORDER BY si.posting_date DESC, si.creation DESC
+        LIMIT %(limit)s
+    """, {"item_code": item_code, "limit": limit}, as_dict=True)
+
+    rows = []
+    for r in purchases:
+        rows.append({**r, "type": "Purchase", "party_type": "Supplier"})
+    for r in sales:
+        rows.append({**r, "type": "Sale", "party_type": "Customer"})
+
+    rows.sort(key=lambda r: (r["posting_date"] or ""), reverse=True)
+
+    total_purchased = sum(flt(r["qty"]) for r in purchases)
+    total_sold      = sum(flt(r["qty"]) for r in sales)
+
+    return {
+        "rows": rows[:limit],
+        "total_purchased_qty": total_purchased,
+        "total_sold_qty": total_sold,
+    }
+
+
 # ── Reorder Alerts ────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False)

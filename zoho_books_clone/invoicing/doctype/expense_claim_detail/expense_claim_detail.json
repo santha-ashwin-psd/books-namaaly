@@ -26,9 +26,9 @@
             "set_only_once": 0, "show_days": 1, "show_seconds": 1, "unique": 0
         },
         {
-            "fieldname": "expense_type", "fieldtype": "Select", "label": "Type",
+            "fieldname": "expense_type", "fieldtype": "Link", "label": "Type",
             "idx": 2, "reqd": 1, "in_list_view": 1,
-            "options": "Travel\nOffice Supplies\nUtilities\nMeals & Entertainment\nSoftware & Subscriptions\nEquipment & Fixtures\nProfessional Fees\nCommunication\nOther",
+            "options": "Expense Category",
             "creation": "2026-04-16 00:00:00.000000", "modified": "2026-04-16 00:00:00.000000",
             "modified_by": "Administrator", "owner": "Administrator", "docstatus": 0,
             "permlevel": 0, "precision": "", "allow_bulk_edit": 0, "allow_in_quick_entry": 0,

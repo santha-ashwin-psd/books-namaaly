@@ -701,9 +701,10 @@ def seed_supplier_custom_fields():
         ("ship_state",         "Ship State",          "Data",     "ship_city",           ""),
         ("ship_pincode",       "Ship Pincode",        "Data",     "ship_state",          ""),
         ("ship_country",       "Ship Country",        "Data",     "ship_pincode",        ""),
+        ("opening_balance",    "Opening Balance",     "Currency", "ship_country",        ""),
     ]
 
-    DB_TYPE_MAP = {"Data": "varchar(140) DEFAULT NULL"}
+    DB_TYPE_MAP = {"Data": "varchar(140) DEFAULT NULL", "Currency": "decimal(21,9) DEFAULT NULL"}
     db_name = frappe.conf.db_name
     existing_cols = set(
         r[0] for r in frappe.db.sql(

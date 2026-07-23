@@ -20,3 +20,9 @@ zoho_books_clone.patches.v1_4.seed_grir_and_inventory_defaults
 # unchanged (still "Stock Received But Not Billed") since it's a fixed
 # Select option used by GL posting / balance sheet logic.
 zoho_books_clone.patches.v1_5.rename_grir_account
+
+# Seeds the new "Expense Category" master with the union of the two
+# previously-hardcoded Select lists on Expense.expense_type and Expense
+# Claim Detail.expense_type, now both Link fields against Expense Category
+# (new doctype, so must run after schema sync creates its table).
+zoho_books_clone.patches.v1_6.seed_expense_categories

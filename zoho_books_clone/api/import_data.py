@@ -339,6 +339,16 @@ def _build_doc(doctype, row, company):
             return None
         if not company:
             frappe.throw(_("Company could not be determined. Please ensure your user is linked to a Books Company."))
+        # expense_type is a company-scoped Link to Expense Category — resolve
+        # or auto-create it for THIS company, then use the resolved doc name
+        # (which is "{category_name} - {company}", not the bare CSV value).
+        cat_name = frappe.db.get_value("Expense Category", {"category_name": expense_type, "company": company}, "name")
+        if not cat_name:
+            cat = frappe.get_doc({"doctype": "Expense Category", "category_name": expense_type, "company": company})
+            cat.flags.ignore_permissions = True
+            cat.insert()
+            cat_name = cat.name
+        expense_type = cat_name
         vendor_input = (row.get("vendor") or "").strip()
         vendor_id = ""
         if vendor_input:

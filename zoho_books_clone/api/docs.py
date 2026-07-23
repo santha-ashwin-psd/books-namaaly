@@ -488,6 +488,27 @@ def _email_attachment(doctype, name, print_format, pdf_html=None, filename=None)
         return []
 
 
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def render_pdf_from_html(pdf_html, filename=None):
+    """Render client-side print HTML (the same Classic/Modern/Minimal
+    templates used for on-screen preview and email attachments) to a real
+    PDF via wkhtmltopdf, and stream it back as a file download.
+
+    This exists because "Download PDF" previously relied on the browser's
+    own print-to-PDF dialog (`window.print()`), whose Margins/Headers-and-
+    footers settings silently override anything the template sets via CSS
+    `@page` rules — so users saw inconsistent margins and stray browser
+    chrome (URL/date/page-number) no matter how the template CSS was tuned.
+    Rendering server-side with wkhtmltopdf means the template's own CSS is
+    the only thing controlling the page layout.
+    """
+    from frappe.utils.pdf import get_pdf
+    content = get_pdf(pdf_html)
+    frappe.local.response.filename = filename or "document.pdf"
+    frappe.local.response.filecontent = content
+    frappe.local.response.type = "download"
+
+
 def _send_business_email(recipients, cc_list, subject, body, reference_doctype,
                          reference_name, attachments=None, company=None):
     """Send a customer/vendor-facing email.
@@ -1609,9 +1630,15 @@ def create_debit_note():
             "item_code":      it.get("item_code") or it.get("item_name") or "",
             "item_name":      it.get("item_name") or it.get("item_code") or "",
             "description":    it.get("description") or it.get("item_name") or "",
+            "hsn_code":       it.get("hsn_code") or "",
+            "uom":            it.get("uom") or "Nos",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
+            "discount_percentage": flt(it.get("discount_percentage", 0)),
+            "discount_amount":     flt(it.get("discount_amount", 0)),
+            "amount":         -abs(flt(it.get("amount", 0))) or None,
             "expense_account": it.get("expense_account") or expense_account,
+            "tax_code":       it.get("tax_code") or "",
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
@@ -2406,8 +2433,13 @@ def create_credit_note():
             "item_code":      it.get("item_code") or it.get("item_name") or "",
             "item_name":      it.get("item_name") or it.get("item_code") or "",
             "description":    it.get("description") or it.get("item_name") or "",
+            "hsn_code":       it.get("hsn_code") or "",
+            "uom":            it.get("uom") or "Nos",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
+            "discount_percentage": flt(it.get("discount_percentage", 0)),
+            "discount_amount":     flt(it.get("discount_amount", 0)),
+            "amount":         -abs(flt(it.get("amount", 0))) or None,
             "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
         }
@@ -2552,8 +2584,13 @@ def save_credit_note_draft():
             "item_code":      it.get("item_code") or "",
             "item_name":      it.get("item_name") or it.get("item_code") or "",
             "description":    it.get("description") or it.get("item_code") or "",
+            "hsn_code":       it.get("hsn_code") or "",
+            "uom":            it.get("uom") or "Nos",
             "qty":            -abs(flt(it.get("qty", 1))),
             "rate":           flt(it.get("rate", 0)),
+            "discount_percentage": flt(it.get("discount_percentage", 0)),
+            "discount_amount":     flt(it.get("discount_amount", 0)),
+            "amount":         -abs(flt(it.get("amount", 0))) or None,
             "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
         }
@@ -3616,6 +3653,9 @@ def get_vendor_summary(vendor):
     outstanding = sum(flt(b.outstanding_amount) for b in bills if flt(b.outstanding_amount) > 0)
     open_bill_count = sum(1 for b in bills if flt(b.outstanding_amount) > 0)
 
+    opening_balance = flt(frappe.db.get_value("Supplier", vendor, "opening_balance"))
+    outstanding += opening_balance
+
     dns = frappe.get_all("Purchase Invoice",
         filters={"supplier": vendor, "is_return": 1, "docstatus": 1},
         fields=["name"])
@@ -3631,6 +3671,7 @@ def get_vendor_summary(vendor):
     return {
         "vendor": vendor,
         "outstanding": outstanding,
+        "opening_balance": opening_balance,
         "dn_credit": dn_credit,
         "open_bill_count": open_bill_count,
         "open_dn_count": open_dn_count,
@@ -3838,6 +3879,9 @@ def get_customer_summary(customer):
     outstanding = sum(flt(i.outstanding_amount) for i in invs if flt(i.outstanding_amount) > 0)
     open_inv_count = sum(1 for i in invs if flt(i.outstanding_amount) > 0)
 
+    opening_balance = flt(frappe.db.get_value("Customer", customer, "opening_balance"))
+    outstanding += opening_balance
+
     cns = frappe.get_all("Sales Invoice",
         filters={"customer": customer, "is_return": 1, "docstatus": 1},
         fields=["name"])
@@ -3853,6 +3897,7 @@ def get_customer_summary(customer):
     return {
         "customer": customer,
         "outstanding": outstanding,
+        "opening_balance": opening_balance,
         "cn_credit": cn_credit,
         "open_invoice_count": open_inv_count,
         "open_cn_count": open_cn_count,

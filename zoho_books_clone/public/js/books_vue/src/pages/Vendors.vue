@@ -916,6 +916,18 @@
             </div>
           </div>
 
+          <div class="inv-sec-lbl">Opening Balance</div>
+          <div class="cus-form-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+            <div>
+              <label class="inv-lbl">Opening Balance (₹)</label>
+              <input v-model.number="form.opening_balance" type="number" min="0" class="inv-fi" placeholder="0.00"
+                :style="formErrors.opening_balance?'border-color:#dc2626;background:#fff5f5':''"
+                @input="delete formErrors.opening_balance"
+                @blur="validateField('opening_balance')"/>
+              <div v-if="formErrors.opening_balance" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.opening_balance}}</div>
+            </div>
+          </div>
+
           </template>
 
         </div>
@@ -1127,7 +1139,7 @@ const form = reactive({
   ship_address_line1: "", ship_address_line2: "",
   ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
   default_payable_account: "", disabled: 0,
-  tds_applicable: 0, tds_section: "", pan: "",
+  tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0,
 });
 
 const formErrors = reactive({});
@@ -1208,7 +1220,7 @@ function resetForm() {
     ship_address_line1: "", ship_address_line2: "",
     ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
     default_payable_account: "", disabled: 0,
-    tds_applicable: 0, tds_section: "", pan: "",
+    tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0,
   });
   Object.keys(formErrors).forEach(k => delete formErrors[k]);
 }
@@ -1277,6 +1289,7 @@ async function openEdit(name) {
       tds_applicable: doc.tds_applicable || 0,
       tds_section: doc.tds_section || "",
       pan: doc.pan || "",
+      opening_balance: doc.opening_balance || 0,
     });
   } catch (e) {
     toast("Could not load vendor: " + (e.message || e), "error");
@@ -1312,6 +1325,8 @@ function validateField(field) {
     const err = validatePincode(s, form.country);
     if (err) formErrors.pincode = err;
   }
+  if (field === "opening_balance" && v < 0)
+    formErrors.opening_balance = "Opening balance cannot be negative";
 }
 
 function validateVendorForm() {
@@ -1328,6 +1343,7 @@ function validateVendorForm() {
   if (form.tax_id && form.country === "India" && !GSTIN_REGEX.test(form.tax_id.trim()))
     formErrors.tax_id = "Invalid GSTIN format (e.g. 27AAPFU0939F1ZV)";
   if (form.pincode) { const err = validatePincode(form.pincode, form.country); if (err) formErrors.pincode = err; }
+  if (form.opening_balance < 0) formErrors.opening_balance = "Opening balance cannot be negative";
   return Object.keys(formErrors).length === 0;
 }
 
@@ -1372,6 +1388,7 @@ async function saveVendor() {
       tds_applicable: form.tds_applicable ? 1 : 0,
       tds_section: form.tds_section,
       pan: form.pan.trim(),
+      opening_balance: parseFloat(form.opening_balance) || 0,
     };
     let doc_to_save = doc;
     if (drawerMode.value === "edit") {

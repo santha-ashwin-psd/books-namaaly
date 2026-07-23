@@ -33,10 +33,11 @@
   },
   {
    "fieldname": "expense_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Expense Type",
-   "options": "Travel\nFood & Meals\nAccommodation\nOffice Supplies\nUtilities\nMarketing\nSoftware\nHardware\nTraining\nMiscellaneous",
+   "options": "Expense Category",
    "reqd": 1
   },
   {

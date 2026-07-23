@@ -1070,7 +1070,8 @@ def ai_enhance_email(subject, body, invoice_name=None):
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
 def get_customer_outstanding():
-    """Return {customer_name: outstanding_amount} for all customers with open invoices."""
+    """Return {customer_name: outstanding_amount} for all customers with open invoices
+    or a non-zero opening balance."""
     company = _get_company(frappe.session.user)
     rows = frappe.db.sql("""
         SELECT customer, COALESCE(SUM(outstanding_amount), 0) AS outstanding
@@ -1078,7 +1079,15 @@ def get_customer_outstanding():
         WHERE docstatus=1 AND outstanding_amount>0 AND company=%s
         GROUP BY customer
     """, company, as_dict=True)
-    return {r.customer: float(r.outstanding or 0) for r in rows}
+    out = {r.customer: float(r.outstanding or 0) for r in rows}
+
+    openings = frappe.db.sql("""
+        SELECT name, opening_balance FROM `tabCustomer`
+        WHERE books_company=%s AND opening_balance IS NOT NULL AND opening_balance != 0
+    """, company, as_dict=True)
+    for o in openings:
+        out[o.name] = out.get(o.name, 0) + float(o.opening_balance or 0)
+    return out
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
@@ -1125,7 +1134,8 @@ def get_vendor_last_bill():
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
 def get_vendor_outstanding():
-    """Return {supplier: outstanding_amount} for all suppliers with open bills."""
+    """Return {supplier: outstanding_amount} for all suppliers with open bills
+    or a non-zero opening balance."""
     company = _get_company(frappe.session.user)
     rows = frappe.db.sql("""
         SELECT supplier, COALESCE(SUM(outstanding_amount), 0) AS outstanding
@@ -1133,7 +1143,15 @@ def get_vendor_outstanding():
         WHERE docstatus=1 AND is_return=0 AND outstanding_amount>0 AND company=%s
         GROUP BY supplier
     """, company, as_dict=True)
-    return {r.supplier: float(r.outstanding or 0) for r in rows}
+    out = {r.supplier: float(r.outstanding or 0) for r in rows}
+
+    openings = frappe.db.sql("""
+        SELECT name, opening_balance FROM `tabSupplier`
+        WHERE books_company=%s AND opening_balance IS NOT NULL AND opening_balance != 0
+    """, company, as_dict=True)
+    for o in openings:
+        out[o.name] = out.get(o.name, 0) + float(o.opening_balance or 0)
+    return out
 
 
 _PRO_MODE_ADDENDUM = """

@@ -48,7 +48,7 @@
             <tr v-for="e in paged" :key="e.name" class="inv-row" :class="{selected:selected.has(e.name)}">
               <td><input type="checkbox" :checked="selected.has(e.name)" @change="toggle(e.name)" /></td>
               <td @click="openView(e)"><span class="inv-link">{{ e.name }}</span></td>
-              <td @click="openView(e)">{{ e.expense_type||'—' }}</td>
+              <td @click="openView(e)">{{ categoryLabel(e.expense_type)||'—' }}</td>
               <td @click="openView(e)">{{ fmtDate(e.posting_date) }}</td>
               <td @click="openView(e)"><span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
               <td @click="openView(e)" class="ta-r mono-sm">{{ fmtCur(e.total_claimed_amount||e.grand_total) }}</td>
@@ -81,7 +81,7 @@
               <span class="exp-mc-docno">{{ e.name }}</span>
               <span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span>
             </div>
-            <div class="exp-mc-mid">{{ e.expense_type || '—' }}</div>
+            <div class="exp-mc-mid">{{ categoryLabel(e.expense_type) || '—' }}</div>
             <div class="exp-mc-meta">
               <span>{{ fmtDate(e.posting_date) }}</span>
               <span class="exp-mc-amount">{{ fmtCur(e.total_claimed_amount || e.grand_total) }}</span>
@@ -139,7 +139,7 @@
                 <label class="inv-lbl">Category <span class="inv-req">*</span></label>
                 <select v-model="form.expense_type" class="inv-fi">
                   <option value="">— Select —</option>
-                  <option v-for="c in expenseCategories" :key="c" :value="c">{{ c }}</option>
+                  <option v-for="c in expenseCategories" :key="c.value" :value="c.value">{{ c.label }}</option>
                 </select>
               </div>
             </div>
@@ -253,7 +253,7 @@
             <div class="exp-view-head-icon"><span v-html="icon('indianrupee',18)"></span></div>
             <div>
               <div class="exp-view-num">{{ viewDoc.name }}</div>
-              <div class="exp-view-sub">{{ viewDoc.expense_type||'Expense' }}</div>
+              <div class="exp-view-sub">{{ categoryLabel(viewDoc.expense_type)||'Expense' }}</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
@@ -280,7 +280,7 @@
               </div>
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">Category</span>
-                <span class="ew-kv-val">{{ viewDoc.expense_type||'—' }}</span>
+                <span class="ew-kv-val">{{ categoryLabel(viewDoc.expense_type)||'—' }}</span>
               </div>
             </div>
           </div>
@@ -369,7 +369,14 @@ const { toast } = useToast();
 const { confirm } = useConfirm();
 const activeTab=ref("all");
 const tabs=[{key:"all",label:"All"},{key:"draft",label:"Draft"},{key:"submitted",label:"Submitted"}];
-const expenseCategories=["Travel","Food & Meals","Accommodation","Office Supplies","Utilities","Marketing","Software","Hardware","Training","Miscellaneous"];
+const expenseCategories=ref([]);
+function categoryLabel(name){
+  if(!name) return "";
+  const hit=expenseCategories.value.find(c=>c.value===name);
+  if(hit) return hit.label;
+  const i=name.lastIndexOf(" - ");
+  return i>-1 ? name.slice(0,i) : name;
+}
 
 const list=ref([]),loading=ref(false),search=ref(""),selected=ref(new Set());
 const drawerOpen=ref(false),drawerSaving=ref(false),editingName=ref("");
@@ -410,6 +417,7 @@ async function fetchPaidThroughAccounts(q = "") {
 const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
 const costCenters=ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
+async function fetchExpenseCategories(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Expense Category",fields:JSON.stringify(["name","category_name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co]]),order_by:"category_name asc",limit_page_length:200})||[];expenseCategories.value=r.map(c=>({value:c.name,label:c.category_name||c.name}));}catch{expenseCategories.value=[];}}
 
 async function load(){
   loading.value=true;
@@ -602,7 +610,7 @@ function _openFromQuery() {
   router.replace({ path: "/expenses" });
 }
 
-onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); _openFromQuery(); });
+onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); fetchExpenseCategories(); _openFromQuery(); });
 </script>
 
 <style scoped>

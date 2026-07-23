@@ -25,6 +25,7 @@ export const NAV = [
 
   { section: "Purchases" },
   { path: "/expenses",                      label: "Expenses",         icon: "expense",    module: "bills"      },
+  { path: "/expenses/categories",           label: "Expense Categories", icon: "folder",   module: "bills"      },
   { path: "/purchase-orders",               label: "Purchase Orders",  icon: "purchase",   module: "bills"      },
   { path: "/purchases",                     label: "Bills",            icon: "fileplus",   module: "bills"      },
   { path: "/recurring-bills",               label: "Recurring Bills",  icon: "recurring",  module: "bills"      },

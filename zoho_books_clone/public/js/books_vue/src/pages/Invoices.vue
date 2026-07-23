@@ -1968,20 +1968,31 @@ async function downloadInvoicePdf(mode = 'pdf') {
     win.document.close();
     setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
   } else {
-    // Download as PDF via browser's print-to-PDF using a hidden iframe
-    const blob = new Blob([html], { type: 'text/html' });
-    const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, '_blank');
-    if (!win) { toast('Pop-up blocked — allow pop-ups to download', 'error'); URL.revokeObjectURL(objectUrl); return; }
-    win.addEventListener('load', () => {
-      try {
-        // Inject a filename hint and trigger print-to-PDF
-        win.document.title = `${inv.name}.pdf`;
-        win.focus();
-        win.print();
-      } catch {}
+    // Render to a real PDF server-side (wkhtmltopdf) instead of using the
+    // browser's print-to-PDF dialog — that dialog's own Margins/Headers
+    // settings otherwise silently override the template's CSS, causing
+    // inconsistent page margins and stray browser chrome in the output.
+    try {
+      const csrf = window.frappe?.csrf_token || "";
+      const res = await fetch('/api/method/zoho_books_clone.api.docs.render_pdf_from_html', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
+        credentials: 'same-origin',
+        body: new URLSearchParams({ pdf_html: html, filename: `${inv.name}.pdf` }),
+      });
+      if (!res.ok) throw new Error('PDF generation failed');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${inv.name}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-    });
+    } catch (e) {
+      toast('Failed to generate PDF', 'error');
+    }
   }
 }
 

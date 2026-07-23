@@ -210,7 +210,18 @@ const navGroups = computed(() => {
 function isActive(path) {
   if (!routeReady.value) return false;
   if (path === "/") return route.path === "/";
-  return route.path === path || route.path.startsWith(path + "/");
+  if (route.path === path) return true;
+  if (!route.path.startsWith(path + "/")) return false;
+  // Prefix match (e.g. an unlisted detail route like /invoices/INV-0001
+  // under the "/invoices" nav item). Only stay active here if no OTHER
+  // nav item is a more specific match for the current route — otherwise
+  // a parent path like "/expenses" would light up alongside its own
+  // sibling item "/expenses/categories".
+  const betterMatch = NAV.some((i) => {
+    if (!i.path || i.path === path || i.path.length <= path.length) return false;
+    return route.path === i.path || route.path.startsWith(i.path + "/");
+  });
+  return !betterMatch;
 }
 
 function goTo(item) {

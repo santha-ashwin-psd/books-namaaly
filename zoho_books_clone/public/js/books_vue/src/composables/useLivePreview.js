@@ -58,9 +58,26 @@ function _esc(s) {
   return String(s ?? "").replace(/[&<>"']/g,
     c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function _currencySymbol(currency) {
+  return (currency && currency !== "INR") ? currency : "₹";
+}
 function _fmt(v, currency) {
   const symbol = (currency && currency !== "INR") ? (currency + " ") : "₹";
   return symbol + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Plain number, no currency symbol — used inside the Classic template's item
+// table / totals / HSN summary, where the currency is already indicated once
+// in the column header ("Rate (₹)", "Amount (₹)", …), matching the reference
+// invoice which never repeats the symbol on data rows.
+function _fmtNum(v) {
+  return Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Reference invoice shows dates as "13-Jul-2026" (full 4-digit year).
+function _fmtDocDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d);
+  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-");
 }
 function _numberToWords(n) {
   n = Math.round(Number(n) || 0);
@@ -89,6 +106,32 @@ function _numberToWords(n) {
 }
 function _today() {
   return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+// Terms & Conditions is shown as a bulleted list on print, one <li> per line.
+function _bulletList(text) {
+  const lines = String(text || "").split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  return `<ul>${lines.map(l => `<li>${_esc(l)}</li>`).join("")}</ul>`;
+}
+// Group line items by HSN/SAC code for the print footer's tax-rate summary
+// table (HSN/SAC Code | Taxable | CGST% | CGST₹ | SGST% | SGST₹, or IGST
+// variant). Amounts are derived from each item's taxable_amount × rate,
+// since that's what the per-item CGST/SGST/IGST % columns are computed from.
+function _hsnSummary(items) {
+  const map = new Map();
+  (items || []).forEach(it => {
+    const hsn = it.gst_hsn_code || it.hsn_code || "";
+    if (!hsn) return;
+    const taxable = Number(it.taxable_amount != null ? it.taxable_amount : it.amount) || 0;
+    const cgstRate = Number(it.cgst_rate || 0), sgstRate = Number(it.sgst_rate || 0), igstRate = Number(it.igst_rate || 0);
+    const row = map.get(hsn) || { hsn, taxable: 0, cgstRate, sgstRate, igstRate, cgstAmt: 0, sgstAmt: 0, igstAmt: 0 };
+    row.taxable += taxable;
+    row.cgstAmt += taxable * cgstRate / 100;
+    row.sgstAmt += taxable * sgstRate / 100;
+    row.igstAmt += taxable * igstRate / 100;
+    map.set(hsn, row);
+  });
+  return [...map.values()];
 }
 function _logoSrc(url) {
   if (!url) return "";
@@ -147,96 +190,119 @@ function _renderClassic(doc, cfg) {
       ${cfg.includeHsn ? `<td class="c nw">${_esc(it.gst_hsn_code || it.hsn_code || "—")}</td>` : ""}
       <td class="r nw">${Number(it.qty || 0)}</td>
       <td class="c nw">${_esc(it.uom || "Nos")}</td>
-      <td class="r nw">${_fmt(it.rate, currency)}</td>
-      ${cfg.includeDiscount ? `<td class="c nw">${Number(it.discount_percentage || 0)}%</td>` : ""}
-      ${includeGst ? `<td class="r nw">${_fmt(it.taxable_amount != null ? it.taxable_amount : it.amount, currency)}</td>` : ""}
+      <td class="r nw">${_fmtNum(it.rate)}</td>
+      ${cfg.includeDiscount ? `<td class="c nw">${Number(it.discount_percentage || 0).toFixed(2)}%</td>` : ""}
+      ${includeGst ? `<td class="r nw">${_fmtNum(it.taxable_amount != null ? it.taxable_amount : it.amount)}</td>` : ""}
       ${includeGst ? (hasIgst ? `<td class="c nw">${Number(it.igst_rate || 0).toFixed(2)}%</td>` : `<td class="c nw">${Number(it.cgst_rate || 0).toFixed(2)}%</td><td class="c nw">${Number(it.sgst_rate || 0).toFixed(2)}%</td>`) : ""}
-      ${includeMrp ? `<td class="r nw">${it.mrp ? _fmt(it.mrp, currency) : "—"}</td>` : ""}
-      <td class="r b nw">${_fmt(it.amount, currency)}</td>
+      ${includeMrp ? `<td class="r nw">${it.mrp ? _fmtNum(it.mrp) : "—"}</td>` : ""}
+      <td class="r b nw">${_fmtNum(it.amount)}</td>
     </tr>`).join("");
   const taxRows = (doc.taxes || []).map(t => {
-    const label = t.description || t.account_head || "";
-    const hasRate = t.rate && !/%/.test(label);
-    return `<tr><td class="tl">${_esc(label)}${hasRate ? ` (${Number(t.rate)}%)` : ""}</td><td class="r">${_fmt(t.tax_amount || 0, currency)}</td></tr>`;
+    const label = (t.description || t.account_head || "Tax").replace(/[@(]?\s*[\d.]+\s*%\)?/g, "").replace(/\(\s*\)/g, "").trim();
+    return `<div class="row"><span>Add ${_esc(label)} (₹)</span><span>${_fmtNum(t.tax_amount || 0)}</span></div>`;
   }).join("");
   const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0) + (includeMrp ? 1 : 0) + (includeGst ? (hasIgst ? 2 : 3) : 0);
+  const hsnRows = includeGst ? _hsnSummary(doc.items) : [];
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <title>${_esc(cfg.title)} — ${_esc(doc.name)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;background:#fff;font-size:12.5px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:12.5px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .sheet{max-width:980px;margin:0 auto;padding:40px}
-  .frame{border:1.5px solid #1c1c1c;padding:28px 30px}
+  .frame{padding:28px 30px}
   /* Letterhead */
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;font-family:Arial,Helvetica,sans-serif}
-  .hdr-l .co{font-size:29px;font-weight:700;color:#111;letter-spacing:-.01em;font-family:Arial,Helvetica,sans-serif}
+  .hdr-l .co{font-size:32px;font-weight:700;color:#111;letter-spacing:-.01em;font-family:Arial,Helvetica,sans-serif}
   .hdr-l .addr{font-size:11px;font-weight:600;color:#111;margin-top:8px;line-height:1.55}
-  .hdr-l .contact{margin-top:8px;font-size:11px;color:#111;display:flex;flex-direction:row;flex-wrap:wrap;gap:16px}
+  .hdr-l .contact{margin-top:8px;font-size:11px;color:${brand};display:flex;flex-direction:row;flex-wrap:wrap;gap:16px}
   .hdr-l .contact .ci{display:flex;align-items:center;gap:6px}
   .hdr-l .contact svg{width:12px;height:12px;flex-shrink:0}
   .hdr-r{flex-shrink:0}
   .hdr-r img{max-height:110px;max-width:170px;object-fit:contain;display:block}
-  .title{text-align:center;font-size:19px;font-weight:800;letter-spacing:.05em;color:#111;margin:28px 0 20px;font-family:Arial,Helvetica,sans-serif}
-  .hdr-bot{display:flex;justify-content:space-between;align-items:flex-end;font-family:Arial,sans-serif;font-size:11.5px;color:#111;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #ddd}
+  .title{text-align:center;font-size:20px;font-weight:800;letter-spacing:.05em;color:#111;margin:28px 0 20px;font-family:Arial,Helvetica,sans-serif}
+  .hdr-bot{display:flex;justify-content:space-between;align-items:flex-end;font-family:Arial,sans-serif;font-size:11.5px;color:#111;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid #1c1c1c}
   .hdr-bot .hb-r{text-align:right}
   .hdr-bot .hb-r div+div{margin-top:3px}
   .hdr-bot b{font-weight:700}
+  .hdr-bot .inv-no{font-size:20px;font-weight:800;color:#111}
+  .hdr-bot .inv-no b{font-size:11.5px;font-weight:700}
   /* Parties row */
   .pr{display:flex;justify-content:space-between;gap:24px;margin-bottom:6px;font-family:Arial,sans-serif}
   .pr .blk{font-size:12px}
   .pr .blk.r{text-align:right}
   .pr .l{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${brand};margin-bottom:3px}
-  .pr .nm{font-weight:700;font-size:13.5px;color:#111;font-family:Georgia,serif}
+  .pr .nm{font-weight:700;font-size:13.5px;color:#111;font-family:Arial,Helvetica,sans-serif}
   .pr .sub{color:#555;font-size:11px;margin-top:2px;white-space:pre-line;line-height:1.45}
   .pr .kv{margin-top:6px}
-  hr.sep{border:none;border-top:1px solid #ddd;margin:16px 0}
+  hr.sep{border:none;border-top:1px solid #1c1c1c;margin:16px 0}
   /* Billing / Shipping address table */
-  .addr-table{display:flex;border:1.5px solid #1c1c1c;margin:10px 0 16px;font-family:Arial,sans-serif}
-  .addr-col{flex:1;min-width:0}
-  .addr-col+.addr-col{border-left:1.5px solid #1c1c1c}
-  .addr-h{font-size:12px;font-weight:700;color:#111;padding:8px 12px;border-bottom:1.5px solid #1c1c1c}
+  .addr-table{display:flex;width:100%;border:1.3px solid #1c1c1c;margin:10px 0 16px;font-family:Arial,sans-serif}
+  .addr-col{flex:1;min-width:0;width:50%}
+  .addr-col+.addr-col{border-left:1.3px solid #1c1c1c}
+  .addr-h{font-size:12px;font-weight:700;color:#111;padding:8px 12px;border-bottom:1.3px solid #1c1c1c}
   .addr-body{padding:10px 12px}
   .addr-ct{font-size:12px;color:#111;margin-bottom:2px}
   .addr-nm{font-size:12px;font-weight:700;color:#111;margin-bottom:4px}
   .addr-ln{font-size:12px;color:#111;line-height:1.6}
   /* Table */
-  table.it{width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;margin-top:4px}
-  table.it th{background:#fff;color:#111;padding:9px 9px;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;text-align:left;border:1px solid #1c1c1c;white-space:nowrap}
+  table.it{width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;margin-top:4px;border:1.3px solid #1c1c1c}
+  table.it th{background:#fff;color:#111;padding:8px 9px;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;text-align:left;border:none;border-bottom:1.5px solid #1c1c1c;border-right:1px solid #1c1c1c;white-space:nowrap}
   table.it th.r{text-align:right}table.it th.c{text-align:center}
-  table.it td{padding:11px 9px;border:1px solid #1c1c1c;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
+  table.it th:last-child{border-right:none}
+  table.it td{padding:6px 9px;font-size:11.5px;line-height:1.35;border:none;border-bottom:1px solid #1c1c1c;border-right:1px solid #1c1c1c;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}
+  table.it td:last-child{border-right:none}
+  table.it tr:last-child td{border-bottom:none}
   table.it td.nw{white-space:nowrap}
-  .it .inm{font-weight:700;color:#1a1a1a;font-family:Georgia,serif}
-  .it .ids{font-size:10.5px;color:#666;margin-top:2px}
+  .it .inm{font-weight:700;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;line-height:1.3}
+  .it .ids{font-size:10px;color:#666;margin-top:1px;line-height:1.3}
   .it .r{text-align:right}.it .c{text-align:center}.it .b{font-weight:700}
-  /* Totals */
-  .tot-wrap{display:flex;justify-content:space-between;gap:20px;margin-top:16px;align-items:flex-start}
-  .tot-left{flex:1;min-width:0;display:flex;gap:20px;align-items:flex-start}
-  .tot-left>div{flex:1;min-width:0}
-  .tt{width:300px;flex-shrink:0;border:1px solid #ccc;font-family:Arial,sans-serif}
-  .tt tr td{padding:7px 14px;font-size:12.5px;border-bottom:1px solid #eee}
-  .tt .tl{color:#555}.tt .r{text-align:right}
-  .tt .grand td{background:${brand};color:#fff;font-weight:700;font-size:14px;border:none}
-  /* Notes / sign */
-  .notes{margin-bottom:12px;font-family:Arial,sans-serif;font-size:11.5px;color:#444;line-height:1.6}
-  .notes .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
-  .words{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;font-weight:700;line-height:1.5}
-  .words .h{font-weight:700;color:${brand};font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;font-family:Arial,sans-serif}
-  .bank{font-family:Arial,sans-serif;font-size:11.5px;color:#333;line-height:1.65;margin-bottom:12px}
-  .bank .h{font-weight:700;color:#111;font-size:12px;margin-bottom:4px}
-  .bank b{font-weight:700;color:#111}
-  .sig{display:flex;justify-content:space-between;gap:40px;margin-top:40px;font-family:Arial,sans-serif}
-  .sig div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#777;text-align:center}
-  .ft{text-align:center;margin-top:18px;font-size:9.5px;color:#999;font-family:Arial,sans-serif;font-style:italic}
-  @media print{.sheet{padding:0;max-width:none}}
+  /* Bottom section: Bank / Amount-in-Words / Totals, Terms & Conditions, and
+     the signature strip are all rows of ONE continuous bordered frame,
+     matching the reference invoice (not separate boxes with gaps). */
+  .bottom-frame{margin-top:16px;border:1.3px solid #1c1c1c;font-family:Arial,sans-serif}
+  .bf-row{display:flex}
+  .bf-row+.bf-row{border-top:1.3px solid #1c1c1c}
+  .bf-cell{flex:1;min-width:0;padding:10px 14px;font-size:11.5px;color:#333;line-height:1.7}
+  .bf-cell+.bf-cell{border-left:1.3px solid #1c1c1c}
+  .bf-cell .h{font-weight:700;color:#111;font-size:12px;margin-bottom:5px}
+  .bf-cell .val{font-weight:700;color:#111;font-size:12px;line-height:1.5}
+  .bf-cell ul{margin:0;padding-left:18px}
+  .bf-cell li{margin:0 0 2px}
+  .bf-cell-totals{padding:0}
+  .tot-figs{display:table;width:100%;border-collapse:collapse}
+  .tot-figs .row{display:table-row}
+  .tot-figs .row>span{display:table-cell;padding:6px 8px;font-size:11px;color:#333;border-bottom:1px solid #1c1c1c;vertical-align:middle;white-space:nowrap}
+  .tot-figs .row>span:first-child{border-right:1px solid #1c1c1c}
+  .tot-figs .row>span:last-child{text-align:right;color:#111;width:1%}
+  .tot-figs .row:last-child>span{border-bottom:none}
+  .tot-figs .row.grand>span{font-weight:700;color:#111;border-top:1.3px solid #1c1c1c;border-bottom:none;padding-top:9px}
+  .bf-row-sign .bf-cell{display:flex;align-items:center}
+  .sign-note-cell{flex:2.2;font-size:11px;color:#333}
+  .sign-qr-cell{flex:0 0 130px;justify-content:center}
+  .sign-qr-cell img{width:76px;height:76px;object-fit:contain}
+  .sign-for-cell{flex:1.4;flex-direction:column;align-items:flex-end;text-align:right;font-size:11.5px;color:#333;gap:22px}
+  .sign-for-cell b{font-weight:700;color:#111}
+  /* HSN/SAC tax-rate summary table — intentionally content-width (not
+     full-page), matching the reference invoice's compact tax summary. */
+  .hsn-tbl{margin-top:14px;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px}
+  .hsn-tbl th,.hsn-tbl td{border:1px solid #1c1c1c;padding:6px 10px}
+  .hsn-tbl th{background:#fff;font-weight:700;color:#111;text-align:left}
+  .hsn-tbl td.r{text-align:right}
+  /* Keep table rows and bottom blocks intact across a page break instead of
+     splitting mid-row (which otherwise duplicates a row's content across
+     two pages when printed). */
+  table.it tr{page-break-inside:avoid;break-inside:avoid}
+  .addr-table,.bf-row,.hsn-tbl{page-break-inside:avoid;break-inside:avoid}
+  @media print{.sheet{padding:0;max-width:none}@page{margin:22mm 15mm}}
 </style></head><body><div class="sheet"><div class="frame">
   <div class="hdr">
     <div class="hdr-l">
       <div class="co">${_esc(doc.company || cfg.companyName || "")}</div>
       ${_state.companyAddress ? `<div class="addr">${_esc(_state.companyAddress)}${(_state.companyCity || _state.companyPincode) ? `,<br/>${_esc(_state.companyCity || "")}${_state.companyPincode ? ", " + _esc(_state.companyPincode) : ""}` : ""}</div>` : ""}
       ${(_state.companyPhone || _state.companyEmail) ? `<div class="contact">
-        ${_state.companyPhone ? `<span class="ci"><svg viewBox="0 0 24 24" fill="#111"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.24.2 2.45.57 3.57a1 1 0 0 1-.25 1.02z"/></svg>${_esc(_state.companyPhone)}</span>` : ""}
-        ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="#111"><path d="M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zm2.4.2 7.1 6.2a.8.8 0 0 0 1 0l7.1-6.2a.6.6 0 0 0-.4-1H4.8a.6.6 0 0 0-.4 1"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
+        ${_state.companyPhone ? `<span class="ci"><svg viewBox="0 0 24 24" fill="${_esc(brand)}"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.24.2 2.45.57 3.57a1 1 0 0 1-.25 1.02z"/></svg>${_esc(_state.companyPhone)}</span>` : ""}
+        ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="${_esc(brand)}"><path d="M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zm2.4.2 7.1 6.2a.8.8 0 0 0 1 0l7.1-6.2a.6.6 0 0 0-.4-1H4.8a.6.6 0 0 0-.4 1"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
       </div>` : ""}
     </div>
     ${logo ? `<div class="hdr-r"><img src="${_esc(logo)}"/></div>` : ""}
@@ -245,8 +311,8 @@ function _renderClassic(doc, cfg) {
   <div class="hdr-bot" style="border-bottom:none">
     <div class="hb-l">${(doc.company_gstin || doc.gstin || _state.companyGstin) ? `<b>GSTIN :</b> ${_esc(doc.company_gstin || doc.gstin || _state.companyGstin)}` : ""}</div>
     <div class="hb-r">
-      <div><b>${_esc(cfg.title)} No. :</b> ${_esc(doc.name || "")}</div>
-      <div><b>Date :</b> ${_esc(docDate)}</div>
+      <div class="inv-no"><b>${_esc(cfg.title ? cfg.title.charAt(0) + cfg.title.slice(1).toLowerCase() : "")} No. :</b> ${_esc(doc.name || "")}</div>
+      <div><b>Date :</b> ${_esc(_fmtDocDate(docDate))}</div>
     </div>
   </div>
   ${(() => {
@@ -273,43 +339,67 @@ function _renderClassic(doc, cfg) {
   })()}
   <table class="it">
     <thead><tr>
-      <th class="c" style="width:30px">#</th><th>Item &amp; Description</th>
-      ${cfg.includeHsn ? `<th class="c" style="width:78px">HSN/SAC</th>` : ""}
-      <th class="r" style="width:44px">Qty</th><th class="c" style="width:50px">UOM</th>
-      <th class="r" style="width:82px">Rate</th>
-      ${cfg.includeDiscount ? `<th class="c" style="width:56px">Disc</th>` : ""}
-      ${includeGst ? `<th class="r" style="width:82px">Taxable</th>` : ""}
+      <th class="c" style="width:30px">No.</th><th>Item &amp; Description</th>
+      ${cfg.includeHsn ? `<th class="c" style="width:78px">HSN / SAC</th>` : ""}
+      <th class="r" style="width:44px">Qty</th><th class="c" style="width:50px">Unit</th>
+      <th class="r" style="width:82px">Rate (${_esc(_currencySymbol(currency))})</th>
+      ${cfg.includeDiscount ? `<th class="c" style="width:64px">Discount</th>` : ""}
+      ${includeGst ? `<th class="r" style="width:88px">Taxable (${_esc(_currencySymbol(currency))})</th>` : ""}
       ${includeGst ? (hasIgst ? `<th class="c" style="width:58px">IGST</th>` : `<th class="c" style="width:58px">CGST</th><th class="c" style="width:58px">SGST</th>`) : ""}
-      ${includeMrp ? `<th class="r" style="width:76px">MRP</th>` : ""}
-      <th class="r" style="width:96px">Amount</th>
+      ${includeMrp ? `<th class="r" style="width:82px">MRP (${_esc(_currencySymbol(currency))})</th>` : ""}
+      <th class="r" style="width:104px">Amount (${_esc(_currencySymbol(currency))})</th>
     </tr></thead>
     <tbody>${items || `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">No items</td></tr>`}</tbody>
   </table>
-  <div class="tot-wrap">
-    <div class="tot-left">
-      <div>
-        ${doc.terms || doc.customer_note ? `<div class="notes"><div class="h">${doc.customer_note ? "Note" : "Terms &amp; Conditions"}</div>${_esc(doc.customer_note || doc.terms)}</div>` : ""}
-        ${doc.remarks ? `<div class="notes"><div class="h">Remarks</div>${_esc(doc.remarks)}</div>` : ""}
-        ${_state.bankName || _state.bankAccountNo ? `<div class="bank">
-          <div class="h">Bank Details :</div>
-          ${_state.bankName ? `Bank Name : ${_esc(_state.bankName)}<br/>` : ""}
-          ${_state.bankBranch ? `Branch : ${_esc(_state.bankBranch)}<br/>` : ""}
-          ${_state.bankAccountNo ? `Account No. : ${_esc(_state.bankAccountNo)}<br/>` : ""}
-          ${_state.bankIfsc ? `IFSC : ${_esc(_state.bankIfsc)}` : ""}
-        </div>` : ""}
-      </div>
-      <div class="words"><div class="h">Total Amount in Words</div>${_esc(amountWords)}</div>
+  ${(() => {
+    const notesHtml = [
+      (doc.terms || doc.customer_note) ? `<div><div class="h">${doc.customer_note ? "Note :" : "Terms &amp; Conditions :"}</div>${_bulletList(doc.customer_note || doc.terms)}</div>` : "",
+      doc.remarks ? `<div style="margin-top:${(doc.terms || doc.customer_note) ? "10px" : "0"}"><div class="h">Remarks :</div>${_bulletList(doc.remarks)}</div>` : "",
+    ].filter(Boolean).join("");
+    return `<div class="bottom-frame">
+  <div class="bf-row">
+    <div class="bf-cell">
+      ${_state.bankName || _state.bankAccountNo ? `
+        <div class="h">Bank Details :</div>
+        ${_state.bankName ? `Bank Name: ${_esc(_state.bankName)}<br/>` : ""}
+        ${_state.bankBranch ? `Branch: ${_esc(_state.bankBranch)}<br/>` : ""}
+        ${_state.bankAccountNo ? `Account No.: ${_esc(_state.bankAccountNo)}<br/>` : ""}
+        ${_state.bankIfsc ? `IFSC: ${_esc(_state.bankIfsc)}` : ""}
+      ` : ""}
     </div>
-    <table class="tt">
-      <tr><td class="tl">Total Before Tax</td><td class="r">${_fmt(netTotal, currency)}</td></tr>
-      ${taxRows}
-      ${doc.discount_amount ? `<tr><td class="tl" style="color:#b91c1c">Discount</td><td class="r" style="color:#b91c1c">− ${_fmt(doc.discount_amount, currency)}</td></tr>` : ""}
-      ${roundOff ? `<tr><td class="tl">Round Off</td><td class="r">${roundOff > 0 ? "" : "− "}${_fmt(Math.abs(roundOff), currency)}</td></tr>` : ""}
-      <tr class="grand"><td>Grand Total</td><td class="r">${_fmt(doc.grand_total, currency)}</td></tr>
-    </table>
+    <div class="bf-cell">
+      <div class="h">Total Invoice Amount in Words :</div>
+      <div class="val">${_esc(amountWords)}</div>
+    </div>
+    <div class="bf-cell bf-cell-totals">
+      <div class="tot-figs">
+        <div class="row"><span>Total Amount before Tax (₹)</span><span>${_fmtNum(netTotal)}</span></div>
+        ${taxRows}
+        ${doc.discount_amount ? `<div class="row"><span style="color:#b91c1c">Discount (₹)</span><span style="color:#b91c1c">− ${_fmtNum(doc.discount_amount)}</span></div>` : ""}
+        ${roundOff ? `<div class="row"><span>Round Off (₹)</span><span>${roundOff > 0 ? "" : "− "}${_fmtNum(Math.abs(roundOff))}</span></div>` : ""}
+        <div class="row grand"><span>Grand Total (₹)</span><span>${_fmtNum(doc.grand_total)}</span></div>
+      </div>
+    </div>
   </div>
-  <div class="sig"><div>Prepared By</div><div>Authorised Signatory</div><div>Receiver's Signature</div></div>
-  <div class="ft">This is a computer-generated document. · ${_esc(doc.company || "")} · ${_esc(doc.name)} · Printed ${_today()}</div>
+  ${notesHtml ? `<div class="bf-row"><div class="bf-cell">${notesHtml}</div></div>` : ""}
+  <div class="bf-row bf-row-sign">
+    <div class="bf-cell sign-note-cell">This is a computer-generated invoice. E. &amp; O. E.</div>
+    ${doc.qr_image ? `<div class="bf-cell sign-qr-cell"><img src="${_esc(doc.qr_image)}"/></div>` : ""}
+    <div class="bf-cell sign-for-cell">
+      <div>For, ${_esc(doc.company || cfg.companyName || "")}</div>
+      <b>Authorised Signatory</b>
+    </div>
+  </div>
+</div>`;
+  })()}
+  ${hsnRows.length ? `<table class="hsn-tbl"><thead><tr>
+    <th>HSN/SAC Code</th><th class="r">Taxable (₹)</th>
+    ${hasIgst ? `<th class="r">IGST %</th><th class="r">IGST (₹)</th>` : `<th class="r">CGST %</th><th class="r">CGST (₹)</th><th class="r">SGST %</th><th class="r">SGST (₹)</th>`}
+  </tr></thead><tbody>
+    ${hsnRows.map(r => `<tr><td>${_esc(r.hsn)}</td><td class="r">${_fmtNum(r.taxable)}</td>
+      ${hasIgst ? `<td class="r">${r.igstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.igstAmt)}</td>` : `<td class="r">${r.cgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.cgstAmt)}</td><td class="r">${r.sgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.sgstAmt)}</td>`}
+    </tr>`).join("")}
+  </tbody></table>` : ""}
 </div></div></body></html>`;
 }
 
