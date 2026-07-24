@@ -320,5 +320,27 @@
     "permlevel": 0,
     "bold": 0,
     "description": "If checked, stock of this item is placed in quarantine warehouse pending QC clearance"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Stock Entry-custom_qc_system_generated",
+    "dt": "Stock Entry",
+    "fieldname": "custom_qc_system_generated",
+    "fieldtype": "Check",
+    "label": "QC System-Generated",
+    "insert_after": "remarks",
+    "default": "0",
+    "in_list_view": 0,
+    "in_standard_filter": 0,
+    "search_index": 0,
+    "no_copy": 1,
+    "permlevel": 0,
+    "unique": 0,
+    "bold": 0,
+    "hidden": 0,
+    "read_only": 1,
+    "print_hide": 1,
+    "report_hide": 0,
+    "description": "Phase 4: set automatically on Stock Entries the QC quarantine workflow creates itself (quarantine placement, release-on-pass, scrap write-off, return-to-supplier). Used to exempt these from the guard that otherwise blocks any Stock Entry sourcing stock out of a quarantine warehouse -- quarantine stock may only leave via this system-generated path, never a manually authored entry."
   }
 ]

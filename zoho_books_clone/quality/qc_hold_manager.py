@@ -2,9 +2,51 @@ from __future__ import annotations
 """
 QC Hold Manager — zoho_books_clone.quality.qc_hold_manager
 ===========================================================
-Manages the quarantine / QC hold lifecycle for items that fail QC Inspection.
+Manages the quarantine / QC hold lifecycle for items that fail QC Inspection,
+and (Phase 3) the release lifecycle for items that were pre-emptively
+quarantined at receipt and then pass.
 
-When a QC Inspection is submitted with status=Fail, this module:
+Two distinct quarantine paths now feed into this module:
+
+  A) Phase 2 pre-emptive quarantine: stock_link._maybe_route_to_quarantine()
+     routes a QC-flagged row straight into the company's quarantine
+     warehouse AT RECEIPT, before any inspection verdict exists. That
+     function stamps the row's QC Inspection with release_status=
+     "Not Released" and quarantine_warehouse at routing time, and
+     qc_engine.py's before_submit hook separately stamps target_warehouse
+     (the row's original, pre-quarantine intended destination) — both
+     BEFORE this module ever runs.
+
+  B) The legacy Fail-triggered path (place_on_hold, still used for
+     reference doctypes Phase 2 doesn't yet cover — Stock Entry
+     Manufacture, Delivery Note, Sales Invoice): stock sits in its normal
+     warehouse until a QC Inspection actually fails, at which point THIS
+     module moves it into quarantine for the first time.
+
+handle_qc_result (on_submit of QC Inspection) now branches three ways:
+  - status == "Pass": if path (A) applies (release_status == "Not
+    Released"), auto-creates a release Stock Entry moving stock from
+    quarantine_warehouse to target_warehouse (Phase 3's
+    _release_quarantine_on_pass), gated by
+    Books Company.qc_auto_release_on_pass (default on). A no-op for any
+    row that was never quarantined.
+  - status == "Fail", path (A) already applied: stock is already sitting in
+    quarantine — this just stamps the hold flags (qc_hold, hold_reason) so
+    it surfaces in get_quarantine_summary() like any other hold, WITHOUT
+    creating a second quarantine Stock Entry (which would otherwise try to
+    move stock from the quarantine warehouse to itself).
+  - status == "Fail", path (A) doesn't apply: unchanged legacy behaviour —
+    place_on_hold() creates the first quarantine Stock Entry from the
+    row's current (normal) warehouse.
+
+handle_qc_cancel (on_cancel) mirrors this: reverses whichever of the above
+actually happened — the release Stock Entry for a cancelled Pass, or the
+quarantine Stock Entry + hold flags for a cancelled Fail (only when this
+module was the one that moved the stock, i.e. path B; path A's stock
+placement is stock_link.py's concern, not reversed here).
+
+When a QC Inspection is submitted with status=Fail (path B only), this
+module:
   1. Flags the hold on the QC Inspection itself (qc_hold=1) — this is the
      authoritative, batch-scoped record of the hold (a QC Inspection is
      always scoped to one reference_name/item/batch_no).
@@ -34,6 +76,7 @@ Public surface
 handle_qc_result(doc, method=None)           -- on_submit hook on QC Inspection
 handle_qc_cancel(doc, method=None)           -- on_cancel hook on QC Inspection
 validate_approval_request(doc, method=None)  -- validate hook on QC Approval Request
+validate_quarantine_movement(doc, method=None) -- validate hook on Stock Entry (Phase 4 guard)
 place_on_hold(inspection_name, quarantine_warehouse, hold_reason) -> dict
 release_from_hold(inspection_name, disposition, target_warehouse)  -> dict
 get_quarantine_summary() -> list
@@ -75,6 +118,69 @@ def _get_company_qc_setting(company: str | None, fieldname: str):
         return None
 
 
+def _is_quarantine_warehouse(warehouse: str | None, company: str | None) -> bool:
+    """
+    True if `warehouse` is this company's configured RM or FG quarantine
+    warehouse. Used by the Phase 4 guard below -- deliberately checks both,
+    since either could legitimately hold stock a manual Stock Entry might
+    try to pull from.
+    """
+    if not warehouse or not company:
+        return False
+    rm_wh = _get_company_qc_setting(company, "default_quarantine_warehouse")
+    fg_wh = _get_company_qc_setting(company, "default_fg_quarantine_warehouse")
+    return warehouse in (rm_wh, fg_wh)
+
+
+# --- Phase 4: guard against manual stock movement out of quarantine ----------
+
+def validate_quarantine_movement(doc, method=None):
+    """
+    validate hook on Stock Entry.
+
+    Blocks any Stock Entry whose SOURCE warehouse (s_warehouse) on any row
+    is a configured quarantine warehouse (RM or FG) for that row's company,
+    unless this Stock Entry was created by the QC quarantine workflow itself
+    (custom_qc_system_generated=1 -- stamped by _create_release_stock_entry
+    and _create_scrap_write_off_entry, the only two functions in this app
+    ever allowed to move stock OUT of quarantine: Phase 3's auto-release on
+    Pass, and the Release to Stock / Scrap / Return to Supplier dispositions
+    from release_from_hold()).
+
+    Receiving INTO quarantine (t_warehouse) is unaffected here -- that's
+    exactly what Phase 2's routing and the legacy Fail-path quarantine
+    transfer are supposed to do, and both of those already go through
+    system-generated entries too, just never sourced FROM quarantine in the
+    first place so they'd never trip this check anyway.
+
+    A no-op on sites that haven't migrated the custom_qc_system_generated
+    fixture yet -- the guard simply isn't enforceable without it, and this
+    validate hook must never be the reason an otherwise-unrelated Stock
+    Entry fails to save on an older site.
+    """
+    if doc.get("custom_qc_system_generated"):
+        return
+    if not frappe.db.has_column("Stock Entry", "custom_qc_system_generated"):
+        return
+
+    company = getattr(doc, "company", None)
+    for row in (getattr(doc, "items", []) or []):
+        s_wh = getattr(row, "s_warehouse", None)
+        if not s_wh:
+            continue
+        if _is_quarantine_warehouse(s_wh, company):
+            frappe.throw(
+                _(
+                    "Row #{0}: {1} is a QC quarantine warehouse. Stock cannot be "
+                    "moved out of quarantine with a manually created Stock Entry "
+                    "-- it can only leave via the system's QC release process "
+                    "(auto-release on Pass, or Release to Stock / Scrap / Return "
+                    "to Supplier from the QC Hold screen)."
+                ).format(row.idx, frappe.bold(s_wh)),
+                title=_("Quarantine Movement Blocked"),
+            )
+
+
 # --- validate hook on QC Approval Request ------------------------------------
 
 def validate_approval_request(doc, method=None):
@@ -95,40 +201,79 @@ def validate_approval_request(doc, method=None):
 def handle_qc_result(doc, method=None):
     """
     Called on_submit of QC Inspection.
-    If status = Fail and a quarantine warehouse is configured in Books Settings,
-    automatically places the item on QC Hold and creates a QC Approval Request
-    so a QA Manager can formally approve/reject the disposition.
+
+    status == "Pass": delegates to _release_quarantine_on_pass (Phase 3) --
+    a no-op unless this row was pre-emptively quarantined at receipt
+    (Phase 2).
+
+    status == "Fail": if a quarantine warehouse is configured in Books
+    Company, automatically places the item on QC Hold and creates a QC
+    Approval Request so a QA Manager can formally approve/reject the
+    disposition. If this row was ALREADY quarantined at receipt (Phase 2),
+    skips re-creating a quarantine Stock Entry (stock hasn't gone
+    anywhere -- it's already sitting there) and just stamps the hold flags.
     """
+    if doc.status == "Pass":
+        _release_quarantine_on_pass(doc)
+        return
+
     if doc.status != "Fail":
         return
 
-    # Read default quarantine warehouse from the inspection's own company
-    # (Books Company), not the global Books Settings singleton — quarantine
-    # warehouses are company-specific in a multi-tenant setup.
-    company = _get_inspection_company(doc)
-    quarantine_wh = _get_company_qc_setting(company, "default_quarantine_warehouse")
+    # Phase 2/3: this row may already be sitting in quarantine (routed
+    # there at receipt by stock_link._maybe_route_to_quarantine, which
+    # stamps release_status="Not Released" + quarantine_warehouse at that
+    # time). If so, there is no stock movement left to do here -- creating
+    # another quarantine Stock Entry would just try to transfer stock from
+    # the quarantine warehouse to itself. Only the hold flags need setting.
+    already_quarantined = bool(
+        frappe.db.has_column("QC Inspection", "release_status")
+        and doc.get("release_status") == "Not Released"
+        and doc.get("quarantine_warehouse")
+    )
 
-    if not quarantine_wh:
-        # No quarantine warehouse configured — still stamp the hold on this
-        # inspection (the authoritative, batch-scoped record) and roll it
-        # up to the item-level convenience flag.
-        _stamp_qc_hold_fields(doc.name, "", "Auto-hold: no quarantine warehouse configured", on_hold=True)
+    if already_quarantined:
+        _stamp_qc_hold_fields(
+            doc.name, doc.get("quarantine_warehouse"),
+            f"Auto-hold: QC Inspection {doc.name} Failed (stock already in "
+            f"quarantine since receipt)",
+            on_hold=True,
+        )
         _flag_item_on_hold(doc.item)
         frappe.msgprint(
-            _("QC Inspection Failed for {0}. Item flagged for QC Hold. "
-              "Configure 'Default Quarantine Warehouse' in this company's "
-              "Books Company settings to enable automatic stock transfer to quarantine.").format(doc.item),
+            _("QC Inspection Failed for {0}. Stock remains in quarantine "
+              "({1}) pending disposition.").format(doc.item, doc.get("quarantine_warehouse")),
             indicator="red",
-            title=_("QC Failed — Item on Hold"),
+            title=_("QC Failed — Stock Held in Quarantine"),
         )
     else:
-        try:
-            place_on_hold(doc.name, quarantine_wh, f"Auto-hold: QC Inspection {doc.name} Failed")
-        except Exception:
-            frappe.log_error(
-                title=f"QC Hold auto-placement failed for {doc.name}",
-                message=frappe.get_traceback(),
+        # Read default quarantine warehouse from the inspection's own company
+        # (Books Company), not the global Books Settings singleton — quarantine
+        # warehouses are company-specific in a multi-tenant setup.
+        company = _get_inspection_company(doc)
+        quarantine_wh = _get_company_qc_setting(company, "default_quarantine_warehouse")
+
+        if not quarantine_wh:
+            # No quarantine warehouse configured — still stamp the hold on this
+            # inspection (the authoritative, batch-scoped record) and roll it
+            # up to the item-level convenience flag.
+            _stamp_qc_hold_fields(doc.name, "", "Auto-hold: no quarantine warehouse configured", on_hold=True)
+            _flag_item_on_hold(doc.item)
+            frappe.msgprint(
+                _("QC Inspection Failed for {0}. Item flagged for QC Hold. "
+                  "Configure 'Default Quarantine Warehouse' in this company's "
+                  "Books Company settings to enable automatic stock transfer to quarantine.").format(doc.item),
+                indicator="red",
+                title=_("QC Failed — Item on Hold"),
             )
+        else:
+            try:
+                place_on_hold(doc.name, quarantine_wh, f"Auto-hold: QC Inspection {doc.name} Failed")
+            except Exception:
+                frappe.log_error(
+                    title=f"QC Hold auto-placement failed for {doc.name}",
+                    message=frappe.get_traceback(),
+                )
 
     # Auto-create a QC Approval Request for the QA manager to action
     try:
@@ -145,15 +290,151 @@ def handle_qc_result(doc, method=None):
         )
 
 
+# --- Phase 3: auto-release from quarantine on Pass ----------------------------
+
+def _qc_auto_release_on_pass_enabled(company: str | None) -> bool:
+    """
+    Read qc_auto_release_on_pass from Books Company for the given company.
+    Default True (auto-release on Pass).
+
+    Books Settings is a single global doctype and is NOT company-enforced —
+    reading this from there would silently share one auto-release toggle
+    across every company in a multi-tenant setup, exactly the bug
+    _qc_hard_block_on already guards against for the hard-block flag. This
+    mirrors that same company-scoped read from Books Company instead.
+    """
+    if not company:
+        return True
+    try:
+        val = frappe.db.get_value("Books Company", company, "qc_auto_release_on_pass")
+        if val is None:
+            return True
+        return bool(int(val))
+    except Exception:
+        return True
+
+
+def _release_quarantine_on_pass(doc):
+    """
+    Called from handle_qc_result when status == "Pass".
+
+    A no-op unless this row was pre-emptively quarantined at receipt
+    (Phase 2's stock_link._maybe_route_to_quarantine, which stamps
+    release_status="Not Released" + quarantine_warehouse at routing time;
+    qc_engine.py's before_submit hook separately stamps target_warehouse
+    with the row's original intended destination). If those conditions
+    hold and Books Company.qc_auto_release_on_pass is on (the default),
+    creates a Material Transfer Stock Entry moving the passed qty from
+    quarantine_warehouse to target_warehouse and marks release_status
+    "Released". If the toggle is off, leaves release_status as
+    "Not Released" so the batch still shows up for manual release later
+    (e.g. via release_from_hold, or a future manual Pass-release action).
+    """
+    if not (frappe.db.has_column("QC Inspection", "release_status")
+            and frappe.db.has_column("QC Inspection", "target_warehouse")):
+        return  # Phase 0 schema not migrated on this site yet
+
+    if doc.get("release_status") != "Not Released":
+        return  # never quarantined at receipt, or already released -- nothing to do
+
+    quarantine_wh = doc.get("quarantine_warehouse")
+    target_wh     = doc.get("target_warehouse")
+    if not quarantine_wh or not target_wh:
+        frappe.log_error(
+            title=f"QC Pass auto-release skipped for {doc.name}",
+            message=(
+                f"release_status was 'Not Released' but quarantine_warehouse="
+                f"{quarantine_wh!r} / target_warehouse={target_wh!r} -- both "
+                f"are required to auto-release. Leaving stock in place; "
+                f"release manually once the correct warehouses are known."
+            ),
+        )
+        return
+
+    if not _qc_auto_release_on_pass_enabled(_get_inspection_company(doc)):
+        frappe.msgprint(
+            _("QC Inspection {0} Passed. Auto-release is turned off in Books "
+              "Settings -- stock remains in quarantine ({1}) until manually "
+              "released to {2}.").format(doc.name, quarantine_wh, target_wh),
+            indicator="blue",
+            title=_("QC Passed — Manual Release Required"),
+            alert=True,
+        )
+        return
+
+    # The passed qty is what should move -- accepted_qty is the inspector's
+    # accept/reject split, falling back to inspected_qty for older/edge-case
+    # inspections where accepted_qty was never populated.
+    qty = flt(doc.get("accepted_qty")) or flt(doc.get("inspected_qty"))
+    if not qty:
+        frappe.log_error(
+            title=f"QC Pass auto-release skipped for {doc.name}",
+            message="No accepted_qty or inspected_qty recorded -- nothing to release.",
+        )
+        return
+
+    try:
+        se_name = _create_release_stock_entry(
+            doc.item, quarantine_wh, target_wh, doc.name,
+            qty=qty, batch_no=doc.get("batch_no") or None,
+            note="Auto-release on QC Pass",
+        )
+    except Exception:
+        frappe.log_error(
+            title=f"QC Pass auto-release failed for {doc.name}",
+            message=frappe.get_traceback(),
+        )
+        return
+
+    if se_name:
+        update = {"release_status": "Released"}
+        if frappe.db.has_column("QC Inspection", "release_stock_entry"):
+            update["release_stock_entry"] = se_name
+        frappe.db.set_value("QC Inspection", doc.name, update, update_modified=False)
+        frappe.msgprint(
+            _("QC Inspection {0} Passed. Stock released from quarantine to {1} via {2}.").format(
+                doc.name, target_wh, frappe.bold(se_name)),
+            indicator="green",
+            title=_("QC Passed — Stock Released"),
+            alert=True,
+        )
+    else:
+        # _create_release_stock_entry already logged/msgprint'd its own
+        # failure reason (e.g. zero qty) -- release_status is deliberately
+        # left as "Not Released" so this batch keeps surfacing until
+        # someone releases it (manually, or via a retried auto-release).
+        frappe.msgprint(
+            _("QC Inspection {0} Passed, but the release Stock Entry could "
+              "not be created. Stock remains in quarantine ({1}) -- check "
+              "the error log and release manually.").format(doc.name, quarantine_wh),
+            indicator="orange",
+            title=_("QC Passed — Release Failed"),
+        )
+
+
 # --- on_cancel hook -------------------------------------------------------------
 
 def handle_qc_cancel(doc, method=None):
     """
-    Called on_cancel of QC Inspection. Reverses everything handle_qc_result /
-    place_on_hold set up for a Fail result:
+    Called on_cancel of QC Inspection.
+
+    status == "Pass": reverses whatever _release_quarantine_on_pass did --
+    cancels the release Stock Entry (if still submitted) and resets
+    release_status back to "Not Released", so the row is once again
+    correctly reflected as sitting in quarantine awaiting a fresh
+    inspection. A no-op if this Pass never triggered a release (item was
+    never quarantined, toggle was off, or the release failed).
+
+    status == "Fail": reverses everything handle_qc_result / place_on_hold
+    set up:
       1. Cancels the auto-created quarantine Stock Entry, if it's still
          submitted (only when this inspection's hold is still active —
          i.e. it was never released, so nothing has moved out of quarantine yet).
+         Skipped when this row was already quarantined at receipt (Phase 2) --
+         handle_qc_result never created a second quarantine Stock Entry for
+         that case, so there is nothing of THIS inspection's to reverse; the
+         stock's presence in quarantine is stock_link.py's concern, not this
+         inspection's.
       2. Clears this inspection's own qc_hold flag and recomputes the
          item-level roll-up flag (other batches of the same item may still
          legitimately be on hold).
@@ -163,8 +444,12 @@ def handle_qc_cancel(doc, method=None):
     cancellable even if some downstream cleanup fails; failures are logged
     instead of blocking the cancel.
     """
+    if doc.status == "Pass":
+        _reverse_release_on_pass_cancel(doc)
+        return
+
     if doc.status != "Fail":
-        return  # Nothing was auto-triggered for a Pass/Pending inspection
+        return  # Nothing was auto-triggered for a Pending inspection
 
     if doc.get("qc_hold"):
         se_name = doc.get("quarantine_stock_entry")
@@ -204,6 +489,45 @@ def handle_qc_cancel(doc, method=None):
           "approval request have been reversed.").format(doc.name),
         indicator="orange",
         title=_("QC Hold Reversed"),
+        alert=True,
+    )
+
+
+def _reverse_release_on_pass_cancel(doc):
+    """
+    on_cancel counterpart to _release_quarantine_on_pass. Cancels the
+    auto-created release Stock Entry (if still submitted) and resets
+    release_status back to "Not Released" -- stock is once again correctly
+    reflected as sitting in quarantine. A no-op if no release Stock Entry
+    was ever recorded on this inspection (row was never quarantined, the
+    auto-release toggle was off, or the release attempt failed).
+    """
+    se_name = doc.get("release_stock_entry") if frappe.db.has_column("QC Inspection", "release_stock_entry") else None
+    if not se_name:
+        return
+
+    try:
+        se = frappe.get_doc("Stock Entry", se_name)
+        if se.docstatus == 1:
+            se.cancel()
+    except Exception:
+        frappe.log_error(
+            title=f"Failed to reverse QC Pass release Stock Entry {se_name} on cancel of {doc.name}",
+            message=frappe.get_traceback(),
+        )
+        return
+
+    if frappe.db.has_column("QC Inspection", "release_status"):
+        frappe.db.set_value(
+            "QC Inspection", doc.name, "release_status", "Not Released",
+            update_modified=False,
+        )
+
+    frappe.msgprint(
+        _("QC Inspection {0} cancelled — its release Stock Entry has been "
+          "reversed and stock is back in quarantine.").format(doc.name),
+        indicator="orange",
+        title=_("QC Release Reversed"),
         alert=True,
     )
 
@@ -554,6 +878,12 @@ def _create_release_stock_entry(
         se.stock_entry_type = purpose
         se.purpose          = purpose
         se.remarks = f"QC Hold Release | QC Inspection: {inspection_name}" + (f" | {note}" if note else "")
+        # Phase 4: exempts this system-generated entry from the guard that
+        # otherwise blocks any Stock Entry sourcing stock out of a
+        # quarantine warehouse (validate_quarantine_movement below) -- this
+        # IS that system-generated release, so it must be allowed through.
+        if frappe.db.has_column("Stock Entry", "custom_qc_system_generated"):
+            se.custom_qc_system_generated = 1
         item_row = {
             "item_code":   item_code,
             "qty":         qty,
@@ -604,6 +934,9 @@ def _create_scrap_write_off_entry(
         se.remarks = f"QC Hold Release — Scrap write-off | QC Inspection: {inspection_name}" + (
             f" | {note}" if note else ""
         )
+        # Phase 4: see the identical note in _create_release_stock_entry above.
+        if frappe.db.has_column("Stock Entry", "custom_qc_system_generated"):
+            se.custom_qc_system_generated = 1
         item_row = {
             "item_code":   item_code,
             "qty":         qty,

@@ -194,6 +194,37 @@ def _is_return_doc(doc) -> bool:
     return bool(flt(getattr(doc, "is_return", 0)))
 
 
+def resolve_intended_warehouse(doc, row) -> str | None:
+    """
+    Phase 2 — public helper.
+
+    Resolve the warehouse a row would land in under NORMAL (non-QC-routed)
+    processing: row warehouse > doc.set_warehouse > item default_warehouse >
+    Books Settings default. This is the exact same chain _stock_rows() below
+    uses internally, exposed here so qc_engine.py's before_submit hooks
+    (auto_create_qc_for_purchase_receipt / auto_create_qc_for_purchase_invoice)
+    can stamp QC Inspection.target_warehouse with the row's ORIGINAL intended
+    destination before this module's on_submit hook overrides the row to
+    route into quarantine instead.
+
+    Ordering this depends on: qc_engine's before_submit hook runs, and thus
+    this function runs, before _stock_rows() ever executes for the same
+    document (before_submit fires before on_submit) — so at the time this is
+    called the row's warehouse fields are still exactly as the user entered
+    them, unaffected by any quarantine routing decision.
+    """
+    item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
+    if not item_code:
+        return None
+    item_default_warehouse = frappe.db.get_value("Item", item_code, "default_warehouse")
+    return (
+        getattr(row, "warehouse", None)
+        or getattr(doc, "set_warehouse", None)
+        or item_default_warehouse
+        or _default_warehouse(doc.company)
+    )
+
+
 def _apply_current_valuation_rate(rows: list[dict]) -> None:
     """
     Overwrite each row's basic_rate with the item's current moving-average
@@ -299,6 +330,20 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
             or item_meta.get("default_warehouse")
             or default_warehouse
         )
+        # Phase 2 — QC quarantine routing.
+        # Only applies to incoming rows (receipt, not a return/debit-note
+        # going back out) for items flagged inspection_required_before_purchase.
+        # Overrides ONLY this row's destination warehouse — every other
+        # (unflagged) row on the same document still lands wherever it was
+        # already headed above. qc_engine.py's before_submit hook (which
+        # runs before this on_submit hook per hooks.py doc_events ordering)
+        # has already created the QC Inspection and stamped its
+        # target_warehouse with this same `warehouse` value computed above,
+        # so Phase 3's release-on-pass has a record of where to send stock
+        # once QC clears it.
+        if direction == "receipt" and not is_return:
+            warehouse = _maybe_route_to_quarantine(row, item_code, doc, warehouse)
+
         if not warehouse:
             frappe.msgprint(
                 _(
@@ -328,6 +373,52 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
         })
 
     return rows
+
+
+def _maybe_route_to_quarantine(row, item_code: str, doc, intended_warehouse: str | None) -> str | None:
+    """
+    Phase 2 — QC quarantine routing for a single incoming row.
+
+    If Item.inspection_required_before_purchase is set AND the receiving
+    company has a Default Quarantine Warehouse (Raw Material) configured on
+    Books Company, this row's stock lands there instead of intended_warehouse
+    — untouched, unusable stock until an explicit release (Phase 3) moves it
+    to target_warehouse on Pass. If either condition isn't met, the row is
+    returned unchanged so existing behaviour (soft-warn only) is preserved
+    exactly — e.g. for companies that haven't configured a quarantine
+    warehouse yet, still a no-op precisely as it was before this phase.
+
+    Also flips the linked QC Inspection's release_status to "Not Released"
+    now that stock has actually been quarantined (as opposed to
+    target_warehouse, which qc_engine.py already stamped at before_submit
+    time regardless of whether routing ends up happening here).
+    """
+    if not frappe.db.get_value("Item", item_code, "inspection_required_before_purchase"):
+        return intended_warehouse
+
+    quarantine_wh = frappe.db.get_value(
+        "Books Company", doc.company, "default_quarantine_warehouse"
+    )
+    if not quarantine_wh:
+        return intended_warehouse
+
+    qci_name = getattr(row, "quality_inspection", None)
+    if qci_name:
+        # Phase 3 (release-on-pass) and the Fail path both need to know,
+        # without re-deriving it, exactly where this row's stock is sitting
+        # right now — stamp it here, once, at the moment routing actually
+        # happens (as opposed to target_warehouse, which qc_engine.py
+        # stamps unconditionally at before_submit time regardless of
+        # whether routing ends up occurring).
+        update = {}
+        if frappe.db.has_column("QC Inspection", "release_status"):
+            update["release_status"] = "Not Released"
+        if frappe.db.has_column("QC Inspection", "quarantine_warehouse"):
+            update["quarantine_warehouse"] = quarantine_wh
+        if update:
+            frappe.db.set_value("QC Inspection", qci_name, update, update_modified=False)
+
+    return quarantine_wh
 
 
 def _build_stock_entry(

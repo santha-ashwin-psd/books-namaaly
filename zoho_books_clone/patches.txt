@@ -32,3 +32,13 @@ zoho_books_clone.patches.v1_6.seed_expense_categories
 # release_status columns for existing records. Must run after schema sync
 # creates these new columns (pre_model_sync would hit "Unknown column").
 zoho_books_clone.patches.v1_7.backfill_qc_quarantine_fields
+
+# Phase 4 of the QC quarantine-workflow rework: flips existing companies'
+# Books Company.qc_hard_block from the old default (0 / soft-warn) to the
+# new default (1 / hard-block) -- a JSON default change alone only affects
+# companies created from now on, not rows that already have an explicit 0
+# stored. Must run after schema sync (post_model_sync is fine here since
+# the column already existed pre-rework; this could safely run
+# pre_model_sync too, but keeping it alongside the rest of this rework's
+# patches in post_model_sync for consistency).
+zoho_books_clone.patches.v1_8.flip_qc_hard_block_default

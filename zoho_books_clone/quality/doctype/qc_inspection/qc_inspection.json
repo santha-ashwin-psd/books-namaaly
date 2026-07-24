@@ -279,6 +279,16 @@
    "description": "N/A unless this row was ever quarantined. Not Released while qc_hold is active and no release Stock Entry has been posted yet. Released once stock has moved out of quarantine to target_warehouse (Pass) or to Rejected/Hold (Fail)."
   },
   {
+   "fieldname": "release_stock_entry",
+   "fieldtype": "Link",
+   "label": "Release Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "in_list_view": 0,
+   "no_copy": 1,
+   "description": "Phase 3: the Stock Entry that moved this row's stock out of quarantine to target_warehouse on Pass (or to Rejected/Hold on Fail). Reversed automatically if this QC Inspection is cancelled."
+  },
+  {
    "fieldname": "hold_reason",
    "fieldtype": "Small Text",
    "label": "Hold Reason",

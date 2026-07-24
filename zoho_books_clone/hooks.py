@@ -35,6 +35,7 @@ doc_events = {
     },
     "Purchase Invoice": {
         "validate":  f"{_CV}.on_validate",
+        "before_submit": f"{_QC}.auto_create_qc_for_purchase_invoice",
         "on_submit": [f"{_CV}.on_submit", f"{_QC}.check_qc_before_stock_link", f"{_SL}.on_purchase_invoice_submit"],
         "on_cancel": [f"{_CV}.on_cancel", f"{_SL}.on_purchase_invoice_cancel"], "before_delete": f"{_CV}.before_delete",
     },
@@ -51,7 +52,7 @@ doc_events = {
     "Purchase Order":   {"validate": f"{_CV}.on_validate", "on_submit": f"{_CV}.on_submit", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # Phase 2: Stock Entry and Bank Transaction wired to central_validator for period/lock checks.
     # Stock Entry also gets QC gate for Manufacture type entries.
-    "Stock Entry":      {"validate": f"{_CV}.on_validate", "before_submit": f"{_QC}.auto_create_qc_for_stock_entry", "on_submit": f"{_QC}.check_qc_before_stock_link", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
+    "Stock Entry":      {"validate": [f"{_CV}.on_validate", f"{_QH}.validate_quarantine_movement"], "before_submit": f"{_QC}.auto_create_qc_for_stock_entry", "on_submit": f"{_QC}.check_qc_before_stock_link", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     "Bank Transaction": {"validate": f"{_CV}.on_validate", "on_cancel": f"{_CV}.on_cancel", "before_delete": f"{_CV}.before_delete"},
     # QC Inspection — auto-handle hold/quarantine on submit
     "QC Inspection":    {"on_submit": f"{_QH}.handle_qc_result", "on_cancel": f"{_QH}.handle_qc_cancel"},

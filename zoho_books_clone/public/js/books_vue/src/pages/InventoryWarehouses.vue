@@ -336,6 +336,9 @@
             <button class="wh-action-btn" @click="loadStockForWarehouse(selectedChild?.name || selectedWH.name)">
               <span v-html="icon('refresh', 13)"></span>
             </button>
+            <button class="wh-action-btn" :disabled="!filteredStockItems.length" @click="exportStockExcel" title="Export to Excel">
+              <span v-html="icon('download', 13)"></span> Export
+            </button>
           </div>
         </div>
 
@@ -918,6 +921,56 @@ function fmtBatchDate(d) {
   if (!d) return "—";
   try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
   catch { return d; }
+}
+
+// Export the currently filtered stock list (respects item search box) to Excel.
+// Includes one row per batch for batch-tracked items, and a single row for others.
+function exportStockExcel() {
+  const rows = filteredStockItems.value;
+  if (!rows.length) return;
+
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+
+  const header = [
+    "Item Code", "Item Name", "Item Group", "UOM",
+    "Actual Qty", "Reserved Qty", "Ordered Qty", "Valuation Rate", "Stock Value",
+    "Status", "Batch No", "Batch Qty", "Manufacturing Date", "Expiry Date",
+  ];
+  const lines = [header.join(",")];
+
+  for (const r of rows) {
+    const baseVals = [
+      r.item_code, r.item_name, r.item_group || "", r.uom || "Nos",
+      flt(r.actual_qty).toFixed(2), flt(r.reserved_qty).toFixed(2), flt(r.ordered_qty).toFixed(2),
+      flt(r.valuation_rate).toFixed(2), flt(r.stock_value).toFixed(2),
+      r.below_reorder ? "Low" : "OK",
+    ];
+    const batches = r.has_batch_no ? batchesFor(r.item_code) : [];
+    if (batches.length) {
+      for (const b of batches) {
+        lines.push([...baseVals, b.batch_no || "", flt(b.qty).toFixed(2),
+          fmtBatchDate(b.manufacturing_date), fmtBatchDate(b.expiry_date)].map(esc).join(","));
+      }
+    } else {
+      lines.push([...baseVals, "", "", "", ""].map(esc).join(","));
+    }
+  }
+
+  const whName = (selectedChild.value?.warehouse_name || selectedChild.value?.name
+    || selectedWH.value?.warehouse_name || selectedWH.value?.name || "Warehouse");
+  const safeName = whName.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
+
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const el = document.createElement("a");
+  el.href = url;
+  el.download = `${safeName}_stock_items.csv`;
+  el.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${rows.length} item row(s) for ${whName}`, "success");
 }
 
 async function loadItems() {

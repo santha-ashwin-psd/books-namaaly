@@ -533,8 +533,15 @@
    "fieldname": "qc_hard_block",
    "fieldtype": "Check",
    "label": "Hard Block on QC Failure",
-   "description": "If checked, submission is blocked outright on QC failure instead of allowing an override.",
-   "default": "0"
+   "description": "Phase 4: if checked (default), submission of a QC-flagged row is blocked outright until QC clears -- no override. Uncheck to fall back to the old soft-warn behaviour (a dismissible confirm dialog).",
+   "default": "1"
+  },
+  {
+   "fieldname": "qc_auto_release_on_pass",
+   "fieldtype": "Check",
+   "label": "Auto-Release Stock from Quarantine on QC Pass",
+   "default": "1",
+   "description": "Phase 3: when a QC-quarantined row's inspection is submitted as Pass, automatically create the release Stock Entry moving stock from quarantine to its original target warehouse for this company. Turn off if you'd rather review and release each Pass manually (e.g. once a segregation-of-duties requirement is introduced later). Company-scoped, like Hard Block on QC Failure above -- Books Settings is a single global doctype and would otherwise share one toggle across every company in a multi-tenant setup."
   },
   {
    "fieldname": "qc_require_second_signoff",

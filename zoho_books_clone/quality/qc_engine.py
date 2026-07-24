@@ -20,6 +20,7 @@ Public surface
 --------------
 check_qc_before_stock_link(doc, method=None)              -- on_submit hook (QC gate)
 auto_create_qc_for_purchase_receipt(doc, method=None)     -- before_submit hook (PR)
+auto_create_qc_for_purchase_invoice(doc, method=None)      -- before_submit hook (PI)
 auto_create_qc_for_stock_entry(doc, method=None)          -- before_submit hook (SE Manufacture)
 auto_create_qc_for_delivery_note(doc, method=None)        -- before_submit hook (DN)
 auto_create_qc_for_sales_invoice(doc, method=None)        -- before_submit hook (SI)
@@ -223,6 +224,46 @@ def _auto_create_qc_for_rows(
     return created
 
 
+# --- Phase 2: stamp target_warehouse before quarantine routing overrides row -
+
+def _stamp_qc_target_warehouse(doc, row, qci_name):
+    """
+    Shared on_created callback for the Incoming (Purchase Receipt / Purchase
+    Invoice) auto-create hooks.
+
+    Stamps QC Inspection.target_warehouse with the row's ORIGINAL intended
+    destination warehouse — computed via stock_link.resolve_intended_warehouse
+    using the exact same resolution chain _stock_rows() uses — BEFORE
+    stock_link's on_submit hook (which runs after this before_submit hook per
+    hooks.py doc_events ordering) has a chance to override the row and route
+    it into quarantine instead.
+
+    Without this, once Phase 2's routing sends a flagged row's stock into
+    quarantine, there would be no record left anywhere of where that stock
+    was originally headed — Phase 3's release-on-pass would have nothing to
+    release TO.
+
+    Best-effort: never blocks QC Inspection creation if the stamp fails, and
+    is a no-op on databases that haven't migrated the target_warehouse
+    column yet (Phase 0's own guard, checked here again defensively).
+    """
+    if not frappe.db.has_column("QC Inspection", "target_warehouse"):
+        return
+    try:
+        from zoho_books_clone.inventory.stock_link import resolve_intended_warehouse
+        intended = resolve_intended_warehouse(doc, row)
+        if intended:
+            frappe.db.set_value(
+                "QC Inspection", qci_name, "target_warehouse", intended,
+                update_modified=False,
+            )
+    except Exception:
+        frappe.log_error(
+            title=f"Failed to stamp target_warehouse on {qci_name}",
+            message=frappe.get_traceback(),
+        )
+
+
 # --- Point 2: Auto-create QC for Purchase Receipt ----------------------------
 
 def auto_create_qc_for_purchase_receipt(doc, method=None):
@@ -231,6 +272,9 @@ def auto_create_qc_for_purchase_receipt(doc, method=None):
     For every item with inspection_required_before_purchase=1,
     automatically creates a draft QC Inspection (if not already existing).
     Inspector receives a blue notification with the inspection name(s).
+
+    Phase 2: also stamps target_warehouse (see _stamp_qc_target_warehouse)
+    so quarantine routing in stock_link.py has somewhere to release stock to.
     """
     _auto_create_qc_for_rows(
         doc,
@@ -239,16 +283,133 @@ def auto_create_qc_for_purchase_receipt(doc, method=None):
         success_message=_("QC Inspection(s) auto-created for {0} item(s): {1}. "
                            "Please complete readings before stock is accepted."),
         success_title=_("QC Inspections Created"),
+        on_created=lambda qci_name, row: _stamp_qc_target_warehouse(doc, row, qci_name),
+    )
+
+
+# --- Phase 1: Auto-create QC for Purchase Invoice -----------------------------
+
+def auto_create_qc_for_purchase_invoice(doc, method=None):
+    """
+    before_submit hook on Purchase Invoice.
+
+    Mirrors auto_create_qc_for_purchase_receipt above -- this app also moves
+    stock on Purchase Invoice submit (see stock_link.on_purchase_invoice_submit),
+    but until now Purchase Invoice was the only one of the five QC-gated
+    doctypes with no before_submit auto-create hook at all, so a flagged item
+    coming in through a Purchase Invoice (rather than a Purchase Receipt) got
+    no QC Inspection created and, in soft-warn mode (the default), sailed
+    straight into usable stock with nothing but a dismissible msgprint.
+
+    Phase 2: where the stock lands now DOES change for flagged items --
+    stock_link._stock_rows() routes the flagged row into quarantine instead
+    of its normally-resolved warehouse. This hook stamps target_warehouse
+    (see _stamp_qc_target_warehouse) with that normally-resolved warehouse
+    before that override happens, so it's on record for Phase 3's release.
+    """
+    _auto_create_qc_for_rows(
+        doc,
+        flag_field="inspection_required_before_purchase",
+        inspection_type="Incoming",
+        success_message=_("QC Inspection(s) auto-created for {0} item(s): {1}. "
+                           "Please complete readings before stock is accepted."),
+        success_title=_("QC Inspections Created"),
+        on_created=lambda qci_name, row: _stamp_qc_target_warehouse(doc, row, qci_name),
     )
 
 
 # --- Point 3: Auto-create QC for Finished Goods (Stock Entry Manufacture) ----
+
+def _resolve_fg_quarantine_warehouse(company: str | None) -> str | None:
+    """
+    Phase 5 — resolve the FG quarantine warehouse for a company, falling
+    back to the RM one if no FG-specific warehouse is configured. Mirrors
+    the fallback Books Company.default_fg_quarantine_warehouse's own field
+    description already promises.
+    """
+    if not company:
+        return None
+    fg_wh = frappe.db.get_value("Books Company", company, "default_fg_quarantine_warehouse")
+    if fg_wh:
+        return fg_wh
+    return frappe.db.get_value("Books Company", company, "default_quarantine_warehouse")
+
+
+def _stamp_and_route_fg_quarantine(doc, row, qci_name):
+    """
+    Phase 5 — on_created callback for Manufacturing finished-goods QC rows.
+
+    Unlike Purchase Receipt/Invoice (Phase 2), Stock Entry Manufacture IS
+    the physical stock movement itself — there's no separate stock_link.py
+    proxy document building a derived Stock Entry afterward. So quarantine
+    routing here means mutating THIS row's own t_warehouse directly,
+    in-memory, right now in before_submit — before Frappe's standard submit
+    flow builds the stock ledger entries from exactly these in-memory rows.
+
+    Order matters: target_warehouse must be captured from row.t_warehouse
+    BEFORE it gets overridden, same as Phase 2's before_submit stamping for
+    Purchase Receipt/Invoice.
+
+      1. Stamp QC Inspection.target_warehouse with the row's original,
+         intended FG destination (whatever the Work Order / user had set
+         t_warehouse to).
+      2. Resolve this company's FG quarantine warehouse (see
+         _resolve_fg_quarantine_warehouse).
+      3. If one is configured, override row.t_warehouse to it and stamp
+         quarantine_warehouse + release_status="Not Released" on the QC
+         Inspection — the exact same bookkeeping Phase 2's
+         stock_link._maybe_route_to_quarantine does for incoming rows, so
+         Phase 3's _release_quarantine_on_pass (qc_hold_manager.py) can
+         release finished goods out of FG quarantine the same way it
+         already releases raw materials out of RM quarantine, with no
+         changes needed there.
+      4. If no quarantine warehouse is configured at all, this is a no-op
+         beyond the target_warehouse stamp — the row lands wherever it was
+         already headed, unchanged (soft-warn only, same as Purchase before
+         Phase 2 for a company that hasn't set one up yet).
+    """
+    if not frappe.db.has_column("QC Inspection", "target_warehouse"):
+        return
+    try:
+        original_t_warehouse = getattr(row, "t_warehouse", None)
+        if original_t_warehouse:
+            frappe.db.set_value(
+                "QC Inspection", qci_name, "target_warehouse", original_t_warehouse,
+                update_modified=False,
+            )
+
+        fg_quarantine_wh = _resolve_fg_quarantine_warehouse(getattr(doc, "company", None))
+        if not fg_quarantine_wh:
+            return  # nothing configured -- row stays exactly where it was
+
+        row.t_warehouse = fg_quarantine_wh
+
+        update = {}
+        if frappe.db.has_column("QC Inspection", "release_status"):
+            update["release_status"] = "Not Released"
+        if frappe.db.has_column("QC Inspection", "quarantine_warehouse"):
+            update["quarantine_warehouse"] = fg_quarantine_wh
+        if update:
+            frappe.db.set_value("QC Inspection", qci_name, update, update_modified=False)
+    except Exception:
+        frappe.log_error(
+            title=f"FG quarantine routing failed for {qci_name}",
+            message=frappe.get_traceback(),
+        )
+
 
 def auto_create_qc_for_stock_entry(doc, method=None):
     """
     before_submit hook on Stock Entry.
     For Manufacture type only: creates draft QC Inspection for finished goods
     (items going INTO stock — t_warehouse set — with inspection_required_before_manufacture=1).
+
+    Phase 5: also routes each flagged finished-goods row into FG quarantine
+    (see _stamp_and_route_fg_quarantine) instead of its normally-set
+    t_warehouse — the same pre-emptive-quarantine-at-creation pattern Phase 2
+    applies to incoming Purchase rows, adapted for the fact that Stock Entry
+    is itself the physical movement rather than something stock_link.py
+    proxies.
     """
     if getattr(doc, "stock_entry_type", "") != "Manufacture":
         return
@@ -262,6 +423,10 @@ def auto_create_qc_for_stock_entry(doc, method=None):
                 update_modified=False,
             )
 
+    def _on_created(qci_name, row):
+        _stamp_work_order(qci_name, row)
+        _stamp_and_route_fg_quarantine(doc, row, qci_name)
+
     _auto_create_qc_for_rows(
         doc,
         flag_field="inspection_required_before_manufacture",
@@ -271,7 +436,7 @@ def auto_create_qc_for_stock_entry(doc, method=None):
         success_title=_("Finished Goods QC Created"),
         # Only finished goods rows (items being produced into t_warehouse)
         row_filter=lambda row: bool(getattr(row, "t_warehouse", None)),
-        on_created=_stamp_work_order,
+        on_created=_on_created,
     )
 
 
@@ -673,21 +838,32 @@ def _qc_master_switch_on() -> bool:
 
 def _qc_hard_block_on(company: str | None = None) -> bool:
     """
-    Read qc_hard_block from Books Company for the given company. Default
-    False (soft-warn mode). Books Settings is a single global doctype and
-    is NOT company-enforced, so this must never be read from there in a
-    multi-tenant app — a hard-block flag set by one company would silently
-    block submissions for every other company too.
+    Read qc_hard_block from Books Company for the given company. Books
+    Settings is a single global doctype and is NOT company-enforced -- this
+    must never be read from there in a multi-tenant app -- a hard-block flag
+    set by one company would silently block submissions for every other
+    company too.
+
+    Phase 4: default is now True (hard-block ON) once a company is known and
+    the field is unset -- previously this defaulted to False (soft-warn),
+    matching the field's old default of "0" on Books Company. The field's
+    own JSON default is now "1" for newly created companies; the per-field
+    None-fallback below covers existing companies/sites where the column
+    exists but happens to hold NULL (pre-migration edge case) rather than an
+    explicit 0 or 1. If doc.company itself is blank (should not normally
+    happen), there is no company-scoped setting to check at all -- this
+    stays conservative and returns False rather than hard-blocking something
+    we can't attribute to any company's configuration.
     """
     if not company:
         return False
     try:
         val = frappe.db.get_value("Books Company", company, "qc_hard_block")
         if val is None:
-            return False
+            return True
         return bool(int(val))
     except Exception:
-        return False
+        return True
 
 
 def _log_qc_override(doc, summary: dict):
