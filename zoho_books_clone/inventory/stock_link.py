@@ -239,6 +239,24 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
         # accepted portion should actually land in stock. Other reference
         # doctypes (Delivery Note, Sales Invoice, ...) don't have this field,
         # so getattr falls through to the full qty exactly as before.
+        # Valuation must use the item's NET (post-discount) cost, not the
+        # gross line rate — row.rate is the pre-discount unit price, while
+        # row.amount already has any line-level discount_amount subtracted
+        # (see PurchaseInvoice.validate(): item.amount = base - discount_amount,
+        # but item.rate itself is left untouched). Deriving the per-unit rate
+        # from amount/qty instead of trusting row.rate keeps stock valued at
+        # what was actually paid, per Ind AS 2 / AS 2 (trade discounts are
+        # excluded from inventory cost). Purchase Receipt Item has no discount
+        # fields, so amount == rate * qty there and this is a no-op for PR.
+        # NOTE: amount is computed against the row's full (ordered/billed)
+        # qty, not accepted_qty — so the denominator here must be that same
+        # full qty, or a partial-acceptance row would have its rate inflated.
+        full_purchase_uom_qty = qty
+        row_amount = flt(getattr(row, "amount", 0))
+        net_rate_per_purchase_uom = (
+            round(row_amount / full_purchase_uom_qty, 6) if full_purchase_uom_qty else flt(getattr(row, "rate", 0))
+        )
+
         accepted_qty = getattr(row, "accepted_qty", None)
         has_accepted_qty = accepted_qty is not None and accepted_qty != ""
         if has_accepted_qty:
@@ -296,10 +314,10 @@ def _stock_rows(doc, direction: str, zero_rate: bool = False) -> list[dict]:
             "item_code":  item_code,
             "item_name":  getattr(row, "item_name", None) or item_code,
             "qty":        qty,
-            # rate was entered per conversion_factor's uom (e.g. per Pack) —
-            # divide by the same factor so basic_rate lines up with the
-            # stock-uom qty above (no-op when conversion_factor is 1).
-            "basic_rate": 0 if zero_rate else flt(getattr(row, "rate", 0)) / conversion_factor,
+            # net_rate_per_purchase_uom was entered per conversion_factor's uom
+            # (e.g. per Pack) — divide by the same factor so basic_rate lines
+            # up with the stock-uom qty above (no-op when conversion_factor is 1).
+            "basic_rate": 0 if zero_rate else net_rate_per_purchase_uom / conversion_factor,
             "warehouse":  warehouse,
             # Batch-tracked receipts (e.g. Purchase Receipt rows) carry their
             # own batch_no — forward it so the auto-generated Stock Entry

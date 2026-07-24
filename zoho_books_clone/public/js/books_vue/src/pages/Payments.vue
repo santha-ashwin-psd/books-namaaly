@@ -416,11 +416,11 @@
               </div>
               <div>
                 <div class="pmt-vd-lbl">PAID FROM</div>
-                <div class="pmt-vd-val">{{ viewPmt.paid_from||'—' }}</div>
+                <div class="pmt-vd-val">{{ paymentAccountLabel(viewPmt.paid_from) }}</div>
               </div>
               <div>
                 <div class="pmt-vd-lbl">PAID TO</div>
-                <div class="pmt-vd-val">{{ viewPmt.paid_to||'—' }}</div>
+                <div class="pmt-vd-val">{{ paymentAccountLabel(viewPmt.paid_to) }}</div>
               </div>
             </div>
           </div>
@@ -607,6 +607,17 @@ let _savingInFlight = false;
 const viewOpen = ref(false), viewPmt = ref(null);
 const pmtCollapsed = reactive({ type: false, party: false, ref: false, accounts: true, alloc: false, notes: true });
 const partyOptions = ref([]), paidFromAccounts = ref([]), paidToAccounts = ref([]);
+const paymentAccountLabelCache = ref({});
+function paymentAccountLabel(name){
+  if(!name) return '—';
+  const opt = paidFromAccounts.value.find(o=>o.value===name) || paidToAccounts.value.find(o=>o.value===name);
+  if(opt) return opt.label;
+  if(paymentAccountLabelCache.value[name]) return paymentAccountLabelCache.value[name];
+  apiList("Account", { fields:["name","account_name"], filters:[["name","=",name]], limit:1 })
+    .then(rows => { paymentAccountLabelCache.value[name] = rows?.[0]?.account_name || name; })
+    .catch(() => { paymentAccountLabelCache.value[name] = name; });
+  return name;
+}
 const paymentModes = ref(["Cash","Bank Transfer","Cheque","Credit Card","UPI","NEFT","RTGS"]);
 const sortCol = ref("payment_date"), sortDir = ref("desc");
 
@@ -846,11 +857,11 @@ async function fetchPaidFromAccounts(q = "") {
     // Pay: we pay vendor → Paid From is our Bank/Cash account
     const types = form.payment_type === "Receive" ? ["Receivable"] : ["Bank","Cash"];
     const rows = await apiList("Account", {
-      fields: ["name","account_type"],
+      fields: ["name","account_name","account_type"],
       filters: [["is_group","=",0],["company","=",company],["account_type","in",types],...(q?[["name","like",`%${q}%`]]:[])],
       limit: 30,
     });
-    paidFromAccounts.value = rows.map(r=>({label:r.name,value:r.name}));
+    paidFromAccounts.value = rows.map(r=>({label:r.account_name||r.name,value:r.name}));
   } catch { paidFromAccounts.value = []; }
 }
 
@@ -861,11 +872,11 @@ async function fetchPaidToAccounts(q = "") {
     // Pay: we pay vendor → Paid To is their Payable account
     const types = form.payment_type === "Receive" ? ["Bank","Cash"] : ["Payable"];
     const rows = await apiList("Account", {
-      fields: ["name","account_type"],
+      fields: ["name","account_name","account_type"],
       filters: [["is_group","=",0],["company","=",company],["account_type","in",types],...(q?[["name","like",`%${q}%`]]:[])],
       limit: 30,
     });
-    paidToAccounts.value = rows.map(r=>({label:r.name,value:r.name}));
+    paidToAccounts.value = rows.map(r=>({label:r.account_name||r.name,value:r.name}));
   } catch { paidToAccounts.value = []; }
 }
 

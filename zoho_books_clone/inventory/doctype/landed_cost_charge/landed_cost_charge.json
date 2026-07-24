@@ -116,10 +116,9 @@
   },
   {
    "fieldname": "expense_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Expense Type",
-   "options": "Travel\nFood & Meals\nAccommodation\nOffice Supplies\nUtilities\nMarketing\nSoftware\nHardware\nTraining\nMiscellaneous",
-   "default": "Miscellaneous",
+   "options": "Expense Category",
    "description": "Used only for the auto-created Expense entry when no Reference DocType/Name is set."
   }
  ],

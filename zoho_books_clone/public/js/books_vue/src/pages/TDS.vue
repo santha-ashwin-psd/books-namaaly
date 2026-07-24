@@ -193,7 +193,7 @@
               <label class="tds-lbl">Expense Account <span style="color:#9ca3af;font-weight:400">(optional — posts GL on save)</span></label>
               <select v-model="entryForm.expense_account" class="tds-fi">
                 <option value="">— No GL posting —</option>
-                <option v-for="a in expenseAccounts" :key="a.name" :value="a.name">{{ a.name }}</option>
+                <option v-for="a in expenseAccounts" :key="a.name" :value="a.name">{{ a.account_name || a.name }}</option>
               </select>
             </div>
             <div class="tds-form-field" style="grid-column:span 2">
@@ -351,7 +351,7 @@ async function load() {
 async function loadExpenseAccounts() {
   try {
     const rows = await apiList("Account", {
-      fields: ["name"],
+      fields: ["name", "account_name"],
       filters: [["is_group", "=", 0], ["account_type", "=", "Expense"]],
       limit: 100,
     });

@@ -228,7 +228,7 @@
             <div><div class="ba-meta-lbl">Branch</div><div>{{ viewDoc.branch||'—' }}</div></div>
             <div><div class="ba-meta-lbl">Holder</div><div>{{ viewDoc.account_holder_name||'—' }}</div></div>
             <div><div class="ba-meta-lbl">Opening Balance</div><div class="mono-sm">{{ fmtCur(viewDoc.opening_balance, viewDoc.currency) }}</div></div>
-            <div style="grid-column:1/-1"><div class="ba-meta-lbl">GL Account</div><div>{{ viewDoc.gl_account||'—' }}</div></div>
+            <div style="grid-column:1/-1"><div class="ba-meta-lbl">GL Account</div><div>{{ glAccountLabel(viewDoc.gl_account) }}</div></div>
           </div>
 
           <div class="ba-section-hdr"><span v-html="icon('grid',13)"></span> Quick Actions</div>
@@ -271,6 +271,17 @@ const typeFilter = ref("all"), sortKey = ref("name");
 const drawerOpen = ref(false), drawerSaving = ref(false), editingName = ref("");
 const viewOpen = ref(false), viewDoc = ref(null);
 const glAccounts = ref([]);
+const glAccountLabelCache = ref({});
+function glAccountLabel(name){
+  if(!name) return '—';
+  const opt = glAccounts.value.find(o=>o.value===name);
+  if(opt) return opt.label;
+  if(glAccountLabelCache.value[name]) return glAccountLabelCache.value[name];
+  apiList("Account", { fields:["name","account_name"], filters:[["name","=",name]], limit:1 })
+    .then(rows => { glAccountLabelCache.value[name] = rows?.[0]?.account_name || name; })
+    .catch(() => { glAccountLabelCache.value[name] = name; });
+  return name;
+}
 const openMenuName = ref("");
 
 const form = reactive({
@@ -396,12 +407,12 @@ async function fetchGLAccounts(q = "") {
   try {
     const co = await resolveCompany();
     const r = await apiList("Account", {
-      fields: ["name"],
+      fields: ["name", "account_name"],
       filters: [["account_type", "in", ["Bank", "Cash"]], ["company", "=", co], ["is_group", "=", 0],
         ...(q ? [["name", "like", `%${q}%`]] : [])],
       limit: 20,
     });
-    glAccounts.value = r.map(x => ({ label: x.name, value: x.name }));
+    glAccounts.value = r.map(x => ({ label: x.account_name || x.name, value: x.name }));
   } catch { glAccounts.value = []; }
 }
 

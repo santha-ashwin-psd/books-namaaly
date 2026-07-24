@@ -1154,40 +1154,8 @@ def send_bill_email(bill_name, to, subject, body, cc=None, pdf_html=None):
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 
 def _create_bank_transaction(pe):
-    """Create a Bank Transaction row mirroring the Payment Entry bank leg."""
-    if pe.payment_type == "Receive":
-        bank_account_name = pe.paid_to
-        deposit    = flt(pe.paid_amount)
-        withdrawal = 0.0
-    else:
-        bank_account_name = pe.paid_from
-        deposit    = 0.0
-        withdrawal = flt(pe.paid_amount)
-
-    bank_acc = frappe.db.get_value(
-        "Bank Account", {"gl_account": bank_account_name, "company": pe.company}, "name"
-    )
-    if not bank_acc:
-        return None
-
-    bt = frappe.get_doc({
-        "doctype":          "Bank Transaction",
-        "date":             pe.payment_date or pe.posting_date,
-        "bank_account":     bank_acc,
-        "credit":           deposit,    # Bank statement convention: credit = money IN (matches _set_balance/_post_gl)
-        "debit":            withdrawal, # Bank statement convention: debit  = money OUT
-        "currency":         pe.currency or "INR",
-        "description":      pe.remarks or f"Payment Entry {pe.name}",
-        "reference_number": pe.reference_no or pe.name,
-        "payment_entry":    pe.name,
-        "status":           "Unreconciled",
-        "company":          pe.company,
-    })
-    bt.insert(ignore_permissions=True)
-    bt.flags.ignore_permissions = True
-    bt.submit()
-    frappe.db.commit()
-    return bt.name
+    from zoho_books_clone.banking.utils import create_bank_transaction_from_payment_entry
+    return create_bank_transaction_from_payment_entry(pe)
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_bill_payment_defaults(bill_name):
     """Vendor-side equivalent of books_data.get_payment_defaults — supplies

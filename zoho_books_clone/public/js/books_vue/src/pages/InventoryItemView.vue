@@ -94,7 +94,7 @@
             <div class="iv-kv"><span class="iv-k">HSN / SAC Code</span><span class="iv-v iv-mono">{{ item.hsn_code || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Tax Template</span><span class="iv-v">{{ item.tax_code || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Income Account</span><span class="iv-v">{{ item.income_account || '—' }}</span></div>
-            <div class="iv-kv"><span class="iv-k">Expense Account</span><span class="iv-v">{{ item.expense_account || '—' }}</span></div>
+            <div class="iv-kv"><span class="iv-k">Expense Account</span><span class="iv-v">{{ expenseAccountName || item.expense_account || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Valuation Method</span><span class="iv-v">{{ item.valuation_method || 'FIFO' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Track Stock</span><span class="iv-v">{{ item.is_stock_item ? 'Yes' : 'No' }}</span></div>
           </div>
@@ -353,7 +353,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiGET } from "../api/client.js";
+import { apiGET, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { fmt, flt } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
@@ -371,6 +371,7 @@ const ledger      = ref([]);
 const priceLists  = ref([]);
 const partyTxns   = ref({ rows: [], total_purchased_qty: 0, total_sold_qty: 0 });
 const loading     = ref(true);
+const expenseAccountName = ref("");
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
@@ -390,6 +391,13 @@ async function load() {
     ledger.value      = sled  || [];
     priceLists.value  = pl    || [];
     partyTxns.value   = ptx   || { rows: [], total_purchased_qty: 0, total_sold_qty: 0 };
+    expenseAccountName.value = "";
+    if (item.value?.expense_account) {
+      try {
+        const rows = await apiList("Account", { fields: ["name", "account_name"], filters: [["name", "=", item.value.expense_account]], limit: 1 });
+        expenseAccountName.value = rows?.[0]?.account_name || item.value.expense_account;
+      } catch { expenseAccountName.value = item.value.expense_account; }
+    }
   } catch (e) {
     toast(e.message || "Failed to load item", "error");
   } finally {

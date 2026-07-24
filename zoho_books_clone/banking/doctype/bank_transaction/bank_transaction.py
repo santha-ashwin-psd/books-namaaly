@@ -46,6 +46,15 @@ class BankTransaction(Document):
         # itself; skip the per-transaction posting in that case.
         if getattr(self.flags, "skip_gl_posting", False):
             return
+        if self.payment_entry or getattr(self, "journal_entry", None):
+            # This row mirrors a Payment Entry or Journal Entry created
+            # elsewhere (see banking/utils.py::create_bank_transaction_row).
+            # That source document already posted the real Dr/Cr GL entries
+            # on its own submit — posting again here would double the bank
+            # balance and dump a duplicate leg into a suspense/mapped
+            # account. This row only exists so it shows up on the
+            # Banking/reconciliation page.
+            return
         bank_account = self._get_bank_gl_account()
         if not bank_account:
             frappe.log_error(

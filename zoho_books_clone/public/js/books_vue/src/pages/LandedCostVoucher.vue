@@ -205,9 +205,13 @@
                       />
                     </td>
                     <td>
-                      <select class="inv-fi" v-model="c.expense_type" :disabled="readOnly">
-                        <option v-for="t in expenseTypeOptions" :key="t" :value="t">{{ t }}</option>
-                      </select>
+                      <SearchableSelect
+                        v-model="c.expense_type"
+                        :options="expenseTypeOptions"
+                        placeholder="— Category —"
+                        :disabled="readOnly"
+                        compact
+                      />
                     </td>
                     <td v-if="readOnly">
                       <a v-if="c.reference_doctype === 'Expense' && c.reference_name"
@@ -330,7 +334,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall } from "../api/client.js";
+import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import Pagination from "../components/Pagination.vue";
 import SearchableSelect from "../components/SearchableSelect.vue";
@@ -455,10 +459,24 @@ const payThroughAccounts = ref([]);
 const payThroughOptions = computed(() =>
   payThroughAccounts.value.map(a => ({ value: a.name, label: a.account_name || a.name }))
 );
-const expenseTypeOptions = [
-  "Travel", "Food & Meals", "Accommodation", "Office Supplies", "Utilities",
-  "Marketing", "Software", "Hardware", "Training", "Miscellaneous",
-];
+// expense_type is a Link to Expense Category (per-company autoname
+// "{category_name} - {company}") — fetch real doc names/labels rather than
+// hardcoding option text, same pattern as Expenses.vue's fetchExpenseCategories().
+const expenseCategories = ref([]);
+const expenseTypeOptions = computed(() =>
+  expenseCategories.value.map(c => ({ value: c.name, label: c.category_name || c.name }))
+);
+async function loadExpenseCategories() {
+  try {
+    const co = await resolveCompany();
+    expenseCategories.value = await apiList("Expense Category", {
+      fields: ["name", "category_name"],
+      filters: [["disabled", "=", 0], ["company", "=", co]],
+      order_by: "category_name asc",
+      limit: 200,
+    });
+  } catch (e) { expenseCategories.value = []; }
+}
 
 async function loadAccounts() {
   try {
@@ -537,11 +555,11 @@ async function loadDetail(name) {
   detailLoading.value = false;
 }
 
-onMounted(() => { loadList(); loadAccounts(); loadPayThroughAccounts(); loadPRList(); loadPIList(); });
+onMounted(() => { loadList(); loadAccounts(); loadPayThroughAccounts(); loadPRList(); loadPIList(); loadExpenseCategories(); });
 
 // ── Charges ──────────────────────────────────────────────────
 function addCharge() {
-  lcv.value.charges.push({ description: "", account: "", amount: 0, paid_through: "", expense_type: "Miscellaneous" });
+  lcv.value.charges.push({ description: "", account: "", amount: 0, paid_through: "", expense_type: "" });
 }
 function viewLinkedExpense(expenseName) {
   router.push({ path: "/expenses", query: { view: expenseName } });

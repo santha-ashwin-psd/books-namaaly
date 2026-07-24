@@ -290,7 +290,7 @@
             <div class="ew-kv-list">
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">Expense Account</span>
-                <span class="ew-kv-val mono-sm">{{ viewDoc.expense_account||'—' }}</span>
+                <span class="ew-kv-val mono-sm">{{ accountLabel(viewDoc.expense_account) }}</span>
               </div>
               <div class="ew-kv-row">
                 <span class="ew-kv-lbl">Paid Through</span>
@@ -389,14 +389,20 @@ const sortCol=ref("posting_date"),sortDir=ref("desc");
 let _id=1;
 const expenseAccountOptions  = ref([]);
 const paidThroughOptions     = ref([]);
+function accountLabel(name){
+  if(!name) return '—';
+  const opt = expenseAccountOptions.value.find(o=>o.value===name) || paidThroughOptions.value.find(o=>o.value===name);
+  if(!opt) return name;
+  return opt.label.split('  ·  ')[0];
+}
 
 async function fetchExpenseAccounts(q = "") {
   try {
     const company = await resolveCompany();
     const filters = [["is_group","=",0],["disabled","=",0],["company","=",company],["account_type","=","Expense"]];
     if (q) filters.push(["name","like",`%${q}%`]);
-    const rows = await apiList("Account", { fields:["name"], filters, limit:30, order:"name asc" });
-    expenseAccountOptions.value = rows.map(r => ({ label: r.name, value: r.name }));
+    const rows = await apiList("Account", { fields:["name","account_name"], filters, limit:30, order:"name asc" });
+    expenseAccountOptions.value = rows.map(r => ({ label: r.account_name || r.name, value: r.name }));
   } catch { expenseAccountOptions.value = []; }
 }
 async function fetchPaidThroughAccounts(q = "") {
@@ -404,14 +410,14 @@ async function fetchPaidThroughAccounts(q = "") {
     const company = await resolveCompany();
     const filters = [["is_group","=",0],["disabled","=",0],["company","=",company],["account_type","in",["Bank","Cash"]]];
     if (q) filters.push(["name","like",`%${q}%`]);
-    const rows = await apiList("Account", { fields:["name","account_type"], filters, limit:30, order:"name asc" });
+    const rows = await apiList("Account", { fields:["name","account_name","account_type"], filters, limit:30, order:"name asc" });
     let balances = {};
     if (rows.length) {
       try {
         balances = await apiGET("zoho_books_clone.db.queries.get_account_balances_bulk", { accounts: rows.map(r => r.name) }) || {};
       } catch { balances = {}; }
     }
-    paidThroughOptions.value = rows.map(r => ({ label: `${r.name}  ·  ${fmt(balances[r.name] || 0)}`, value: r.name }));
+    paidThroughOptions.value = rows.map(r => ({ label: `${r.account_name || r.name}  ·  ${fmt(balances[r.name] || 0)}`, value: r.name }));
   } catch { paidThroughOptions.value = []; }
 }
 const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});

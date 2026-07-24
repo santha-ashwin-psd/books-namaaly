@@ -379,50 +379,8 @@ def get_payment_defaults(invoice_name):
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 
 def _create_bank_transaction(pe):
-    """Create a Bank Transaction row mirroring the Payment Entry bank leg.
-
-    Called after a Payment Entry is submitted so the Banking / Transactions
-    page shows the entry immediately, ready for reconciliation.
-
-    For a Receive payment:  money comes IN  → credit on the bank account
-    For a Pay payment:      money goes OUT  → debit  on the bank account
-    """
-    # Resolve which account is the bank/cash leg
-    if pe.payment_type == "Receive":
-        bank_account_name = pe.paid_to    # Bank/Cash account
-        deposit   = flt(pe.paid_amount)
-        withdrawal = 0.0
-    else:  # Pay
-        bank_account_name = pe.paid_from  # Bank/Cash account
-        deposit   = 0.0
-        withdrawal = flt(pe.paid_amount)
-
-    # Look up the Bank Account document linked to this GL account
-    bank_acc = frappe.db.get_value(
-        "Bank Account", {"gl_account": bank_account_name, "company": pe.company}, "name"
-    )
-    if not bank_acc:
-        # No Bank Account record linked — skip silently (Cash payments are fine without one)
-        return None
-
-    bt = frappe.get_doc({
-        "doctype":        "Bank Transaction",
-        "date":           pe.payment_date or pe.posting_date,
-        "bank_account":   bank_acc,
-        "credit":         deposit,    # Bank statement convention: credit = money IN (matches _set_balance/_post_gl)
-        "debit":          withdrawal, # Bank statement convention: debit  = money OUT
-        "currency":       pe.paid_to_account_currency or "INR",
-        "description":    pe.remarks or f"Payment Entry {pe.name}",
-        "reference_number": pe.reference_no or pe.name,
-        "payment_entry":  pe.name,
-        "status":         "Unreconciled",
-        "company":        pe.company,
-    })
-    bt.insert(ignore_permissions=True)
-    bt.flags.ignore_permissions = True
-    bt.submit()
-    frappe.db.commit()
-    return bt.name
+    from zoho_books_clone.banking.utils import create_bank_transaction_from_payment_entry
+    return create_bank_transaction_from_payment_entry(pe)
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def record_payment(
@@ -989,6 +947,19 @@ def deposit_cash_to_bank(amount, destination_account, deposit_date=None, notes=N
     je.submit()
 
     frappe.db.commit()
+
+    if dest_type == "Bank":
+        from zoho_books_clone.banking.utils import create_bank_transaction_row
+        create_bank_transaction_row(
+            bank_account_gl=destination_account,
+            date=deposit_date,
+            credit=amount,   # cash deposit = money IN to the bank
+            debit=0,
+            company=company,
+            description=notes or _CASH_DEPOSIT_REMARK_PREFIX,
+            reference_number=je.name,
+            journal_entry=je.name,
+        )
 
     remaining = available_total - amount
     return {

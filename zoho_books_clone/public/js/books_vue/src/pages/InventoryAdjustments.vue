@@ -244,7 +244,7 @@ function fmtQty(v){ return Number(flt(v)).toLocaleString("en-IN",{maximumFractio
 
 async function fetchWarehouses(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Warehouse",{fields:["name"],filters:[["company","=",co],["is_group","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); warehouses.value=r.map(x=>({label:x.name,value:x.name})); }catch{warehouses.value=[];} }
 async function fetchItems(q=""){ try{ const r=await apiList("Item",{fields:["name","item_name","has_batch_no"],filters:[["disabled","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); items.value=r.map(x=>({label:x.name,value:x.name,has_batch_no:x.has_batch_no?1:0})); }catch{items.value=[];} }
-async function fetchAccounts(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Account",{fields:["name"],filters:[["company","=",co],["is_group","=",0],["account_type","in",["Stock Adjustment","Expense","Temporary"]],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); accounts.value=r.map(x=>({label:x.name,value:x.name})); }catch{accounts.value=[];} }
+async function fetchAccounts(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Account",{fields:["name","account_name"],filters:[["company","=",co],["is_group","=",0],["account_type","in",["Stock Adjustment","Expense","Temporary"]],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); accounts.value=r.map(x=>({label:x.account_name||x.name,value:x.name})); }catch{accounts.value=[];} }
 
 async function loadCurrentStock(){
   if(!form.item_code||!form.warehouse){ currentQty.value=0; currentRate.value=0; return; }

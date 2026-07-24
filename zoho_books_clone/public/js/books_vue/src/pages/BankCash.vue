@@ -129,8 +129,8 @@
           <div class="cash-field"><label class="cash-label">Date <span class="req">*</span></label><input v-model="form.payment_date" type="date" class="cash-input" /></div>
           <div class="cash-field"><label class="cash-label">Amount <span class="req">*</span></label><input v-model.number="form.paid_amount" type="number" min="0" step="0.01" class="cash-input" /></div>
           <div class="cash-field" style="grid-column:1/-1">
-            <label class="cash-label">{{ form.payment_type==='Receive'?'Customer':'Vendor/Employee' }} <span class="req">*</span></label>
-            <SearchableSelect v-model="form.party" :options="partyOptions" :placeholder="form.payment_type==='Receive'?'Select customer…':'Select vendor/employee…'" @search="fetchParties" />
+            <label class="cash-label">{{ form.payment_type==='Receive'?'Customer':'Vendor' }} <span class="req">*</span></label>
+            <SearchableSelect v-model="form.party" :options="partyOptions" :placeholder="form.payment_type==='Receive'?'Select customer…':'Select vendor…'" @search="fetchParties" />
           </div>
           <div class="cash-field" style="grid-column:1/-1" v-if="form.payment_type==='Receive'">
             <label class="cash-label">Purpose <span class="req">*</span></label>
@@ -254,11 +254,11 @@
           <div class="cash-section-hdr"><span v-html="icon('info',13)"></span> Details</div>
           <div class="cash-meta-grid">
             <div><div class="cash-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.payment_date) }}</div></div>
-            <div><div class="cash-meta-lbl">{{ viewDoc.payment_type==='Receive'?'Customer':'Vendor/Employee' }}</div><div>{{ viewDoc.party_name||viewDoc.party||'—' }}</div></div>
+            <div><div class="cash-meta-lbl">{{ viewDoc.payment_type==='Receive'?'Customer':'Vendor' }}</div><div>{{ viewDoc.party_name||viewDoc.party||'—' }}</div></div>
             <div><div class="cash-meta-lbl">Type</div><div>{{ viewDoc.payment_type==='Receive'?'Cash In':'Cash Out' }}</div></div>
             <div><div class="cash-meta-lbl">Mode</div><div>Cash</div></div>
             <div v-if="viewDoc.payment_type==='Receive'"><div class="cash-meta-lbl">Purpose</div><div>{{ viewDoc.custom_purpose||'—' }}</div></div>
-            <div v-else><div class="cash-meta-lbl">Expense Category</div><div>{{ viewDoc.custom_expense_category||'—' }}</div></div>
+            <div v-else><div class="cash-meta-lbl">Expense Category</div><div>{{ expenseCategoryLabel(viewDoc.custom_expense_category) }}</div></div>
           </div>
           <template v-if="viewDoc.remarks">
             <div class="cash-section-hdr"><span v-html="icon('file',13)"></span> Remarks</div>
@@ -444,14 +444,24 @@ const cashDestinations=computed(()=>depositDestinations.value.filter(d=>d.accoun
 const selected=ref(new Set());
 const partyOptions=ref([]);
 const expenseCategoryOptions=ref([]);
+const expenseCategoryLabelCache=ref({});
+function expenseCategoryLabel(name){
+  if(!name) return '—';
+  const cached=expenseCategoryOptions.value.find(o=>o.value===name)||expenseCategoryLabelCache.value[name];
+  if(cached) return typeof cached==='string'?cached:cached.label;
+  apiList("Account",{fields:["name","account_name"],filters:[["name","=",name]],limit:1})
+    .then(rows=>{expenseCategoryLabelCache.value[name]=rows?.[0]?.account_name||name;})
+    .catch(()=>{expenseCategoryLabelCache.value[name]=name;});
+  return name;
+}
 const CASH_IN_PURPOSES=["Sales Receipt","Customer Advance","Loan Received","Capital Introduced","Other Income","Refund Received","Other"];
 async function fetchExpenseCategories(q=""){
   try{
     const company=await resolveCompany();
     const filters=[["is_group","=",0],["disabled","=",0],["company","=",company],["account_type","=","Expense"]];
     if(q)filters.push(["name","like",`%${q}%`]);
-    const rows=await apiList("Account",{fields:["name"],filters,limit:30,order:"name asc"});
-    expenseCategoryOptions.value=rows.map(r=>({label:r.name,value:r.name}));
+    const rows=await apiList("Account",{fields:["name","account_name"],filters,limit:30,order:"name asc"});
+    expenseCategoryOptions.value=rows.map(r=>({label:r.account_name||r.name,value:r.name}));
   }catch{expenseCategoryOptions.value=[];}
 }
 const sortCol=ref("payment_date"),sortDir=ref("desc");
@@ -528,7 +538,7 @@ async function bulkDelete(){
   const ok=await confirm({title:`Delete ${rows.length} cash entr${rows.length>1?'ies':'y'}?`,body:"This cancels and deletes the selected entries, reversing their ledger impact. This cannot be undone.",okLabel:"Delete",okStyle:"danger"});
   if(!ok)return;
   bulkBusy.value=true;let done=0;
-  try{for(const p of rows){const dt=p._dt||"Payment Entry";try{await apiCancel(dt,p.name);}catch{}try{await apiDelete(dt,p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await load();}
+  try{for(const p of rows){const dt=p._dt||"Payment Entry";try{await apiCancel(dt,p.name);}catch{}try{await apiDelete(dt,p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await Promise.all([load(),refreshUndepositedCount()]);}
   finally{bulkBusy.value=false;}
 }
 
@@ -554,10 +564,11 @@ function openView(p){viewDoc.value=p;viewOpen.value=true;}
 
 async function saveCash(){
   if(!flt(form.paid_amount))return toast.error("Amount is required");
-  if(!form.party.trim())return toast.error(form.payment_type==="Receive"?"Customer is required":"Vendor/Employee is required");
+  if(!form.party.trim())return toast.error(form.payment_type==="Receive"?"Customer is required":"Vendor is required");
   if(form.payment_type==="Receive"&&!form.custom_purpose)return toast.error("Purpose is required");
   if(form.payment_type==="Pay"&&!form.custom_expense_category)return toast.error("Expense Category is required");
   if(!cashAccount.value)return toast.error("Cash account not configured — check chart of accounts");
+  if(form.payment_type==="Receive"&&!receivableAccount.value)return toast.error("No Receivable account found — check chart of accounts");
   drawerSaving.value=true;
   try{
     const company=await resolveCompany();const isCashIn=form.payment_type==="Receive";
@@ -568,7 +579,7 @@ async function saveCash(){
 
     if(isCashIn){
       // Dr Cash-in-Hand / Cr Accounts Receivable (customer pays cash).
-      const doc={doctype:"Payment Entry",company,payment_type:"Receive",party_type:"Customer",party:form.party,party_name: partyName,mode_of_payment:"Cash",paid_from:receivableAccount.value||cashAccount.value,paid_to:cashAccount.value,paid_from_account_currency:companyCurrency.value,paid_to_account_currency:companyCurrency.value,source_exchange_rate:1,target_exchange_rate:1,paid_amount:flt(form.paid_amount),received_amount:flt(form.paid_amount),payment_date:form.payment_date,custom_purpose:form.custom_purpose,custom_expense_category:"",remarks:form.remarks||""};
+      const doc={doctype:"Payment Entry",company,payment_type:"Receive",party_type:"Customer",party:form.party,party_name: partyName,mode_of_payment:"Cash",paid_from:receivableAccount.value,paid_to:cashAccount.value,paid_from_account_currency:companyCurrency.value,paid_to_account_currency:companyCurrency.value,source_exchange_rate:1,target_exchange_rate:1,paid_amount:flt(form.paid_amount),received_amount:flt(form.paid_amount),payment_date:form.payment_date,custom_purpose:form.custom_purpose,custom_expense_category:"",remarks:form.remarks||""};
       const saved=await apiSave(doc);await apiSubmit("Payment Entry",saved.name);
       toast.success(`Cash entry ${saved?.name||""} created`);
     }else{
@@ -592,7 +603,7 @@ async function saveCash(){
       const saved=await apiSave(doc);await apiSubmit("Journal Entry",saved.name);
       toast.success(`Cash entry ${saved?.name||""} created`);
     }
-    drawerOpen.value=false;await load();
+    drawerOpen.value=false;await Promise.all([load(),refreshUndepositedCount()]);
   }catch(e){toast.error(e.message||"Failed to save");}finally{drawerSaving.value=false;}
 }
 
@@ -601,7 +612,7 @@ async function deleteEntry(p){
   if(!ok)return;
   actionBusy.value=true;
   const dt=p._dt||"Payment Entry";
-  try{try{await apiCancel(dt,p.name);}catch{}await apiDelete(dt,p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await load();}
+  try{try{await apiCancel(dt,p.name);}catch{}await apiDelete(dt,p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await Promise.all([load(),refreshUndepositedCount()]);}
   catch(e){toast.error(e.message||"Failed to delete");}finally{actionBusy.value=false;}
 }
 
@@ -658,11 +669,22 @@ async function onDestinationChange(){
 
 async function saveDeposit(){
   if(!depositForm.amount||depositForm.amount<=0)return toast.error("Enter an amount to deposit");
-  if(depositForm.amount>totalUndeposited.value)return toast.error("Amount exceeds the undeposited balance");
   if(!depositForm.destination_account)return toast.error("Select where to deposit the cash");
   if(!depositForm.date)return toast.error("Deposit date is required");
   depositSaving.value=true;
   try{
+    // Re-check the pool right before submitting — totalUndeposited may be
+    // stale if another payment/deposit landed since the drawer was opened
+    // or the destination was last changed. The backend re-validates too,
+    // but catching it here gives a clearer message before the API call.
+    const dest=depositDestinations.value.find(d=>d.name===depositForm.destination_account);
+    const excludeAccount = dest && dest.account_type==="Cash" ? dest.name : null;
+    await loadDepositPool(excludeAccount);
+    if(depositForm.amount>totalUndeposited.value){
+      toast.error(`Only ${fmtCur(totalUndeposited.value)} is available now — please adjust the amount.`);
+      depositSaving.value=false;
+      return;
+    }
     const co=await resolveCompany();
     const res=await apiPOST("zoho_books_clone.api.books_data.deposit_cash_to_bank",{
       amount:depositForm.amount,

@@ -224,6 +224,20 @@ class LandedCostVoucher(Document):
             # reversal that already happened above.
             frappe.log_error(frappe.get_traceback(), "Landed Cost GL reversal failed")
 
+    def _default_expense_category(self) -> str | None:
+        """Resolve the "Miscellaneous" Expense Category doc for this LCV's
+        company, used only when a charge row has no expense_type set.
+        expense_type is a Link to Expense Category, whose autoname format is
+        "{category_name} - {company}" — so the bare word "Miscellaneous" is
+        never itself a valid value; it has to be looked up per company.
+        Falls back to None (Expense.insert() will then raise its own
+        mandatory-field error) if that category was never seeded for this
+        company, rather than guessing/creating one here.
+        """
+        return frappe.db.get_value(
+            "Expense Category", {"category_name": "Miscellaneous", "company": self.company}
+        )
+
     def _create_expense_entries(self):
         """For every charge row with no existing Reference DocType/Name (i.e.
         nothing was already booked for it via a separate Bill/Journal Entry),
@@ -253,7 +267,7 @@ class LandedCostVoucher(Document):
             expense = frappe.get_doc({
                 "doctype": "Expense",
                 "posting_date": self.posting_date,
-                "expense_type": row.expense_type or "Miscellaneous",
+                "expense_type": row.expense_type or self._default_expense_category(),
                 "description": row.description or f"Landed cost charge — {self.name}",
                 "amount": flt(row.amount),
                 "expense_account": row.account,
