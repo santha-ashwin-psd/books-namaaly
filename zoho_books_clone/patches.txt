@@ -26,3 +26,9 @@ zoho_books_clone.patches.v1_5.rename_grir_account
 # Claim Detail.expense_type, now both Link fields against Expense Category
 # (new doctype, so must run after schema sync creates its table).
 zoho_books_clone.patches.v1_6.seed_expense_categories
+
+# Phase 0 of the QC quarantine-workflow rework: back-fills the new
+# Books Company.default_fg_quarantine_warehouse and QC Inspection.
+# release_status columns for existing records. Must run after schema sync
+# creates these new columns (pre_model_sync would hit "Unknown column").
+zoho_books_clone.patches.v1_7.backfill_qc_quarantine_fields

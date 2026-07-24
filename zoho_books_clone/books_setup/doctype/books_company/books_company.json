@@ -509,8 +509,15 @@
    "fieldname": "default_quarantine_warehouse",
    "fieldtype": "Link",
    "options": "Warehouse",
-   "label": "Default Quarantine Warehouse",
-   "description": "Stock from failed QC Inspections is auto-transferred here for this company."
+   "label": "Default Quarantine Warehouse (Raw Material)",
+   "description": "Stock from failed/pending QC Inspections on incoming (RM) receipts is auto-routed here for this company."
+  },
+  {
+   "fieldname": "default_fg_quarantine_warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse",
+   "label": "Default Quarantine Warehouse (Finished Goods)",
+   "description": "Finished-goods rows from Manufacturing that require QC Inspection are auto-routed here instead of default_quarantine_warehouse. Falls back to Default Quarantine Warehouse (Raw Material) if left blank."
   },
   {
    "fieldname": "default_scrap_warehouse",

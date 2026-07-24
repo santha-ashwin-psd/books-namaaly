@@ -54,8 +54,8 @@ class PaymentEntry(Document):
     # GL posting (paid_from/paid_to) has nothing to do with that bill's own
     # AP/AR account, leaving the two permanently out of sync.
     _ALLOWED_REFERENCE_DOCTYPES = {
-        "Receive": {"Sales Invoice"},
-        "Pay":     {"Purchase Invoice"},
+        "Receive": {"Sales Invoice", "Journal Entry"},
+        "Pay":     {"Purchase Invoice", "Journal Entry"},
     }
 
     def validate_references(self):
@@ -76,6 +76,30 @@ class PaymentEntry(Document):
                     self.payment_type, ref.reference_doctype, ref.reference_name,
                     ", ".join(sorted(allowed)),
                 ))
+
+            if ref.reference_doctype == "Journal Entry":
+                # Journal Entry has no outstanding_amount field (unlike
+                # Sales/Purchase Invoice) — this only exists to let a
+                # Payment Entry settle an opening-balance JE, so compute it
+                # the same way the opening-balance module does.
+                from zoho_books_clone.accounts.opening_balance import _REF_TYPE
+                party_type = "Customer" if self.payment_type == "Receive" else "Supplier"
+                row = frappe.db.get_value(
+                    "Journal Entry Account",
+                    {"parent": ref.reference_name, "reference_type": _REF_TYPE[party_type],
+                     "party_type": party_type},
+                    "party",
+                )
+                if not row:
+                    frappe.throw(_("{0} is not an opening balance entry").format(ref.reference_name))
+                from zoho_books_clone.accounts.opening_balance import get_opening_balance_outstanding
+                outstanding = get_opening_balance_outstanding(party_type, row)
+                if flt(ref.allocated_amount) > outstanding:
+                    frappe.throw(_(
+                        "Allocated amount {0} exceeds outstanding {1} for {2}"
+                    ).format(ref.allocated_amount, outstanding, ref.reference_name))
+                continue
+
             outstanding = frappe.db.get_value(
                 ref.reference_doctype, ref.reference_name, "outstanding_amount"
             )
@@ -98,6 +122,11 @@ class PaymentEntry(Document):
         for ref in (self.references or []):
             dt  = ref.reference_doctype
             dn  = ref.reference_name
+            if dt == "Journal Entry":
+                # No outstanding_amount field to cache — get_opening_balance_outstanding()
+                # recomputes from Payment Entry references on demand, so
+                # there's nothing to update here.
+                continue
             amt = flt(ref.allocated_amount)
             current = flt(frappe.db.get_value(dt, dn, "outstanding_amount"))
             new_amt = max(0.0, (current + amt) if cancel else (current - amt))

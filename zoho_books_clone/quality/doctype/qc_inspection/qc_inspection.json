@@ -3,7 +3,7 @@
  "module": "Quality",
  "doctype": "DocType",
  "creation": "2026-06-29 00:00:00.000000",
- "modified": "2026-07-13 00:00:00.000000",
+ "modified": "2026-07-24 00:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "docstatus": 0,
@@ -256,6 +256,27 @@
    "no_copy": 1,
    "depends_on": "eval:doc.qc_hold",
    "description": "Auto-created Stock Entry that moved stock into quarantine — reversed automatically if this QC Inspection is cancelled"
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Target Warehouse (Original Destination)",
+   "options": "Warehouse",
+   "read_only": 1,
+   "in_list_view": 0,
+   "no_copy": 1,
+   "description": "The warehouse this row would have landed in had it not been routed to quarantine for inspection — stamped automatically when the QC Inspection is auto-created from the reference document, before routing overrides the row. Used to release stock to the correct place on Pass without asking the user to re-specify it."
+  },
+  {
+   "fieldname": "release_status",
+   "fieldtype": "Select",
+   "label": "Release Status",
+   "options": "N/A\nNot Released\nReleased",
+   "default": "N/A",
+   "read_only": 1,
+   "in_list_view": 0,
+   "no_copy": 1,
+   "description": "N/A unless this row was ever quarantined. Not Released while qc_hold is active and no release Stock Entry has been posted yet. Released once stock has moved out of quarantine to target_warehouse (Pass) or to Rejected/Hold (Fail)."
   },
   {
    "fieldname": "hold_reason",

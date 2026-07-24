@@ -8,7 +8,7 @@
    "fieldname": "reference_doctype",
    "fieldtype": "Select",
    "label": "Type",
-   "options": "Sales Invoice\nPurchase Invoice",
+   "options": "Sales Invoice\nPurchase Invoice\nJournal Entry",
    "in_list_view": 1,
    "idx": 1,
    "creation": "2026-03-16 04:22:11.189548",

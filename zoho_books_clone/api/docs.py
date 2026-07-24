@@ -3777,8 +3777,9 @@ def get_vendor_summary(vendor):
     outstanding = sum(flt(b.outstanding_amount) for b in bills if flt(b.outstanding_amount) > 0)
     open_bill_count = sum(1 for b in bills if flt(b.outstanding_amount) > 0)
 
-    opening_balance = flt(frappe.db.get_value("Supplier", vendor, "opening_balance"))
-    outstanding += opening_balance
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance, get_opening_balance_outstanding
+    opening_balance = get_opening_balance("Supplier", vendor)
+    outstanding += get_opening_balance_outstanding("Supplier", vendor)
 
     dns = frappe.get_all("Purchase Invoice",
         filters={"supplier": vendor, "is_return": 1, "docstatus": 1},
@@ -3852,11 +3853,23 @@ def get_vendor_transactions(vendor, limit=50):
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_vendor_statement(vendor, from_date=None, to_date=None):
-    """Account statement: chronological list with running balance."""
+    """Account statement: chronological list with running balance.
+
+    Includes the vendor's opening balance (if any) as the first row, dated
+    before any other transaction, so the running balance actually reflects
+    it — this endpoint used to ignore opening_balance completely.
+    """
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance
+
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
     fd = frappe._dict({"from_date": from_date, "to_date": to_date})
     rows = []
+
+    opening_balance = get_opening_balance("Supplier", vendor)
+    if opening_balance:
+        rows.append({"date": None, "ref": "Opening Balance",
+                     "type": "Opening Balance", "debit": 0, "credit": flt(opening_balance)})
 
     bills = frappe.get_all("Purchase Invoice",
         filters={"supplier": vendor, "docstatus": 1, "is_return": 0},
@@ -3890,7 +3903,7 @@ def get_vendor_statement(vendor, from_date=None, to_date=None):
         rows.append({"date": p.payment_date, "ref": p.name,
                      "type": "Payment", "debit": flt(p.paid_amount), "credit": 0})
 
-    rows.sort(key=lambda r: (r["date"] or "", r["ref"] or ""))
+    rows.sort(key=lambda r: (str(r["date"]) if r["date"] else "", r["ref"] or ""))
     running = 0.0
     for r in rows:
         running += flt(r["credit"]) - flt(r["debit"])
@@ -4003,8 +4016,9 @@ def get_customer_summary(customer):
     outstanding = sum(flt(i.outstanding_amount) for i in invs if flt(i.outstanding_amount) > 0)
     open_inv_count = sum(1 for i in invs if flt(i.outstanding_amount) > 0)
 
-    opening_balance = flt(frappe.db.get_value("Customer", customer, "opening_balance"))
-    outstanding += opening_balance
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance, get_opening_balance_outstanding
+    opening_balance = get_opening_balance("Customer", customer)
+    outstanding += get_opening_balance_outstanding("Customer", customer)
 
     cns = frappe.get_all("Sales Invoice",
         filters={"customer": customer, "is_return": 1, "docstatus": 1},
@@ -4076,11 +4090,22 @@ def get_customer_transactions(customer, limit=50):
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_customer_statement(customer, from_date=None, to_date=None):
-    """Customer statement (AR perspective): Invoice = debit (owed), Payment/CN = credit."""
+    """Customer statement (AR perspective): Invoice = debit (owed), Payment/CN = credit.
+
+    Includes the customer's opening balance (if any) as the first row — this
+    endpoint used to ignore opening_balance completely.
+    """
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance
+
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
     fd = frappe._dict({"from_date": from_date, "to_date": to_date})
     rows = []
+
+    opening_balance = get_opening_balance("Customer", customer)
+    if opening_balance:
+        rows.append({"date": None, "ref": "Opening Balance",
+                     "type": "Opening Balance", "debit": flt(opening_balance), "credit": 0})
 
     invs = frappe.get_all("Sales Invoice",
         filters={"customer": customer, "docstatus": 1, "is_return": 0},
@@ -4114,7 +4139,7 @@ def get_customer_statement(customer, from_date=None, to_date=None):
         rows.append({"date": p.payment_date, "ref": p.name,
                      "type": "Payment", "debit": 0, "credit": flt(p.paid_amount)})
 
-    rows.sort(key=lambda r: (r["date"] or "", r["ref"] or ""))
+    rows.sort(key=lambda r: (str(r["date"]) if r["date"] else "", r["ref"] or ""))
     running = 0.0
     for r in rows:
         running += flt(r["debit"]) - flt(r["credit"])

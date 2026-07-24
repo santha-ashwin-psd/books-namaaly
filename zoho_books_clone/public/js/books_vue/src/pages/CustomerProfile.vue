@@ -102,11 +102,52 @@
       </div>
     </div>
 
+    <!-- Opening Balance -->
+    <div v-if="obInfo.has_opening_je" class="cp-ob-card">
+      <div>
+        <div class="cp-section-title" style="border:none;padding:0">Opening Balance</div>
+        <div class="cp-ob-amt" :class="{green: obInfo.outstanding<=0}">
+          {{ fmtCur(obInfo.outstanding) }}
+          <span v-if="obInfo.outstanding<=0" class="cp-chip" style="margin-left:6px">Paid</span>
+        </div>
+      </div>
+      <button v-if="obInfo.outstanding>0" class="cp-btn-primary" @click="openPayModal">
+        <span v-html="icon('plus',13)"></span> Pay
+      </button>
+    </div>
+
     <!-- Tabs -->
     <div class="cp-tabs">
       <button v-for="t in tabs" :key="t.k" class="cp-tab" :class="{active:tab===t.k}" @click="tab=t.k">
         {{ t.l }}<span v-if="t.count" class="cp-tab-count">{{ t.count }}</span>
       </button>
+    </div>
+
+    <!-- Pay Opening Balance modal -->
+    <div v-if="showPayModal" class="cp-modal-overlay" @click.self="showPayModal=false">
+      <div class="cp-modal">
+        <div class="cp-modal-title">Pay Opening Balance</div>
+        <label class="cp-modal-field">
+          <span>Amount</span>
+          <input type="number" v-model.number="payForm.amount" :max="obInfo.outstanding" min="0.01" step="0.01" />
+        </label>
+        <label class="cp-modal-field">
+          <span>Pay Into</span>
+          <select v-model="payForm.bank_cash_account">
+            <option v-for="a in obInfo.bank_cash_accounts" :key="a.name" :value="a.name">{{ a.name }}</option>
+          </select>
+        </label>
+        <label class="cp-modal-field">
+          <span>Date</span>
+          <input type="date" v-model="payForm.payment_date" />
+        </label>
+        <div class="cp-modal-actions">
+          <button class="cp-btn-ghost" @click="showPayModal=false">Cancel</button>
+          <button class="cp-btn-primary" :disabled="payLoading" @click="submitPayment">
+            {{ payLoading ? "Recording…" : "Record Payment" }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Tab content -->
@@ -158,7 +199,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet, apiGET, apiList } from "../api/client.js";
+import { apiGet, apiGET, apiList, apiSave, apiSubmit } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { fmtDate } from "../utils/format.js";
@@ -174,6 +215,10 @@ const summary = ref({ outstanding: 0, cn_credit: 0, open_invoice_count: 0, open_
 const transactions = ref([]);
 const tab = ref("overview");
 const tabLoading = ref(false);
+const obInfo = ref({ has_opening_je: false });
+const showPayModal = ref(false);
+const payLoading = ref(false);
+const payForm = reactive({ amount: 0, bank_cash_account: "", payment_date: new Date().toISOString().slice(0, 10) });
 
 const tabs = computed(() => [
   { k: "overview", l: "Overview" },
@@ -231,18 +276,67 @@ async function load() {
   tabLoading.value = true;
   try {
     const name = route.params.name;
-    const [c, s, t] = await Promise.all([
+    const [c, s, t, ob] = await Promise.all([
       apiGet("Customer", name).catch(() => ({})),
       apiGET("zoho_books_clone.api.docs.get_customer_summary", { customer: name }).catch(() => ({})),
       apiGET("zoho_books_clone.api.docs.get_customer_transactions", { customer: name, limit: 200 }).catch(() => []),
+      apiGET("zoho_books_clone.accounts.opening_balance.get_opening_balance_payment_info",
+        { party_type: "Customer", party: name }).catch(() => ({ has_opening_je: false })),
     ]);
     customer.value = c || {};
     summary.value = s || summary.value;
     transactions.value = Array.isArray(t) ? t : [];
+    obInfo.value = ob || { has_opening_je: false };
   } catch (e) {
     toast.error(e.message || "Failed to load customer");
   } finally {
     tabLoading.value = false;
+  }
+}
+
+function openPayModal() {
+  payForm.amount = obInfo.value.outstanding;
+  payForm.bank_cash_account = obInfo.value.bank_cash_accounts?.[0]?.name || "";
+  payForm.payment_date = new Date().toISOString().slice(0, 10);
+  showPayModal.value = true;
+}
+
+async function submitPayment() {
+  const amount = Number(payForm.amount);
+  if (!payForm.bank_cash_account) { toast.error("Choose an account to pay into"); return; }
+  if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
+  if (amount > obInfo.value.outstanding + 0.01) { toast.error("Amount exceeds outstanding opening balance"); return; }
+
+  payLoading.value = true;
+  try {
+    const doc = {
+      doctype: "Payment Entry",
+      payment_type: "Receive",
+      party_type: "Customer",
+      party: route.params.name,
+      party_name: customer.value.customer_name,
+      company: obInfo.value.company,
+      paid_from: obInfo.value.party_account,
+      paid_to: payForm.bank_cash_account,
+      paid_amount: amount,
+      received_amount: amount,
+      payment_date: payForm.payment_date,
+      remarks: `Opening balance payment for ${customer.value.customer_name || route.params.name}`,
+      references: [{
+        reference_doctype: "Journal Entry",
+        reference_name: obInfo.value.journal_entry,
+        allocated_amount: amount,
+      }],
+    };
+    const saved = await apiSave(doc);
+    await apiSubmit("Payment Entry", saved.name);
+    toast.success("Payment recorded");
+    showPayModal.value = false;
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Failed to record payment");
+  } finally {
+    payLoading.value = false;
   }
 }
 
@@ -323,6 +417,16 @@ function newInvoice() {
 .cp-link{color:#2563eb;text-decoration:none;font-weight:500;}
 .cp-link:hover{text-decoration:underline;}
 .cp-address{font-size:12.5px;color:#374151;line-height:1.6;}
+
+.cp-ob-card{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 22px;box-shadow:0 1px 2px rgba(15,23,42,.03);}
+.cp-ob-amt{font-size:20px;font-weight:700;color:#0f172a;margin-top:4px;}
+
+.cp-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;}
+.cp-modal{background:#fff;border-radius:12px;padding:22px;width:340px;box-shadow:0 10px 30px rgba(0,0,0,.15);}
+.cp-modal-title{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:14px;}
+.cp-modal-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600;}
+.cp-modal-field input,.cp-modal-field select{border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;}
+.cp-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 
 .cp-tabs{display:flex;gap:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px 10px 0 0;padding:0 12px;flex-shrink:0;}
 .cp-tab{background:transparent;border:none;padding:12px 18px;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:6px;font-family:inherit;}

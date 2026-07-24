@@ -1276,12 +1276,13 @@ def get_customer_outstanding():
     """, company, as_dict=True)
     out = {r.customer: float(r.outstanding or 0) for r in rows}
 
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance_outstanding
     openings = frappe.db.sql("""
-        SELECT name, opening_balance FROM `tabCustomer`
+        SELECT name FROM `tabCustomer`
         WHERE books_company=%s AND opening_balance IS NOT NULL AND opening_balance != 0
     """, company, as_dict=True)
     for o in openings:
-        out[o.name] = out.get(o.name, 0) + float(o.opening_balance or 0)
+        out[o.name] = out.get(o.name, 0) + get_opening_balance_outstanding("Customer", o.name)
     return out
 
 
@@ -1340,12 +1341,13 @@ def get_vendor_outstanding():
     """, company, as_dict=True)
     out = {r.supplier: float(r.outstanding or 0) for r in rows}
 
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance_outstanding
     openings = frappe.db.sql("""
-        SELECT name, opening_balance FROM `tabSupplier`
+        SELECT name FROM `tabSupplier`
         WHERE books_company=%s AND opening_balance IS NOT NULL AND opening_balance != 0
     """, company, as_dict=True)
     for o in openings:
-        out[o.name] = out.get(o.name, 0) + float(o.opening_balance or 0)
+        out[o.name] = out.get(o.name, 0) + get_opening_balance_outstanding("Supplier", o.name)
     return out
 
 

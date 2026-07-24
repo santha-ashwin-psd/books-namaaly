@@ -909,7 +909,17 @@ def get_ap_aging(company: str, as_of_date: str) -> list[dict]:
 
 @frappe.whitelist()
 def get_customer_statement(customer: str, company: str = "") -> dict:
-    """Outstanding invoices + payment history for a customer."""
+    """Outstanding invoices + payment history for a customer.
+
+    Includes the customer's opening balance (if any) both as a synthetic
+    row in `invoices` — so it's visible in the statement, same as a real
+    invoice — and folded into `total_outstanding`. Previously this endpoint
+    ignored opening_balance entirely, so a customer with only an opening
+    balance and no invoices showed ₹0 outstanding here even though the
+    Customers list page (a different endpoint) showed it correctly.
+    """
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance
+
     if not company:
         from zoho_books_clone.api.session import _get_company
         company = _get_company(frappe.session.user) or ""
@@ -932,6 +942,14 @@ def get_customer_statement(customer: str, company: str = "") -> dict:
         ORDER BY payment_date DESC
         LIMIT 20
     """, {"company": company, "customer": customer}, as_dict=True)
+
+    opening_balance = get_opening_balance("Customer", customer)
+    if opening_balance:
+        invoices.insert(0, {
+            "name": "Opening Balance", "posting_date": None, "due_date": None,
+            "grand_total": opening_balance, "outstanding_amount": opening_balance,
+            "currency": None, "is_overdue": 0,
+        })
 
     total_outstanding = sum(flt(i["outstanding_amount"]) for i in invoices)
     overdue_amount    = sum(flt(i["outstanding_amount"]) for i in invoices if i["is_overdue"])

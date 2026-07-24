@@ -460,6 +460,19 @@
                 <a href="#" style="font-size:12.5px;color:#2563EB;text-decoration:none">Enter Opening Balance</a>
               </div>
             </div>
+
+            <div v-if="obInfo.has_opening_je" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:16px;display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px">OPENING BALANCE</div>
+                <div style="font-size:16px;font-weight:700;margin-top:4px" :style="{color: obInfo.outstanding>0?'#dc2626':'#16a34a'}">
+                  {{ fmt(obInfo.outstanding) }}
+                  <span v-if="obInfo.outstanding<=0" style="font-size:11px;font-weight:700;padding:1px 8px;border-radius:12px;background:#dcfce7;color:#16a34a;margin-left:6px">Paid</span>
+                </div>
+              </div>
+              <button v-if="obInfo.outstanding>0" class="nim-btn nim-btn-primary" style="font-size:13px" @click="openPayModal">
+                <span v-html="icon('plus',13)"></span> Pay
+              </button>
+            </div>
             <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
               <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" :style="!custSectionCollapsed.otherDetails?'border-bottom:1px solid #F3F4F6':''" @click="custSectionCollapsed.otherDetails=!custSectionCollapsed.otherDetails">
                 <span style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px">OTHER DETAILS</span>
@@ -669,6 +682,34 @@
 
   <!-- Drawer -->
   <Teleport to="body">
+    <div v-if="showPayModal" class="cus-pay-modal-overlay" @click.self="showPayModal=false">
+      <div class="cus-pay-modal">
+        <div style="font-size:16px;font-weight:700;color:#111827;margin-bottom:14px">Pay Opening Balance</div>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600">
+          <span>Amount</span>
+          <input type="number" v-model.number="payForm.amount" :max="obInfo.outstanding" min="0.01" step="0.01"
+            style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit"/>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600">
+          <span>Pay Into</span>
+          <select v-model="payForm.bank_cash_account" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+            <option v-for="a in obInfo.bank_cash_accounts" :key="a.name" :value="a.name">{{ a.name }}</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600">
+          <span>Date</span>
+          <input type="date" v-model="payForm.payment_date"
+            style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit"/>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+          <button class="nim-btn" style="background:#fff;color:#374151;border:1px solid #E5E7EB" @click="showPayModal=false">Cancel</button>
+          <button class="nim-btn nim-btn-primary" :disabled="payLoading" @click="submitPayment">
+            {{ payLoading ? "Recording…" : "Record Payment" }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showDrawer" class="inv-drawer-bg" @click.self="showDrawer=false">
       <div class="inv-drawer-panel" :class="{open:showDrawer}" style="width:680px;max-width:98vw">
 
@@ -1255,7 +1296,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
-import { apiList, apiGET, apiSave, apiDelete, apiPOST, resolveCompany } from "../api/client.js";
+import { apiList, apiGET, apiSave, apiSubmit, apiDelete, apiPOST, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePermissions } from "../composables/usePermissions.js";
 import AddressManager from "../components/AddressManager.vue";
@@ -1871,6 +1912,77 @@ const custTxnsLoaded  = ref(false);          // ← lazy flag
 const txnPage = ref(1);                       // ← load-more page
 const TXN_PAGE_SIZE = 10;
 const custSectionCollapsed = reactive({ address: false, otherDetails: false });
+const obInfo = ref({ has_opening_je: false });
+const showPayModal = ref(false);
+const payLoading = ref(false);
+const payForm = reactive({ amount: 0, bank_cash_account: "", payment_date: new Date().toISOString().slice(0, 10) });
+
+async function loadOpeningBalance() {
+  if (!selectedCustomer.value) return;
+  obInfo.value = await apiGET(
+    "zoho_books_clone.accounts.opening_balance.get_opening_balance_payment_info",
+    { party_type: "Customer", party: selectedCustomer.value.name }
+  ).catch(() => ({ has_opening_je: false }));
+}
+
+function openPayModal() {
+  payForm.amount = obInfo.value.outstanding;
+  payForm.bank_cash_account = obInfo.value.bank_cash_accounts?.[0]?.name || "";
+  payForm.payment_date = new Date().toISOString().slice(0, 10);
+  showPayModal.value = true;
+}
+
+async function submitPayment() {
+  const amount = Number(payForm.amount);
+  if (!payForm.bank_cash_account) { toast("Choose an account to pay into", "error"); return; }
+  if (!amount || amount <= 0) { toast("Enter a valid amount", "error"); return; }
+  if (amount > obInfo.value.outstanding + 0.01) { toast("Amount exceeds outstanding opening balance", "error"); return; }
+
+  payLoading.value = true;
+  try {
+    const doc = {
+      doctype: "Payment Entry",
+      payment_type: "Receive",
+      party_type: "Customer",
+      party: selectedCustomer.value.name,
+      party_name: selectedCustomer.value.customer_name,
+      company: obInfo.value.company,
+      paid_from: obInfo.value.party_account,
+      paid_to: payForm.bank_cash_account,
+      paid_amount: amount,
+      received_amount: amount,
+      payment_date: payForm.payment_date,
+      remarks: `Opening balance payment for ${selectedCustomer.value.customer_name || selectedCustomer.value.name}`,
+      references: [{
+        reference_doctype: "Journal Entry",
+        reference_name: obInfo.value.journal_entry,
+        allocated_amount: amount,
+      }],
+    };
+    const saved = await apiSave(doc);
+    await apiSubmit("Payment Entry", saved.name);
+    toast("Payment recorded", "success");
+    showPayModal.value = false;
+    await loadOpeningBalance();
+
+    // Refresh outstanding balances everywhere they're shown — the sidebar
+    // list, the RECEIVABLES card, and (if open) the Transactions/Statement
+    // tabs — otherwise they keep showing the pre-payment amount until a
+    // full page reload.
+    await load();
+    const updated = list.value.find(c => c.name === selectedCustomer.value.name);
+    if (updated) selectedCustomer.value = { ...selectedCustomer.value, outstanding: updated.outstanding };
+
+    custTxnsLoaded.value = false;
+    if (activeCustomerTab.value === "transactions") await loadTransactions();
+    stmtLoaded.value = false;
+    if (activeCustomerTab.value === "statement") await loadStatement();
+  } catch (e) {
+    toast(e.message || "Failed to record payment", "error");
+  } finally {
+    payLoading.value = false;
+  }
+}
 
 async function loadTransactions() {
   if (!selectedCustomer.value || custTxnsLoaded.value) return;
@@ -1895,6 +2007,8 @@ async function selectCustomer(c) {
   custTxnsLoaded.value = false;
   txnPage.value     = 1;
   Object.assign(custSectionCollapsed, { address: false, otherDetails: false });
+  obInfo.value = { has_opening_je: false };
+  loadOpeningBalance();
   // Only load the full customer doc (lightweight) — tabs load on demand
   custTxnsLoading.value = true;
   try {
@@ -1905,7 +2019,7 @@ async function selectCustomer(c) {
   } catch (e) { /* keep panel open */ }
   custTxnsLoading.value = false;
 }
-function closeCustomer()   { selectedCustomer.value = null; }
+function closeCustomer()   { selectedCustomer.value = null; showPayModal.value = false; }
 function custInitials(name) {
   return (name || "?").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
@@ -2161,6 +2275,8 @@ onMounted(load);
 </script>
 
 <style scoped>
+.cus-pay-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;}
+.cus-pay-modal{background:#fff;border-radius:12px;padding:22px;width:340px;box-shadow:0 10px 30px rgba(0,0,0,.15);}
 /* ── Drawer slide-in animation ──────────────────────────── */
 .inv-drawer-panel {
   width: 680px;
