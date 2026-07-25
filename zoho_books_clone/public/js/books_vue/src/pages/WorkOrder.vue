@@ -1343,23 +1343,35 @@ function printWorkOrder() {
         <meta charset="utf-8"/>
         <title>Work Order ${esc(wo.value.name)}</title>
         <style>
-          * { box-sizing:border-box; }
-          body { font-family: Arial, Helvetica, sans-serif; color:#1A1D23; padding:28px; }
-          .sheet { border:1px solid #1A1D23; border-radius:8px; padding:24px 26px; }
+          * { box-sizing:border-box; margin:0; padding:0; }
+          body { font-family: Arial, Helvetica, sans-serif; color:#1A1D23; background:#e5e7eb; min-height:100vh; }
+          .toolbar { position:sticky; top:0; z-index:10; background:#fff; padding:10px 18px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; gap:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+          .tb-lbl { font-size:11.5px; font-weight:700; color:#374151; letter-spacing:.04em; }
+          .print-btn { margin-left:auto; background:#1a6ef7; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-weight:700; cursor:pointer; font:inherit; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+          .print-btn:hover { background:#1558d0; }
+          .doc-wrap { max-width:820px; margin:20px auto; background:#fff; box-shadow:0 4px 24px rgba(0,0,0,.1); border-radius:8px; overflow:hidden; }
+          .sheet { padding:28px 30px; }
           h1 { font-size:18px; margin:0 0 4px; }
           .sub { color:#868E96; font-size:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid #E2E8F0; }
           .meta { display:grid; grid-template-columns: 1fr 1fr; gap:10px 24px; margin-bottom:22px; font-size:13px; }
           .meta div { border:1px solid #E2E8F0; border-radius:6px; padding:8px 10px; }
           .meta div span { color:#868E96; display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px; }
-          table { width:100%; border-collapse:collapse; font-size:13px; border:1px solid #1A1D23; border-radius:6px; overflow:hidden; }
+          table { width:100%; border-collapse:collapse; font-size:13px; border:1px solid #E2E8F0; border-radius:6px; overflow:hidden; }
           th, td { border:1px solid #E2E8F0; padding:8px 10px; text-align:left; }
           th { background:#F8F9FC; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#868E96; }
           h2 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:#868E96; margin:0 0 8px; }
-          @media print { body { padding:0; } .sheet { border:none; } }
+          @media print { .toolbar { display:none!important; } body { background:#fff; } .doc-wrap { box-shadow:none; margin:0; max-width:none; border-radius:0; } }
         </style>
       </head>
       <body>
-        <div class="sheet">
+        <div class="toolbar">
+          <span class="tb-lbl">PRINT PREVIEW</span>
+          <button class="print-btn" onclick="window.print()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print
+          </button>
+        </div>
+        <div class="doc-wrap"><div class="sheet">
           <h1>Work Order — ${esc(wo.value.name)}</h1>
           <div class="sub">Printed ${esc(new Date().toLocaleString())}</div>
           <div class="meta">
@@ -1375,17 +1387,16 @@ function printWorkOrder() {
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
-        </div>
+        </div></div>
       </body>
     </html>`;
 
-  const win = window.open("", "_blank", "width=900,height=700");
+  const win = window.open("", "_blank");
   if (!win) { toast("Please allow pop-ups to print", "error"); return; }
   win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
-  win.onload = () => win.print();
 }
 
 async function loadStockEntries() {
