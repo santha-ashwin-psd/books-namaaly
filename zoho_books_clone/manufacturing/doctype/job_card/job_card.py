@@ -32,11 +32,6 @@ class JobCard(Document):
             _sync_wo_operation_status(self.wo_operation_name, self.status)
             _sync_wo_operation_actual_time(self.wo_operation_name)
 
-    def on_cancel(self):
-        if self.wo_operation_name:
-            _sync_wo_operation_status(self.wo_operation_name, "Pending")
-            _sync_wo_operation_actual_time(self.wo_operation_name)
-
 
 def _sync_wo_operation_status(wo_op_name, job_card_status):
     """Map Job Card status → Work Order Operation status and write it."""

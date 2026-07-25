@@ -414,6 +414,25 @@ def auto_create_qc_for_stock_entry(doc, method=None):
     if getattr(doc, "stock_entry_type", "") != "Manufacture":
         return
 
+    # Resolve the actual production item so the row filter below can tell
+    # the finished-goods receipt row apart from scrap/by-product rows --
+    # both carry t_warehouse (scrap is received into scrap_warehouse too),
+    # so filtering on "has a t_warehouse" alone let a scrap item's own
+    # inspection_required_before_manufacture flag spuriously create a
+    # "Finished Goods QC" inspection for the scrap item, and — via
+    # _stamp_and_route_fg_quarantine below — reroute real recoverable scrap
+    # stock into the FG quarantine warehouse instead of scrap_warehouse.
+    production_item = None
+    if getattr(doc, "work_order", None):
+        production_item = frappe.db.get_value("Work Order", doc.work_order, "production_item")
+
+    def _is_fg_row(row):
+        if not getattr(row, "t_warehouse", None):
+            return False
+        if production_item:
+            return row.item_code == production_item
+        return True  # no Work Order linked -- fall back to the old behaviour
+
     def _stamp_work_order(qci_name, row):
         # Stamp work_order traceability if column exists
         if (frappe.db.has_column("QC Inspection", "work_order")
@@ -434,8 +453,8 @@ def auto_create_qc_for_stock_entry(doc, method=None):
         success_message=_("Finished Goods QC Inspection(s) auto-created: {1}. "
                            "Please complete readings for the manufactured batch."),
         success_title=_("Finished Goods QC Created"),
-        # Only finished goods rows (items being produced into t_warehouse)
-        row_filter=lambda row: bool(getattr(row, "t_warehouse", None)),
+        # Only the finished-goods receipt row(s) -- see _is_fg_row above.
+        row_filter=_is_fg_row,
         on_created=_on_created,
     )
 

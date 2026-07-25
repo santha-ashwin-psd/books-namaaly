@@ -29,6 +29,16 @@
         <div class="bomx-pp-sc-val" style="color:var(--bx-green)">{{ countWOCreated }}</div>
         <div class="bomx-pp-sc-lbl">WOs Created</div>
       </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-green)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-green)">{{ countCompleted }}</div>
+        <div class="bomx-pp-sc-lbl">Completed</div>
+      </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-red)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-red)">{{ countCancelled }}</div>
+        <div class="bomx-pp-sc-lbl">Cancelled</div>
+      </div>
     </div>
 
     <div class="bomx-list-filters">
@@ -36,7 +46,7 @@
         <option value="">All Status</option>
         <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
       </select>
-      <input class="bomx-fi bomx-search-full" v-model="search" type="text" placeholder="Search Production Plans…"/>
+      <input class="bomx-fi bomx-search-full" v-model="search" type="text" placeholder="Search by Plan ID, company, status, or remarks…"/>
     </div>
 
     <div class="bomx-pp-rows">
@@ -56,6 +66,9 @@
           </div>
           <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click.stop="selectPlan(row.name)">
             Open <span v-html="icon('open',11)"></span>
+          </button>
+          <button v-if="row.docstatus === 0" class="bomx-btn-icon danger" @click.stop="deletePP(row.name, $event)" title="Delete">
+            <span v-html="icon('trash',13)"></span>
           </button>
         </div>
       </div>
@@ -106,238 +119,277 @@
                 <button v-if="!isNew && pp.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelPP" :disabled="submitting">
                   {{ submitting ? 'Cancelling…' : 'Cancel Plan' }}
                 </button>
+                <button v-if="!isNew && pp.docstatus===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="deletePP(pp.name)">
+                  Delete
+                </button>
                 <button v-if="!isNew && pp.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitPP" :disabled="submitting || saving">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
                 <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
                   {{ saving ? 'Saving…' : (isNew ? 'Save Production Plan' : 'Save Changes') }}
                 </button>
+                <button v-if="!isNew && pp.docstatus===1" class="bomx-btn bomx-btn-light" @click="saveRemarks" :disabled="saving">
+                  {{ saving ? 'Saving…' : 'Save Remarks' }}
+                </button>
               </div>
             </div>
           </div>
 
-          <!-- Tabs -->
-          <div class="bomx-tabs">
-            <button v-for="t in tabs" :key="t.id" class="bomx-tab" :class="{'bomx-tab--active': activeTab===t.id}" @click="activeTab=t.id">{{ t.label }}</button>
-          </div>
-
           <div class="bomx-body">
 
-            <!-- ── TAB: Plan ── -->
-            <template v-if="activeTab==='plan'">
-              <div class="bomx-section-lbl">Plan Details</div>
-              <div class="bomx-hdr-fields bomx-hf-cols-1" style="padding:0;border:none;background:none;margin-bottom:20px">
-                <div>
-                  <div class="bomx-hf-label">Posting Date</div>
-                  <input class="bomx-fi" type="date" v-model="pp.posting_date" :disabled="readOnly" style="width:100%"/>
+            <!-- ── CARD: Plan Details ── -->
+            <div class="bomx-card">
+              <div class="bomx-card-hdr">
+                <span class="bomx-card-hdr-title"><span v-html="icon('clipboard',14)"></span> Plan Details</span>
+              </div>
+              <div class="bomx-card-body">
+                <div class="bomx-fg bomx-fg-2" style="margin-bottom:14px">
+                  <div>
+                    <label class="bomx-fl">Posting Date</label>
+                    <input class="bomx-fi" type="date" v-model="pp.posting_date" :disabled="readOnly"/>
+                  </div>
+                  <div>
+                    <label class="bomx-fl">Remarks</label>
+                    <input class="bomx-fi" type="text" v-model="pp.remarks" :disabled="pp.docstatus === 2" placeholder="Notes on this plan…"/>
+                  </div>
+                </div>
+                <template v-if="pp.amended_from">
+                  <div class="bomx-field-hint" style="margin-bottom:14px">Amended from <span class="bomx-link" @click="router.push(`/manufacturing/production-plan/${pp.amended_from}`)">{{ pp.amended_from }}</span></div>
+                </template>
+                <div class="bomx-fg bomx-fg-4">
+                  <div>
+                    <label class="bomx-fl">Source Warehouse (Raw Materials) <span style="color:var(--bx-red)">*</span></label>
+                    <div class="bomx-fi-w"><select class="bomx-fi" v-model="pp.default_source_warehouse" :disabled="readOnly">
+                      <option value="">— Select —</option>
+                      <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select></div>
+                  </div>
+                  <div>
+                    <label class="bomx-fl">Work-in-Progress Warehouse</label>
+                    <div class="bomx-fi-w"><select class="bomx-fi" v-model="pp.default_wip_warehouse" :disabled="readOnly">
+                      <option value="">— Select —</option>
+                      <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select></div>
+                  </div>
+                  <div>
+                    <label class="bomx-fl">Finished Goods Warehouse <span style="color:var(--bx-red)">*</span></label>
+                    <div class="bomx-fi-w"><select class="bomx-fi" v-model="pp.default_fg_warehouse" :disabled="readOnly">
+                      <option value="">— Select —</option>
+                      <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select></div>
+                  </div>
+                  <div>
+                    <label class="bomx-fl">Scrap / By-Product Warehouse</label>
+                    <div class="bomx-fi-w"><select class="bomx-fi" v-model="pp.default_scrap_warehouse" :disabled="readOnly">
+                      <option value="">— Defaults to FG Warehouse —</option>
+                      <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select></div>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div class="bomx-section-lbl">Default Warehouses</div>
-              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
-                <div>
-                  <div class="bomx-hf-label">Default Source Warehouse (Raw Materials)</div>
-                  <select class="bomx-fi" v-model="pp.default_source_warehouse" :disabled="readOnly" style="width:100%">
-                    <option value="">— Select —</option>
-                    <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                  </select>
-                  <div class="bomx-field-hint">Also the warehouse checked for availability on the Raw Materials tab.</div>
-                </div>
-                <div>
-                  <div class="bomx-hf-label">Default Work-in-Progress Warehouse</div>
-                  <select class="bomx-fi" v-model="pp.default_wip_warehouse" :disabled="readOnly" style="width:100%">
-                    <option value="">— Select —</option>
-                    <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                  </select>
-                </div>
+            <!-- ── CARD: Source — Sales Orders ── -->
+            <div class="bomx-card">
+              <div class="bomx-card-hdr">
+                <span class="bomx-card-hdr-title"><span v-html="icon('fileText',14)"></span> Source — Sales Orders</span>
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="openSOPicker">
+                  <span v-html="icon('plus',12)"></span> Add Sales Orders
+                </button>
               </div>
-              <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:20px">
-                <div>
-                  <div class="bomx-hf-label">Default Finished Goods Warehouse <span style="color:var(--bx-red)">*</span></div>
-                  <select class="bomx-fi" v-model="pp.default_fg_warehouse" :disabled="readOnly" style="width:100%">
-                    <option value="">— Select —</option>
-                    <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                  </select>
-                </div>
-                <div>
-                  <div class="bomx-hf-label">Default Scrap / By-Product Warehouse</div>
-                  <select class="bomx-fi" v-model="pp.default_scrap_warehouse" :disabled="readOnly" style="width:100%">
-                    <option value="">— Defaults to Finished Goods Warehouse —</option>
-                    <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                  </select>
-                </div>
+              <div v-if="!pp.sales_orders || !pp.sales_orders.length" class="bomx-tree-empty" style="padding:28px">
+                Click <b>Add Sales Orders</b> to pull demand from open Sales Orders, or add items manually below.
               </div>
-
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-                <div style="min-width:0">
-                  <div class="bomx-section-lbl" style="margin-bottom:2px">Demand from Sales Orders</div>
-                  <div class="bomx-field-hint" style="margin-top:0">Optional — pull pending qty from open Sales Orders as a starting point.</div>
+              <template v-else>
+                <div class="bomx-tbl-wrap">
+                  <table class="bomx-so-tbl">
+                    <thead>
+                      <tr>
+                        <th>SO Number</th>
+                        <th>Customer</th>
+                        <th>Status</th>
+                        <th>Delivery Date</th>
+                        <th class="right">Grand Total</th>
+                        <th v-if="!readOnly" style="width:36px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(so, idx) in pp.sales_orders" :key="idx">
+                        <td class="mono" style="font-weight:600">
+                          <span class="bomx-link" @click="router.push(`/sales/sales-order/${so.sales_order}`)">{{ so.sales_order }}</span>
+                        </td>
+                        <td>{{ so.customer || '—' }}</td>
+                        <td><span class="bomx-badge" :class="soStatusClass(so.status)">{{ so.status || '—' }}</span></td>
+                        <td class="mono">{{ fmtDate(so.delivery_date) }}</td>
+                        <td class="right mono">{{ so.grand_total ? fmt(so.grand_total) : '—' }}</td>
+                        <td v-if="!readOnly">
+                          <button class="bomx-btn-icon danger" @click="removeSalesOrder(idx)" title="Remove">
+                            <span v-html="icon('trash',13)"></span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap" v-if="!readOnly">
-                  <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="openSOPicker">
-                    <span v-html="icon('plus',12)"></span> Add Sales Orders
-                  </button>
-                  <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="pullItemsFromSalesOrders" :disabled="itemsLoading || !pp.sales_orders.length">
+                <div v-if="!readOnly" class="bomx-card-footer">
+                  <span class="bomx-field-hint" style="margin:0">Pulls pending qty (qty − delivered) per item across the Sales Orders above.</span>
+                  <button class="bomx-btn bomx-btn-sm bomx-btn-mfg" @click="pullItemsFromSalesOrders" :disabled="itemsLoading || !pp.sales_orders || !pp.sales_orders.length">
                     {{ itemsLoading ? 'Pulling…' : 'Pull / Refresh Items' }}
                   </button>
                 </div>
-              </div>
-              <div class="bomx-rm-cards" style="margin-bottom:20px">
-                <div v-if="!pp.sales_orders || !pp.sales_orders.length" class="bomx-tree-empty">No Sales Orders added yet.</div>
-                <div v-for="(so, idx) in pp.sales_orders" :key="idx" class="bomx-rm-card">
-                  <div class="bomx-rm-card-hdr">
-                    <span class="bomx-rm-card-title mono" style="font-weight:600">{{ so.sales_order }}</span>
-                    <span style="font-size:12px;color:var(--bx-muted)">{{ so.status }}</span>
-                    <button v-if="!readOnly" class="bomx-btn-icon danger" @click="pp.sales_orders.splice(idx,1)" title="Remove">
-                      <span v-html="icon('trash',13)"></span>
-                    </button>
-                  </div>
-                  <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
-                    <div class="bomx-rm-field"><label>Customer</label><div class="bomx-rm-static">{{ so.customer || '—' }}</div></div>
-                    <div class="bomx-rm-field"><label>Delivery Date</label><div class="bomx-rm-static">{{ fmtDate(so.delivery_date) }}</div></div>
-                  </div>
-                </div>
-              </div>
+              </template>
+            </div>
 
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-                <span class="bomx-section-lbl" style="margin-bottom:0">Items to Manufacture</span>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="addPOItem">
+            <!-- ── CARD: Items to Produce ── -->
+            <div class="bomx-card">
+              <div class="bomx-card-hdr">
+                <span class="bomx-card-hdr-title"><span v-html="icon('settings',14)"></span> Items to Produce</span>
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="addPOItem">
                   <span v-html="icon('plus',12)"></span> Add Row
                 </button>
               </div>
-              <div v-if="!pp.po_items || !pp.po_items.length" class="bomx-tree-empty">No items yet. Pull from Sales Orders above, or add a row manually.</div>
-              <div v-else class="bomx-pp-tbl-wrap">
-                <table class="bomx-pp-item-tbl">
-                  <thead>
-                    <tr>
-                      <th>Item to Manufacture</th>
-                      <th>BOM</th>
-                      <th class="right">Planned Qty</th>
-                      <th>FG Warehouse</th>
-                      <th class="right">WO Qty</th>
-                      <th style="width:36px"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, idx) in pp.po_items" :key="idx">
-                      <td style="min-width:180px">
-                        <select class="bomx-fi" v-model="row.item_code" @change="onPOItemChange(row)" :disabled="readOnly">
-                          <option value="">— Select —</option>
-                          <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
-                        </select>
-                      </td>
-                      <td style="min-width:160px">
-                        <select class="bomx-fi" v-model="row.bom_no" :disabled="readOnly">
-                          <option value="">— Select Submitted BOM —</option>
-                          <option v-for="b in bomsFor(row.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
-                        </select>
-                      </td>
-                      <td class="right" style="min-width:100px">
-                        <input class="bomx-fi bomx-fi-mono" style="text-align:right" type="number" v-model="row.planned_qty" min="0.01" step="any" :disabled="readOnly"/>
-                      </td>
-                      <td style="min-width:160px">
-                        <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
-                          <option value="">— Use Default —</option>
-                          <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                        </select>
-                      </td>
-                      <td class="right mono" style="color:var(--bx-muted)">{{ flt(row.work_order_created_qty) ? fmt(row.work_order_created_qty) : '—' }}</td>
-                      <td>
-                        <button v-if="!readOnly" class="bomx-btn-icon danger" @click="pp.po_items.splice(idx,1)" title="Remove">
-                          <span v-html="icon('trash',13)"></span>
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </template>
-
-            <!-- ── TAB: Raw Materials ── -->
-            <template v-if="activeTab==='materials'">
-              <div class="bomx-prod-card">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                  <div>
-                    <div class="bomx-section-lbl" style="margin-bottom:2px">Raw Material Requirement</div>
-                    <div style="font-size:12.5px;color:var(--bx-muted)">Explodes the BOM for every Item to Manufacture and compares against on-hand stock in the Default Source Warehouse.</div>
-                  </div>
-                  <div style="display:flex;gap:8px;flex-shrink:0">
-                    <button v-if="!isNew && pp.docstatus===1 && hasShortfall" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="createMaterialRequests" :disabled="actionLoading==='mr'">
-                      {{ actionLoading === 'mr' ? 'Creating…' : 'Create Material Requests' }}
-                    </button>
-                    <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="calculateRawMaterials" :disabled="mrLoading || !pp.po_items.length">
-                      {{ mrLoading ? 'Calculating…' : 'Calculate Requirement' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="!pp.mr_items || !pp.mr_items.length" class="bomx-tree-empty">No requirement calculated yet. Click "Calculate Requirement" above.</div>
-              <div v-else class="bomx-pp-mat-grid">
-                <div v-for="(m, idx) in pp.mr_items" :key="idx" class="bomx-pp-mat-card">
-                  <div class="bomx-pp-mat-name">{{ m.item_name || m.item_code }}</div>
-                  <div class="bomx-pp-mat-code mono">{{ m.item_code }}</div>
-                  <div class="bomx-pp-mat-row"><span>Required</span><span class="mono" style="font-weight:700">{{ fmt(m.required_qty) }} {{ m.uom }}</span></div>
-                  <div class="bomx-pp-mat-row"><span>Available</span><span class="mono">{{ fmt(m.available_qty) }} {{ m.uom }}</span></div>
-                  <div class="bomx-pp-mat-row">
-                    <span>Shortfall</span>
-                    <span class="mono" :class="flt(m.shortfall_qty) > 0 ? 'bomx-pp-stock-short' : 'bomx-pp-stock-ok'">
-                      {{ flt(m.shortfall_qty) > 0 ? fmt(m.shortfall_qty) + ' ' + m.uom : 'Sufficient' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </template>
-
-            <!-- ── TAB: Work Orders ── -->
-            <template v-if="activeTab==='work-orders'">
-              <div v-if="isNew" class="bomx-tree-empty">Save and submit the Production Plan first to create Work Orders.</div>
+              <div v-if="!pp.po_items || !pp.po_items.length" class="bomx-tree-empty" style="padding:28px">No items yet. Pull from Sales Orders above, or add a row manually.</div>
               <template v-else>
-                <div class="bomx-prod-card" v-if="pp.docstatus===1">
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                    <div>
-                      <div class="bomx-section-lbl" style="margin-bottom:2px">Create Work Orders</div>
-                      <div style="font-size:12.5px;color:var(--bx-muted)">Generates one Draft Work Order per row for whatever Planned Qty doesn't already have one. Review and submit each Work Order from there.</div>
-                    </div>
-                    <div style="display:flex;gap:8px;flex-shrink:0">
-                      <button v-if="hasDraftWorkOrders" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="bulkSubmitWorkOrders" :disabled="actionLoading==='bulk-submit'">
-                        {{ actionLoading === 'bulk-submit' ? 'Submitting…' : 'Submit All Work Orders' }}
-                      </button>
-                      <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty">
-                        {{ actionLoading==='wo' ? 'Creating…' : 'Create Work Orders' }}
-                      </button>
-                    </div>
-                  </div>
-                  <div class="bomx-field-hint" v-if="!pendingWOQty">Every row already has a Work Order for its full Planned Qty.</div>
+                <div class="bomx-tbl-wrap">
+                  <table class="bomx-item-tbl">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>BOM</th>
+                        <th class="right">Planned Qty</th>
+                        <th>UOM</th>
+                        <th>FG Warehouse</th>
+                        <th class="right">WO Created Qty</th>
+                        <th v-if="!readOnly" style="width:36px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, idx) in pp.po_items" :key="idx">
+                        <td style="min-width:180px">
+                          <select class="bomx-fi" v-model="row.item_code" @change="onPOItemChange(row)" :disabled="readOnly">
+                            <option value="">— Select —</option>
+                            <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                          </select>
+                        </td>
+                        <td style="min-width:160px">
+                          <select class="bomx-fi" v-model="row.bom_no" :disabled="readOnly || !row.item_code">
+                            <option value="">{{ row.item_code ? '— Select Submitted BOM —' : '— Select an Item first —' }}</option>
+                            <option v-for="b in bomsFor(row.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
+                          </select>
+                        </td>
+                        <td class="right" style="min-width:100px">
+                          <input class="bomx-fi bomx-fi-mono" style="text-align:right" type="number" v-model="row.planned_qty" min="0.01" step="any" :disabled="readOnly"/>
+                        </td>
+                        <td class="mono" style="color:var(--bx-muted)">{{ row.stock_uom || '—' }}</td>
+                        <td style="min-width:160px">
+                          <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
+                            <option value="">— Use Default —</option>
+                            <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                          </select>
+                        </td>
+                        <td class="right mono" style="color:var(--bx-muted)">{{ flt(row.work_order_created_qty) ? fmt(row.work_order_created_qty) : '—' }}</td>
+                        <td v-if="!readOnly">
+                          <button class="bomx-btn-icon danger" @click="pp.po_items.splice(idx,1)" title="Remove">
+                            <span v-html="icon('trash',13)"></span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
+                <div class="bomx-card-footer">
+                  <span>{{ pp.po_items.length }} item{{ pp.po_items.length===1?'':'s' }} planned</span>
+                  <span class="mono">Total: {{ fmt(totalPlannedQty) }} planned<template v-if="totalPendingWOQty > 0.0001"> · {{ fmt(totalPendingWOQty) }} pending WO</template></span>
+                </div>
+              </template>
+            </div>
 
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <span class="bomx-section-lbl" style="margin-bottom:0">Linked Work Orders</span>
-                  <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadWorkOrders" :disabled="woLoading">Refresh</button>
+            <!-- ── CARD: Material Requirement Summary ── -->
+            <div class="bomx-card">
+              <div class="bomx-card-hdr">
+                <span class="bomx-card-hdr-title"><span v-html="icon('package',14)"></span> Material Requirement Summary</span>
+                <div style="display:flex;gap:8px;flex-shrink:0">
+                  <button v-if="!isNew && pp.docstatus===1 && hasShortfall" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="createMaterialRequests" :disabled="actionLoading==='mr'">
+                    {{ actionLoading === 'mr' ? 'Creating…' : 'Create Material Requests' }}
+                  </button>
+                  <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="calculateRawMaterials" :disabled="mrLoading || !pp.po_items || !pp.po_items.length">
+                    {{ mrLoading ? 'Calculating…' : 'Calculate Requirement' }}
+                  </button>
                 </div>
-                <div v-if="!workOrders.length" class="bomx-tree-empty">No Work Orders created yet.</div>
+              </div>
+              <div class="bomx-card-body">
+                <div v-if="!pp.mr_items || !pp.mr_items.length" class="bomx-tree-empty">Add items above and click "Calculate Requirement" to see raw material requirements.</div>
                 <template v-else>
-                  <div class="bomx-pp-infobox">
-                    <span v-html="icon('check',14)"></span>
-                    <span><b>{{ workOrders.length }}</b> Work Order{{ workOrders.length===1?'':'s' }} linked to this Production Plan. Click a chip to open it.</span>
+                  <div v-if="hasShortfall" class="bomx-infobox bomx-ib-amber" style="margin-bottom:14px">
+                    <span v-html="icon('alertTriangle',14)"></span>
+                    <span><b>{{ shortfallCount }} material{{ shortfallCount===1?'':'s' }} short</b> — est. ₹{{ fmt(totalShortfallCost) }} to procure. Raise Material Requests before starting production.</span>
                   </div>
-                  <div class="bomx-pp-wo-chips">
-                    <span v-for="w in workOrders" :key="w.name" class="bomx-pp-wo-chip" :class="'wo-' + woStatusClass(w)" @click="router.push(`/manufacturing/work-order/${w.name}`)" :title="(w.item_name || w.production_item) + ' — ' + w.status">
-                      {{ w.name }}
-                    </span>
+                  <div class="bomx-pp-mat-grid">
+                    <div v-for="(m, idx) in pp.mr_items" :key="idx" class="bomx-pp-mat-card">
+                      <div class="bomx-pp-mat-name">{{ m.item_name || m.item_code }}</div>
+                      <div class="bomx-pp-mat-code mono">{{ m.item_code }}</div>
+                      <div class="bomx-pp-mat-row"><span>Required</span><span class="mono" style="font-weight:700">{{ fmt(m.required_qty) }} {{ m.uom }}</span></div>
+                      <div class="bomx-pp-mat-row"><span>Available</span><span class="mono">{{ fmt(m.available_qty) }} {{ m.uom }}</span></div>
+                      <div class="bomx-pp-mat-row">
+                        <span>Shortfall</span>
+                        <span class="mono" :class="flt(m.shortfall_qty) > 0 ? 'bomx-pp-stock-short' : 'bomx-pp-stock-ok'">
+                          {{ flt(m.shortfall_qty) > 0 ? fmt(m.shortfall_qty) + ' ' + m.uom : 'Sufficient' }}
+                        </span>
+                      </div>
+                      <div v-if="flt(m.shortfall_qty) > 0" class="bomx-pp-mat-row">
+                        <span>Est. Cost</span>
+                        <span class="mono">₹{{ fmt(m.estimated_cost) }}</span>
+                      </div>
+                    </div>
                   </div>
                 </template>
-              </template>
-            </template>
+              </div>
+            </div>
 
-            <!-- ── TAB: More Information ── -->
-            <template v-if="activeTab==='more'">
-              <div class="bomx-section-lbl">Remarks</div>
-              <textarea class="bomx-fi" v-model="pp.remarks" rows="3" :disabled="readOnly" style="width:100%;min-height:90px;resize:vertical;margin-bottom:20px" placeholder="Optional notes…"></textarea>
-              <template v-if="pp.amended_from">
-                <div class="bomx-section-lbl">Amended From</div>
-                <span class="bomx-link" @click="router.push(`/manufacturing/production-plan/${pp.amended_from}`)">{{ pp.amended_from }}</span>
-              </template>
+            <!-- ── CARD: Work Orders ── -->
+            <div class="bomx-card" v-if="isNew">
+              <div class="bomx-card-body"><div class="bomx-tree-empty">Save and submit the Production Plan first to create Work Orders.</div></div>
+            </div>
+            <template v-else>
+              <div class="bomx-card" v-if="pp.docstatus===1">
+                <div class="bomx-card-hdr">
+                  <span class="bomx-card-hdr-title"><span v-html="icon('settings',14)"></span> Create Work Orders</span>
+                  <div style="display:flex;gap:8px;flex-shrink:0">
+                    <button v-if="hasDraftWorkOrders" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="bulkSubmitWorkOrders" :disabled="actionLoading==='bulk-submit'">
+                      {{ actionLoading === 'bulk-submit' ? 'Submitting…' : 'Submit All Work Orders' }}
+                    </button>
+                    <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty">
+                      {{ actionLoading==='wo' ? 'Creating…' : 'Create Work Orders' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="bomx-card-body" v-if="!pendingWOQty">
+                  <div class="bomx-field-hint" style="margin:0">Every row already has a Work Order for its full Planned Qty.</div>
+                </div>
+              </div>
+
+              <div class="bomx-card">
+                <div class="bomx-card-hdr">
+                  <span class="bomx-card-hdr-title" :style="workOrders.length ? 'color:var(--bx-green)' : ''">
+                    <span v-html="icon('check',14)"></span> Work Orders Created
+                  </span>
+                  <button class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="loadWorkOrders" :disabled="woLoading">Refresh</button>
+                </div>
+                <div class="bomx-card-body">
+                  <div v-if="!workOrders.length" class="bomx-tree-empty">No Work Orders created yet.</div>
+                  <template v-else>
+                    <div class="bomx-infobox bomx-ib-green" style="margin-bottom:12px">
+                      <span v-html="icon('check',14)"></span>
+                      <span><b>{{ workOrders.length }}</b> Work Order{{ workOrders.length===1?'':'s' }} created from this Production Plan. Click a chip to open it.</span>
+                    </div>
+                    <div class="bomx-pp-wo-chips">
+                      <span v-for="w in workOrders" :key="w.name" class="bomx-pp-wo-chip" :class="'wo-' + woStatusClass(w)" @click="router.push(`/manufacturing/work-order/${w.name}`)" :title="(w.item_name || w.production_item) + ' — ' + w.status">
+                        {{ w.name }}
+                      </span>
+                    </div>
+                  </template>
+                </div>
+              </div>
             </template>
 
           </div>
@@ -378,14 +430,16 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, resolveCompany } from "../api/client.js";
+import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 
 const ENGINE = "zoho_books_clone.manufacturing.production_plan_engine.";
 
 const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
+const { confirm } = useConfirm();
 
 // ── LIST STATE ──────────────────────────────────────────────
 const loading = ref(false);
@@ -399,7 +453,7 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 
 async function loadList() {
   try {
-    const fields = ["name", "posting_date", "company", "status", "docstatus", "modified"];
+    const fields = ["name", "posting_date", "company", "status", "docstatus", "modified", "remarks"];
     const r = await apiList("Production Plan", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
   } catch (e) {
@@ -411,7 +465,7 @@ const sorted = computed(() => {
   let r = list.value;
   if (filterStatus.value) r = r.filter(i => i.status === filterStatus.value);
   const q = search.value.toLowerCase().trim();
-  if (q) r = r.filter(i => (i.name || "").toLowerCase().includes(q));
+  if (q) r = r.filter(i => [i.name, i.company, i.status, i.remarks].some(f => (f || "").toLowerCase().includes(q)));
   return r;
 });
 
@@ -426,6 +480,8 @@ const countTotal = computed(() => list.value.length);
 const countDraft = computed(() => list.value.filter(i => i.status === "Draft").length);
 const countSubmitted = computed(() => list.value.filter(i => i.status === "Submitted").length);
 const countWOCreated = computed(() => list.value.filter(i => i.status === "Work Orders Created").length);
+const countCompleted = computed(() => list.value.filter(i => i.status === "Completed").length);
+const countCancelled = computed(() => list.value.filter(i => i.status === "Cancelled").length);
 
 // Pipeline stages shown in the detail header, derived from pp.status.
 // Cancelled plans get their own short track; everything else walks
@@ -481,14 +537,6 @@ const mrLoading = ref(false);
 const actionLoading = ref(false);
 const woLoading = ref(false);
 
-const activeTab = ref("plan");
-const tabs = [
-  { id: "plan",         label: "Plan" },
-  { id: "materials",    label: "Raw Materials" },
-  { id: "work-orders",  label: "Work Orders" },
-  { id: "more",          label: "More Information" },
-];
-
 function emptyPP() {
   return {
     doctype: "Production Plan",
@@ -528,7 +576,7 @@ onMounted(async () => {
     const stk = await apiList("Item", { fields: ["name", "item_name", "stock_uom"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
     stockItems.value = stk || [];
 
-    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "is_default", "docstatus"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name asc" });
+    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "is_default", "docstatus", "is_active"], filters: [["docstatus", "=", 1], ["is_active", "=", 1]], limit: 2000, order: "name asc" });
     bomList.value = boms || [];
 
     const whs = await apiList("Warehouse", { fields: ["name"], filters: co ? [["company", "=", co], ["is_group", "=", 0]] : [["is_group", "=", 0]], limit: 1000, order: "name asc" });
@@ -564,7 +612,6 @@ onMounted(async () => {
 });
 
 watch(() => route.params.name, async (name) => {
-  activeTab.value = "plan";
   if (!name) { pp.value = emptyPP(); return; }
   loading.value = true;
   try {
@@ -589,7 +636,10 @@ async function loadPP() {
 }
 
 function bomsFor(itemCode) {
-  if (!itemCode) return bomList.value;
+  // Previously returned the full bomList (every BOM in the system) when no
+  // item was picked yet, so the dropdown was pickable out of order and full
+  // of irrelevant options. An item must be chosen first.
+  if (!itemCode) return [];
   return bomList.value.filter(b => b.item === itemCode);
 }
 
@@ -598,8 +648,15 @@ function onPOItemChange(row) {
   row.item_name = item ? item.item_name : "";
   row.stock_uom = item ? item.stock_uom : "";
   const candidates = bomsFor(row.item_code);
-  const def = candidates.find(b => b.is_default) || candidates[0];
-  row.bom_no = def ? def.name : "";
+  // Only reassign BOM if the current one isn't valid for the newly-selected
+  // item. Previously this always overwrote row.bom_no, so any BOM already
+  // chosen (however it got there) was silently discarded on every item
+  // change, even when it belonged to the new item.
+  const stillValid = row.bom_no && candidates.some(b => b.name === row.bom_no);
+  if (!stillValid) {
+    const def = candidates.find(b => b.is_default) || candidates[0];
+    row.bom_no = def ? def.name : "";
+  }
 }
 
 function addPOItem() { pp.value.po_items.push(EMPTY_PO_ITEM()); }
@@ -644,6 +701,23 @@ function confirmSOPicker() {
   showSOPickerModal.value = false;
 }
 
+async function removeSalesOrder(idx) {
+  // Removing a Sales Order used to just splice the row and leave whatever
+  // had already been pulled from it sitting in Items to Manufacture --
+  // demand for a SO no longer on the plan stayed on the plan regardless.
+  // Re-pull from the remaining Sales Orders (if any) so SO-sourced rows
+  // reflect exactly what's still selected; work_order_created_qty and any
+  // BOM choice already made are preserved for items still present.
+  pp.value.sales_orders.splice(idx, 1);
+  const remaining = (pp.value.sales_orders || []).map(r => r.sales_order).filter(Boolean);
+  if (remaining.length) {
+    await pullItemsFromSalesOrders();
+  } else {
+    pp.value.po_items = (pp.value.po_items || []).filter(r => !r.sales_order);
+    toast("Sales Order removed — its pulled item(s) were also removed since no Sales Orders remain");
+  }
+}
+
 async function pullItemsFromSalesOrders() {
   const soNames = (pp.value.sales_orders || []).map(r => r.sales_order).filter(Boolean);
   if (!soNames.length) return toast("Add at least one Sales Order first", "error");
@@ -654,7 +728,22 @@ async function pullItemsFromSalesOrders() {
     // with the freshly aggregated set so re-pulling reflects any delivery
     // that's happened since.
     const manual = (pp.value.po_items || []).filter(r => !r.sales_order);
-    pp.value.po_items = [...manual, ...(items || []).map(i => ({ ...EMPTY_PO_ITEM(), ...i }))];
+    // Re-pulling rebuilds SO-sourced rows from scratch, which would otherwise
+    // wipe work_order_created_qty (silently un-tracking WOs already created
+    // for this item on an amended plan) and any BOM already picked for it.
+    // Carry both forward by item_code before the old rows are discarded.
+    const priorByItem = {};
+    for (const r of (pp.value.po_items || [])) {
+      if (r.sales_order && r.item_code) priorByItem[r.item_code] = r;
+    }
+    pp.value.po_items = [...manual, ...(items || []).map(i => {
+      const prior = priorByItem[i.item_code];
+      return {
+        ...EMPTY_PO_ITEM(), ...i,
+        work_order_created_qty: prior ? flt(prior.work_order_created_qty) : 0,
+        bom_no: (prior && prior.bom_no) || i.bom_no,
+      };
+    })];
     toast(`Pulled ${(items || []).length} item(s) from ${soNames.length} Sales Order(s)`);
   } catch (e) {
     toast(e.message, "error");
@@ -664,12 +753,24 @@ async function pullItemsFromSalesOrders() {
 
 // ── Raw Materials ────────────────────────────────────────────────────────
 async function calculateRawMaterials() {
-  if (!pp.value.po_items.length) return toast("Add items to manufacture first", "error");
+  if (!pp.value.po_items || !pp.value.po_items.length) return toast("Add items to manufacture first", "error");
   mrLoading.value = true;
   try {
     const rows = pp.value.po_items.map(r => ({ item_code: r.item_code, bom_no: r.bom_no, planned_qty: r.planned_qty }));
-    pp.value.mr_items = await apiCall(ENGINE + "get_raw_materials", { po_items: rows, warehouse: pp.value.default_source_warehouse || undefined });
-    toast("Raw material requirement calculated");
+    const resp = await apiCall(ENGINE + "get_raw_materials", {
+      po_items: rows,
+      warehouse: pp.value.default_source_warehouse || undefined,
+      production_plan: pp.value.name || undefined,
+    });
+    pp.value.mr_items = resp.items || [];
+    const warnings = [];
+    if (!resp.warehouse_checked) {
+      warnings.push("no Default Source Warehouse set — every item is shown as full shortfall, not checked against stock");
+    }
+    if (resp.skipped && resp.skipped.length) {
+      warnings.push(`${resp.skipped.length} item(s) skipped (no BOM selected): ${resp.skipped.join(", ")}`);
+    }
+    toast(warnings.length ? `Raw material requirement calculated — but ${warnings.join("; ")}` : "Raw material requirement calculated", warnings.length ? "error" : undefined);
   } catch (e) {
     toast(e.message, "error");
   }
@@ -679,7 +780,20 @@ async function calculateRawMaterials() {
 // ── Work Orders ──────────────────────────────────────────────────────────
 const pendingWOQty = computed(() => (pp.value.po_items || []).some(r => flt(r.planned_qty) - flt(r.work_order_created_qty) > 0.0001));
 const hasShortfall = computed(() => (pp.value.mr_items || []).some(r => flt(r.shortfall_qty) > 0.0001));
+const shortfallCount = computed(() => (pp.value.mr_items || []).filter(r => flt(r.shortfall_qty) > 0.0001).length);
+const totalShortfallCost = computed(() => (pp.value.mr_items || []).reduce((s, r) => s + (flt(r.shortfall_qty) > 0.0001 ? flt(r.estimated_cost) : 0), 0));
 const hasDraftWorkOrders = computed(() => workOrders.value.some(w => w.status === "Draft"));
+const totalPlannedQty = computed(() => (pp.value.po_items || []).reduce((s, r) => s + flt(r.planned_qty), 0));
+const totalPendingWOQty = computed(() => (pp.value.po_items || []).reduce((s, r) => s + Math.max(0, flt(r.planned_qty) - flt(r.work_order_created_qty)), 0));
+
+function soStatusClass(status) {
+  if (!status) return "badge-obsolete";
+  const s = status.toLowerCase();
+  if (s.includes("cancel")) return "badge-cancelled";
+  if (s.includes("draft")) return "badge-obsolete";
+  if (s.includes("complet") || s.includes("deliver")) return "badge-active";
+  return "badge-inprocess";
+}
 
 async function loadWorkOrders() {
   woLoading.value = true;
@@ -737,6 +851,42 @@ async function createMaterialRequests() {
 }
 
 // ── Save / Submit / Cancel / Amend ───────────────────────────────────────
+async function deletePP(name, event) {
+  if (event) event.stopPropagation();
+  const ok = await confirm({
+    title: "Delete Production Plan",
+    body: `Are you sure you want to delete ${name}? This cannot be undone.`,
+    okLabel: "Delete",
+    okStyle: "danger",
+  });
+  if (!ok) return;
+  try {
+    await apiDelete("Production Plan", name);
+    toast(`${name} deleted`);
+    if (selectedName.value === name) goBackToList();
+    await loadList();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function saveRemarks() {
+  // Every other field on a submitted plan is rightly locked (po_items/mr_items
+  // drive Work Orders and Material Requests already created against them), but
+  // remarks is just a note and shouldn't have gone read-only along with them.
+  // save_doc already lets submitted-doc updates through, so this only needed
+  // a UI entry point since the main Save button disappears once readOnly.
+  saving.value = true;
+  try {
+    const doc = await apiSave(pp.value);
+    pp.value = doc;
+    toast("Remarks saved");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  saving.value = false;
+}
+
 async function save() {
   if (!pp.value.po_items || !pp.value.po_items.length) return toast("Add at least one item to manufacture", "error");
   if (!pp.value.default_fg_warehouse) return toast("Default Finished Goods Warehouse is required", "error");
@@ -823,6 +973,11 @@ const ICONS = {
   x:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
   open:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>',
   chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>',
+  clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"></path><rect x="9" y="3" width="6" height="4" rx="1"></rect><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="13" y2="16"></line></svg>',
+  fileText: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"></path></svg>',
+  package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+  alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
@@ -885,13 +1040,13 @@ function icon(name, size) {
 .bomx-pp-pipe-line.done { background:var(--bx-mfg); }
 
 /* ── Items to Manufacture table ── */
-.bomx-pp-tbl-wrap { overflow-x:auto; border:1px solid var(--bx-border); border-radius:var(--bx-rsm); }
-.bomx-pp-item-tbl { width:100%; border-collapse:collapse; font-size:13px; }
-.bomx-pp-item-tbl th { text-align:left; padding:8px 10px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
-.bomx-pp-item-tbl th.right, .bomx-pp-item-tbl td.right { text-align:right; }
-.bomx-pp-item-tbl td { padding:7px 10px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
-.bomx-pp-item-tbl tr:last-child td { border-bottom:none; }
-.bomx-pp-item-tbl tr:hover td { background:#FAFBFF; }
+.bomx-tbl-wrap { overflow-x:auto; }
+.bomx-item-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.bomx-item-tbl th { text-align:left; padding:8px 10px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
+.bomx-item-tbl th.right, .bomx-item-tbl td.right { text-align:right; }
+.bomx-item-tbl td { padding:7px 10px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-item-tbl tr:last-child td { border-bottom:none; }
+.bomx-item-tbl tr:hover td { background:#FAFBFF; }
 
 /* ── Raw material grid ── */
 .bomx-pp-mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
@@ -937,12 +1092,6 @@ function icon(name, size) {
 .bomx-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
 .bomx-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 
-/* ── Tabs ── */
-.bomx-tabs { display:flex; gap:2px; padding:0 22px; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); overflow-x:auto; scrollbar-width:none; }
-.bomx-tabs::-webkit-scrollbar { display:none; }
-.bomx-tab { padding:10px 14px; border:none; background:none; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--bx-muted); white-space:nowrap; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s; }
-.bomx-tab:hover { color:var(--bx-mfgB); }
-.bomx-tab--active { color:var(--bx-mfgB); border-bottom-color:var(--bx-mfg); }
 
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
 .bomx-hf-cols-1-1 { grid-template-columns:1fr 1fr; }
@@ -950,13 +1099,45 @@ function icon(name, size) {
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
 
-.bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
+.bomx-body { padding:20px 22px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:16px; }
+.bomx-pp-section-divider { height:1px; background:var(--bx-border); margin:24px -22px 24px; }
 .bomx-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); margin-bottom:8px; }
 .bomx-tree-empty { text-align:center; padding:20px; color:var(--bx-muted); font-size:13px; }
 .bomx-link { color:var(--bx-mfg); font-weight:600; cursor:pointer; }
 .bomx-link:hover { text-decoration:underline; }
 
 .bomx-prod-card { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:16px; margin-bottom:16px; }
+
+/* ── Card sections (Plan Details / Sales Orders / Items / Material Req / Work Orders) ── */
+.bomx-card { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; }
+.bomx-card-hdr { padding:13px 18px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.bomx-card-hdr-title { font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; color:var(--bx-text); }
+.bomx-card-hdr-title svg { color:var(--bx-mfg); flex-shrink:0; }
+.bomx-card-body { padding:18px; }
+.bomx-card-footer { padding:10px 16px; background:var(--bx-surf2); border-top:1px solid var(--bx-border); font-size:12.5px; color:var(--bx-muted); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+
+/* ── Form grid (used inside Plan Details) ── */
+.bomx-fg { display:grid; gap:12px; }
+.bomx-fg-2 { grid-template-columns:1fr 1fr; }
+.bomx-fg-4 { grid-template-columns:1fr 1fr 1fr 1fr; }
+.bomx-fl { display:block; font-size:11.5px; font-weight:600; color:#495057; margin-bottom:4px; }
+.bomx-fi-w { position:relative; }
+@media (max-width:900px) { .bomx-fg-4 { grid-template-columns:1fr 1fr; } }
+@media (max-width:640px) { .bomx-fg-2, .bomx-fg-4 { grid-template-columns:1fr; } }
+
+/* ── Sales Order table ── */
+.bomx-so-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.bomx-so-tbl th { text-align:left; padding:8px 12px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
+.bomx-so-tbl th.right, .bomx-so-tbl td.right { text-align:right; }
+.bomx-so-tbl td { padding:8px 12px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-so-tbl tr:last-child td { border-bottom:none; }
+.bomx-so-tbl tr:hover td { background:#FAFBFF; }
+
+/* ── Info boxes (shortfall / success banners) ── */
+.bomx-infobox { border-radius:var(--bx-rsm); padding:11px 14px; font-size:13px; display:flex; gap:10px; align-items:flex-start; line-height:1.5; }
+.bomx-ib-amber { background:var(--bx-amberS); color:var(--bx-mfgB); border:1px solid rgba(230,119,0,.25); }
+.bomx-ib-amber svg { color:var(--bx-amber); flex-shrink:0; margin-top:1px; }
+.bomx-ib-green { background:var(--bx-greenS); color:var(--bx-green); border:1px solid rgba(47,158,68,.2); }
 
 /* ── Child-row cards ── */
 .bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
@@ -1024,7 +1205,6 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
   .bomx-detail-title { font-size:16px; }
 
   .bomx-hdr-fields, .bomx-hf-cols-1-1 { grid-template-columns:1fr; padding:12px 16px; gap:10px; }
-  .bomx-tabs { padding:0 16px; }
   .bomx-body { padding:14px 16px; }
 
   .bomx-rm-card-body { grid-template-columns:1fr 1fr; }

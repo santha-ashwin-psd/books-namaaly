@@ -37,7 +37,7 @@ from frappe.utils import flt
 
 from zoho_books_clone.utils.access import assert_can
 from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
-from zoho_books_clone.inventory.utils import get_stock_balance_bulk
+from zoho_books_clone.inventory.utils import get_stock_balance_bulk, get_valuation_rate_bulk
 
 
 def _parse_list(val):
@@ -145,10 +145,15 @@ def get_items_from_sales_orders(sales_orders):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def get_raw_materials(po_items, warehouse=None):
+def get_raw_materials(po_items, warehouse=None, production_plan=None):
     """Explode BOMs for the given Items-to-Manufacture rows, aggregate raw
     material requirement across all of them, and compare against on-hand
-    stock in `warehouse` (the plan's default source warehouse). Read-only."""
+    stock in `warehouse` (the plan's default source warehouse).
+
+    If `production_plan` given, also persist result to that doc's mr_items
+    table (bypassing the after-submit lock) -- else "Calculate Requirement"
+    only updates client state, and create_material_requests() finds nothing
+    once plan is submitted (no Save button left to push it through)."""
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     assert_can("BOM", "read")
@@ -156,6 +161,11 @@ def get_raw_materials(po_items, warehouse=None):
     from zoho_books_clone.manufacturing.work_order_engine import get_bom_breakdown
 
     po_items = _parse_list(po_items)
+    # Rows missing a BOM used to be filtered out here with no trace, so the
+    # requirement calc would quietly under-report and the person had no way
+    # to know an item was excluded until "Create Work Orders" hard-threw on
+    # it later. Track what's skipped and return it so the UI can warn.
+    skipped = [r.get("item_code") for r in po_items if not r.get("bom_no")]
     po_items = [r for r in po_items if r.get("bom_no") and flt(r.get("planned_qty")) > 0]
     if not po_items:
         frappe.throw(_("Add items with a selected BOM and Planned Qty first."))
@@ -178,17 +188,57 @@ def get_raw_materials(po_items, warehouse=None):
             entry["required_qty"] += flt(r["required_qty"])
 
     item_codes = list(agg.keys())
+    # Without a warehouse there's nothing to compare on-hand stock against,
+    # so every item comes back as 100% shortfall -- indistinguishable from a
+    # genuinely empty warehouse unless callers are told the check was skipped.
+    warehouse_checked = bool(warehouse)
     balances = get_stock_balance_bulk(item_codes, warehouse) if warehouse else {}
+
+    # Rough cost estimate for shortfall qty, so a person doesn't have to open
+    # each Item to gauge procurement spend. Prefer the warehouse's own moving
+    # valuation rate; items with no stock movement yet (rate = 0, e.g. newly
+    # added raw materials) fall back to the Item's standard buying rate.
+    valuation_rates = get_valuation_rate_bulk(item_codes, warehouse) if warehouse else {}
+    fallback_rates = {}
+    need_fallback = [c for c in item_codes if not valuation_rates.get(c)]
+    if need_fallback:
+        fallback_rates = {
+            i.name: flt(i.standard_buying_rate)
+            for i in frappe.get_all("Item", filters={"name": ["in", need_fallback]},
+                                     fields=["name", "standard_buying_rate"])
+        }
 
     results = []
     for code, entry in agg.items():
         available = flt(balances.get(code, 0))
         entry["available_qty"] = available
         entry["shortfall_qty"] = max(0.0, entry["required_qty"] - available)
+        rate = valuation_rates.get(code) or fallback_rates.get(code) or 0.0
+        entry["estimated_cost"] = round(entry["shortfall_qty"] * rate, 2)
         results.append(entry)
 
     results.sort(key=lambda r: r["item_code"])
-    return results
+
+    if production_plan:
+        pp = frappe.get_doc("Production Plan", production_plan)
+        assert_doc_in_user_company(pp)
+        pp.set("mr_items", [])
+        for r in results:
+            pp.append("mr_items", {
+                "item_code": r["item_code"], "item_name": r["item_name"],
+                "uom": r["uom"], "required_qty": r["required_qty"],
+                "available_qty": r["available_qty"], "shortfall_qty": r["shortfall_qty"],
+                "estimated_cost": r["estimated_cost"],
+            })
+        # mr_items isn't marked allow_on_submit, and this endpoint is the only
+        # way to refresh it once the plan is submitted (there's no Save button
+        # left) -- ignore_validate_update_after_submit lets that one table
+        # through without reopening every other field on a submitted doc.
+        pp.flags.ignore_validate_update_after_submit = True
+        pp.save(ignore_permissions=True)
+        frappe.db.commit()
+
+    return {"items": results, "skipped": [s for s in skipped if s], "warehouse_checked": warehouse_checked}
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
@@ -208,13 +258,26 @@ def create_work_orders(production_plan):
     if not pp.default_fg_warehouse:
         frappe.throw(_("Set a Default Finished Goods Warehouse on the Production Plan first."))
 
+    # Check every row that still needs a Work Order *before* creating any of
+    # them. Throwing mid-loop on the first missing BOM (as before) left
+    # earlier rows in the same run with live Work Orders already created,
+    # while later rows -- possibly also missing a BOM -- were never even
+    # reported. Submit-time validation should already have caught this, but
+    # this is the actual point of no return, so it's checked again here too.
+    missing_bom = [
+        row.item_code for row in pp.po_items
+        if (flt(row.planned_qty) - flt(row.work_order_created_qty)) > 0.0001 and not row.bom_no
+    ]
+    if missing_bom:
+        frappe.throw(_(
+            "Cannot create Work Orders: the following row(s) have no BOM selected — {0}."
+        ).format(", ".join(missing_bom)))
+
     created = []
     for row in pp.po_items:
         pending = flt(row.planned_qty) - flt(row.work_order_created_qty)
         if pending <= 0.0001:
             continue
-        if not row.bom_no:
-            frappe.throw(_("Row for {0}: no BOM selected — cannot create a Work Order.").format(row.item_code))
 
         wo = frappe.new_doc("Work Order")
         wo.bom = row.bom_no
@@ -230,9 +293,18 @@ def create_work_orders(production_plan):
         wo.fg_warehouse = row.warehouse or pp.default_fg_warehouse
         wo.scrap_warehouse = pp.default_scrap_warehouse
         wo.company = pp.company
-        wo.sales_order = row.sales_order
+        # row.sales_order is free-text and can hold multiple comma-joined SOs
+        # when an item was pulled from several orders at once -- sales_order
+        # on Work Order is a Link field, so only a single, exact SO name is
+        # valid there. Set it only when there's exactly one; otherwise leave
+        # it blank and keep the full list traceable in remarks instead of
+        # throwing a LinkValidationError on every multi-SO row.
+        source_sos = [s.strip() for s in (row.sales_order or "").split(",") if s.strip()]
+        wo.sales_order = source_sos[0] if len(source_sos) == 1 else None
         wo.production_plan = pp.name
         wo.remarks = _("Auto-created from Production Plan {0}").format(pp.name)
+        if len(source_sos) > 1:
+            wo.remarks += _(" (demand from Sales Orders: {0})").format(", ".join(source_sos))
         wo.insert(ignore_permissions=True)
         created.append(wo.name)
 

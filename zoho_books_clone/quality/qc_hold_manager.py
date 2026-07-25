@@ -324,11 +324,11 @@ def _release_quarantine_on_pass(doc):
     qc_engine.py's before_submit hook separately stamps target_warehouse
     with the row's original intended destination). If those conditions
     hold and Books Company.qc_auto_release_on_pass is on (the default),
-    creates a Material Transfer Stock Entry moving the passed qty from
-    quarantine_warehouse to target_warehouse and marks release_status
-    "Released". If the toggle is off, leaves release_status as
-    "Not Released" so the batch still shows up for manual release later
-    (e.g. via release_from_hold, or a future manual Pass-release action).
+    delegates to _do_quarantine_release. If the toggle is off, leaves
+    release_status as "Not Released" so the batch still shows up for
+    manual release later -- see manual_release_quarantine below, the
+    actual manual path (QualityInspections.vue's "Release from Quarantine"
+    button on a Pass inspection still sitting in quarantine).
     """
     if not (frappe.db.has_column("QC Inspection", "release_status")
             and frappe.db.has_column("QC Inspection", "target_warehouse")):
@@ -337,6 +337,82 @@ def _release_quarantine_on_pass(doc):
     if doc.get("release_status") != "Not Released":
         return  # never quarantined at receipt, or already released -- nothing to do
 
+    if not _qc_auto_release_on_pass_enabled(_get_inspection_company(doc)):
+        frappe.msgprint(
+            _("QC Inspection {0} Passed. Auto-release is turned off in Books "
+              "Settings -- stock remains in quarantine ({1}) until manually "
+              "released to {2}.").format(doc.name, doc.get("quarantine_warehouse"), doc.get("target_warehouse")),
+            indicator="blue",
+            title=_("QC Passed — Manual Release Required"),
+            alert=True,
+        )
+        return
+
+    _do_quarantine_release(doc)
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def manual_release_quarantine(inspection_name: str) -> dict:
+    """
+    Manually release a Pass-status QC Inspection's stock out of quarantine.
+
+    This is the actual escape hatch for the case _release_quarantine_on_pass
+    itself warns about when Books Company.qc_auto_release_on_pass is off --
+    without this, a Passed inspection whose stock was pre-emptively
+    quarantined at receipt/manufacture had NO way to ever leave quarantine:
+    release_from_hold() requires an Approved QC Approval Request, and
+    QC Approval Requests are only ever auto-created for a Fail result
+    (see handle_qc_result / create_qc_approval_request's own status=='Fail'
+    guard) -- a Pass was never eligible to raise one. And a manually created
+    Stock Entry sourcing stock out of the quarantine warehouse is blocked
+    outright by validate_quarantine_movement. So the stock was permanently
+    stuck with zero release path anywhere in the app.
+
+    A Pass result doesn't need a QA approval gate the way a Fail disposition
+    does -- the passed inspection itself already IS the authorization to
+    move the stock to where it was always headed (target_warehouse).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    if not frappe.db.exists("QC Inspection", inspection_name):
+        frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
+
+    doc = frappe.get_doc("QC Inspection", inspection_name)
+    if doc.docstatus != 1:
+        frappe.throw(_("QC Inspection must be submitted before it can be released."))
+    if doc.status != "Pass":
+        frappe.throw(_("Only a Pass QC Inspection can be manually released from quarantine."))
+    if not (frappe.db.has_column("QC Inspection", "release_status")
+            and frappe.db.has_column("QC Inspection", "target_warehouse")):
+        frappe.throw(_("Quarantine release is not available on this site."))
+    if doc.get("release_status") != "Not Released":
+        frappe.throw(_("This QC Inspection is not currently sitting in quarantine."))
+    if not doc.get("quarantine_warehouse") or not doc.get("target_warehouse"):
+        frappe.throw(_(
+            "Cannot release: quarantine_warehouse or target_warehouse is not "
+            "set on this QC Inspection."
+        ))
+
+    _do_quarantine_release(doc)
+    frappe.db.commit()
+
+    updated = frappe.db.get_value(
+        "QC Inspection", inspection_name, ["release_status", "release_stock_entry"], as_dict=True
+    ) or {}
+    return {
+        "status": "ok" if updated.get("release_status") == "Released" else "failed",
+        "release_status": updated.get("release_status"),
+        "stock_entry": updated.get("release_stock_entry"),
+    }
+
+
+def _do_quarantine_release(doc):
+    """Actually move the passed qty from quarantine_warehouse to
+    target_warehouse and mark release_status "Released". Shared by the
+    automatic Pass trigger (_release_quarantine_on_pass, when the auto-
+    release toggle is on) and the manual trigger (manual_release_quarantine,
+    always -- a manual click is itself the authorization)."""
     quarantine_wh = doc.get("quarantine_warehouse")
     target_wh     = doc.get("target_warehouse")
     if not quarantine_wh or not target_wh:
@@ -348,17 +424,6 @@ def _release_quarantine_on_pass(doc):
                 f"are required to auto-release. Leaving stock in place; "
                 f"release manually once the correct warehouses are known."
             ),
-        )
-        return
-
-    if not _qc_auto_release_on_pass_enabled(_get_inspection_company(doc)):
-        frappe.msgprint(
-            _("QC Inspection {0} Passed. Auto-release is turned off in Books "
-              "Settings -- stock remains in quarantine ({1}) until manually "
-              "released to {2}.").format(doc.name, quarantine_wh, target_wh),
-            indicator="blue",
-            title=_("QC Passed — Manual Release Required"),
-            alert=True,
         )
         return
 

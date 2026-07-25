@@ -421,6 +421,20 @@
         </div>
         <div class="qc-dfooter">
           <button class="qc-btn-ghost" @click="viewOpen=false">Close</button>
+          <!-- Release from Quarantine: a Pass inspection whose stock was pre-emptively
+               quarantined at receipt/manufacture but never auto-released (auto-release
+               toggle off in Books Company settings). This is the only way that stock
+               can ever leave quarantine -- release_from_hold() requires an Approved QC
+               Approval Request, and those are never created for a Pass result. -->
+          <button
+            v-if="viewDoc.docstatus === 1 && viewDoc.status === 'Pass' && viewDoc.release_status === 'Not Released'"
+            class="qc-btn-approval"
+            :disabled="releaseSending"
+            @click="releaseFromQuarantine(viewDoc.name)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            {{ releaseSending ? 'Releasing…' : 'Release from Quarantine' }}
+          </button>
           <!-- Request Approval button: only for submitted inspections that failed QC -->
           <button
             v-if="viewDoc.docstatus === 1 && viewDoc.status === 'Fail'"
@@ -584,6 +598,7 @@ const viewOpen    = ref(false);
 const viewDoc     = ref(null);
 const viewLoading = ref(false);
 const approvalSending = ref(false);
+const releaseSending  = ref(false);
 const coaSending  = ref(false);
 const saving      = ref(false);
 const isDirty     = ref(false);
@@ -882,6 +897,31 @@ async function requestApproval(inspectionName) {
     toast.error(e.message || "Failed to create approval request");
   } finally {
     approvalSending.value = false;
+  }
+}
+
+async function releaseFromQuarantine(inspectionName) {
+  if (!inspectionName) return;
+  releaseSending.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.quality.qc_hold_manager.manual_release_quarantine", {
+      inspection_name: inspectionName,
+    });
+    const data = res?.message || res;
+    if (data?.status === "ok") {
+      if (viewDoc.value) {
+        viewDoc.value.release_status = data.release_status;
+        viewDoc.value.release_stock_entry = data.stock_entry;
+      }
+      toast.success(`Stock released from quarantine to target warehouse via ${data.stock_entry || "Stock Entry"}`);
+      await load();
+    } else {
+      toast.error("Release did not complete — check the QC Inspection for details");
+    }
+  } catch (e) {
+    toast.error(e.message || "Failed to release from quarantine");
+  } finally {
+    releaseSending.value = false;
   }
 }
 

@@ -132,7 +132,8 @@
   {
    "fieldname": "remarks",
    "fieldtype": "Small Text",
-   "label": "Remarks"
+   "label": "Remarks",
+   "allow_on_submit": 1
   },
   {
    "fieldname": "amended_from",

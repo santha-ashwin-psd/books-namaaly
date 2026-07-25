@@ -82,18 +82,23 @@ export const NAV = [
 
   { section: "Manufacturing" },
   // { path: "/manufacturing",                    label: "Dashboard",        icon: "grid",       module: "inventory" },
-  { path: "/manufacturing/bom",               label: "Bill of Materials", icon: "box",        module: "inventory" },
-  { path: "/manufacturing/operation",         label: "Operations",       icon: "stack",      module: "inventory" },
-  { path: "/manufacturing/workstation",       label: "Workstations",     icon: "gear",       module: "inventory" },
+  // Setup — masters used to define how things are made
   { path: "/manufacturing/workstation-type",  label: "Workstation Types",icon: "badge",      module: "inventory" },
+  { path: "/manufacturing/workstation",       label: "Workstations",     icon: "gear",       module: "inventory" },
+  { path: "/manufacturing/operation",         label: "Operations",       icon: "stack",      module: "inventory" },
   { path: "/manufacturing/routing",           label: "Routing",          icon: "recurring",  module: "inventory" },
+  { path: "/manufacturing/bom",               label: "Bill of Materials", icon: "box",        module: "inventory" },
+  // Plan — decide what and how much to make
+  { path: "/manufacturing/material-request",  label: "Material Requests", icon: "purchase",   module: "inventory" },
+  { path: "/manufacturing/production-plan",   label: "Production Plan",  icon: "chart",      module: "inventory" },
+  // Execute — run production day to day
   { path: "/manufacturing/work-order",        label: "Work Orders",      icon: "order",      module: "inventory" },
   { path: "/manufacturing/job-card",          label: "Job Cards",        icon: "stack",      module: "inventory" },
-  { path: "/manufacturing/production-plan",   label: "Production Plan",  icon: "chart",      module: "inventory" },
-  { path: "/manufacturing/material-request",  label: "Material Requests", icon: "purchase",   module: "inventory" },
   { path: "/manufacturing/packing-slip",      label: "Packing Slips",     icon: "box",        module: "inventory" },
+  // Exceptions — substitutions when the plan doesn't hold
   { path: "/manufacturing/alternative-item", label: "Alternative Items",   icon: "stack", module: "inventory" },
   { path: "/manufacturing/material-substitutions", label: "Substitution Approvals", icon: "check", module: "inventory" },
+  // Insights & configuration
   { path: "/manufacturing/reports",          label: "Mfg Reports",         icon: "chart",      module: "inventory" },
   { path: "/manufacturing/settings",         label: "Mfg Settings",        icon: "gear",       module: "inventory" },
 

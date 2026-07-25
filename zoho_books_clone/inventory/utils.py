@@ -332,6 +332,18 @@ def get_valuation_rate(item_code: str, warehouse: str) -> float:
     return flt(rate)
 
 
+def get_valuation_rate_bulk(item_codes: list[str], warehouse: str) -> dict[str, float]:
+    """Return {item_code: valuation_rate} for a list of items in one warehouse."""
+    if not item_codes or not warehouse:
+        return {}
+    rows = frappe.get_all(
+        "Bin",
+        filters={"warehouse": warehouse, "item_code": ["in", item_codes]},
+        fields=["item_code", "valuation_rate"],
+    )
+    return {r.item_code: flt(r.valuation_rate) for r in rows}
+
+
 def compute_bin_valuation(
     old_qty: float,
     old_value: float,

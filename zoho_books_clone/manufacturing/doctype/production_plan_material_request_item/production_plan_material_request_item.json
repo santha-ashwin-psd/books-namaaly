@@ -64,6 +64,14 @@
    "label": "Shortfall Qty",
    "read_only": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "read_only": 1,
+   "description": "shortfall_qty x last known valuation/buying rate. Rough estimate for procurement planning, not a quotation.",
+   "in_list_view": 1
   }
  ],
  "permissions": []

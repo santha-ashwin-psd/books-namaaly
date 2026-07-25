@@ -1,5 +1,30 @@
 <template>
 <div class="bomx-page">
+
+  <!-- ══════════ SUMMARY STRIP ══════════ -->
+  <div class="bomx-sum-strip">
+    <div class="bomx-sum-card" style="--bar:var(--bx-text)">
+      <div class="bomx-sc-lbl">Total Operations</div>
+      <div class="bomx-sc-val">{{ list.length }}</div>
+      <div class="bomx-sc-sub">In master</div>
+    </div>
+    <div class="bomx-sum-card" style="--bar:var(--bx-green)">
+      <div class="bomx-sc-lbl" style="color:var(--bx-green)">Active</div>
+      <div class="bomx-sc-val" style="color:var(--bx-green)">{{ activeCount }}</div>
+      <div class="bomx-sc-sub">Currently in use</div>
+    </div>
+    <div class="bomx-sum-card" style="--bar:var(--bx-blue)">
+      <div class="bomx-sc-lbl" style="color:var(--bx-blue)">With Workstation</div>
+      <div class="bomx-sc-val" style="color:var(--bx-blue)">{{ withWorkstationCount }}</div>
+      <div class="bomx-sc-sub">Machine-assigned</div>
+    </div>
+    <div class="bomx-sum-card" style="--bar:var(--bx-violet)">
+      <div class="bomx-sc-lbl" style="color:var(--bx-violet)">Corrective Ops</div>
+      <div class="bomx-sc-val" style="color:var(--bx-violet)">{{ correctiveCount }}</div>
+      <div class="bomx-sc-sub">Rework / rectification</div>
+    </div>
+  </div>
+
   <div class="bomx-two-col">
 
     <!-- ══════════ LEFT: OPERATION LIST ══════════ -->
@@ -8,11 +33,17 @@
         <span class="bomx-panel-title">⚙️ All Operations <span class="bomx-count">({{ sorted.length }})</span></span>
         <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
-      <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
-        <option value="">All Status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+      <div class="bomx-filter-row">
+        <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select class="bomx-fi bomx-status-filter" v-model="filterWorkstation">
+          <option value="">All Work Centres</option>
+          <option v-for="w in workstationOptions" :key="w" :value="w">{{ w }}</option>
+        </select>
+      </div>
       <input class="bomx-search" v-model="search" type="text" placeholder="Search Operation by name or workstation…"/>
       <div class="bomx-list">
         <template v-if="loading">
@@ -22,16 +53,19 @@
         <div v-else v-for="row in sorted" :key="row.name"
              class="bomx-item" :class="{active: selectedName === row.name}"
              @click="selectOperation(row.name)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div class="bomx-item-hdr">
+            <span class="bomx-item-icon">{{ row.is_corrective_operation ? '🛠️' : '⚙️' }}</span>
             <div class="bomx-item-name">{{ row.operation_name || row.name }}</div>
             <span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
           </div>
           <div class="bomx-item-meta">
             <span class="mono">{{ row.name }}</span>
-          </div>
-          <div class="bomx-item-right" v-if="row.default_workstation">
-            <span style="font-size:12px;color:var(--bx-muted)">Workstation:</span>
-            <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--bx-mfgB)">{{ row.default_workstation }}</span>
+            <span v-if="row.default_workstation">&#x2022;</span>
+            <span v-if="row.default_workstation" class="mono bomx-item-wc">{{ row.default_workstation }}</span>
+            <span v-if="row.sub_operation_count">&#x2022;</span>
+            <span v-if="row.sub_operation_count">{{ row.sub_operation_count }} sub-op{{ row.sub_operation_count > 1 ? 's' : '' }}</span>
+            <span v-if="row.quality_inspection_template">&#x2022;</span>
+            <span v-if="row.quality_inspection_template">QC linked</span>
           </div>
         </div>
       </div>
@@ -175,13 +209,14 @@ const loading = ref(false);
 const list = ref([]);
 const search = ref("");
 const filterStatus = ref("");
+const filterWorkstation = ref("");
 
 const selectedName = computed(() => (route.params.name && route.params.name !== "new") ? route.params.name : (route.params.name === "new" ? "new" : null));
 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "operation_name", "default_workstation", "is_active", "modified"];
+    const fields = ["name", "operation_name", "default_workstation", "is_active", "is_corrective_operation", "modified"];
     const r = await apiList("Operation", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
   } catch (e) {
@@ -194,10 +229,21 @@ const sorted = computed(() => {
   let r = list.value;
   if (filterStatus.value === "active") r = r.filter(i => i.is_active);
   if (filterStatus.value === "inactive") r = r.filter(i => !i.is_active);
+  if (filterWorkstation.value) r = r.filter(i => i.default_workstation === filterWorkstation.value);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter(i => [i.operation_name, i.name, i.default_workstation].filter(Boolean).join(" ").toLowerCase().includes(q));
   return r;
 });
+
+const workstationOptions = computed(() => {
+  const set = new Set(list.value.map(i => i.default_workstation).filter(Boolean));
+  return Array.from(set).sort();
+});
+
+// ── SUMMARY STRIP ────────────────────────────────────────────
+const activeCount = computed(() => list.value.filter(i => i.is_active).length);
+const withWorkstationCount = computed(() => list.value.filter(i => i.default_workstation).length);
+const correctiveCount = computed(() => list.value.filter(i => i.is_corrective_operation).length);
 
 function statusLabel(row) {
   return row.is_active ? "Active" : "Inactive";
@@ -397,13 +443,23 @@ function icon(name, size) {
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
 
+/* ── Summary strip ── */
+.bomx-sum-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+@media (max-width:800px) { .bomx-sum-strip { grid-template-columns:repeat(2,1fr); } }
+.bomx-sum-card { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:13px 16px; position:relative; overflow:hidden; }
+.bomx-sum-card::before { content:""; position:absolute; top:0; left:0; width:3px; height:100%; background:var(--bar); }
+.bomx-sc-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:3px; }
+.bomx-sc-val { font-size:21px; font-weight:700; font-family:'DM Mono',monospace; color:var(--bx-text); }
+.bomx-sc-sub { font-size:11px; color:var(--bx-muted); margin-top:2px; }
+
 
 /* ── List panel ── */
 .bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
 .bomx-panel-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .bomx-panel-title { font-size:13px; font-weight:700; color:var(--bx-text); }
 .bomx-count { font-size:12px; font-weight:400; color:var(--bx-muted); }
-.bomx-status-filter { margin:8px 12px 0; width:calc(100% - 24px); font-size:12px; padding:6px 10px; }
+.bomx-filter-row { display:flex; gap:8px; margin:8px 12px 0; }
+.bomx-status-filter { flex:1; font-size:12px; padding:6px 10px; margin:0; width:auto; }
 .bomx-search { width:100%; border:none; outline:none; font-size:13px; padding:10px 14px; margin-top:8px; border-bottom:1px solid var(--bx-border); background:#fff; color:var(--bx-text); }
 .bomx-search::placeholder { color:var(--bx-muted); }
 .bomx-list { overflow-y:auto; max-height: calc(100vh - 230px); }
@@ -411,8 +467,11 @@ function icon(name, size) {
 .bomx-item { padding:12px 14px; border-bottom:1px solid #F1F3F5; cursor:pointer; transition:background .12s; display:flex; flex-direction:column; gap:4px; }
 .bomx-item:hover { background:#FAFBFF; }
 .bomx-item.active { background:var(--bx-mfgS); border-left:3px solid var(--bx-mfg); }
-.bomx-item-name { font-size:13.5px; font-weight:600; color:var(--bx-text); }
-.bomx-item-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bx-muted); }
+.bomx-item-hdr { display:flex; align-items:center; gap:8px; }
+.bomx-item-icon { font-size:15px; flex-shrink:0; line-height:1; }
+.bomx-item-name { font-size:13.5px; font-weight:700; color:var(--bx-text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-item-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bx-muted); flex-wrap:wrap; }
+.bomx-item-wc { font-weight:700; color:var(--bx-mfg); }
 .bomx-item-right { display:flex; align-items:center; gap:6px; margin-top:2px; }
 
 /* ── Badges ── */

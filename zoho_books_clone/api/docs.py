@@ -846,6 +846,13 @@ def amend_doc(doctype, name):
     if not meta.has_field("amended_from"):
         frappe.throw(_("{0} does not support amendment.").format(doctype))
 
+    existing = frappe.db.get_value(doctype, {"amended_from": name}, "name")
+    if existing:
+        frappe.throw(_(
+            "{0} has already been amended as {1}. Open that document instead "
+            "of amending {0} again."
+        ).format(name, existing))
+
     new_doc = frappe.copy_doc(src)
     new_doc.amended_from = src.name
     new_doc.docstatus = 0

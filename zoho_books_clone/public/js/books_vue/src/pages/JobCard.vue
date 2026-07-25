@@ -347,6 +347,7 @@ function emptyDoc() {
     doctype: "Job Card",
     work_order: "",
     operation: "",
+    wo_operation_name: "",
     workstation: "",
     status: "Open",
     for_quantity: 1,
@@ -405,7 +406,9 @@ async function loadDoc() {
     // /manufacturing/job-card/new?work_order=X&operation=Y&workstation=Z
     if (route.query.work_order) doc.value.work_order = route.query.work_order;
     if (route.query.operation) doc.value.operation = route.query.operation;
+    if (route.query.wo_operation_name) doc.value.wo_operation_name = route.query.wo_operation_name;
     if (route.query.workstation) doc.value.workstation = route.query.workstation;
+    if (route.query.for_quantity) doc.value.for_quantity = Number(route.query.for_quantity) || 1;
     if (route.query.work_order && !workOrdersList.value.some(w => w.name === route.query.work_order))
       workOrdersList.value = [{ name: route.query.work_order }, ...workOrdersList.value];
     return;

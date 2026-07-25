@@ -124,6 +124,7 @@
           <div class="bomx-seq-tabs">
             <button class="bomx-seq-tab" :class="{active: activeTab==='flow'}" @click="activeTab='flow'">📊 Flow Diagram</button>
             <button class="bomx-seq-tab" :class="{active: activeTab==='sequence'}" @click="activeTab='sequence'">📋 Sequence Editor</button>
+            <button class="bomx-seq-tab" :class="{active: activeTab==='linked_boms'}" @click="activeTab='linked_boms'">📄 Linked BOMs</button>
           </div>
 
           <div class="bomx-body">
@@ -199,6 +200,29 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Operation
               </div>
+            </div>
+
+            <!-- Linked BOMs tab (read-only) -->
+            <div v-if="activeTab==='linked_boms'">
+              <div v-if="linkedBomsLoading" class="bomx-tree-empty">Loading…</div>
+              <template v-else>
+                <div v-if="!linkedBoms.length" class="bomx-tree-empty">This routing is not used in any Bill of Materials yet.</div>
+                <template v-else>
+                  <div class="bomx-section-lbl" style="margin-bottom:10px">This routing is used in the following Bills of Materials:</div>
+                  <div class="bomx-linked-bom-list">
+                    <div class="bomx-linked-bom-row" v-for="b in linkedBoms" :key="b.name">
+                      <span class="bomx-tree-icon">📄</span>
+                      <div class="bomx-linked-bom-info">
+                        <div class="bomx-linked-bom-title">
+                          {{ b.name }}<span v-if="b.bom_version"> v{{ b.bom_version }}</span>
+                          — {{ b.item_name || b.item }}
+                        </div>
+                      </div>
+                      <button class="bomx-btn bomx-btn-ghost" @click="router.push(`/manufacturing/bom/${b.name}`)">Open BOM</button>
+                    </div>
+                  </div>
+                </template>
+              </template>
             </div>
 
             <!-- Header fields -->
@@ -347,7 +371,40 @@ function emptyDoc() {
 const doc = ref(emptyDoc());
 const activeTab = ref("flow");
 
-watch(() => route.params.name, () => { activeTab.value = "flow"; });
+watch(() => route.params.name, () => { activeTab.value = "flow"; linkedBoms.value = []; });
+
+// ── LINKED BOMS TAB ──────────────────────────────────────────
+const linkedBoms = ref([]);
+const linkedBomsLoading = ref(false);
+
+async function loadLinkedBoms() {
+  if (isNew.value || !doc.value.name) { linkedBoms.value = []; return; }
+  linkedBomsLoading.value = true;
+  try {
+    const boms = await apiList("BOM", {
+      fields: ["name", "item", "bom_version", "is_default", "docstatus"],
+      filters: [["routing", "=", doc.value.name]],
+      limit: 500,
+      order: "modified desc",
+    });
+    const rows = boms || [];
+    const itemCodes = [...new Set(rows.map(r => r.item).filter(Boolean))];
+    if (itemCodes.length) {
+      const items = await apiList("Item", { fields: ["name", "item_name"], filters: [["name", "in", itemCodes]], limit: itemCodes.length });
+      const nameMap = {};
+      (items || []).forEach(i => { nameMap[i.name] = i.item_name; });
+      rows.forEach(r => { r.item_name = nameMap[r.item] || r.item; });
+    }
+    linkedBoms.value = rows;
+  } catch (e) {
+    toast("Could not load linked BOMs", "error");
+  }
+  linkedBomsLoading.value = false;
+}
+
+watch(activeTab, (val) => {
+  if (val === "linked_boms" && !linkedBomsLoading.value) loadLinkedBoms();
+});
 
 const totalTime = computed(() => (doc.value.operations || []).reduce((s, o) => s + (Number(o.time_in_mins) || 0), 0));
 const totalCost = computed(() => (doc.value.operations || []).reduce((s, o) => s + ((Number(o.hour_rate) || 0) * (Number(o.time_in_mins) || 0) / 60), 0));
@@ -598,6 +655,14 @@ function icon(name, size) {
 .bomx-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); margin-bottom:8px; }
 .bomx-tree-empty { text-align:center; padding:20px; color:var(--bx-muted); font-size:13px; }
 .bomx-tree-icon { font-size:14px; flex-shrink:0; }
+
+/* ── Linked BOMs tab ── */
+.bomx-linked-bom-list { display:flex; flex-direction:column; gap:8px; }
+.bomx-linked-bom-row { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-radius); }
+.bomx-linked-bom-info { flex:1; min-width:0; }
+.bomx-linked-bom-title { font-size:13.5px; font-weight:700; color:var(--bx-text); }
+.bomx-btn-ghost { background:var(--bx-surface); color:#495057; border:1px solid #CDD5E0; }
+.bomx-btn-ghost:hover:not(:disabled) { background:var(--bx-surf2); border-color:var(--bx-mfg); color:var(--bx-mfg); }
 .bomx-add-row { display:flex; align-items:center; gap:8px; padding:8px 12px; color:var(--bx-mfg); cursor:pointer; font-size:13px; font-weight:600; border-radius:var(--bx-rsm); margin-top:4px; }
 .bomx-add-row:hover { background:var(--bx-mfgS); }
 

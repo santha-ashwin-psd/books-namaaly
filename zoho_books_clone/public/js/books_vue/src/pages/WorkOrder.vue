@@ -130,8 +130,11 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList" :disabled="saving || submitting">Back</button>
-                <button v-if="!isNew && wo.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===2 && !amendedInto" class="bomx-btn bomx-btn-light" @click="amendWO" :disabled="submitting">
                   {{ submitting ? 'Amending…' : 'Amend' }}
+                </button>
+                <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
+                  View Amended {{ amendedInto }}
                 </button>
                 <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0 && wo.status!=='Stopped'" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting">
                   {{ submitting ? 'Cancelling…' : 'Cancel Work Order' }}
@@ -341,10 +344,10 @@
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ op.operation || 'New Operation' }}</span>
                     <div style="flex:1"></div>
                     <template v-if="!isNew && op.operation">
-                      <span v-for="jc in jobCardsFor(op.operation)" :key="jc.name" class="bomx-badge"
+                      <span v-for="jc in jobCardsFor(op)" :key="jc.name" class="bomx-badge"
                             style="cursor:pointer" :class="jc.status==='Completed' ? 'badge-active' : (jc.status==='Cancelled' ? 'badge-obsolete' : 'badge-wip')"
                             :title="jc.name" @click="router.push('/manufacturing/job-card/' + jc.name)">{{ jc.status || 'Open' }}</span>
-                      <button v-if="!jobCardsFor(op.operation).length" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="createJobCardFor(op)">+ Job Card</button>
+                      <button v-if="!jobCardsFor(op).length" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="createJobCardFor(op)">+ Job Card</button>
                     </template>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -964,6 +967,7 @@ const stockEntries = ref([]);
 const qcInspections = ref([]);
 const qcLoading = ref(false);
 const jobCards = ref([]);
+const amendedInto = ref(null);
 const jcLoading = ref(false);
 const operationsList = ref([]);
 const workstationsList = ref([]);
@@ -1184,14 +1188,18 @@ watch(() => route.params.name, async (name) => {
 async function loadWO() {
   // Reset every Work-Order-scoped list up front. Without this, switching to a
   // Work Order that skips the docstatus===1 branch below (e.g. a Draft) left
-  // the PREVIOUS Work Order's Job Cards (and Stock Entries / Packing Slips)
-  // sitting in these refs, since nothing ever cleared them -- the Production
-  // tab kept showing the last-loaded WO's Job Cards until the user manually
-  // clicked Refresh (which calls loadJobCards() and finally re-filters by the
-  // now-current wo.value.name).
+  // the PREVIOUS Work Order's Job Cards / Stock Entries / Packing Slips /
+  // QC Inspections sitting in these refs, since nothing ever cleared them --
+  // the Production tab kept showing the last-loaded WO's data until the user
+  // manually clicked Refresh. Reconciliation is included too: it's only
+  // fetched on-demand via the "Check Reconciliation" button, so without this
+  // reset it stays on screen from whichever WO it was last checked on.
   jobCards.value = [];
   stockEntries.value = [];
   sourcedPackingSlips.value = [];
+  qcInspections.value = [];
+  reconciliation.value = null;
+  amendedInto.value = null;
 
   if (isNew.value) {
     wo.value = emptyWO();
@@ -1210,6 +1218,16 @@ async function loadWO() {
   if (wo.value.docstatus === 1) {
     await loadStockEntries(); await loadJobCards();
     loadSourcedPackingSlips();
+  }
+  if (wo.value.docstatus === 2) {
+    try {
+      const existing = await apiList("Work Order", {
+        fields: ["name"],
+        filters: [["amended_from", "=", wo.value.name]],
+        limit: 1,
+      }) || [];
+      amendedInto.value = existing[0]?.name || null;
+    } catch (e) { amendedInto.value = null; }
   }
 
   // If the linked BOM is no longer active (it was amended into a newer version,
@@ -1400,7 +1418,12 @@ async function submitWO() {
 
 async function cancelWO() {
   if (!wo.value.name) return;
-  if (!confirm("Cancel this Work Order?")) return;
+  if (!(await confirm({
+    title: "Cancel Work Order",
+    body: `Cancel Work Order ${wo.value.name}? This cannot be undone.`,
+    okLabel: "Cancel Work Order",
+    okStyle: "danger",
+  }))) return;
   submitting.value = true;
   try {
     const doc = await apiCancel("Work Order", wo.value.name);
@@ -1664,7 +1687,7 @@ async function loadJobCards() {
   jcLoading.value = true;
   try {
     jobCards.value = await apiList("Job Card", {
-      fields: ["name", "operation", "workstation", "status", "for_quantity", "total_time_in_mins"],
+      fields: ["name", "operation", "wo_operation_name", "workstation", "status", "for_quantity", "total_time_in_mins"],
       filters: [["work_order", "=", wo.value.name]],
       limit: 100, order: "creation desc",
     }) || [];
@@ -1672,13 +1695,19 @@ async function loadJobCards() {
   jcLoading.value = false;
 }
 
-function jobCardsFor(opName) {
-  return (jobCards.value || []).filter(jc => jc.operation === opName);
+function jobCardsFor(op) {
+  return (jobCards.value || []).filter(jc => jc.wo_operation_name === op.name);
 }
 function createJobCardFor(op) {
   router.push({
     path: "/manufacturing/job-card/new",
-    query: { work_order: wo.value.name, operation: op.operation, workstation: op.workstation || "" },
+    query: {
+      work_order: wo.value.name,
+      operation: op.operation,
+      wo_operation_name: op.name,
+      workstation: op.workstation || "",
+      for_quantity: wo.value.qty || 1,
+    },
   });
 }
 

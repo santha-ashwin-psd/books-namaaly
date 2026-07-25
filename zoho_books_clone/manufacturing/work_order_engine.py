@@ -811,6 +811,50 @@ def apply_row_substitution(work_order, work_order_item_row, alternative_item_cod
     }
 
 
+def _wo_items_for_reversal(wo, item_code, warehouse_hint):
+    """Find the Work Order Item row(s) a Stock Entry row should be rolled
+    back against.
+
+    Matching purely by item_code (as reverse_material_issue and
+    reverse_manufacture_entry used to) silently misattributes to whichever
+    row happens to appear FIRST whenever a Work Order has more than one raw
+    material row for the same item -- a supported case, since each row can
+    carry its own source_warehouse (see WorkOrder.validate()) and
+    WorkOrder.vue's "+ Add Material" has no dedup. Narrowing by warehouse
+    first resolves the common case; if that's still ambiguous (e.g.
+    consumption routed every row through a shared WIP warehouse), the
+    caller splits the quantity proportionally across all matches instead of
+    dumping it all on one row.
+    """
+    candidates = [r for r in wo.items if r.item_code == item_code]
+    if len(candidates) <= 1:
+        return candidates
+    narrowed = [
+        r for r in candidates
+        if (r.source_warehouse or wo.source_warehouse) == warehouse_hint
+    ]
+    return narrowed if len(narrowed) == 1 else candidates
+
+
+def _rollback_qty_across_rows(matches, total_qty, field):
+    """Subtract total_qty from `field` (transferred_qty / consumed_qty)
+    across one or more matched rows, weighted by required_qty when more
+    than one row matches -- see _wo_items_for_reversal."""
+    if not matches:
+        return
+    if len(matches) == 1:
+        row = matches[0]
+        current = flt(getattr(row, field))
+        row.db_set(field, max(current - flt(total_qty), 0), update_modified=False)
+        return
+    total_weight = sum(flt(r.required_qty) for r in matches) or len(matches)
+    for row in matches:
+        weight = (flt(row.required_qty) / total_weight) if total_weight else (1.0 / len(matches))
+        share = flt(total_qty) * weight
+        current = flt(getattr(row, field))
+        row.db_set(field, max(current - share, 0), update_modified=False)
+
+
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def resume_work_order(work_order):
     """Resume a previously stopped Work Order, restoring it to In Process
@@ -874,8 +918,8 @@ def reverse_material_issue(work_order, stock_entry):
 
     affected = [row for row in se.items if row.t_warehouse == wo.wip_warehouse]
     for row in affected:
-        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
-        if wo_item and flt(wo_item.consumed_qty) > 0:
+        matches = _wo_items_for_reversal(wo, row.item_code, row.s_warehouse)
+        if any(flt(m.consumed_qty) > 0 for m in matches):
             frappe.throw(_(
                 "Cannot reverse: {0} transferred by this entry has already been "
                 "partly or fully consumed against this Work Order."
@@ -885,10 +929,8 @@ def reverse_material_issue(work_order, stock_entry):
     se.cancel()
 
     for row in affected:
-        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
-        if wo_item:
-            new_transferred = max(flt(wo_item.transferred_qty) - flt(row.qty), 0)
-            wo_item.db_set("transferred_qty", new_transferred, update_modified=False)
+        matches = _wo_items_for_reversal(wo, row.item_code, row.s_warehouse)
+        _rollback_qty_across_rows(matches, row.qty, "transferred_qty")
 
     still_transferred = any(
         flt(frappe.db.get_value("Work Order Item", r.name, "transferred_qty")) > 0
@@ -964,10 +1006,8 @@ def reverse_manufacture_entry(work_order, stock_entry):
     se.cancel()
 
     for row in consumption_rows:
-        wo_item = next((r for r in wo.items if r.item_code == row.item_code), None)
-        if wo_item:
-            new_consumed = max(flt(wo_item.consumed_qty) - flt(row.qty), 0)
-            wo_item.db_set("consumed_qty", new_consumed, update_modified=False)
+        matches = _wo_items_for_reversal(wo, row.item_code, row.s_warehouse)
+        _rollback_qty_across_rows(matches, row.qty, "consumed_qty")
 
     new_produced_qty = max(flt(wo.produced_qty) - qty_manufactured, 0)
     wo.db_set("produced_qty", new_produced_qty)

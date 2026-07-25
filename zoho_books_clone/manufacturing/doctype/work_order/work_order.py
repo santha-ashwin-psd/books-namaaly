@@ -5,6 +5,37 @@ from frappe.utils import flt
 
 
 class WorkOrder(Document):
+	def before_insert(self):
+		"""When this doc is a fresh amendment (created via api.docs.amend_doc,
+		which inserts with docstatus=0 but otherwise carries every field over
+		verbatim from the cancelled original via frappe.copy_doc), reset every
+		field that describes PROGRESS rather than PLAN back to a clean start.
+
+		Several of these fields are already flagged no_copy=1 in the doctype
+		JSON precisely because they shouldn't survive a copy -- but amend_doc
+		is generic and doesn't special-case no_copy, so status/produced_qty/
+		process_loss_qty/operating cost all came through unchanged. Without
+		this, a brand-new revision that has had zero materials issued/
+		consumed and zero production recorded against it showed status
+		"Cancelled" (from the doc it was amended from) and its raw-material/
+		operation rows still showed transferred/consumed qty and Completed
+		operations left over from a Work Order that, under this name, never
+		actually ran.
+		"""
+		if not self.amended_from:
+			return
+		self.status = "Draft"
+		self.produced_qty = 0
+		self.process_loss_qty = 0
+		self.actual_operating_cost = 0
+		self.total_operating_cost = 0
+		for row in (self.items or []):
+			row.transferred_qty = 0
+			row.consumed_qty = 0
+		for row in (self.operations or []):
+			row.status = "Pending"
+			row.actual_time_in_mins = 0
+
 	def validate(self):
 		if flt(self.qty) <= 0:
 			frappe.throw(_("Qty to Manufacture must be greater than zero."))
