@@ -1,19 +1,50 @@
 <template>
 <div class="bomx-page">
+
+  <!-- ══════════ SUMMARY STRIP ══════════ -->
+  <div class="bomx-sum-strip">
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-mfg)"></div>
+      <div class="bomx-sc-lbl">Total Routings</div>
+      <div class="bomx-sc-val">{{ list.length }}</div>
+      <div class="bomx-sc-sub">{{ activeCount }} active</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-blue)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-blue)">Total Steps</div>
+      <div class="bomx-sc-val" style="color:var(--bx-blue)">{{ totalStepsAll }}</div>
+      <div class="bomx-sc-sub">Across all routings</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-green)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-green)">Cycle Time</div>
+      <div class="bomx-sc-val" style="color:var(--bx-green)">{{ totalTime }} <span style="font-size:12px;font-weight:600">min</span></div>
+      <div class="bomx-sc-sub">This routing</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-amber)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-amber)">Est. Labour Cost</div>
+      <div class="bomx-sc-val" style="color:var(--bx-amber)">₹{{ formatMoney(totalCost) }}</div>
+      <div class="bomx-sc-sub">This routing</div>
+    </div>
+  </div>
+
   <div class="bomx-two-col">
 
     <!-- ══════════ LEFT: ROUTING LIST ══════════ -->
     <div class="bomx-list-panel">
       <div class="bomx-panel-hdr">
-        <span class="bomx-panel-title">🧭 All Routings <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <span class="bomx-panel-title">🧭 Routings <span class="bomx-count">({{ sorted.length }})</span></span>
+        <button class="bomx-btn-icon-round" @click="openAdd" title="New Routing">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
       <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
         <option value="">All Status</option>
         <option value="active">Active</option>
         <option value="inactive">Inactive</option>
       </select>
-      <input class="bomx-search" v-model="search" type="text" placeholder="Search Routings…"/>
+      <input class="bomx-search" v-model="search" type="text" placeholder="Search routings…"/>
       <div class="bomx-list">
         <template v-if="loading">
           <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
@@ -27,7 +58,7 @@
             <span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
           </div>
           <div class="bomx-item-meta">
-            <span>{{ row.op_count != null ? row.op_count : 0 }} operation{{ row.op_count === 1 ? '' : 's' }}</span>
+            <span>⚙️ {{ row.op_count != null ? row.op_count : 0 }} operation{{ row.op_count === 1 ? '' : 's' }}</span>
           </div>
         </div>
       </div>
@@ -62,75 +93,123 @@
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
                 <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
                   {{ saving ? 'Saving…' : (isNew ? 'Save Routing' : 'Save Changes') }}
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- Header fields -->
-          <div class="bomx-hdr-fields" style="grid-template-columns:2fr 1fr">
-            <div>
-              <div class="bomx-hf-label">Routing Name <span style="color:var(--bx-red)">*</span></div>
-              <input class="bomx-fi" type="text" v-model="doc.routing_name" :disabled="!isNew" placeholder="e.g., Standard Assembly Line" style="width:100%"/>
-              <div class="bomx-field-hint" v-if="!isNew">Routing name cannot be changed after creation.</div>
+          <!-- Stats bar -->
+          <div class="bomx-stats-bar">
+            <div class="bomx-sbar-cell">
+              <div class="bomx-sbar-lbl">Steps</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-mfg)">{{ (doc.operations || []).length }}</div>
+            </div>
+            <div class="bomx-sbar-cell">
+              <div class="bomx-sbar-lbl">Total Cycle Time</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-blue)">{{ totalTime }}<span style="font-size:11px;font-weight:600"> min</span></div>
+            </div>
+            <div class="bomx-sbar-cell">
+              <div class="bomx-sbar-lbl">Est. Labour Cost</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-green)">₹{{ formatMoney(totalCost) }}</div>
+            </div>
+            <div class="bomx-sbar-cell">
+              <div class="bomx-sbar-lbl">Avg Rate / Op</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-amber)">₹{{ formatMoney(avgRate) }}</div>
             </div>
           </div>
-          <div class="bomx-toggle-row">
-            <label class="bomx-toggle"><input type="checkbox" v-model="doc.is_active" :true-value="1" :false-value="0"/> Is Active</label>
+
+          <!-- Tabs -->
+          <div class="bomx-seq-tabs">
+            <button class="bomx-seq-tab" :class="{active: activeTab==='flow'}" @click="activeTab='flow'">📊 Flow Diagram</button>
+            <button class="bomx-seq-tab" :class="{active: activeTab==='sequence'}" @click="activeTab='sequence'">📋 Sequence Editor</button>
           </div>
 
           <div class="bomx-body">
-            <!-- Operations Sequence -->
-            <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px">
-              Operations Sequence <span class="bomx-count" v-if="doc.operations && doc.operations.length">({{ doc.operations.length }})</span>
+
+            <!-- Flow Diagram tab (read-only visual) -->
+            <div v-if="activeTab==='flow'">
+              <div v-if="!doc.operations || !doc.operations.length" class="bomx-tree-empty">No operations added yet. Switch to the Sequence Editor tab to add one.</div>
+              <div v-else class="bomx-flow-wrap">
+                <template v-for="(op, idx) in doc.operations" :key="op._uid">
+                  <div class="bomx-flow-step">
+                    <div class="bomx-flow-seq">{{ idx + 1 }}</div>
+                    <div class="bomx-flow-box">
+                      <div class="bomx-flow-icon">⚙️</div>
+                      <div class="bomx-flow-name">{{ op.operation || '— Not set —' }}</div>
+                      <div class="bomx-flow-time" v-if="op.time_in_mins">{{ op.time_in_mins }} min</div>
+                    </div>
+                    <div class="bomx-flow-wc" v-if="op.workstation">{{ op.workstation }}</div>
+                  </div>
+                  <div class="bomx-flow-arrow" v-if="idx < doc.operations.length - 1">→</div>
+                </template>
+              </div>
             </div>
-            <div class="bomx-rm-cards">
-              <div v-if="!doc.operations || !doc.operations.length" class="bomx-tree-empty">No operations added.</div>
-              <div class="bomx-rm-card" v-for="(op, idx) in doc.operations" :key="op._uid">
-                <div class="bomx-rm-card-hdr">
-                  <span class="bomx-tree-icon">⚙️</span>
-                  <span class="bomx-rm-card-title" style="font-weight:700;color:var(--bx-mfgB);flex:none">#{{ idx + 1 }}</span>
-                  <div style="flex:1"></div>
-                  <button class="bomx-btn-icon" @click="moveOp(idx, -1)" :disabled="idx===0" title="Move up">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
-                  </button>
-                  <button class="bomx-btn-icon" @click="moveOp(idx, 1)" :disabled="idx===doc.operations.length-1" title="Move down">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                  </button>
-                  <button class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
-                </div>
-                <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
-                  <div class="bomx-rm-field">
-                    <label>Operation <span style="color:var(--bx-red)">*</span></label>
-                    <select class="bomx-fi" v-model="op.operation" @change="onOpChange(op)">
-                      <option value="">— Select —</option>
-                      <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
-                    </select>
+
+            <!-- Sequence Editor tab (editable) -->
+            <div v-if="activeTab==='sequence'">
+              <div class="bomx-section-lbl" style="display:flex;align-items:center;gap:6px">
+                Operations Sequence <span class="bomx-count" v-if="doc.operations && doc.operations.length">({{ doc.operations.length }})</span>
+              </div>
+              <div class="bomx-rm-cards">
+                <div v-if="!doc.operations || !doc.operations.length" class="bomx-tree-empty">No operations added.</div>
+                <div class="bomx-rm-card" v-for="(op, idx) in doc.operations" :key="op._uid">
+                  <div class="bomx-rm-card-hdr">
+                    <span class="bomx-rm-card-num">{{ idx + 1 }}</span>
+                    <span class="bomx-rm-card-title" style="font-weight:700;color:var(--bx-mfgB);flex:none">Step {{ idx + 1 }}</span>
+                    <div style="flex:1"></div>
+                    <button class="bomx-btn-icon" @click="moveOp(idx, -1)" :disabled="idx===0" title="Move up">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                    </button>
+                    <button class="bomx-btn-icon" @click="moveOp(idx, 1)" :disabled="idx===doc.operations.length-1" title="Move down">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <button class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                   </div>
-                  <div class="bomx-rm-field">
-                    <label>Workstation</label>
-                    <select class="bomx-fi" v-model="op.workstation" @change="onWorkstationChange(op)">
-                      <option value="">— Select —</option>
-                      <option v-for="w in workstationsList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                    </select>
-                  </div>
-                  <div class="bomx-rm-field">
-                    <label>Time (Min)</label>
-                    <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="op.time_in_mins" min="0" step="any" placeholder="0"/>
-                  </div>
-                  <div class="bomx-rm-field">
-                    <label>Hour Rate</label>
-                    <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="op.hour_rate" min="0" step="any" placeholder="0"/>
+                  <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
+                    <div class="bomx-rm-field">
+                      <label>Operation <span style="color:var(--bx-red)">*</span></label>
+                      <select class="bomx-fi" v-model="op.operation" @change="onOpChange(op)">
+                        <option value="">— Select —</option>
+                        <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
+                      </select>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Workstation</label>
+                      <select class="bomx-fi" v-model="op.workstation" @change="onWorkstationChange(op)">
+                        <option value="">— Select —</option>
+                        <option v-for="w in workstationsList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                      </select>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Time (Min)</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="op.time_in_mins" min="0" step="any" placeholder="0"/>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Hour Rate</label>
+                      <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="op.hour_rate" min="0" step="any" placeholder="0"/>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div class="bomx-add-row" @click="addOp">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Operation
+              </div>
             </div>
-            <div class="bomx-add-row" @click="addOp">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Operation
+
+            <!-- Header fields -->
+            <div class="bomx-section-lbl" style="margin-top:22px">Routing Details</div>
+            <div class="bomx-hdr-fields-inline">
+              <div>
+                <div class="bomx-hf-label">Routing Name <span style="color:var(--bx-red)">*</span></div>
+                <input class="bomx-fi" type="text" v-model="doc.routing_name" :disabled="!isNew" placeholder="e.g., Standard Assembly Line" style="width:100%"/>
+                <div class="bomx-field-hint" v-if="!isNew">Routing name cannot be changed after creation.</div>
+              </div>
+              <label class="bomx-toggle"><input type="checkbox" v-model="doc.is_active" :true-value="1" :false-value="0"/> Is Active</label>
             </div>
 
             <!-- Description -->
@@ -205,6 +284,13 @@ function statusClass(row) {
   return row.is_active ? "badge-active" : "badge-obsolete";
 }
 
+// ── SUMMARY STRIP (display-only, derived from existing list/doc data) ──
+const activeCount = computed(() => list.value.filter(r => r.is_active).length);
+const totalStepsAll = computed(() => list.value.reduce((s, r) => s + (r.op_count || 0), 0));
+function formatMoney(n) {
+  return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function selectRouting(name) {
   router.push(`/manufacturing/routing/${name}`);
 }
@@ -259,6 +345,17 @@ function emptyDoc() {
   };
 }
 const doc = ref(emptyDoc());
+const activeTab = ref("flow");
+
+watch(() => route.params.name, () => { activeTab.value = "flow"; });
+
+const totalTime = computed(() => (doc.value.operations || []).reduce((s, o) => s + (Number(o.time_in_mins) || 0), 0));
+const totalCost = computed(() => (doc.value.operations || []).reduce((s, o) => s + ((Number(o.hour_rate) || 0) * (Number(o.time_in_mins) || 0) / 60), 0));
+const avgRate = computed(() => {
+  const ops = doc.value.operations || [];
+  if (!ops.length) return 0;
+  return ops.reduce((s, o) => s + (Number(o.hour_rate) || 0), 0) / ops.length;
+});
 
 const operationsList = ref([]);
 const workstationsList = ref([]);
@@ -414,6 +511,49 @@ function icon(name, size) {
 }
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
+
+/* ── Summary strip ── */
+.bomx-sum-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+.bomx-sum-card { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:13px 16px; position:relative; overflow:hidden; }
+.bomx-sc-bar { position:absolute; top:0; left:0; width:3px; height:100%; }
+.bomx-sc-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:3px; }
+.bomx-sc-val { font-size:21px; font-weight:700; font-family:var(--bx-mono, monospace); }
+.bomx-sc-sub { font-size:11px; color:var(--bx-muted); margin-top:2px; }
+@media (max-width:1000px) { .bomx-sum-strip { grid-template-columns:repeat(2,1fr); } }
+
+.bomx-btn-icon-round { width:26px; height:26px; border-radius:50%; background:var(--bx-mfg); color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+.bomx-btn-icon-round:hover { background:var(--bx-mfgB); }
+
+/* ── Detail stats bar ── */
+.bomx-stats-bar { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.bomx-sbar-cell { padding:12px 16px; border-right:1px solid var(--bx-border); display:flex; flex-direction:column; gap:2px; }
+.bomx-sbar-cell:last-child { border-right:none; }
+.bomx-sbar-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
+.bomx-sbar-val { font-size:17px; font-weight:700; font-family:var(--bx-mono, monospace); }
+@media (max-width:640px) { .bomx-stats-bar { grid-template-columns:repeat(2,1fr); } }
+
+/* ── Tabs ── */
+.bomx-seq-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 18px; }
+.bomx-seq-tab { padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; }
+.bomx-seq-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
+.bomx-seq-tab:hover:not(.active) { color:var(--bx-text); }
+
+/* ── Flow diagram ── */
+.bomx-flow-wrap { display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding:16px 4px; flex-wrap:nowrap; }
+.bomx-flow-step { display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0; min-width:110px; max-width:130px; }
+.bomx-flow-seq { font-size:10px; font-weight:700; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--bx-mfgS); color:var(--bx-mfgB); }
+.bomx-flow-box { width:100px; min-height:64px; border-radius:8px; border:2px solid var(--bx-mfg); background:var(--bx-mfgS); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-align:center; padding:8px; transition:transform .15s, box-shadow .15s; }
+.bomx-flow-box:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.1); }
+.bomx-flow-icon { font-size:16px; }
+.bomx-flow-name { font-size:11px; font-weight:700; line-height:1.25; color:var(--bx-mfgB); word-break:break-word; }
+.bomx-flow-time { font-size:10px; color:var(--bx-muted); }
+.bomx-flow-wc { font-size:10.5px; color:var(--bx-muted); text-align:center; }
+.bomx-flow-arrow { color:#CDD5E0; font-size:20px; flex-shrink:0; margin:0 2px; align-self:center; margin-top:22px; }
+
+.bomx-rm-card-num { width:22px; height:22px; border-radius:50%; background:var(--bx-mfgS); color:var(--bx-mfg); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+.bomx-hdr-fields-inline { display:flex; align-items:flex-end; gap:20px; flex-wrap:wrap; }
+.bomx-hdr-fields-inline > div:first-child { flex:1; min-width:220px; }
+.bomx-fi-mono { font-family:var(--bx-mono, monospace); }
 
 
 /* ── List panel ── */

@@ -1,13 +1,37 @@
 <template>
 <div class="bomx-page">
-  <div class="bomx-two-col">
 
-    <!-- ══════════ LEFT: JOB CARD LIST ══════════ -->
-    <div class="bomx-list-panel">
-      <div class="bomx-panel-hdr">
-        <span class="bomx-panel-title">🗂️ All Job Cards <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+  <!-- ══════════ FULL-WIDTH LIST VIEW (always mounted; drawer overlays on top) ══════════ -->
+  <div class="bomx-list-view">
+    <div class="bomx-list-toolbar">
+      <span class="bomx-panel-title">🗂️ All Job Cards <span class="bomx-count">({{ sorted.length }})</span></span>
+      <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Job Card</button>
+    </div>
+
+    <div class="bomx-pp-sumstrip">
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-mfg)"></div>
+        <div class="bomx-pp-sc-val">{{ countTotal }}</div>
+        <div class="bomx-pp-sc-lbl">Total</div>
       </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-amber)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-amber)">{{ countOpen }}</div>
+        <div class="bomx-pp-sc-lbl">Open</div>
+      </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-blue)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-blue)">{{ countWIP }}</div>
+        <div class="bomx-pp-sc-lbl">In Progress</div>
+      </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-green)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-green)">{{ countCompleted }}</div>
+        <div class="bomx-pp-sc-lbl">Completed</div>
+      </div>
+    </div>
+
+    <div class="bomx-list-filters">
       <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
         <option value="">All Status</option>
         <option value="Open">Open</option>
@@ -15,114 +39,122 @@
         <option value="Completed">Completed</option>
         <option value="Cancelled">Cancelled</option>
       </select>
-      <input class="bomx-search" v-model="search" type="text" placeholder="Search Job Card, Work Order, Operation…"/>
-      <div class="bomx-list">
-        <template v-if="loading">
-          <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
-        </template>
-        <div v-else-if="!sorted.length" class="bomx-list-empty">No Job Cards found</div>
-        <div v-else v-for="row in sorted" :key="row.name"
-             class="bomx-item" :class="{active: selectedName === row.name}"
-             @click="selectJobCard(row.name)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div class="bomx-item-name">{{ row.name }}</div>
-            <span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
+      <input class="bomx-fi bomx-search-full" v-model="search" type="text" placeholder="Search Job Card, Work Order, Operation…"/>
+    </div>
+
+    <div class="bomx-jc-grid">
+      <template v-if="loading">
+        <div v-for="n in 6" :key="n" class="bomx-jc"><div class="shimmer" style="height:150px;border-radius:10px"></div></div>
+      </template>
+      <div v-else-if="!sorted.length" class="bomx-list-empty">No Job Cards found</div>
+      <div v-else v-for="row in sorted" :key="row.name" class="bomx-jc" :class="'jc-status-' + statusSlug(row.status)" @click="selectJobCard(row.name)">
+        <div class="bomx-jc-hdr">
+          <div class="bomx-jc-icon" :class="'jc-icon-' + statusSlug(row.status)"><span v-html="icon('card',17)"></span></div>
+          <div style="flex:1;min-width:0">
+            <div class="bomx-jc-id mono">{{ row.name }}</div>
+            <div class="bomx-jc-op">{{ row.operation || '—' }}</div>
+            <div class="bomx-jc-wo">{{ row.work_order }}<span v-if="row.workstation"> • {{ row.workstation }}</span></div>
           </div>
-          <div class="bomx-item-meta">
-            <span v-if="row.work_order">{{ row.work_order }}</span>
-            <span v-if="row.work_order && row.operation">•</span>
-            <span v-if="row.operation">{{ row.operation }}</span>
+          <span class="bomx-badge" :class="statusClass(row)" style="flex-shrink:0">{{ statusLabel(row) }}</span>
+        </div>
+        <div class="bomx-jc-body">
+          <div class="bomx-jc-stat">
+            <div class="bomx-jc-stat-lbl">Operator</div>
+            <div class="bomx-jc-stat-val">{{ row.employee || 'Unassigned' }}</div>
           </div>
-          <div class="bomx-item-right" v-if="row.workstation">
-            <span style="font-size:12px;color:var(--bx-muted)">{{ row.workstation }}</span>
+          <div class="bomx-jc-stat">
+            <div class="bomx-jc-stat-lbl">For Quantity</div>
+            <div class="bomx-jc-stat-val mono">{{ row.for_quantity || '—' }}</div>
           </div>
+          <div class="bomx-jc-stat" style="grid-column:1/-1">
+            <div class="bomx-jc-stat-lbl">Total Time</div>
+            <div class="bomx-jc-stat-val mono">{{ row.total_time_in_mins ? fmtMins(row.total_time_in_mins) : '—' }}</div>
+          </div>
+        </div>
+        <div class="bomx-jc-foot">
+          <span class="mono">{{ fmtDate(row.modified) }}</span>
+          <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click.stop="selectJobCard(row.name)">
+            Open <span v-html="icon('open',11)"></span>
+          </button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- ══════════ RIGHT: JOB CARD DETAIL ══════════ -->
-    <div class="bomx-detail-panel">
+  <!-- ══════════ DRAWER: Job Card Detail (overlays the list, doesn't replace it) ══════════ -->
+  <Transition name="jc-drawer-fade">
+    <div v-if="selectedName" class="jc-drawer-bg" @click="handleBgClick">
+      <div class="jc-drawer-panel" @click.stop>
 
-      <!-- Empty state -->
-      <div v-if="!selectedName" class="bomx-empty-state">
-        <div class="bomx-empty-icon">🗂️</div>
-        <div class="bomx-empty-title">Select a Job Card</div>
-        <div class="bomx-empty-sub">Choose a Job Card from the list to view schedule, time logs, and status.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Job Card</button>
-      </div>
+        <div v-if="detailLoading" class="jc-drawer-hdr">
+          <div class="shimmer" style="height:34px;border-radius:6px;width:70%"></div>
+        </div>
+        <div v-else class="jc-drawer-hdr">
+          <div style="min-width:0">
+            <div class="jc-drawer-title">{{ isNew ? 'New Job Card' : doc.name }}</div>
+            <div class="jc-drawer-sub">
+              <span v-if="!isNew && doc.work_order">{{ doc.work_order }}</span>
+              <span v-if="!isNew && doc.work_order && doc.operation"> · </span>
+              <span v-if="doc.operation">{{ doc.operation }}</span>
+              <span v-if="doc.workstation"> · {{ doc.workstation }}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+            <span class="bomx-badge jc-drawer-badge" :class="statusClass(doc)">{{ statusLabel(doc) }}</span>
+            <button class="jc-drawer-close" @click="goBackToList" title="Close">✕</button>
+          </div>
+        </div>
 
-      <template v-else>
-        <div v-if="detailLoading" class="bomx-empty-state"><div class="shimmer" style="height:200px;border-radius:10px"></div></div>
+        <div v-if="detailLoading" class="jc-drawer-body">
+          <div class="shimmer" style="height:180px;border-radius:10px"></div>
+        </div>
 
         <template v-else>
-          <!-- Header -->
-          <div class="bomx-detail-hdr">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-              <div style="min-width:0">
-                <div class="bomx-detail-title">{{ isNew ? 'New Job Card' : doc.name }}</div>
-                <div class="bomx-detail-meta">
-                  <span v-if="!isNew && doc.work_order">{{ doc.work_order }}</span>
-                  <span v-if="!isNew && doc.work_order && doc.operation">•</span>
-                  <span v-if="doc.operation">{{ doc.operation }}</span>
-                  <span v-if="doc.operation">•</span>
-                  <span class="bomx-badge" :class="statusClass(doc)" style="font-size:11px">{{ statusLabel(doc) }}</span>
-                </div>
-              </div>
-              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-                <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading">
-                  {{ saving ? 'Saving…' : (isNew ? 'Save Job Card' : 'Save Changes') }}
-                </button>
-              </div>
-            </div>
-          </div>
+          <div class="jc-drawer-body">
 
-          <!-- Header fields -->
-          <div class="bomx-hdr-fields">
-            <div>
-              <div class="bomx-hf-label">Work Order <span style="color:var(--bx-red)">*</span></div>
-              <select class="bomx-fi" v-model="doc.work_order" :disabled="!isNew" style="width:100%" :title="doc.work_order">
-                <option value="">— Select Work Order —</option>
-                <option v-for="w in workOrdersList" :key="w.name" :value="w.name">{{ w.name }}</option>
-              </select>
+            <!-- Header fields -->
+            <div class="bomx-hdr-fields" style="border:1px solid var(--bx-border);border-radius:var(--bx-radius);margin-bottom:16px">
+              <div>
+                <div class="bomx-hf-label">Work Order <span style="color:var(--bx-red)">*</span></div>
+                <select class="bomx-fi" v-model="doc.work_order" :disabled="!isNew" style="width:100%" :title="doc.work_order">
+                  <option value="">— Select Work Order —</option>
+                  <option v-for="w in workOrdersList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                </select>
+              </div>
+              <div>
+                <div class="bomx-hf-label">Operation <span style="color:var(--bx-red)">*</span></div>
+                <select class="bomx-fi" v-model="doc.operation" style="width:100%" :title="doc.operation">
+                  <option value="">— Select Operation —</option>
+                  <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
+                </select>
+              </div>
+              <div>
+                <div class="bomx-hf-label">Workstation</div>
+                <select class="bomx-fi" v-model="doc.workstation" style="width:100%" :title="doc.workstation">
+                  <option value="">— Select —</option>
+                  <option v-for="w in workstationsList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <div class="bomx-hf-label">Operation <span style="color:var(--bx-red)">*</span></div>
-              <select class="bomx-fi" v-model="doc.operation" style="width:100%" :title="doc.operation">
-                <option value="">— Select Operation —</option>
-                <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
-              </select>
+            <div class="jc-drawer-toggle-row">
+              <div style="min-width:150px">
+                <div class="bomx-hf-label">Status</div>
+                <select class="bomx-fi" v-model="doc.status" style="width:100%">
+                  <option>Open</option>
+                  <option>Work In Progress</option>
+                  <option>Completed</option>
+                  <option>Cancelled</option>
+                </select>
+              </div>
+              <div style="min-width:120px">
+                <div class="bomx-hf-label">For Quantity</div>
+                <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="doc.for_quantity" min="0" step="any" style="width:100%"/>
+              </div>
+              <div style="flex:1;min-width:150px">
+                <div class="bomx-hf-label">Employee</div>
+                <input class="bomx-fi" type="text" v-model="doc.employee" placeholder="Operator name" style="width:100%"/>
+              </div>
             </div>
-            <div>
-              <div class="bomx-hf-label">Workstation</div>
-              <select class="bomx-fi" v-model="doc.workstation" style="width:100%" :title="doc.workstation">
-                <option value="">— Select —</option>
-                <option v-for="w in workstationsList" :key="w.name" :value="w.name">{{ w.name }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="bomx-toggle-row" style="align-items:flex-end;gap:24px">
-            <div style="min-width:160px">
-              <div class="bomx-hf-label">Status</div>
-              <select class="bomx-fi" v-model="doc.status" style="width:100%">
-                <option>Open</option>
-                <option>Work In Progress</option>
-                <option>Completed</option>
-                <option>Cancelled</option>
-              </select>
-            </div>
-            <div style="min-width:140px">
-              <div class="bomx-hf-label">For Quantity</div>
-              <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="doc.for_quantity" min="0" step="any" style="width:100%"/>
-            </div>
-            <div style="flex:1;min-width:160px">
-              <div class="bomx-hf-label">Employee</div>
-              <input class="bomx-fi" type="text" v-model="doc.employee" placeholder="Operator name" style="width:100%"/>
-            </div>
-          </div>
-
-          <!-- Body -->
-          <div class="bomx-body">
 
             <!-- Schedule -->
             <div class="bomx-section-lbl">Schedule</div>
@@ -170,7 +202,7 @@
                     <span v-html="icon('trash',13)"></span>
                   </button>
                 </div>
-                <div class="bomx-rm-card-body">
+                <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
                   <div class="bomx-rm-field">
                     <label>From</label>
                     <input class="bomx-fi" type="datetime-local" v-model="tl.from_time" @change="calcTimeDiff(tl)"/>
@@ -203,19 +235,20 @@
           </div>
 
           <!-- Footer -->
-          <div class="bomx-footer">
-            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteFromDetail">Delete Job Card</button>
+          <div class="jc-drawer-footer">
+            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3);background:#fff" @click="deleteFromDetail">Delete</button>
             <div style="flex:1"></div>
+            <button class="bomx-btn bomx-btn-light" style="border:1px solid var(--bx-border);color:var(--bx-text)" @click="goBackToList" :disabled="saving">Close</button>
             <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Job Card' : 'Save Changes') }}
             </button>
           </div>
         </template>
-      </template>
+      </div>
     </div>
+  </Transition>
 
-  </div>
 </div>
 </template>
 
@@ -242,7 +275,7 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "work_order", "operation", "workstation", "status", "modified"];
+    const fields = ["name", "work_order", "operation", "workstation", "status", "employee", "for_quantity", "total_time_in_mins", "modified"];
     const r = await apiList("Job Card", { fields, limit: 2000, order: "modified desc" });
     list.value = r || [];
   } catch (e) {
@@ -258,6 +291,15 @@ const sorted = computed(() => {
   if (q) r = r.filter(i => [i.name, i.work_order, i.operation, i.workstation].filter(Boolean).join(" ").toLowerCase().includes(q));
   return r;
 });
+
+const countTotal = computed(() => list.value.length);
+const countOpen = computed(() => list.value.filter(i => (i.status || "Open") === "Open").length);
+const countWIP = computed(() => list.value.filter(i => i.status === "Work In Progress").length);
+const countCompleted = computed(() => list.value.filter(i => i.status === "Completed").length);
+
+function statusSlug(status) {
+  return (status || "Open").toLowerCase().replace(/\s+/g, "-");
+}
 
 function statusLabel(row) { return row.status || "Open"; }
 function statusClass(row) {
@@ -276,6 +318,9 @@ function openAdd() {
 }
 function goBackToList() {
   router.push("/manufacturing/job-card");
+}
+function handleBgClick() {
+  if (!saving.value) goBackToList();
 }
 
 async function deleteFromDetail() {
@@ -432,6 +477,12 @@ function fmtMins(m) {
   const h = Math.floor(m / 60), min = Math.round(m % 60);
   return h > 0 ? `${h}h ${min}m` : `${min}m`;
 }
+function fmtDate(d) {
+  if (!d) return "";
+  const obj = new Date(d);
+  if (isNaN(obj)) return d;
+  return obj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 async function save() {
   if (!doc.value.work_order) return toast("Work Order is required", "error");
@@ -466,6 +517,9 @@ async function save() {
 const ICONS = {
   plus:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+  open:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>',
+  chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
@@ -485,26 +539,47 @@ function icon(name, size) {
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
-.bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
-@media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
+.bomx-list-view { display:flex; flex-direction:column; gap:14px; }
 
+/* ── List toolbar ── */
+.bomx-list-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.bomx-panel-title { font-size:16px; font-weight:700; color:var(--bx-text); }
+.bomx-count { font-size:13px; font-weight:400; color:var(--bx-muted); }
 
-/* ── List panel ── */
-.bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
-.bomx-panel-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.bomx-panel-title { font-size:13px; font-weight:700; color:var(--bx-text); }
-.bomx-count { font-size:12px; font-weight:400; color:var(--bx-muted); }
-.bomx-status-filter { margin:8px 12px 0; width:calc(100% - 24px); font-size:12px; padding:6px 10px; }
-.bomx-search { width:100%; border:none; outline:none; font-size:13px; padding:10px 14px; margin-top:8px; border-bottom:1px solid var(--bx-border); background:#fff; color:var(--bx-text); }
-.bomx-search::placeholder { color:var(--bx-muted); }
-.bomx-list { overflow-y:auto; max-height: calc(100vh - 230px); }
-.bomx-list-empty { text-align:center; padding:32px; color:var(--bx-muted); font-size:13px; }
-.bomx-item { padding:12px 14px; border-bottom:1px solid #F1F3F5; cursor:pointer; transition:background .12s; display:flex; flex-direction:column; gap:4px; }
-.bomx-item:hover { background:#FAFBFF; }
-.bomx-item.active { background:var(--bx-mfgS); border-left:3px solid var(--bx-mfg); }
-.bomx-item-name { font-size:13.5px; font-weight:600; color:var(--bx-text); }
-.bomx-item-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bx-muted); }
-.bomx-item-right { display:flex; align-items:center; gap:6px; }
+/* ── Filters row ── */
+.bomx-list-filters { display:flex; gap:10px; flex-wrap:wrap; }
+.bomx-status-filter { width:200px; }
+.bomx-search-full { flex:1; min-width:220px; }
+.bomx-list-empty { grid-column:1/-1; text-align:center; padding:40px; color:var(--bx-muted); font-size:13px; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); }
+
+/* ── Summary strip (list view) ── */
+.bomx-pp-sumstrip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.bomx-pp-sc { position:relative; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:12px 14px 12px 18px; text-align:left; overflow:hidden; }
+.bomx-pp-sc-bar { position:absolute; top:0; left:0; width:3px; height:100%; }
+.bomx-pp-sc-val { font-size:20px; font-weight:700; font-family:var(--bx-mono); color:var(--bx-text); }
+.bomx-pp-sc-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--bx-muted); margin-top:2px; }
+
+/* ── Job Card grid ── */
+.bomx-jc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+.bomx-jc { background:var(--bx-surface); border:1.5px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; cursor:pointer; transition:all .15s; }
+.bomx-jc:hover { border-color:var(--bx-mfgL); box-shadow:0 4px 16px rgba(26,110,247,.1); transform:translateY(-1px); }
+.bomx-jc.jc-status-open { border-left:4px solid var(--bx-amber); }
+.bomx-jc.jc-status-work-in-progress { border-left:4px solid var(--bx-blue); }
+.bomx-jc.jc-status-completed { border-left:4px solid var(--bx-green); opacity:.9; }
+.bomx-jc.jc-status-cancelled { border-left:4px solid var(--bx-muted); opacity:.75; }
+.bomx-jc-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); display:flex; align-items:flex-start; gap:10px; }
+.bomx-jc-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--bx-surf2); color:var(--bx-muted); }
+.bomx-jc-icon.jc-icon-open { background:var(--bx-amberS); color:var(--bx-amber); }
+.bomx-jc-icon.jc-icon-work-in-progress { background:var(--bx-blueS); color:var(--bx-blue); }
+.bomx-jc-icon.jc-icon-completed { background:var(--bx-greenS); color:var(--bx-green); }
+.bomx-jc-id { font-size:11px; font-weight:700; color:var(--bx-mfgB); }
+.bomx-jc-op { font-size:14px; font-weight:700; color:var(--bx-text); margin:2px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-jc-wo { font-size:11.5px; color:var(--bx-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-jc-body { padding:10px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.bomx-jc-stat { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.bomx-jc-stat-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
+.bomx-jc-stat-val { font-size:13.5px; font-weight:700; color:var(--bx-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-jc-foot { padding:8px 14px; background:var(--bx-surf2); border-top:1px solid var(--bx-border); display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:var(--bx-muted); }
 
 /* ── Badges ── */
 .bomx-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
@@ -513,25 +588,57 @@ function icon(name, size) {
 .badge-wip { background:var(--bx-blueS); color:var(--bx-blue); }
 .badge-open { background:var(--bx-amberS); color:var(--bx-amber); }
 
-/* ── Detail panel ── */
-.bomx-detail-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; min-height: calc(100vh - 100px); }
-.bomx-empty-state { text-align:center; padding:60px 20px; color:var(--bx-muted); }
-.bomx-empty-icon { font-size:48px; margin-bottom:14px; }
-.bomx-empty-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:6px; }
-.bomx-empty-sub { font-size:13px; line-height:1.6; max-width:280px; margin:0 auto 20px; }
-
-.bomx-detail-hdr { padding:18px 22px; background:linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg)); }
-.bomx-detail-title { font-size:18px; font-weight:700; color:#fff; margin-bottom:4px; }
-.bomx-detail-meta { font-size:12.5px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-
 .bomx-hdr-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:16px 22px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
 .bomx-toggle-row { display:flex; gap:20px; padding:14px 22px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
-.bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
 .bomx-section-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bx-muted); margin-bottom:8px; }
+
+/* ══════════ Drawer (Job Card detail slides over the list) ══════════ */
+.jc-drawer-bg {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(15,17,23,.45);
+  display: flex; justify-content: flex-end;
+}
+.jc-drawer-panel {
+  width: 700px; max-width: 97vw; height: 100%;
+  background: var(--bx-surface);
+  display: flex; flex-direction: column;
+  box-shadow: -20px 0 60px rgba(0,0,0,.18);
+}
+.jc-drawer-hdr {
+  flex-shrink: 0;
+  padding: 16px 22px;
+  background: linear-gradient(135deg, var(--bx-mfgB), var(--bx-mfg));
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.jc-drawer-title { font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jc-drawer-sub { font-size: 12.5px; color: rgba(255,255,255,.75); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jc-drawer-badge { background: rgba(255,255,255,.92) !important; }
+.jc-drawer-close {
+  background: rgba(255,255,255,.2); border: none; cursor: pointer; color: #fff;
+  width: 28px; height: 28px; border-radius: 6px; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: background .15s;
+}
+.jc-drawer-close:hover { background: rgba(255,255,255,.32); }
+.jc-drawer-toggle-row { display:flex; gap:16px; padding:14px 22px; flex-wrap:wrap; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); }
+.jc-drawer-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.jc-drawer-footer {
+  flex-shrink: 0; padding: 14px 22px; border-top: 1px solid var(--bx-border);
+  background: var(--bx-surf2); display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+}
+
+/* Backdrop fade */
+.jc-drawer-fade-enter-active, .jc-drawer-fade-leave-active { transition: background-color .22s ease; }
+.jc-drawer-fade-enter-from, .jc-drawer-fade-leave-to { background-color: rgba(15,17,23,0) !important; }
+
+/* Panel slide, driven off the same enter/leave classes as the backdrop */
+.jc-drawer-panel { transition: transform .22s ease; transform: translateX(0); }
+.jc-drawer-fade-enter-from .jc-drawer-panel,
+.jc-drawer-fade-leave-to .jc-drawer-panel { transform: translateX(100%); }
 
 /* ── Time log cards (reuse rm-card pattern) ── */
 .bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
@@ -590,17 +697,19 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 /* ── Mobile responsive ── */
 @media (max-width:768px) {
   .bomx-page { padding:10px; overflow-x:hidden; }
-  .bomx-two-col { gap:12px; }
-  .bomx-list { max-height:280px; }
-  .bomx-detail-panel { min-height:auto; }
+  .bomx-list-view { gap:10px; }
+  .bomx-jc-grid { grid-template-columns:1fr; }
+  .bomx-pp-sumstrip { grid-template-columns:repeat(2,1fr); }
+  .bomx-status-filter { width:100%; }
 
-  .bomx-detail-hdr { padding:14px 16px; }
+  .jc-drawer-panel { width:100vw; max-width:100vw; }
+  .jc-drawer-hdr { padding:14px 16px; }
+  .jc-drawer-toggle-row { padding:10px 16px 12px; gap:14px; }
+  .jc-drawer-body { padding:14px 16px; }
   .bomx-hdr-fields { grid-template-columns:1fr; padding:12px 16px; gap:10px; }
-  .bomx-toggle-row { padding:10px 16px 12px; gap:14px; }
-  .bomx-body { padding:14px 16px; }
 
   .bomx-rm-card-body { grid-template-columns:1fr 1fr; }
-  .bomx-footer { flex-direction:column; align-items:stretch; gap:10px; }
+  .jc-drawer-footer { flex-wrap:wrap; }
 }
 
 @media (max-width:420px) {

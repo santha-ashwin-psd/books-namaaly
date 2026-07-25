@@ -1,54 +1,92 @@
 <template>
 <div class="bomx-page">
-  <div class="bomx-two-col">
 
-    <!-- ══════════ LEFT: PRODUCTION PLAN LIST ══════════ -->
-    <div class="bomx-list-panel">
-      <div class="bomx-panel-hdr">
-        <span class="bomx-panel-title">📅 All Production Plans <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+  <!-- ══════════ FULL-WIDTH LIST VIEW ══════════ -->
+  <div v-if="!selectedName" class="bomx-list-view">
+    <div class="bomx-list-toolbar">
+      <span class="bomx-panel-title">📅 All Production Plans <span class="bomx-count">({{ sorted.length }})</span></span>
+      <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Production Plan</button>
+    </div>
+
+    <div class="bomx-pp-sumstrip">
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-mfg)"></div>
+        <div class="bomx-pp-sc-val">{{ countTotal }}</div>
+        <div class="bomx-pp-sc-lbl">Total</div>
       </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-muted)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-muted)">{{ countDraft }}</div>
+        <div class="bomx-pp-sc-lbl">Draft</div>
+      </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-blue)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-blue)">{{ countSubmitted }}</div>
+        <div class="bomx-pp-sc-lbl">Submitted</div>
+      </div>
+      <div class="bomx-pp-sc">
+        <div class="bomx-pp-sc-bar" style="background:var(--bx-green)"></div>
+        <div class="bomx-pp-sc-val" style="color:var(--bx-green)">{{ countWOCreated }}</div>
+        <div class="bomx-pp-sc-lbl">WOs Created</div>
+      </div>
+    </div>
+
+    <div class="bomx-list-filters">
       <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
         <option value="">All Status</option>
         <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
       </select>
-      <input class="bomx-search" v-model="search" type="text" placeholder="Search Production Plans…"/>
-      <div class="bomx-list">
-        <template v-if="loading">
-          <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
-        </template>
-        <div v-else-if="!sorted.length" class="bomx-list-empty">No Production Plans found</div>
-        <div v-else v-for="row in sorted" :key="row.name"
-             class="bomx-item" :class="{active: selectedName === row.name}"
-             @click="selectPlan(row.name)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div class="bomx-item-name">{{ row.name }}</div>
-            <span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span>
-          </div>
-          <div class="bomx-item-meta">
+      <input class="bomx-fi bomx-search-full" v-model="search" type="text" placeholder="Search Production Plans…"/>
+    </div>
+
+    <div class="bomx-pp-rows">
+      <template v-if="loading">
+        <div v-for="n in 4" :key="n" class="bomx-pp-row"><div class="shimmer" style="height:58px;border-radius:8px"></div></div>
+      </template>
+      <div v-else-if="!sorted.length" class="bomx-list-empty">No Production Plans found</div>
+      <div v-else v-for="row in sorted" :key="row.name" class="bomx-pp-row" @click="selectPlan(row.name)">
+        <div class="bomx-pp-row-top">
+          <div class="bomx-item-name">{{ row.name }}</div>
+          <span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span>
+        </div>
+        <div class="bomx-pp-row-foot">
+          <div class="bomx-pp-row-meta">
             <span class="mono">{{ fmtDate(row.posting_date) }}</span>
-            <span v-if="row.company">•</span>
-            <span v-if="row.company">{{ row.company }}</span>
+            <span v-if="row.company">• {{ row.company }}</span>
           </div>
+          <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click.stop="selectPlan(row.name)">
+            Open <span v-html="icon('open',11)"></span>
+          </button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- ══════════ RIGHT: PRODUCTION PLAN DETAIL ══════════ -->
-    <div class="bomx-detail-panel">
-
-      <!-- Empty state -->
-      <div v-if="!selectedName" class="bomx-empty-state">
-        <div class="bomx-empty-icon">📅</div>
-        <div class="bomx-empty-title">Select a Production Plan</div>
-        <div class="bomx-empty-sub">Choose a Production Plan from the list to view demand, raw materials, and Work Orders.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Production Plan</button>
-      </div>
-
-      <template v-else>
+  <!-- ══════════ FULL-WIDTH DETAIL VIEW ══════════ -->
+  <div v-else class="bomx-detail-panel">
         <div v-if="loading" class="bomx-empty-state"><div class="shimmer" style="height:200px;border-radius:10px"></div></div>
 
         <template v-else>
+          <!-- Back -->
+          <button class="bomx-back-btn" @click="goBackToList" :disabled="saving || submitting" title="Back to list">
+            <span v-html="icon('chevronLeft',16)"></span>
+          </button>
+
+          <!-- Pipeline -->
+          <div class="bomx-pp-pipeline" v-if="!isNew">
+            <template v-for="(step, i) in pipelineSteps" :key="step.key">
+              <div class="bomx-pp-pipe-step">
+                <div class="bomx-pp-pipe-dot" :class="'st-' + pipelineStepState(step.key)">
+                  <span v-if="pipelineStepState(step.key)==='done' && step.key!=='Cancelled'" v-html="icon('check',14)"></span>
+                  <span v-else-if="step.key==='Cancelled'" v-html="icon('x',14)"></span>
+                  <span v-else>{{ i + 1 }}</span>
+                </div>
+                <div class="bomx-pp-pipe-label" :class="'st-' + pipelineStepState(step.key)">{{ step.label }}</div>
+              </div>
+              <div v-if="i < pipelineSteps.length - 1" class="bomx-pp-pipe-line" :class="{ done: pipelineStepState(pipelineSteps[i+1].key) === 'done' }"></div>
+            </template>
+          </div>
+
           <!-- Header -->
           <div class="bomx-detail-hdr">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -167,44 +205,51 @@
                   <span v-html="icon('plus',12)"></span> Add Row
                 </button>
               </div>
-              <div class="bomx-rm-cards">
-                <div v-if="!pp.po_items || !pp.po_items.length" class="bomx-tree-empty">No items yet. Pull from Sales Orders above, or add a row manually.</div>
-                <div v-for="(row, idx) in pp.po_items" :key="idx" class="bomx-rm-card">
-                  <div class="bomx-rm-card-hdr">
-                    <span class="bomx-rm-card-title">{{ row.item_name || row.item_code || 'New Row' }}</span>
-                    <span v-if="flt(row.work_order_created_qty)" style="font-size:12px;color:var(--bx-muted)">WO: {{ fmt(row.work_order_created_qty) }}</span>
-                    <button v-if="!readOnly" class="bomx-btn-icon danger" @click="pp.po_items.splice(idx,1)" title="Remove">
-                      <span v-html="icon('trash',13)"></span>
-                    </button>
-                  </div>
-                  <div class="bomx-rm-card-body">
-                    <div class="bomx-rm-field" style="grid-column:span 2">
-                      <label>Item to Manufacture</label>
-                      <select class="bomx-fi" v-model="row.item_code" @change="onPOItemChange(row)" :disabled="readOnly">
-                        <option value="">— Select —</option>
-                        <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
-                      </select>
-                    </div>
-                    <div class="bomx-rm-field" style="grid-column:span 2">
-                      <label>BOM</label>
-                      <select class="bomx-fi" v-model="row.bom_no" :disabled="readOnly">
-                        <option value="">— Select Submitted BOM —</option>
-                        <option v-for="b in bomsFor(row.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
-                      </select>
-                    </div>
-                    <div class="bomx-rm-field">
-                      <label>Planned Qty</label>
-                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="row.planned_qty" min="0.01" step="any" :disabled="readOnly"/>
-                    </div>
-                    <div class="bomx-rm-field">
-                      <label>FG Warehouse</label>
-                      <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
-                        <option value="">— Use Default —</option>
-                        <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
+              <div v-if="!pp.po_items || !pp.po_items.length" class="bomx-tree-empty">No items yet. Pull from Sales Orders above, or add a row manually.</div>
+              <div v-else class="bomx-pp-tbl-wrap">
+                <table class="bomx-pp-item-tbl">
+                  <thead>
+                    <tr>
+                      <th>Item to Manufacture</th>
+                      <th>BOM</th>
+                      <th class="right">Planned Qty</th>
+                      <th>FG Warehouse</th>
+                      <th class="right">WO Qty</th>
+                      <th style="width:36px"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in pp.po_items" :key="idx">
+                      <td style="min-width:180px">
+                        <select class="bomx-fi" v-model="row.item_code" @change="onPOItemChange(row)" :disabled="readOnly">
+                          <option value="">— Select —</option>
+                          <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                        </select>
+                      </td>
+                      <td style="min-width:160px">
+                        <select class="bomx-fi" v-model="row.bom_no" :disabled="readOnly">
+                          <option value="">— Select Submitted BOM —</option>
+                          <option v-for="b in bomsFor(row.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
+                        </select>
+                      </td>
+                      <td class="right" style="min-width:100px">
+                        <input class="bomx-fi bomx-fi-mono" style="text-align:right" type="number" v-model="row.planned_qty" min="0.01" step="any" :disabled="readOnly"/>
+                      </td>
+                      <td style="min-width:160px">
+                        <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
+                          <option value="">— Use Default —</option>
+                          <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                        </select>
+                      </td>
+                      <td class="right mono" style="color:var(--bx-muted)">{{ flt(row.work_order_created_qty) ? fmt(row.work_order_created_qty) : '—' }}</td>
+                      <td>
+                        <button v-if="!readOnly" class="bomx-btn-icon danger" @click="pp.po_items.splice(idx,1)" title="Remove">
+                          <span v-html="icon('trash',13)"></span>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </template>
 
@@ -227,18 +272,18 @@
                 </div>
               </div>
 
-              <div class="bomx-rm-cards">
-                <div v-if="!pp.mr_items || !pp.mr_items.length" class="bomx-tree-empty">No requirement calculated yet. Click "Calculate Requirement" above.</div>
-                <div v-for="(m, idx) in pp.mr_items" :key="idx" class="bomx-rm-card">
-                  <div class="bomx-rm-card-hdr">
-                    <span class="bomx-rm-card-title">{{ m.item_name || m.item_code }}</span>
-                    <span class="bomx-badge" :class="flt(m.shortfall_qty) > 0 ? 'badge-cancelled' : 'badge-active'">
-                      {{ flt(m.shortfall_qty) > 0 ? 'Short ' + fmt(m.shortfall_qty) : 'OK' }}
+              <div v-if="!pp.mr_items || !pp.mr_items.length" class="bomx-tree-empty">No requirement calculated yet. Click "Calculate Requirement" above.</div>
+              <div v-else class="bomx-pp-mat-grid">
+                <div v-for="(m, idx) in pp.mr_items" :key="idx" class="bomx-pp-mat-card">
+                  <div class="bomx-pp-mat-name">{{ m.item_name || m.item_code }}</div>
+                  <div class="bomx-pp-mat-code mono">{{ m.item_code }}</div>
+                  <div class="bomx-pp-mat-row"><span>Required</span><span class="mono" style="font-weight:700">{{ fmt(m.required_qty) }} {{ m.uom }}</span></div>
+                  <div class="bomx-pp-mat-row"><span>Available</span><span class="mono">{{ fmt(m.available_qty) }} {{ m.uom }}</span></div>
+                  <div class="bomx-pp-mat-row">
+                    <span>Shortfall</span>
+                    <span class="mono" :class="flt(m.shortfall_qty) > 0 ? 'bomx-pp-stock-short' : 'bomx-pp-stock-ok'">
+                      {{ flt(m.shortfall_qty) > 0 ? fmt(m.shortfall_qty) + ' ' + m.uom : 'Sufficient' }}
                     </span>
-                  </div>
-                  <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
-                    <div class="bomx-rm-field"><label>Required Qty</label><div class="bomx-rm-static mono">{{ fmt(m.required_qty) }} {{ m.uom }}</div></div>
-                    <div class="bomx-rm-field"><label>Available Qty</label><div class="bomx-rm-static mono">{{ fmt(m.available_qty) }}</div></div>
                   </div>
                 </div>
               </div>
@@ -270,19 +315,18 @@
                   <span class="bomx-section-lbl" style="margin-bottom:0">Linked Work Orders</span>
                   <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadWorkOrders" :disabled="woLoading">Refresh</button>
                 </div>
-                <div class="bomx-rm-cards">
-                  <div v-if="!workOrders.length" class="bomx-tree-empty">No Work Orders created yet.</div>
-                  <div v-for="w in workOrders" :key="w.name" class="bomx-rm-card" style="cursor:pointer" @click="router.push(`/manufacturing/work-order/${w.name}`)">
-                    <div class="bomx-rm-card-hdr">
-                      <span class="bomx-rm-card-title mono" style="font-weight:600">{{ w.name }}</span>
-                      <span class="bomx-badge" :class="woStatusClass(w)">{{ w.status }}</span>
-                    </div>
-                    <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
-                      <div class="bomx-rm-field"><label>Item</label><div class="bomx-rm-static">{{ w.item_name || w.production_item }}</div></div>
-                      <div class="bomx-rm-field"><label>Qty</label><div class="bomx-rm-static mono">{{ fmt(w.qty) }}</div></div>
-                    </div>
+                <div v-if="!workOrders.length" class="bomx-tree-empty">No Work Orders created yet.</div>
+                <template v-else>
+                  <div class="bomx-pp-infobox">
+                    <span v-html="icon('check',14)"></span>
+                    <span><b>{{ workOrders.length }}</b> Work Order{{ workOrders.length===1?'':'s' }} linked to this Production Plan. Click a chip to open it.</span>
                   </div>
-                </div>
+                  <div class="bomx-pp-wo-chips">
+                    <span v-for="w in workOrders" :key="w.name" class="bomx-pp-wo-chip" :class="'wo-' + woStatusClass(w)" @click="router.push(`/manufacturing/work-order/${w.name}`)" :title="(w.item_name || w.production_item) + ' — ' + w.status">
+                      {{ w.name }}
+                    </span>
+                  </div>
+                </template>
               </template>
             </template>
 
@@ -298,9 +342,6 @@
 
           </div>
         </template>
-      </template>
-    </div>
-
   </div>
 
   <!-- Sales Order picker modal -->
@@ -379,6 +420,39 @@ function statusClass(row) {
   if (row.status === "Cancelled") return "badge-cancelled";
   if (row.status === "Draft") return "badge-obsolete";
   return "badge-inprocess";
+}
+
+const countTotal = computed(() => list.value.length);
+const countDraft = computed(() => list.value.filter(i => i.status === "Draft").length);
+const countSubmitted = computed(() => list.value.filter(i => i.status === "Submitted").length);
+const countWOCreated = computed(() => list.value.filter(i => i.status === "Work Orders Created").length);
+
+// Pipeline stages shown in the detail header, derived from pp.status.
+// Cancelled plans get their own short track; everything else walks
+// Draft → Submitted → Work Orders Created → Completed.
+const PIPELINE_STEPS = [
+  { key: "Draft", label: "Draft" },
+  { key: "Submitted", label: "Submitted" },
+  { key: "Work Orders Created", label: "WOs Created" },
+  { key: "Completed", label: "Completed" },
+];
+const pipelineSteps = computed(() => {
+  if (pp.value.status === "Cancelled") {
+    return [
+      { key: "Draft", label: "Draft" },
+      { key: "Submitted", label: "Submitted" },
+      { key: "Cancelled", label: "Cancelled" },
+    ];
+  }
+  return PIPELINE_STEPS;
+});
+function pipelineStepState(stepKey) {
+  const order = ["Draft", "Submitted", "Work Orders Created", "Completed"];
+  const curIdx = order.indexOf(pp.value.status === "Cancelled" ? "Submitted" : pp.value.status);
+  const stepIdx = order.indexOf(stepKey);
+  if (stepKey === "Cancelled") return "cancelled";
+  if (stepIdx <= curIdx) return "done";
+  return "pending";
 }
 function woStatusClass(w) {
   if (w.status === "Completed") return "badge-active";
@@ -745,6 +819,10 @@ function fmtDate(d) {
 const ICONS = {
   plus:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+  x:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+  open:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>',
+  chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
@@ -764,25 +842,76 @@ function icon(name, size) {
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
-.bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
-@media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
+.bomx-list-view { display:flex; flex-direction:column; gap:14px; }
 
+/* ── List toolbar ── */
+.bomx-list-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.bomx-panel-title { font-size:16px; font-weight:700; color:var(--bx-text); }
+.bomx-count { font-size:13px; font-weight:400; color:var(--bx-muted); }
 
-/* ── List panel ── */
-.bomx-list-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; }
-.bomx-panel-hdr { padding:12px 14px; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.bomx-panel-title { font-size:13px; font-weight:700; color:var(--bx-text); }
-.bomx-count { font-size:12px; font-weight:400; color:var(--bx-muted); }
-.bomx-status-filter { margin:8px 12px 0; width:calc(100% - 24px); font-size:12px; padding:6px 10px; }
-.bomx-search { width:100%; border:none; outline:none; font-size:13px; padding:10px 14px; margin-top:8px; border-bottom:1px solid var(--bx-border); background:#fff; color:var(--bx-text); }
-.bomx-search::placeholder { color:var(--bx-muted); }
-.bomx-list { overflow-y:auto; max-height: calc(100vh - 230px); }
-.bomx-list-empty { text-align:center; padding:32px; color:var(--bx-muted); font-size:13px; }
-.bomx-item { padding:12px 14px; border-bottom:1px solid #F1F3F5; cursor:pointer; transition:background .12s; display:flex; flex-direction:column; gap:4px; }
-.bomx-item:hover { background:#FAFBFF; }
-.bomx-item.active { background:var(--bx-mfgS); border-left:3px solid var(--bx-mfg); }
-.bomx-item-name { font-size:13.5px; font-weight:600; color:var(--bx-text); }
-.bomx-item-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bx-muted); }
+/* ── Filters row ── */
+.bomx-list-filters { display:flex; gap:10px; flex-wrap:wrap; }
+.bomx-status-filter { width:200px; }
+.bomx-search-full { flex:1; min-width:220px; }
+.bomx-list-empty { text-align:center; padding:40px; color:var(--bx-muted); font-size:13px; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); }
+.bomx-item-name { font-size:14.5px; font-weight:700; color:var(--bx-text); }
+
+/* ── Summary strip (list view) ── */
+.bomx-pp-sumstrip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.bomx-pp-sc { position:relative; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:12px 14px 12px 18px; text-align:left; overflow:hidden; }
+.bomx-pp-sc-bar { position:absolute; top:0; left:0; width:3px; height:100%; }
+.bomx-pp-sc-val { font-size:20px; font-weight:700; font-family:var(--bx-mono); color:var(--bx-text); }
+.bomx-pp-sc-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--bx-muted); margin-top:2px; }
+
+/* ── Plan rows (full-width list view) ── */
+.bomx-pp-rows { display:flex; flex-direction:column; gap:12px; }
+.bomx-pp-row { background:var(--bx-surface); border:1.5px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; cursor:pointer; transition:all .15s; }
+.bomx-pp-row:hover { border-color:var(--bx-mfgL); box-shadow:0 4px 16px rgba(26,110,247,.08); }
+.bomx-pp-row-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 18px; border-bottom:1px solid var(--bx-border); }
+.bomx-pp-row-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 18px; background:var(--bx-surf2); }
+.bomx-pp-row-meta { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--bx-muted); }
+
+/* ── Pipeline stepper (detail header) ── */
+.bomx-pp-pipeline { display:flex; align-items:center; gap:0; padding:14px 22px; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); margin-bottom:16px; flex-wrap:wrap; }
+.bomx-pp-pipe-step { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; }
+.bomx-pp-pipe-dot { width:30px; height:30px; border-radius:50%; border:2px solid var(--bx-border); background:#fff; color:var(--bx-muted); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+.bomx-pp-pipe-dot.st-done { border-color:var(--bx-mfg); background:var(--bx-mfg); color:#fff; }
+.bomx-pp-pipe-dot.st-cancelled { border-color:var(--bx-red); background:var(--bx-red); color:#fff; }
+.bomx-pp-pipe-dot.st-pending { border-color:var(--bx-mfgL); color:var(--bx-mfgB); }
+.bomx-pp-pipe-label { font-size:11px; font-weight:600; white-space:nowrap; color:var(--bx-muted); }
+.bomx-pp-pipe-label.st-done { color:var(--bx-mfgB); }
+.bomx-pp-pipe-label.st-cancelled { color:var(--bx-red); }
+.bomx-pp-pipe-line { height:2px; width:44px; flex-shrink:0; margin-bottom:18px; background:var(--bx-border); }
+.bomx-pp-pipe-line.done { background:var(--bx-mfg); }
+
+/* ── Items to Manufacture table ── */
+.bomx-pp-tbl-wrap { overflow-x:auto; border:1px solid var(--bx-border); border-radius:var(--bx-rsm); }
+.bomx-pp-item-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.bomx-pp-item-tbl th { text-align:left; padding:8px 10px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
+.bomx-pp-item-tbl th.right, .bomx-pp-item-tbl td.right { text-align:right; }
+.bomx-pp-item-tbl td { padding:7px 10px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-pp-item-tbl tr:last-child td { border-bottom:none; }
+.bomx-pp-item-tbl tr:hover td { background:#FAFBFF; }
+
+/* ── Raw material grid ── */
+.bomx-pp-mat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+.bomx-pp-mat-card { background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-rsm); padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+.bomx-pp-mat-name { font-size:13px; font-weight:600; color:var(--bx-text); }
+.bomx-pp-mat-code { font-size:11px; color:var(--bx-muted); }
+.bomx-pp-mat-row { display:flex; justify-content:space-between; font-size:12px; color:var(--bx-muted); margin-top:2px; }
+.bomx-pp-stock-ok { color:var(--bx-green); font-weight:700; }
+.bomx-pp-stock-short { color:var(--bx-red); font-weight:700; }
+
+/* ── Info box / WO chips ── */
+.bomx-pp-infobox { border-radius:var(--bx-rsm); padding:10px 13px; font-size:13px; display:flex; gap:9px; align-items:flex-start; line-height:1.5; background:var(--bx-greenS); color:var(--bx-green); border:1px solid rgba(47,158,68,.2); margin-bottom:12px; }
+.bomx-pp-wo-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.bomx-pp-wo-chip { display:inline-flex; align-items:center; gap:6px; border-radius:20px; padding:5px 12px; font-size:12.5px; font-weight:700; font-family:var(--bx-mono); cursor:pointer; border:1px solid transparent; transition:all .12s; }
+.bomx-pp-wo-chip:hover { filter:brightness(0.97); }
+.bomx-pp-wo-chip.wo-badge-active { background:var(--bx-greenS); color:var(--bx-green); border-color:rgba(47,158,68,.2); }
+.bomx-pp-wo-chip.wo-badge-obsolete { background:#F1F3F5; color:var(--bx-muted); border-color:var(--bx-border); }
+.bomx-pp-wo-chip.wo-badge-cancelled { background:var(--bx-redS); color:var(--bx-red); border-color:rgba(201,42,42,.2); }
+.bomx-pp-wo-chip.wo-badge-stopped { background:var(--bx-amberS); color:var(--bx-amber); border-color:rgba(230,119,0,.2); }
+.bomx-pp-wo-chip.wo-badge-inprocess { background:var(--bx-blueS); color:var(--bx-blue); border-color:rgba(25,113,194,.2); }
 
 /* ── Badges ── */
 .bomx-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
@@ -791,6 +920,11 @@ function icon(name, size) {
 .badge-cancelled { background:var(--bx-redS); color:var(--bx-red); }
 .badge-stopped { background:var(--bx-amberS); color:var(--bx-amber); }
 .badge-inprocess { background:var(--bx-blueS); color:var(--bx-blue); }
+
+/* ── Back button (detail view) ── */
+.bomx-back-btn { display:inline-flex; align-items:center; justify-content:center; width:38px; height:34px; margin:14px 0 0 14px; background:#fff; border:1px solid var(--bx-border); border-radius:10px; color:var(--bx-muted); cursor:pointer; box-shadow:0 1px 2px rgba(16,24,40,.05); transition:all .15s; }
+.bomx-back-btn:hover:not(:disabled) { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
+.bomx-back-btn:disabled { opacity:.5; cursor:not-allowed; }
 
 /* ── Detail panel ── */
 .bomx-detail-panel { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; display:flex; flex-direction:column; min-height: calc(100vh - 100px); }
@@ -882,9 +1016,9 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 /* ── Mobile responsive ── */
 @media (max-width:768px) {
   .bomx-page { padding:10px; overflow-x:hidden; }
-  .bomx-two-col { gap:12px; }
-  .bomx-list { max-height:280px; }
+  .bomx-list-view { gap:10px; }
   .bomx-detail-panel { min-height:auto; }
+  .bomx-status-filter { width:100%; }
 
   .bomx-detail-hdr { padding:14px 16px; }
   .bomx-detail-title { font-size:16px; }
@@ -895,6 +1029,10 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 
   .bomx-rm-card-body { grid-template-columns:1fr 1fr; }
   .bomx-prod-card { padding:14px; }
+
+  .bomx-pp-sumstrip { grid-template-columns:repeat(2,1fr); }
+  .bomx-pp-pipeline { padding:12px 16px; }
+  .bomx-pp-pipe-line { width:24px; }
 }
 
 @media (max-width:420px) {

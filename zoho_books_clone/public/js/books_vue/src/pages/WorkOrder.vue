@@ -1,52 +1,119 @@
 <template>
 <div class="bomx-page">
-  <div class="bomx-two-col">
 
-    <!-- ══════════ LEFT: WORK ORDER LIST ══════════ -->
-    <div class="bomx-list-panel">
-      <div class="bomx-panel-hdr">
-        <span class="bomx-panel-title">🏗️ All Work Orders <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
-      </div>
-      <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
-        <option value="">All Status</option>
-        <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
-      </select>
-      <input class="bomx-search" v-model="search" type="text" placeholder="Search Work Orders, items…"/>
-      <div class="bomx-list">
-        <template v-if="loading">
-          <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
-        </template>
-        <div v-else-if="!sorted.length" class="bomx-list-empty">No Work Orders found</div>
-        <div v-else v-for="row in sorted" :key="row.name"
-             class="bomx-item" :class="{active: selectedName === row.name}"
-             @click="selectWorkOrder(row.name)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div class="bomx-item-name">{{ row.item_name || row.production_item || row.name }}</div>
-            <span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span>
-          </div>
-          <div class="bomx-item-meta">
-            <span class="mono">{{ row.name }}</span>
-          </div>
-          <div class="bomx-item-right">
-            <span style="font-size:12px;color:var(--bx-muted)">{{ fmtNum(row.produced_qty) }} / {{ fmtNum(row.qty) }} {{ row.stock_uom }}</span>
-          </div>
-        </div>
-      </div>
+  <!-- ══════════ SUMMARY STRIP ══════════ -->
+  <div class="bomx-sum-strip">
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-mfg)"></div>
+      <div class="bomx-sc-lbl">Total Work Orders</div>
+      <div class="bomx-sc-val">{{ list.length }}</div>
+      <div class="bomx-sc-sub">All statuses</div>
     </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-blue)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-blue)">In Process</div>
+      <div class="bomx-sc-val" style="color:var(--bx-blue)">{{ countByStatus('In Process') }}</div>
+      <div class="bomx-sc-sub">Currently running</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:#868E96"></div>
+      <div class="bomx-sc-lbl">Draft</div>
+      <div class="bomx-sc-val">{{ countByStatus('Draft') }}</div>
+      <div class="bomx-sc-sub">Not yet submitted</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-green)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-green)">Completed</div>
+      <div class="bomx-sc-val" style="color:var(--bx-green)">{{ countByStatus('Completed') }}</div>
+      <div class="bomx-sc-sub">Finished production</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-amber)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-amber)">Stopped</div>
+      <div class="bomx-sc-val" style="color:var(--bx-amber)">{{ countByStatus('Stopped') }}</div>
+      <div class="bomx-sc-sub">Paused production</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-violet)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-violet)">Total Qty Planned</div>
+      <div class="bomx-sc-val" style="color:var(--bx-violet)">{{ fmtNum(totalQtyPlanned) }}</div>
+      <div class="bomx-sc-sub">Across all Work Orders</div>
+    </div>
+  </div>
 
-    <!-- ══════════ RIGHT: WORK ORDER DETAIL ══════════ -->
-    <div class="bomx-detail-panel">
+  <!-- ══════════ STATUS TABS ══════════ -->
+  <div class="bomx-status-tabs">
+    <button class="bomx-status-tab" :class="{active: filterStatus===''}" @click="filterStatus=''">All <span class="bomx-tab-count">{{ list.length }}</span></button>
+    <button v-for="s in statusOptions" :key="s" class="bomx-status-tab" :class="{active: filterStatus===s}" @click="filterStatus=s">{{ s }} <span class="bomx-tab-count">{{ countByStatus(s) }}</span></button>
+  </div>
 
-      <!-- Empty state -->
-      <div v-if="!selectedName" class="bomx-empty-state">
-        <div class="bomx-empty-icon">🏗️</div>
-        <div class="bomx-empty-title">Select a Work Order</div>
-        <div class="bomx-empty-sub">Choose a Work Order from the list to view or edit it.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Work Order</button>
+  <!-- ══════════ TOOLBAR ══════════ -->
+  <div class="bomx-toolbar">
+    <div class="bomx-search-wrap">
+      <span v-html="icon('search',14)"></span>
+      <input v-model="search" type="text" placeholder="Search by WO number, item…"/>
+    </div>
+    <span class="bomx-toolbar-count">{{ sorted.length }} order{{ sorted.length===1?'':'s' }}</span>
+    <div style="flex:1"></div>
+    <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Work Order</button>
+  </div>
+
+  <!-- ══════════ WORK ORDER TABLE ══════════ -->
+  <div class="bomx-table-wrap">
+    <template v-if="loading">
+      <div style="padding:16px">
+        <div v-for="n in 6" :key="n" class="shimmer" style="height:34px;border-radius:6px;margin-bottom:8px"></div>
       </div>
+    </template>
+    <div v-else-if="!sorted.length" class="bomx-list-empty" style="padding:56px 20px">
+      <div style="font-size:38px;margin-bottom:10px">🏗️</div>
+      No Work Orders found.
+      <div style="margin-top:14px"><button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Work Order</button></div>
+    </div>
+    <table v-else class="bomx-table">
+      <thead>
+        <tr>
+          <th>WO Number</th>
+          <th>Item</th>
+          <th>BOM</th>
+          <th style="text-align:right">Qty Ordered</th>
+          <th style="text-align:right">Qty Produced</th>
+          <th>Planned Start</th>
+          <th>Planned End</th>
+          <th>Status</th>
+          <th>Progress</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in sorted" :key="row.name" class="bomx-wo-row" @click="selectWorkOrder(row.name)">
+          <td class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ row.name }}</td>
+          <td>
+            <div style="font-weight:600">{{ row.item_name || row.production_item }}</div>
+            <div style="font-size:11.5px;color:var(--bx-muted)">{{ row.production_item }}</div>
+          </td>
+          <td class="mono" style="font-size:12px;color:var(--bx-muted)">{{ row.bom || '—' }}</td>
+          <td style="text-align:right;font-weight:700;white-space:nowrap">{{ fmtNum(row.qty) }} <span style="font-weight:400;color:var(--bx-muted);font-size:12px">{{ row.stock_uom }}</span></td>
+          <td style="text-align:right;white-space:nowrap">{{ fmtNum(row.produced_qty) }} <span style="color:var(--bx-muted);font-size:12px">{{ row.stock_uom }}</span></td>
+          <td style="font-size:12.5px;color:var(--bx-muted);white-space:nowrap">{{ fmtDate(row.planned_start_date) }}</td>
+          <td style="white-space:nowrap">
+            <span :style="isOverdue(row) ? 'color:var(--bx-red);font-weight:700' : 'color:var(--bx-muted)'" style="font-size:12.5px">{{ fmtDate(row.planned_end_date) }}<span v-if="isOverdue(row)"> ▲</span></span>
+          </td>
+          <td><span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="bomx-prog-bar"><div class="bomx-prog-fill" :style="{width: progressPctnew(row)+'%', background: progressColor(row)}"></div></div>
+              <span style="font-size:11.5px;font-weight:700;color:var(--bx-muted);white-space:nowrap">{{ progressPctnew(row) }}%</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-      <template v-else>
+  <!-- ══════════ DRAWER: WORK ORDER DETAIL ══════════ -->
+  <div v-if="selectedName" class="bomx-overlay" @click.self="goBackToList">
+    <div class="bomx-drawer">
+
         <div v-if="loading" class="bomx-empty-state"><div class="shimmer" style="height:200px;border-radius:10px"></div></div>
 
         <template v-else>
@@ -86,6 +153,20 @@
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- Status Pipeline -->
+          <div class="bomx-status-pipe" v-if="!isNew">
+            <template v-for="(step, i) in pipelineSteps" :key="step.key">
+              <div class="bomx-sp-wrap">
+                <div class="bomx-sp-dot" :class="pipelineDotClass(step)">
+                  <svg v-if="pipelineStepDone(step)" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span v-else>{{ i + 1 }}</span>
+                </div>
+                <div class="bomx-sp-label" :class="{'bomx-sp-label--active': pipelineStepActive(step)}">{{ step.label }}</div>
+              </div>
+              <div class="bomx-sp-line" v-if="i < pipelineSteps.length - 1" :class="{'bomx-sp-line--done': pipelineStepDone(step)}"></div>
+            </template>
           </div>
 
           <!-- Tabs -->
@@ -552,9 +633,7 @@
 
           </div>
         </template>
-      </template>
     </div>
-
   </div>
 
   <!-- Complete Work Order Modal -->
@@ -694,7 +773,8 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   try {
     const fields = ["name", "production_item", "item_name", "bom", "qty", "stock_uom",
-                     "produced_qty", "status", "docstatus", "modified"];
+                     "produced_qty", "status", "docstatus", "modified",
+                     "planned_start_date", "planned_end_date"];
     const r = await apiList("Work Order", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
   } catch (e) {
@@ -723,6 +803,87 @@ function statusClass(row) {
 function fmtNum(n) {
   if (n === undefined || n === null) return "0";
   return Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+function fmtDate(d) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt)) return "—";
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${dt.getDate()} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
+}
+function isOverdue(row) {
+  if (!row.planned_end_date) return false;
+  if (["Completed", "Cancelled", "Stopped"].includes(row.status)) return false;
+  return new Date(row.planned_end_date) < new Date(new Date().toDateString());
+}
+function progressPctnew(row) {
+  const qty = Number(row.qty) || 0;
+  if (!qty) return 0;
+  return Math.min(100, Math.round((Number(row.produced_qty) || 0) / qty * 100));
+}
+function progressColor(row) {
+  const pct = progressPctnew(row);
+  if (row.status === "Completed" || pct >= 100) return "var(--bx-green)";
+  if (row.status === "Stopped") return "var(--bx-amber)";
+  return "var(--bx-mfg)";
+}
+
+// ── SUMMARY STRIP (display-only, derived from existing list data) ──
+function countByStatus(status) {
+  return list.value.filter(r => r.status === status).length;
+}
+const totalQtyPlanned = computed(() => list.value.reduce((s, r) => s + (Number(r.qty) || 0), 0));
+
+// ── STATUS PIPELINE (read-only visual, derived from wo.status) ──
+const pipelineSteps = computed(() => {
+  if (wo.value.status === "Cancelled") {
+    return [
+      { key: "draft", label: "Draft" },
+      { key: "submitted", label: "Submitted" },
+      { key: "cancelled", label: "Cancelled" },
+    ];
+  }
+  if (wo.value.status === "Stopped") {
+    return [
+      { key: "draft", label: "Draft" },
+      { key: "submitted", label: "Submitted" },
+      { key: "inprocess", label: "In Process" },
+      { key: "stopped", label: "Stopped" },
+    ];
+  }
+  return [
+    { key: "draft", label: "Draft" },
+    { key: "submitted", label: "Submitted" },
+    { key: "inprocess", label: "In Process" },
+    { key: "completed", label: "Completed" },
+  ];
+});
+const pipelineOrder = ["draft", "submitted", "inprocess", "completed", "stopped", "cancelled"];
+function currentPipelineKey() {
+  const s = wo.value.status;
+  if (s === "In Process") return "inprocess";
+  if (s === "Completed") return "completed";
+  if (s === "Stopped") return "stopped";
+  if (s === "Cancelled") return "cancelled";
+  if (s === "Submitted") return "submitted";
+  return "draft";
+}
+function pipelineStepDone(step) {
+  const cur = currentPipelineKey();
+  if (step.key === cur) return step.key === "completed" || step.key === "cancelled" || step.key === "stopped";
+  return pipelineOrder.indexOf(step.key) < pipelineOrder.indexOf(cur) && !["stopped", "cancelled"].includes(step.key) ? true :
+    (pipelineSteps.value.findIndex(s => s.key === step.key) < pipelineSteps.value.findIndex(s => s.key === cur));
+}
+function pipelineStepActive(step) {
+  return step.key === currentPipelineKey();
+}
+function pipelineDotClass(step) {
+  const active = pipelineStepActive(step);
+  const done = pipelineStepDone(step);
+  if (step.key === "cancelled" && active) return "bomx-sp-dot--cancelled";
+  if (step.key === "stopped" && active) return "bomx-sp-dot--stopped";
+  if (done || active) return "bomx-sp-dot--done";
+  return "bomx-sp-dot--pending";
 }
 
 function selectWorkOrder(name) {
@@ -911,11 +1072,21 @@ const totalPlannedOperationMinutes = computed(() =>
 // Client-side preview of Total Operating Cost so the field updates instantly
 // as Additional Operating Cost is edited, ahead of the authoritative
 // server-side recalculation in Work Order.calculate_operating_cost() on save.
+// Mirrors the backend's PER-ROW logic (see work_order.py::calculate_operating_cost):
+// each operation row contributes its actual cost if it has logged actual time,
+// else its planned cost. Switching the WHOLE total to "actual" the moment any
+// one row gets a Job Card would make every not-yet-started row contribute ₹0
+// instead of its planned cost, understating the true cost-to-date.
 const totalOperatingCostPreview = computed(() => {
-  const actual = flt(wo.value.actual_operating_cost);
-  const planned = flt(wo.value.planned_operating_cost);
+  const rowsTotal = (wo.value.operations || []).reduce((sum, op) => {
+    const hourRate = flt(op.hour_rate);
+    const actualTime = flt(op.actual_time_in_mins);
+    const plannedCost = (flt(op.planned_time_in_mins) / 60) * hourRate;
+    const actualCost = (actualTime / 60) * hourRate;
+    return sum + (actualTime ? actualCost : plannedCost);
+  }, 0);
   const additional = flt(wo.value.additional_operating_cost);
-  return (actual > 0 ? actual : planned) + additional;
+  return rowsTotal + additional;
 });
 
 // Raw Material Cost: sum of each Work Order Item row's amount
@@ -1011,6 +1182,17 @@ watch(() => route.params.name, async (name) => {
 });
 
 async function loadWO() {
+  // Reset every Work-Order-scoped list up front. Without this, switching to a
+  // Work Order that skips the docstatus===1 branch below (e.g. a Draft) left
+  // the PREVIOUS Work Order's Job Cards (and Stock Entries / Packing Slips)
+  // sitting in these refs, since nothing ever cleared them -- the Production
+  // tab kept showing the last-loaded WO's Job Cards until the user manually
+  // clicked Refresh (which calls loadJobCards() and finally re-filters by the
+  // now-current wo.value.name).
+  jobCards.value = [];
+  stockEntries.value = [];
+  sourcedPackingSlips.value = [];
+
   if (isNew.value) {
     wo.value = emptyWO();
     selectedProductionItem.value = "";
@@ -1695,17 +1877,12 @@ function fmt(n) {
   if (isNaN(n) || n == null) return "0.00";
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtDate(d) {
-  if (!d) return "";
-  const obj = new Date(d);
-  if (isNaN(obj)) return d;
-  return obj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 // ── UTIL ─────────────────────────────────────────────────────
 const ICONS = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
   printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
@@ -1727,6 +1904,61 @@ function icon(name, size) {
 }
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
+
+/* ── Status tabs (list view) ── */
+.bomx-status-tabs { display:flex; border-bottom:2px solid var(--bx-border); margin-bottom:14px; gap:2px; overflow-x:auto; }
+.bomx-status-tab { padding:9px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+.bomx-status-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
+.bomx-status-tab:hover:not(.active) { color:var(--bx-text); }
+.bomx-tab-count { font-size:11px; background:var(--bx-bg); border:1px solid var(--bx-border); border-radius:20px; padding:1px 7px; font-weight:600; }
+.bomx-status-tab.active .bomx-tab-count { background:var(--bx-mfgS); border-color:rgba(180,83,9,.2); color:var(--bx-mfg); }
+
+/* ── Toolbar (list view) ── */
+.bomx-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:12px 14px; margin-bottom:16px; }
+.bomx-search-wrap { display:flex; align-items:center; gap:7px; background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:20px; padding:6px 14px; min-width:220px; color:var(--bx-muted); }
+.bomx-search-wrap input { border:none; outline:none; font-size:13px; background:transparent; color:var(--bx-text); width:100%; }
+.bomx-search-wrap input::placeholder { color:var(--bx-muted); }
+.bomx-toolbar-count { font-size:12.5px; color:var(--bx-muted); white-space:nowrap; }
+
+/* ── Work Order table ── */
+.bomx-table-wrap { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow-x:auto; margin-bottom:20px; }
+.bomx-table { width:100%; border-collapse:collapse; font-size:13px; }
+.bomx-table th { text-align:left; padding:9px 14px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
+.bomx-table td { padding:11px 14px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-table tr:last-child td { border-bottom:none; }
+.bomx-wo-row { cursor:pointer; transition:background .1s; }
+.bomx-wo-row:hover td { background:#FAFBFF; }
+.bomx-prog-bar { height:5px; background:#E2E8F0; border-radius:3px; overflow:hidden; width:76px; flex-shrink:0; }
+.bomx-prog-fill { height:100%; border-radius:3px; transition:width .3s; }
+
+/* ── Overlay + slide-in drawer (Work Order detail) ── */
+.bomx-overlay { position:fixed; inset:0; background:rgba(17,24,39,.5); display:flex; justify-content:flex-end; z-index:1000; }
+.bomx-drawer { width:820px; max-width:97vw; height:100%; background:#fff; box-shadow:-8px 0 30px rgba(0,0,0,.15); display:flex; flex-direction:column; animation: bx-slide-in .18s ease-out; overflow:hidden; }
+@keyframes bx-slide-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+.bomx-drawer .bomx-body { flex:1; overflow-y:auto; }
+
+/* ── Summary strip ── */
+.bomx-sum-strip { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
+.bomx-sum-card { background:var(--bx-surface); border:1px solid var(--bx-border); border-radius:var(--bx-radius); padding:12px 14px; position:relative; overflow:hidden; }
+.bomx-sc-bar { position:absolute; top:0; left:0; width:3px; height:100%; }
+.bomx-sc-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:3px; }
+.bomx-sc-val { font-size:20px; font-weight:700; font-family:var(--bx-mono, monospace); }
+.bomx-sc-sub { font-size:10.5px; color:var(--bx-muted); margin-top:1px; }
+@media (max-width:1300px) { .bomx-sum-strip { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:640px) { .bomx-sum-strip { grid-template-columns:repeat(2,1fr); } }
+
+/* ── Status pipeline ── */
+.bomx-status-pipe { display:flex; align-items:flex-start; gap:0; margin:16px 22px 0; padding:14px 18px; background:var(--bx-surf2); border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow-x:auto; }
+.bomx-sp-wrap { display:flex; flex-direction:column; align-items:center; gap:0; flex-shrink:0; }
+.bomx-sp-dot { width:26px; height:26px; border-radius:50%; border:2px solid; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; transition:all .2s; }
+.bomx-sp-dot--pending { border-color:var(--bx-border); color:var(--bx-muted); background:#fff; }
+.bomx-sp-dot--done { border-color:var(--bx-mfg); color:#fff; background:var(--bx-mfg); }
+.bomx-sp-dot--stopped { border-color:var(--bx-amber); color:#fff; background:var(--bx-amber); }
+.bomx-sp-dot--cancelled { border-color:var(--bx-red); color:#fff; background:var(--bx-red); }
+.bomx-sp-label { font-size:11px; font-weight:600; margin-top:5px; text-align:center; white-space:nowrap; color:var(--bx-muted); }
+.bomx-sp-label--active { color:var(--bx-mfgB); }
+.bomx-sp-line { width:40px; height:2px; flex-shrink:0; background:var(--bx-border); margin:12px 6px 0; }
+.bomx-sp-line--done { background:var(--bx-mfg); }
 
 
 /* ── List panel ── */
