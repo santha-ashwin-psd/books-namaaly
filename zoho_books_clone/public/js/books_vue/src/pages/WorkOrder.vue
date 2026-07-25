@@ -197,7 +197,12 @@
 
               <div class="bomx-section-lbl" style="display:flex;align-items:center;justify-content:space-between">
                 <span>Raw Materials <span class="bomx-count" v-if="wo.items && wo.items.length">({{ wo.items.length }})</span></span>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="addMaterial">+ Add Row</button>
+                <div style="display:flex;gap:6px">
+                  <button v-if="!isNew && wo.items && wo.items.length && (wo.docstatus===0 || (wo.docstatus===1 && wo.status!=='Completed'))" type="button" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="printWorkOrder" title="Print Work Order">
+                    <span v-html="icon('printer',12)"></span> Print
+                  </button>
+                  <button v-if="!readOnly" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="addMaterial">+ Add Row</button>
+                </div>
               </div>
               <div class="bomx-rm-cards">
                 <div v-if="!wo.items || !wo.items.length" class="bomx-tree-empty">No raw materials yet. Select a BOM and click "Load / Refresh Materials from BOM".</div>
@@ -1310,6 +1315,79 @@ async function issueMaterials() {
   actionLoading.value = false;
 }
 
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function itemLabel(code) {
+  const i = stockItems.value.find(x => x.name === code);
+  return (i && i.item_name) || code || "";
+}
+
+function printWorkOrder() {
+  const rows = wo.value.items || [];
+  const rowsHtml = rows.length
+    ? rows.map(rm => `
+        <tr>
+          <td>${esc(rm.item_code)}</td>
+          <td>${esc(itemLabel(rm.item_code))}</td>
+          <td style="text-align:right">${esc(fmt(rm.required_qty))}</td>
+          <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="4" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Work Order ${esc(wo.value.name)}</title>
+        <style>
+          * { box-sizing:border-box; }
+          body { font-family: Arial, Helvetica, sans-serif; color:#1A1D23; padding:28px; }
+          .sheet { border:1px solid #1A1D23; border-radius:8px; padding:24px 26px; }
+          h1 { font-size:18px; margin:0 0 4px; }
+          .sub { color:#868E96; font-size:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid #E2E8F0; }
+          .meta { display:grid; grid-template-columns: 1fr 1fr; gap:10px 24px; margin-bottom:22px; font-size:13px; }
+          .meta div { border:1px solid #E2E8F0; border-radius:6px; padding:8px 10px; }
+          .meta div span { color:#868E96; display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px; }
+          table { width:100%; border-collapse:collapse; font-size:13px; border:1px solid #1A1D23; border-radius:6px; overflow:hidden; }
+          th, td { border:1px solid #E2E8F0; padding:8px 10px; text-align:left; }
+          th { background:#F8F9FC; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#868E96; }
+          h2 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:#868E96; margin:0 0 8px; }
+          @media print { body { padding:0; } .sheet { border:none; } }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <h1>Work Order — ${esc(wo.value.name)}</h1>
+          <div class="sub">Printed ${esc(new Date().toLocaleString())}</div>
+          <div class="meta">
+            <div><span>Production Item</span>${esc(wo.value.item_name || wo.value.production_item)}</div>
+            <div><span>BOM</span>${esc(wo.value.bom)}</div>
+            <div><span>Qty to Manufacture</span>${esc(fmt(wo.value.qty))} ${esc(wo.value.stock_uom)}</div>
+            <div><span>Default Source Warehouse</span>${esc(wo.value.source_warehouse || "—")}</div>
+          </div>
+          <h2>Raw Materials</h2>
+          <table>
+            <thead>
+              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th>Warehouse</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </body>
+    </html>`;
+
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) { toast("Please allow pop-ups to print", "error"); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
+}
+
 async function loadStockEntries() {
   seLoading.value = true;
   try {
@@ -1616,6 +1694,7 @@ function fmtDate(d) {
 // ── UTIL ─────────────────────────────────────────────────────
 const ICONS = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
+  printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
