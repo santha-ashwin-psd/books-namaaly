@@ -34,6 +34,18 @@
       <div class="bomx-sc-sub">Paused production</div>
     </div>
     <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-blue)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-blue)">Submitted</div>
+      <div class="bomx-sc-val" style="color:var(--bx-blue)">{{ countByStatus('Submitted') }}</div>
+      <div class="bomx-sc-sub">Not yet started</div>
+    </div>
+    <div class="bomx-sum-card">
+      <div class="bomx-sc-bar" style="background:var(--bx-red)"></div>
+      <div class="bomx-sc-lbl" style="color:var(--bx-red)">Cancelled</div>
+      <div class="bomx-sc-val" style="color:var(--bx-red)">{{ countByStatus('Cancelled') }}</div>
+      <div class="bomx-sc-sub">Voided Work Orders</div>
+    </div>
+    <div class="bomx-sum-card">
       <div class="bomx-sc-bar" style="background:var(--bx-violet)"></div>
       <div class="bomx-sc-lbl" style="color:var(--bx-violet)">Total Qty Planned</div>
       <div class="bomx-sc-val" style="color:var(--bx-violet)">{{ fmtNum(totalQtyPlanned) }}</div>
@@ -136,7 +148,7 @@
                 <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
                   View Amended {{ amendedInto }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0 && wo.status!=='Stopped'" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting">
                   {{ submitting ? 'Cancelling…' : 'Cancel Work Order' }}
                 </button>
                 <button v-if="!isNew && wo.docstatus===1 && bomType==='Packing' && wo.status!=='Completed' && wo.status!=='Cancelled'" class="bomx-btn" style="background:var(--bx-blueS);color:var(--bx-blue)" @click="createPackingSlip" :disabled="actionLoading==='ps'">
@@ -380,7 +392,7 @@
                     </div>
                     <div class="bomx-rm-field">
                       <label>Status</label>
-                      <select class="bomx-fi" v-model="op.status">
+                      <select class="bomx-fi" v-model="op.status" :disabled="readOnly">
                         <option>Pending</option><option>In Process</option><option>Completed</option>
                       </select>
                     </div>
@@ -615,8 +627,12 @@
                   </div>
                   <div class="bomx-cost-eq">=</div>
                   <div class="bomx-cost-item bomx-cost-item--total">
-                    <div class="bomx-cost-item-lbl">Total Cost</div>
+                    <div class="bomx-cost-item-lbl">Total Cost (Planned)</div>
                     <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(totalWorkOrderCost) }}</div>
+                  </div>
+                  <div class="bomx-cost-item bomx-cost-item--total" v-if="actualAbsorbedCost !== null" style="margin-top:6px">
+                    <div class="bomx-cost-item-lbl" title="Actual cost posted into finished-good stock across every completion recorded so far, from the Manufacture Stock Entries (raw material + operating cost, net of scrap credit) -- not the BOM-load-time snapshot above.">Total Cost (Actual)</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(actualAbsorbedCost) }}</div>
                   </div>
                 </div>
               </div>
@@ -647,8 +663,9 @@
         <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:14px">
           <div>
             <div class="bomx-hf-label">Qty Manufactured <span style="color:var(--bx-red)">*</span></div>
-            <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="maxCompletableQty" step="any" style="width:100%"/>
+            <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="maxCompletableQty" step="any" style="width:100%" :style="qtyManufacturedError ? 'border-color:var(--bx-red)' : ''"/>
             <div class="bomx-field-hint">Remaining planned qty: {{ fmt(remainingQty) }}<span v-if="overProductionAllowancePct>0"> · up to {{ fmt(maxCompletableQty) }} allowed with the {{ overProductionAllowancePct }}% over-production allowance</span></div>
+            <div v-if="qtyManufacturedError" class="bomx-field-hint" style="color:var(--bx-red)">{{ qtyManufacturedError }}</div>
           </div>
           <div>
             <div class="bomx-hf-label">Process Loss / Wastage Qty</div>
@@ -700,7 +717,7 @@
       </div>
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeCompleteModal" :disabled="actionLoading">Cancel</button>
-        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading">
+        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading || !!qtyManufacturedError">
           {{ actionLoading==='complete' ? 'Completing…' : 'Complete' }}
         </button>
       </div>
@@ -925,6 +942,7 @@ function emptyWO() {
     status: "Draft",
     produced_qty: 0,
     process_loss_qty: 0,
+    process_loss_percent: 0,
     items_loaded_for_qty: 0,
     source_warehouse: "",
     wip_warehouse: "",
@@ -1000,7 +1018,7 @@ const warehousesEditable = computed(() => wo.value.docstatus !== 2 && flt(wo.val
 // Job Card time logs genuinely needs adding while a Work Order is in
 // progress (docstatus===1), not just while still a Draft. Only a
 // cancelled Work Order (docstatus===2) should block it.
-const operatingCostEditable = computed(() => wo.value.docstatus !== 2);
+const operatingCostEditable = computed(() => wo.value.docstatus !== 2 && wo.value.status !== "Completed");
 
 
 onMounted(async () => {
@@ -1104,6 +1122,27 @@ const rawMaterialCost = computed(() =>
 // Order tab (planned/actual + additional), mirroring how
 // complete_work_order() actually values the finished good.
 const totalWorkOrderCost = computed(() => rawMaterialCost.value + totalOperatingCostPreview.value);
+
+// Actual absorbed cost: unlike totalWorkOrderCost/rawMaterialCost above
+// (which only ever reflect the BOM-load-time planned snapshot), this pulls
+// the real cost that was actually posted into FG stock across every
+// completion recorded so far -- so the panel can show "Planned" and
+// "Actual" side by side once the Work Order has at least one completion.
+const actualAbsorbedCost = ref(null);
+async function loadActualAbsorbedCost() {
+  if (isNew.value || !wo.value.name || !flt(wo.value.produced_qty)) {
+    actualAbsorbedCost.value = null;
+    return;
+  }
+  try {
+    const r = await apiCall("zoho_books_clone.manufacturing.work_order_engine.get_actual_absorbed_cost", {
+      work_order: wo.value.name,
+    });
+    actualAbsorbedCost.value = flt(r.actual_cost);
+  } catch (e) {
+    actualAbsorbedCost.value = null;
+  }
+}
 
 const recalcLoading = ref(false);
 async function recalcOperatingCost(refreshHourRates) {
@@ -1218,6 +1257,7 @@ async function loadWO() {
   if (wo.value.docstatus === 1) {
     await loadStockEntries(); await loadJobCards();
     loadSourcedPackingSlips();
+    loadActualAbsorbedCost();
   }
   if (wo.value.docstatus === 2) {
     try {
@@ -1311,6 +1351,10 @@ async function loadFromBom() {
     wo.value.operations = (r.operations || []).map(o => ({ ...EMPTY_OP(), ...o }));
     bomScrapItems.value = r.scrap_items || [];
     bomProcessLoss.value = flt(r.process_loss);
+    // Persist onto the Work Order doc itself (not just the client-side ref)
+    // so complete_work_order() on the server has this BOM's expected loss %
+    // available to split actual process loss into normal vs abnormal later.
+    wo.value.process_loss_percent = flt(r.process_loss);
     bomType.value = r.bom_type || "Manufacturing";
 
     // Pre-fill Work Order warehouse fields from Manufacturing Settings if empty
@@ -1455,7 +1499,12 @@ async function stopWO() {
   submitting.value = true;
   try {
     await apiCall("zoho_books_clone.manufacturing.work_order_engine.stop_work_order", { work_order: wo.value.name });
-    wo.value.status = "Stopped";
+    // Backend also bulk-updates every Operation row's status and bumps
+    // `modified` -- re-fetch the full doc rather than patching just the
+    // status field locally, so the client's `modified` timestamp stays in
+    // sync (otherwise the next apiSave() sends a stale timestamp and hits
+    // a "Document has been modified" error).
+    wo.value = await apiGet("Work Order", wo.value.name);
     toast("Work Order stopped");
     loadList();
   } catch (e) {
@@ -1468,8 +1517,10 @@ async function resumeWO() {
   if (!wo.value.name) return;
   submitting.value = true;
   try {
-    const newStatus = await apiCall("zoho_books_clone.manufacturing.work_order_engine.resume_work_order", { work_order: wo.value.name });
-    wo.value.status = newStatus;
+    await apiCall("zoho_books_clone.manufacturing.work_order_engine.resume_work_order", { work_order: wo.value.name });
+    // Same reasoning as stopWO() -- re-fetch the full doc instead of
+    // patching a single field, so `modified` doesn't go stale.
+    wo.value = await apiGet("Work Order", wo.value.name);
     toast("Work Order resumed");
     loadList();
   } catch (e) {
@@ -1496,11 +1547,19 @@ const maxCompletableQty = computed(() => {
 // qty. remainingQty alone hits 0 exactly at 100% produced and would lock
 // the button out even when the allowance still permits more.
 const canCompleteMore = computed(() => maxCompletableQty.value > 0.0001);
-const progressPct = computed(() => {
-  const q = flt(wo.value.qty);
-  if (!q) return 0;
-  return Math.min(100, Math.round((flt(wo.value.produced_qty) / q) * 100));
+// Live inline validation for the Complete modal's Qty Manufactured field --
+// HTML's `max` attribute doesn't actually block typed/pasted values above
+// it, so this backs it up with a message the person sees immediately,
+// while the hard check in submitComplete() (and the server) stays the
+// real source of truth.
+const qtyManufacturedError = computed(() => {
+  const qty = flt(completeForm.value.qty_manufactured);
+  if (qty > maxCompletableQty.value + 0.0001) {
+    return `Cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value > 0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}`;
+  }
+  return "";
 });
+const progressPct = computed(() => progressPctnew(wo.value));
 const allTransferred = computed(() => (wo.value.items || []).every(r => flt(r.transferred_qty) >= flt(r.required_qty) - 0.0001));
 
 const productionItemHasBatch = computed(() => {

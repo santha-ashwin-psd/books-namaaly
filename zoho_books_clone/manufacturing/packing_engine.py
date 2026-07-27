@@ -365,10 +365,17 @@ def post_packing_consumption(packing_slip, batch_no=None, manufacturing_date=Non
     # short item in one message -- rather than letting the first short row
     # fail deep inside Stock Entry's own negative-stock guard once se.insert()
     # below is already underway, with the rest of the rows unchecked.
-    _check_stock_availability(
-        [{"item_code": row.item_code, "qty": row.packed_qty} for row in ps.items],
-        ps.source_warehouse,
-    )
+    # Group by each row's own source_warehouse (falling back to the slip's
+    # source_warehouse) so a row-level override is checked against the
+    # warehouse it will actually be consumed from, not always ps.source_warehouse.
+    _reqs_by_warehouse = {}
+    for row in ps.items:
+        wh = row.source_warehouse or ps.source_warehouse
+        _reqs_by_warehouse.setdefault(wh, []).append(
+            {"item_code": row.item_code, "qty": row.packed_qty}
+        )
+    for wh, reqs in _reqs_by_warehouse.items():
+        _check_stock_availability(reqs, wh)
 
     # Phase 4 (bulk -> packed batch/expiry lineage): if the bulk item is
     # batch-tracked, this run must be sourced from exactly one identified
@@ -451,12 +458,13 @@ def post_packing_consumption(packing_slip, batch_no=None, manufacturing_date=Non
         if qty <= 0:
             continue
         any_consumed = True
-        rm_rate = get_valuation_rate(row.item_code, ps.source_warehouse)
+        row_source_warehouse = row.source_warehouse or ps.source_warehouse
+        rm_rate = get_valuation_rate(row.item_code, row_source_warehouse)
         total_consumed_cost += qty * rm_rate
         item_row = {
             "item_code": row.item_code,
             "qty": qty,
-            "s_warehouse": ps.source_warehouse,
+            "s_warehouse": row_source_warehouse,
             "basic_rate": rm_rate,
         }
         if row.batch_no:

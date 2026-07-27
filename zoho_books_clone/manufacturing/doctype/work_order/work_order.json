@@ -112,6 +112,15 @@
    "no_copy": 1
   },
   {
+   "fieldname": "process_loss_percent",
+   "fieldtype": "Percent",
+   "label": "Expected Process Loss %",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "description": "Snapshot of the BOM's Process Loss % at Work Order creation. Used at completion to split actual process loss into normal (capitalized into FG cost) vs abnormal (expensed to variance)."
+  },
+  {
    "fieldname": "sec_wo_warehouses",
    "fieldtype": "Section Break",
    "label": "Warehouses"
@@ -247,6 +256,15 @@
    "no_copy": 1,
    "bold": 1,
    "description": "Actual Operating Cost + Additional Operating Cost (falls back to Planned Operating Cost before any time is logged)."
+  },
+  {
+   "fieldname": "operating_cost_absorbed_total",
+   "fieldtype": "Currency",
+   "label": "Operating Cost Absorbed (Cumulative)",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "description": "Running total of operating cost actually absorbed into FG valuation across all completions so far. Trued up against Total Operating Cost on the final completion."
   },
   {
    "fieldname": "sec_wo_more",

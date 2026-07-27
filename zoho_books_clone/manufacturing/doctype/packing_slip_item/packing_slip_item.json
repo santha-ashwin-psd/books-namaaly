@@ -55,6 +55,13 @@
    "label": "Batch No",
    "options": "Batch",
    "description": "Batch of the packed item (if batch-tracked)."
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "description": "Warehouse this row is consumed from. Falls back to the Packing Slip's Source Warehouse if left blank."
   }
  ],
  "permissions": []

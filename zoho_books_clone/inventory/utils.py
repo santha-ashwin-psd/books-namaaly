@@ -325,11 +325,40 @@ def get_stock_balance_bulk(item_codes: list[str], warehouse: str) -> dict[str, f
 # ── Valuation ─────────────────────────────────────────────────────────────────
 
 def get_valuation_rate(item_code: str, warehouse: str) -> float:
-    """Return current moving-average valuation rate from Bin."""
-    rate = frappe.db.get_value(
+    """Return current moving-average valuation rate from Bin.
+
+    Falls back to Item.standard_buying_rate when there's no Bin row (or the
+    Bin rate is 0) for this item+warehouse, so callers don't silently
+    consume/receive stock at zero cost. If even that fallback is unset, logs
+    a warning so the zero-cost posting doesn't pass unnoticed.
+    """
+    rate = flt(frappe.db.get_value(
         "Bin", {"item_code": item_code, "warehouse": warehouse}, "valuation_rate"
+    ))
+    if rate:
+        return rate
+
+    fallback_rate = flt(frappe.db.get_value("Item", item_code, "standard_buying_rate"))
+    if fallback_rate:
+        frappe.log_error(
+            title="Valuation rate fallback used",
+            message=(
+                f"No Bin valuation rate for item {item_code} in warehouse "
+                f"{warehouse}. Falling back to Item.standard_buying_rate "
+                f"({fallback_rate})."
+            ),
+        )
+        return fallback_rate
+
+    frappe.log_error(
+        title="Zero-cost valuation rate",
+        message=(
+            f"Item {item_code} in warehouse {warehouse} has no Bin valuation "
+            f"rate and no Item.standard_buying_rate set. Returning 0 -- this "
+            f"item is about to post at zero cost."
+        ),
     )
-    return flt(rate)
+    return 0.0
 
 
 def get_valuation_rate_bulk(item_codes: list[str], warehouse: str) -> dict[str, float]:

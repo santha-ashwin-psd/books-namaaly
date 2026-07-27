@@ -268,6 +268,10 @@ def _merge_duplicate_rows(rows):
             m = merged[key]
             m["required_qty"] = flt(m["required_qty"]) + flt(r["required_qty"])
             m["amount"] = flt(m["amount"]) + flt(r["amount"])
+            # Keep rate consistent with the merged qty/amount -- otherwise
+            # rate keeps the first occurrence's value while amount reflects
+            # both, so rate * required_qty != amount for merged rows.
+            m["rate"] = m["amount"] / m["required_qty"] if m["required_qty"] else 0.0
     return [merged[k] for k in order]
 
 
@@ -439,6 +443,9 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     current_produced_qty = flt(frappe.db.get_value("Work Order", wo.name, "produced_qty"))
     current_process_loss_qty = flt(frappe.db.get_value("Work Order", wo.name, "process_loss_qty"))
     current_total_operating_cost = flt(frappe.db.get_value("Work Order", wo.name, "total_operating_cost"))
+    current_operating_cost_absorbed_total = flt(
+        frappe.db.get_value("Work Order", wo.name, "operating_cost_absorbed_total")
+    )
 
     ms = _get_mfg_settings()
     over_pct = flt(ms.get("over_production_allowance_pct", 0))
@@ -455,6 +462,13 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                 "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1}). "
                 "Increase Over-Production Allowance % in Manufacturing Settings to allow this."
             ).format(qty_manufactured, flt(wo.qty) - current_produced_qty))
+
+    # Whether this run brings the Work Order to full completion -- computed
+    # up front (rather than re-derived after the Stock Entry is posted) so
+    # both the operating-cost true-up and the process-loss split below can
+    # use it while building this run's Stock Entry.
+    is_final = new_total >= flt(wo.qty) - 0.0001
+
 
     # Raw materials are consumed for the FULL quantity that left the
     # process -- both what became finished stock (qty_manufactured) and
@@ -540,29 +554,62 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     if flt(wo.qty) > 0:
         operating_cost_this_run = current_total_operating_cost * consumption_ratio
 
+    # True-up on the final completion: total_operating_cost can drift between
+    # partial completions as planned time gets replaced by actual logged
+    # time (see calculate_operating_cost), so the sum of
+    # operating_cost_this_run across every partial run generally won't equal
+    # the final total_operating_cost -- the gap was previously never
+    # reconciled anywhere (unlike the raw-material side, which already has
+    # manufacturing_variance_loss for its own shortfall pool). On the run
+    # that completes the Work Order, absorb whatever is left instead of the
+    # snapshot-based share, so cumulative absorption lines up exactly with
+    # the now-final total_operating_cost.
+    if is_final:
+        operating_cost_this_run = current_total_operating_cost - current_operating_cost_absorbed_total
+
+    # Process loss beyond the BOM's expected % (process_loss_percent,
+    # snapshotted onto the Work Order at creation from BOM.process_loss) is
+    # abnormal -- e.g. a spill or an operator error, not the shrinkage the
+    # BOM already accounts for. Loss within the expected % stays capitalized
+    # into FG cost same as before; only the excess is carved out and
+    # expensed via manufacturing_variance_loss instead of inflating
+    # fg_unit_rate.
+    expected_loss_qty_this_run = flt(wo.process_loss_percent) / 100.0 * qty_manufactured
+    abnormal_loss_qty = max(0.0, process_loss_qty - expected_loss_qty_this_run)
+    total_consumed_qty_this_run = qty_manufactured + process_loss_qty
+    rm_unit_cost_this_run = (
+        total_consumed_cost / total_consumed_qty_this_run if total_consumed_qty_this_run > 0 else 0.0
+    )
+    abnormal_loss_value = abnormal_loss_qty * rm_unit_cost_this_run
+
     # Whatever consumed cost is left after crediting out scrap value gets
     # spread across the qty actually manufactured this run. This also
-    # absorbs the cost of any process_loss_qty (that material was consumed
-    # too, per consumption_ratio above, but never became stock of its own)
-    # into the finished good that did come out -- the standard costing
-    # treatment for in-process loss.
+    # absorbs the cost of any NORMAL process_loss_qty (that material was
+    # consumed too, per consumption_ratio above, but never became stock of
+    # its own) into the finished good that did come out -- the standard
+    # costing treatment for in-process loss. Abnormal loss (abnormal_loss_value,
+    # carved out above) is deliberately excluded from this pool so it never
+    # capitalizes into fg_unit_rate.
     #
     # In the unusual case where total_scrap_value alone exceeds the
     # available cost pool (total_consumed_cost + operating_cost_this_run),
     # the naive rate would go negative -- clamped to 0 below. That clamp
     # would otherwise silently strand the shortfall as an uncleared debit
     # balance in the WIP account forever (nothing ever credits it out).
-    # manufacturing_variance_loss captures exactly that shortfall so
-    # _post_gl_entries can write it off to a loss/variance account instead.
-    raw_pool = total_consumed_cost - total_scrap_value + operating_cost_this_run
+    # manufacturing_variance_loss captures exactly that shortfall (plus any
+    # abnormal process loss) so _post_gl_entries can write it off to a
+    # loss/variance account instead.
+    raw_pool = total_consumed_cost - total_scrap_value + operating_cost_this_run - abnormal_loss_value
     fg_unit_rate = 0.0
-    manufacturing_variance_loss = 0.0
+    manufacturing_variance_loss = abnormal_loss_value
     if qty_manufactured > 0:
         fg_unit_rate = max(raw_pool, 0.0) / qty_manufactured
         if raw_pool < 0:
-            manufacturing_variance_loss = -raw_pool
+            manufacturing_variance_loss += -raw_pool
 
     se.remarks += f" (operating cost absorbed this run: {operating_cost_this_run:.2f})"
+    if abnormal_loss_value:
+        se.remarks += f" (abnormal process loss expensed: {abnormal_loss_value:.2f})"
     se.operating_cost_absorbed = operating_cost_this_run
     se.manufacturing_variance_loss = manufacturing_variance_loss
 
@@ -632,7 +679,8 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     new_produced_qty = current_produced_qty + qty_manufactured
     wo.db_set("produced_qty", new_produced_qty)
     wo.db_set("process_loss_qty", current_process_loss_qty + process_loss_qty)
-    is_complete = new_produced_qty >= flt(wo.qty) - 0.0001
+    wo.db_set("operating_cost_absorbed_total", current_operating_cost_absorbed_total + operating_cost_this_run)
+    is_complete = is_final
     wo.db_set("status", "Completed" if is_complete else "In Process")
     if is_complete:
         # Work Order is fully done -- finalize every operation as Completed,
@@ -656,6 +704,42 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     frappe.db.commit()
 
     return se.name
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_actual_absorbed_cost(work_order):
+    """Return the actual (as opposed to planned/BOM-snapshot) cost absorbed
+    into the finished good so far, for the Vue Cost Breakdown panel's
+    Planned-vs-Actual comparison. Sums the finished-good receipt row's
+    amount (qty * fg_unit_rate, which already nets raw material + operating
+    cost - scrap credit, per complete_work_order()) across every submitted
+    Manufacture Stock Entry linked to this Work Order.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+
+    rows = frappe.db.sql(
+        """
+        SELECT sed.amount
+        FROM `tabStock Entry Detail` sed
+        INNER JOIN `tabStock Entry` se ON se.name = sed.parent
+        WHERE se.work_order = %s
+          AND se.docstatus = 1
+          AND se.stock_entry_type = 'Manufacture'
+          AND sed.item_code = %s
+          AND sed.t_warehouse IS NOT NULL AND sed.t_warehouse != ''
+        """,
+        (wo.name, wo.production_item),
+        as_dict=True,
+    )
+    actual_cost = sum(flt(r.amount) for r in rows)
+    return {
+        "actual_cost": actual_cost,
+        "produced_qty": flt(wo.produced_qty),
+    }
 
 
 def _set_operations_status(wo, status, skip_statuses=None):
@@ -794,11 +878,23 @@ def apply_row_substitution(work_order, work_order_item_row, alternative_item_cod
     original_item_code = row.original_item_code or row.item_code
     new_required_qty = flt(row.required_qty) * flt(conversion_factor or 1)
 
+    # Recompute rate/amount against the alternative item's current valuation
+    # rate (same convention _consume_qty_for_row/complete_work_order use at
+    # actual-costing time) -- otherwise the row (and the Vue "Raw Material
+    # Cost" total) keeps showing the replaced item's cost until the BOM is
+    # reloaded. Purely a display/reporting fix; actual completion-time
+    # costing already looks up its own rate fresh and is unaffected.
+    s_wh = row.source_warehouse or wo.wip_warehouse or wo.source_warehouse
+    new_rate = get_valuation_rate(alternative_item_code, s_wh) if s_wh else 0.0
+    new_amount = new_rate * new_required_qty
+
     row.db_set("original_item_code", original_item_code, update_modified=False)
     row.db_set("item_code", alternative_item_code, update_modified=False)
     row.db_set("item_name", alt_item.item_name, update_modified=False)
     row.db_set("uom", alt_item.stock_uom, update_modified=False)
     row.db_set("required_qty", new_required_qty, update_modified=False)
+    row.db_set("rate", new_rate, update_modified=False)
+    row.db_set("amount", new_amount, update_modified=False)
     row.db_set("is_substituted", 1, update_modified=False)
     row.db_set("substitution_reason", reason or "", update_modified=False)
     frappe.db.commit()
@@ -808,6 +904,8 @@ def apply_row_substitution(work_order, work_order_item_row, alternative_item_cod
         "original_item_code": original_item_code,
         "alternative_item_code": alternative_item_code,
         "new_required_qty": new_required_qty,
+        "new_rate": new_rate,
+        "new_amount": new_amount,
     }
 
 
