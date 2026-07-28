@@ -10,7 +10,7 @@ class GeneralLedgerEntry(Document):
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-def make_gl_entries(gl_map: list[dict], cancel: bool = False) -> None:
+def make_gl_entries(gl_map: list[dict], cancel: bool = False) -> list[str]:
     """
     Create or reverse General Ledger Entries.
 
@@ -18,11 +18,17 @@ def make_gl_entries(gl_map: list[dict], cancel: bool = False) -> None:
               voucher_no, posting_date, company.
     Cancellation: pass [{"voucher_type": "...", "voucher_no": "..."}]
                   Entries are REVERSED (not deleted) to preserve audit trail.
+
+    Returns the list of newly-created GL Entry names, in the same order as
+    gl_map, when cancel=False (empty list on cancel — reversal touches
+    existing rows rather than returning new ones). Existing callers that
+    ignore the return value are unaffected.
     """
     if not cancel:
         _validate_gl_balance(gl_map)
 
     affected_accounts: set[str] = set()
+    created_names: list[str] = []
 
     for entry in gl_map:
         if cancel:
@@ -34,11 +40,13 @@ def make_gl_entries(gl_map: list[dict], cancel: bool = False) -> None:
             account = entry.get("account")
             if not account:
                 frappe.throw(_("GL entry missing 'account' field: {0}").format(entry))
-            _create_gl_entry(entry)
+            created_names.append(_create_gl_entry(entry))
             affected_accounts.add(account)
 
     for account in affected_accounts:
         _update_account_balance(account)
+
+    return created_names
 
 
 def set_voucher_gl_suspended(voucher_type: str, voucher_no: str, suspended: bool) -> None:
@@ -230,7 +238,7 @@ def _reverse_gl_entries(voucher_type: str, voucher_no: str) -> set[str]:
     return affected
 
 
-def _create_gl_entry(entry: dict) -> None:
+def _create_gl_entry(entry: dict) -> str:
     doc = frappe.new_doc("General Ledger Entry")
     # Drop empty fiscal_year so Frappe doesn't try to validate a Link to ""
     clean = {k: v for k, v in entry.items() if not (k == "fiscal_year" and not v)}
@@ -238,6 +246,7 @@ def _create_gl_entry(entry: dict) -> None:
     doc.flags.ignore_permissions = True
     doc.flags.ignore_mandatory   = True
     doc.insert()
+    return doc.name
 
 
 def _update_account_balance(account: str) -> None:

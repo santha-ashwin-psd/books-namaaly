@@ -42,3 +42,10 @@ zoho_books_clone.patches.v1_7.backfill_qc_quarantine_fields
 # pre_model_sync too, but keeping it alongside the rest of this rework's
 # patches in post_model_sync for consistency).
 zoho_books_clone.patches.v1_8.flip_qc_hard_block_default
+
+# Back-fills the Fixed Asset accounts (Fixed Assets group, Fixed Assets -
+# Cost, Accumulated Depreciation, Capital Work in Progress, Depreciation
+# Expense) for every existing company. These were missing from the COA seed
+# template entirely, so the Asset Category "Accounting" section's account
+# pickers were permanently empty for every company, old and new.
+zoho_books_clone.patches.v1_9.seed_fixed_asset_accounts

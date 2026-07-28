@@ -252,6 +252,82 @@
             </div>
           </div>
 
+          <!-- Accounting (per Company) card -->
+          <div class="ac-form-card">
+            <div class="ac-acct-hdr">
+              <div>
+                <div class="ac-form-section" style="margin-bottom:2px">Accounting</div>
+                <div class="ac-acct-hdr-sub">
+                  Fixed Asset / Accumulated Depreciation / Depreciation Expense accounts to use for this
+                  category. Required before any asset in this category can be submitted.
+                </div>
+              </div>
+              <button class="ac-action-btn" @click="addAccountRow" :disabled="form.accounts.length >= 1"
+                :title="form.accounts.length >= 1 ? 'Only one set of accounts is needed — this category belongs to a single company' : ''">
+                <span v-html="icon('plus', 12)"></span> Add Accounts
+              </button>
+            </div>
+
+            <div v-if="!form.accounts.length" class="ac-acct-empty">
+              No company accounts configured yet. Add one so assets in this category can be capitalized and depreciated.
+            </div>
+
+            <div v-for="(row, idx) in form.accounts" :key="idx" class="ac-acct-row">
+              <div class="ac-acct-row-top">
+                <div class="ac-field" style="flex:1">
+                  <label class="ac-label">Company <span style="color:#dc2626">*</span></label>
+                  <SearchableSelect
+                    v-model="row.company"
+                    :options="companyOptions"
+                    placeholder="Select company"
+                    @search="fetchCompanyOptions"
+                  />
+                </div>
+                <button class="ac-acct-remove-btn" title="Remove" @click="removeAccountRow(idx)">
+                  <span v-html="icon('trash', 13)"></span>
+                </button>
+              </div>
+              <div class="ac-acct-row-grid">
+                <div class="ac-field">
+                  <label class="ac-label">Fixed Asset Account <span style="color:#dc2626">*</span></label>
+                  <SearchableSelect
+                    v-model="row.fixed_asset_account"
+                    :options="row._opts.fixed"
+                    placeholder="Fixed Asset account"
+                    @search="(q) => fetchRowAccounts(row, 'fixed', 'Fixed Asset', q)"
+                  />
+                </div>
+                <div class="ac-field">
+                  <label class="ac-label">Accumulated Depreciation Account <span style="color:#dc2626">*</span></label>
+                  <SearchableSelect
+                    v-model="row.accumulated_depreciation_account"
+                    :options="row._opts.accdep"
+                    placeholder="Accumulated Depreciation account"
+                    @search="(q) => fetchRowAccounts(row, 'accdep', 'Accumulated Depreciation', q)"
+                  />
+                </div>
+                <div class="ac-field">
+                  <label class="ac-label">Depreciation Expense Account <span style="color:#dc2626">*</span></label>
+                  <SearchableSelect
+                    v-model="row.depreciation_expense_account"
+                    :options="row._opts.depexp"
+                    placeholder="Depreciation Expense account"
+                    @search="(q) => fetchRowAccounts(row, 'depexp', 'Depreciation', q)"
+                  />
+                </div>
+                <div class="ac-field">
+                  <label class="ac-label">CWIP Account <span style="color:#94a3b8;font-weight:500">(optional)</span></label>
+                  <SearchableSelect
+                    v-model="row.cwip_account"
+                    :options="row._opts.cwip"
+                    placeholder="Capital work in progress account"
+                    @search="(q) => fetchRowAccounts(row, 'cwip', null, q)"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Form actions -->
           <div class="ac-form-actions">
             <button class="ac-action-btn ac-action-btn--primary" :disabled="saving" @click="saveCategory">
@@ -271,11 +347,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
-import { apiList, apiSave, apiDelete, apiPOST } from "../api/client.js";
+import { apiGet, apiList, apiSave, apiDelete, apiPOST, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
+import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast }   = useToast();
 const { confirm } = useConfirm();
@@ -292,9 +369,64 @@ const isMobile     = ref(window.innerWidth <= 480);
 const allAssets    = ref([]);
 const assetsLoading = ref(false);
 
-const form = reactive({ name: "", category_name: "", description: "", is_active: 1 });
+const form = reactive({ name: "", category_name: "", description: "", is_active: 1, accounts: [] });
+const companyOptions = ref([]);
+// The category is now scoped to a single owning Books Company (books_company).
+// The per-row "Company" picker in the Accounting section must never offer any
+// other company — otherwise a category from Company A could be configured
+// with GL accounts belonging to Company B, defeating the isolation above.
+const myCompany = ref("");
 
 function onResize() { isMobile.value = window.innerWidth <= 480; }
+
+function blankAccountRow() {
+  return {
+    company: "",
+    fixed_asset_account: "",
+    accumulated_depreciation_account: "",
+    depreciation_expense_account: "",
+    cwip_account: "",
+    // UI-only, per-row dropdown option caches — stripped before save.
+    _opts: { fixed: [], accdep: [], depexp: [], cwip: [] },
+  };
+}
+
+function addAccountRow() {
+  form.accounts.push({ ...blankAccountRow(), company: myCompany.value || "" });
+}
+
+function removeAccountRow(idx) {
+  form.accounts.splice(idx, 1);
+}
+
+async function fetchCompanyOptions(q = "") {
+  // Restricted to the category's own company — the accounts sub-table must
+  // never let this category be wired to another tenant's GL accounts.
+  if (!myCompany.value) { companyOptions.value = []; return; }
+  try {
+    const rows = await apiList("Books Company", {
+      fields: ["name", "company_name"],
+      filters: [["name", "=", myCompany.value]],
+      limit: 1,
+    });
+    companyOptions.value = (rows || []).map((x) => ({ label: x.company_name || x.name, value: x.name }));
+  } catch {
+    companyOptions.value = [{ label: myCompany.value, value: myCompany.value }];
+  }
+}
+
+async function fetchRowAccounts(row, key, accountType, q = "") {
+  try {
+    const filters = [["is_group", "=", 0]];
+    if (accountType) filters.push(["account_type", "=", accountType]);
+    if (row.company) filters.push(["company", "=", row.company]);
+    if (q) filters.push(["name", "like", `%${q}%`]);
+    const rows = await apiList("Account", { fields: ["name", "account_name"], filters, limit: 30, order: "name asc" });
+    row._opts[key] = (rows || []).map((r) => ({ label: r.account_name || r.name, value: r.name }));
+  } catch {
+    row._opts[key] = [];
+  }
+}
 
 const CATEGORY_DEFAULTS = [
   { name: "ACS-001", category_name: "Electronics",        description: "Electronic devices and components", is_active: 1 },
@@ -360,7 +492,7 @@ function selectCategory(cat) {
   panelMode.value = "view";
 }
 
-function enterEditMode() {
+async function enterEditMode() {
   if (!selectedCategory.value) return;
   originalName.value = selectedCategory.value.name;
   Object.assign(form, {
@@ -368,14 +500,32 @@ function enterEditMode() {
     category_name: selectedCategory.value.category_name || "",
     description: selectedCategory.value.description || "",
     is_active: selectedCategory.value.is_active ? 1 : 0,
+    accounts: [],
   });
   panelMode.value = "edit";
+  // The sidebar list only carries summary fields — fetch the full doc to get
+  // the per-company accounts child table.
+  try {
+    const full = await apiGet("Asset Category", selectedCategory.value.name);
+    myCompany.value = full?.books_company || (await resolveCompany()) || "";
+    form.accounts = (full?.accounts || []).map((r) => ({
+      company: r.company || "",
+      fixed_asset_account: r.fixed_asset_account || "",
+      accumulated_depreciation_account: r.accumulated_depreciation_account || "",
+      depreciation_expense_account: r.depreciation_expense_account || "",
+      cwip_account: r.cwip_account || "",
+      _opts: { fixed: [], accdep: [], depexp: [], cwip: [] },
+    }));
+  } catch (e) {
+    toast("Failed to load account setup: " + e.message, "error");
+  }
 }
 
-function newCategory() {
+async function newCategory() {
   selected.value = null;
   selectedCategory.value = null;
-  Object.assign(form, { name: "", category_name: "", description: "", is_active: 1 });
+  Object.assign(form, { name: "", category_name: "", description: "", is_active: 1, accounts: [] });
+  myCompany.value = (await resolveCompany()) || "";
   panelMode.value = "new";
 }
 
@@ -389,6 +539,22 @@ function cancelForm() {
 
 async function saveCategory() {
   if (!form.category_name.trim()) { toast("Category name is required", "error"); return; }
+
+  for (const row of form.accounts) {
+    if (!row.company || !row.fixed_asset_account || !row.accumulated_depreciation_account || !row.depreciation_expense_account) {
+      toast("Each company row needs Company, Fixed Asset, Accumulated Depreciation and Depreciation Expense accounts", "error");
+      return;
+    }
+  }
+  const companiesSeen = new Set();
+  for (const row of form.accounts) {
+    if (companiesSeen.has(row.company)) {
+      toast(`Company "${row.company}" is configured more than once`, "error");
+      return;
+    }
+    companiesSeen.add(row.company);
+  }
+
   saving.value = true;
   try {
     const catName = form.category_name.trim();
@@ -400,6 +566,20 @@ async function saveCategory() {
       description: form.description,
       is_active: form.is_active ? 1 : 0,
     };
+    if (!isEdit) {
+      const booksCompany = await resolveCompany();
+      if (!booksCompany) { toast("No company configured.", "error"); saving.value = false; return; }
+      payload.books_company = booksCompany;
+    }
+    Object.assign(payload, {
+      accounts: form.accounts.map((r) => ({
+        company: r.company,
+        fixed_asset_account: r.fixed_asset_account,
+        accumulated_depreciation_account: r.accumulated_depreciation_account,
+        depreciation_expense_account: r.depreciation_expense_account,
+        cwip_account: r.cwip_account || "",
+      })),
+    });
     if (isEdit) {
       payload.name = originalName.value;
     }
@@ -458,6 +638,7 @@ async function deleteCategory() {
 onMounted(() => {
   load();
   loadAssets();
+  fetchCompanyOptions();
   window.addEventListener("resize", onResize, { passive: true });
 });
 onUnmounted(() => window.removeEventListener("resize", onResize));
@@ -704,6 +885,30 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 .ac-is-active-text { flex: 1; }
 .ac-is-active-title { font-size: 13px; font-weight: 700; color: #374151; }
 .ac-is-active-sub   { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+
+.ac-acct-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.ac-acct-hdr-sub { font-size: 11.5px; color: #94a3b8; line-height: 1.5; margin-top: 4px; max-width: 480px; }
+.ac-acct-empty {
+  padding: 18px 16px; text-align: center; font-size: 12.5px; color: #94a3b8;
+  background: #f8fafc; border-radius: 10px; border: 1.5px dashed #e2e8f0;
+}
+.ac-acct-row {
+  border: 1.5px solid #e8edf5; border-radius: 12px; padding: 14px 16px;
+  margin-bottom: 12px; background: #fbfcfe;
+}
+.ac-acct-row:last-child { margin-bottom: 0; }
+.ac-acct-row-top { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
+.ac-acct-remove-btn {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; border: 1.5px solid #fca5a5;
+  background: #fff5f5; color: #dc2626; cursor: pointer; transition: background .12s;
+}
+.ac-acct-remove-btn:hover { background: #fee2e2; }
+.ac-acct-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+@media (max-width: 640px) {
+  .ac-acct-row-grid { grid-template-columns: 1fr; }
+}
 
 .ac-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ac-action-btn {

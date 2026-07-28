@@ -1,0 +1,240 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "AST-DISP-.YYYY.-.####",
+ "creation": "2026-07-27 08:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "asset",
+  "company",
+  "disposal_type",
+  "disposal_date",
+  "sale_details_section",
+  "sale_amount",
+  "receivable_account",
+  "gl_section",
+  "purchase_cost_snapshot",
+  "accumulated_depreciation_snapshot",
+  "net_book_value_snapshot",
+  "gain_loss_amount",
+  "gain_loss_account",
+  "remarks",
+  "gl_posted",
+  "previous_asset_status",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "options": "Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1,
+   "description": "Stamped from the Asset on save."
+  },
+  {
+   "fieldname": "disposal_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Disposal Type",
+   "options": "Scrap\nSale",
+   "reqd": 1
+  },
+  {
+   "fieldname": "disposal_date",
+   "fieldtype": "Date",
+   "label": "Disposal Date",
+   "reqd": 1,
+   "default": "Today"
+  },
+  {
+   "fieldname": "sale_details_section",
+   "fieldtype": "Section Break",
+   "label": "Sale Details",
+   "depends_on": "eval:doc.disposal_type=='Sale'"
+  },
+  {
+   "depends_on": "eval:doc.disposal_type=='Sale'",
+   "mandatory_depends_on": "eval:doc.disposal_type=='Sale'",
+   "fieldname": "sale_amount",
+   "fieldtype": "Currency",
+   "label": "Sale Amount"
+  },
+  {
+   "depends_on": "eval:doc.disposal_type=='Sale'",
+   "mandatory_depends_on": "eval:doc.disposal_type=='Sale'",
+   "fieldname": "receivable_account",
+   "fieldtype": "Link",
+   "label": "Receivable Account (Debtor / Bank / Cash)",
+   "options": "Account",
+   "description": "Account debited for the sale proceeds."
+  },
+  {
+   "fieldname": "gl_section",
+   "fieldtype": "Section Break",
+   "label": "Gain / Loss"
+  },
+  {
+   "fieldname": "purchase_cost_snapshot",
+   "fieldtype": "Currency",
+   "label": "Original Purchase Cost",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "accumulated_depreciation_snapshot",
+   "fieldtype": "Currency",
+   "label": "Accumulated Depreciation (at disposal)",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Derived as Purchase Cost \u2212 Current Value at the time this disposal was submitted, so the GL entry always balances regardless of any prior rounding drift."
+  },
+  {
+   "fieldname": "net_book_value_snapshot",
+   "fieldtype": "Currency",
+   "label": "Net Book Value (at disposal)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "gain_loss_amount",
+   "fieldtype": "Currency",
+   "label": "Gain / (Loss) on Disposal",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Positive = gain (Sale Amount > Net Book Value). Negative = loss. Always \u2212Net Book Value for Scrap."
+  },
+  {
+   "fieldname": "gain_loss_account",
+   "fieldtype": "Link",
+   "label": "Gain / Loss on Disposal Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Credited if this disposal produces a gain, debited if it produces a loss. Picked explicitly \u2014 this app has no per-category or per-company default for it."
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "default": "0",
+   "fieldname": "gl_posted",
+   "fieldtype": "Check",
+   "label": "GL Posted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_asset_status",
+   "fieldtype": "Data",
+   "label": "Previous Asset Status",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "description": "Asset.status before this disposal, so cancel can restore it."
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Asset Disposal",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-27 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Disposal",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

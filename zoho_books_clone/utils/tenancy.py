@@ -285,3 +285,11 @@ hp_packing_slip     = _make_hp("Packing Slip")
 
 qc_asset = _make_qc("Asset")
 hp_asset = _make_hp("Asset")
+
+# ── Asset Category (master record — uses `books_company`, like Customer/Item) ─
+# Unlike Asset, Asset Category has no native `company` field: one category can
+# hold per-company accounting rows in its child table, but the category itself
+# is a shared master, so it's isolated the same way as Customer/Supplier/Item/Contact.
+
+qc_asset_category = lambda user=None: _qc_books_company(user)  # noqa: E731
+hp_asset_category  = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype, user)  # noqa: E731

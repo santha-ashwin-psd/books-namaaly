@@ -1,66 +1,40 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import add_years
+
+from zoho_books_clone.assets.asset_gl import (
+    post_asset_capitalization,
+    reverse_asset_capitalization,
+    validate_capitalization_setup,
+)
+from zoho_books_clone.assets.depreciation_engine import build_schedule
 
 class Asset(Document):
 
     def validate(self):
         self.generate_depreciation_schedule()
+        validate_capitalization_setup(self)
+
+    def on_submit(self):
+        post_asset_capitalization(self)
+
+    def on_cancel(self):
+        reverse_asset_capitalization(self)
 
     def generate_depreciation_schedule(self):
-        # NOTE (ported from legacy Assets module): `depreciation_method` offers
-        # "Straight Line" / "Written Down Value" as a Select option, but this
-        # function always computes straight-line depreciation regardless of
-        # which one is chosen. WDV is effectively a no-op field right now.
-        # Flagging rather than silently adding WDV math — that's new behavior,
-        # not a straight port, and should be a deliberate follow-up phase.
-
-        # Clear old schedule
-        self.depreciation_schedule = []
-
-        if (
-            not self.purchase_cost
-            or not self.useful_life
-            or self.useful_life <= 0
+        # Regenerating a schedule after any period has already been posted
+        # would silently discard the posted GL history recorded on those
+        # rows (see depreciation_posting.py). Once a schedule has live
+        # postings, further edits to the asset's depreciation inputs
+        # (method/frequency/life/salvage) must not blow that away here.
+        if any(
+            row.status == "Completed" for row in (self.depreciation_schedule or [])
         ):
             return
 
-        purchase_cost = self.purchase_cost
-        salvage_value = self.salvage_value or 0
-        useful_life = self.useful_life
+        self.depreciation_schedule = []
 
-        yearly_depreciation = (
-            purchase_cost - salvage_value
-        ) / useful_life
+        rows = build_schedule(self)
+        for row in rows:
+            self.append("depreciation_schedule", row)
 
-        opening = purchase_cost
-
-        for year in range(1, useful_life + 1):
-
-            closing = opening - yearly_depreciation
-
-            if closing < salvage_value:
-                closing = salvage_value
-
-            self.append("depreciation_schedule", {
-
-                "year": year,
-
-                "depreciation_date": add_years(
-                    self.purchase_date,
-                    year
-                ),
-
-                "opening_value": opening,
-
-                "depreciation_amount": yearly_depreciation,
-
-                "closing_value": closing,
-
-                "status": "Pending"
-
-            })
-
-            opening = closing
-
-        self.current_value = purchase_cost
+        self.current_value = self.purchase_cost if rows else self.current_value

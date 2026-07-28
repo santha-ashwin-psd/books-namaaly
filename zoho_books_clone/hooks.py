@@ -69,6 +69,7 @@ doc_events = {
     "Supplier":  {"before_insert": f"{_TN}.auto_stamp_books_company"},
     "Item":      {"before_insert": f"{_TN}.auto_stamp_books_company"},
     "Contact":   {"before_insert": f"{_TN}.auto_stamp_books_company"},
+    "Asset Category": {"before_insert": f"{_TN}.auto_stamp_books_company"},
     # Auto-stamp company on manufacturing transactional records
     "BOM":              {"before_insert": f"{_TN}.auto_stamp_company"},
     "Work Order":       {"before_insert": f"{_TN}.auto_stamp_company"},
@@ -85,6 +86,7 @@ scheduler_events = {
         "zoho_books_clone.utils.scheduler.send_payment_reminders",
         "zoho_books_clone.banking.utils.auto_match_bank_transactions",
         "zoho_books_clone.utils.scheduler.send_reorder_alerts",
+        "zoho_books_clone.assets.depreciation_posting.post_due_depreciation",
     ],
     "monthly": [
         "zoho_books_clone.utils.scheduler.generate_monthly_reports",
@@ -193,6 +195,8 @@ permission_query_conditions = {
     "Packing Slip":      f"{_TN}.qc_packing_slip",
     # Assets — scoped by the `company` field
     "Asset":             f"{_TN}.qc_asset",
+    # Asset Category — master record, scoped by `books_company` like Customer/Item
+    "Asset Category":    f"{_TN}.qc_asset_category",
 }
 
 has_permission = {
@@ -226,6 +230,8 @@ has_permission = {
     "Packing Slip":      f"{_TN}.hp_packing_slip",
     # Assets — scoped by the `company` field
     "Asset":             f"{_TN}.hp_asset",
+    # Asset Category — master record, scoped by `books_company` like Customer/Item
+    "Asset Category":    f"{_TN}.hp_asset_category",
 }
 
 website_route_rules = [

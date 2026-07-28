@@ -104,6 +104,9 @@
                 <option value="">— Select —</option>
                 <option v-for="w in workOrderList" :key="w.name" :value="w.name">{{ w.name }} — {{ w.production_item }}</option>
               </select>
+              <div v-if="!workOrderList.length" style="font-size:11px;color:#94a3b8;margin-top:4px">
+                No submitted Work Orders on a Packing BOM found. Create a Work Order against a Packing-type BOM first.
+              </div>
             </div>
             <div>
               <div class="psx-hf-label">Item Being Packed</div>
@@ -357,18 +360,31 @@ onMounted(async () => {
   loading.value = true;
   try {
     const co = await resolveCompany();
-    const [wos, items, uoms, warehouses] = await Promise.all([
+    const [wos, packingBoms, items, uoms, warehouses] = await Promise.all([
       apiList("Work Order", {
         fields: ["name", "production_item", "bom", "status", "qty", "produced_qty"],
         filters: [["docstatus", "=", 1], ["status", "!=", "Cancelled"]],
         limit: 500,
         order: "name desc",
       }),
+      // A Packing Slip only ever consumes bulk stock into retail packs, which
+      // is exactly what a "Packing" type BOM models (bulk_item + packing_items).
+      // A regular "Manufacturing"/"Sub-Assembly" BOM explodes into raw
+      // materials instead -- if a Work Order built on one of those slipped
+      // through here, its raw-material breakdown would show up in the
+      // Packing Slip's items table by mistake. Restricting the Work Order
+      // picker to only Packing-BOM-backed orders prevents that at the source.
+      apiList("BOM", {
+        fields: ["name"],
+        filters: [["bom_type", "=", "Packing"], ["docstatus", "=", 1]],
+        limit: 2000,
+      }),
       apiList("Item", { fields: ["name", "item_name", "stock_uom"], limit: 5000, order: "name asc" }),
       apiList("UOM", { fields: ["name"], limit: 200, order: "name asc" }),
       apiList("Warehouse", { fields: ["name"], filters: [["company", "=", co], ["is_group", "=", 0]], limit: 200, order: "name asc" }),
     ]);
-    workOrderList.value = wos || [];
+    const packingBomNames = new Set((packingBoms || []).map(b => b.name));
+    workOrderList.value = (wos || []).filter(w => packingBomNames.has(w.bom));
     itemsList.value = items || [];
     uomList.value = uoms || [];
     warehouseList.value = warehouses || [];

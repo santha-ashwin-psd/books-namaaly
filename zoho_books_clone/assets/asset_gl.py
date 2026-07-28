@@ -1,0 +1,255 @@
+from __future__ import annotations
+"""
+Asset capitalization GL — Phase 1+2 of the asset-management accounting build-out.
+
+Phase 1 (schema): Asset Category now carries a child table (`accounts`,
+Asset Category Account) mapping each Company to its Fixed Asset /
+Accumulated Depreciation / Depreciation Expense / CWIP accounts — the same
+"account defaults live on the category, keyed by company" shape ERPNext
+uses, and consistent with this app's own per-company default pattern
+(Books Company.default_inventory_account etc. in accounts/inventory_gl.py).
+
+Phase 2 (this file): on Asset submit, post a capitalization entry —
+
+    DR Fixed Asset Account (from the asset's category+company)
+    CR Asset.credit_account (Payable, for a supplier-billed purchase, or
+                              Bank/Cash, for a cash purchase)
+
+for `purchase_cost`. On cancel, reverse it via the same
+general_ledger_entry.make_gl_entries(cancel=True) path every other
+financial doctype in this app uses (Sales/Purchase Invoice, Landed Cost
+Voucher, Stock Entry) — entries are reversed, not deleted, preserving the
+audit trail.
+
+Not yet covered (left for a later phase, deliberately — see chat plan):
+  - Linking to Purchase Invoice's own GL (no "Is Fixed Asset" line flag
+    exists yet on Purchase Invoice) — this posts a self-contained entry
+    instead, so `credit_account` must be picked explicitly, the same way
+    Purchase Invoice requires an explicit `credit_to`.
+  - Disposal/scrap/sale GL.
+
+CWIP (capitalize to CWIP first, move to Fixed Asset on "available for
+use") — implemented below, adapted from how ERPNext handles it. ERPNext
+triggers CWIP off Purchase Receipt/Invoice for a fixed-asset item; this
+app has no such integration, so the same two-step pattern is triggered
+off Asset submit instead:
+
+  - On Asset submit, if the category+company has a cwip_account
+    configured AND available_for_use_date is later than purchase_date
+    (i.e. the asset isn't ready for use yet), capitalization posts to
+    CWIP instead of Fixed Asset: DR CWIP Account / CR credit_account.
+    `cwip_transferred` is left 0.
+  - Once available_for_use_date arrives, assets/cwip_posting.py's daily
+    scheduled job transfers it: DR Fixed Asset Account / CR CWIP
+    Account, for the same purchase_cost, and sets cwip_transferred = 1.
+  - If no cwip_account is configured for the category+company, or
+    available_for_use_date is not later than purchase_date, capitalization
+    posts straight to Fixed Asset as before (cwip_transferred defaults to
+    1 -- "nothing left to transfer").
+  - On cancel, both legs are reversed if both were posted (see
+    reverse_asset_capitalization below).
+
+Phase 3 (assets/depreciation_engine.py + assets/depreciation_posting.py):
+  periodic depreciation postings (DR Depreciation Expense / CR Accumulated
+  Depreciation) now exist as their own modules rather than living here —
+  depreciation posts per Depreciation Schedule row on a schedule, not once
+  on Asset submit like capitalization does, so it needs its own scheduled
+  job and idempotency handling. get_category_accounts() below is reused
+  by depreciation_posting.py rather than duplicated.
+"""
+
+import frappe
+from frappe import _
+from frappe.utils import flt, getdate
+
+from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import (
+    make_gl_entries,
+)
+
+_VOUCHER_TYPE = "Asset"
+_CWIP_VOUCHER_TYPE = "Asset CWIP Transfer"
+
+
+def _cwip_voucher_no(asset_name: str) -> str:
+    return f"{asset_name}-CWIP"
+
+
+def _needs_cwip(doc, accounts: dict) -> bool:
+    """True if this asset should capitalize to CWIP rather than straight
+    to Fixed Asset: the category+company has a CWIP account configured,
+    and the asset isn't ready for use as of its purchase date."""
+    if not accounts.get("cwip_account"):
+        return False
+    if not doc.available_for_use_date or not doc.purchase_date:
+        return False
+    return getdate(doc.available_for_use_date) > getdate(doc.purchase_date)
+
+
+def get_category_accounts(asset_category: str, company: str) -> dict:
+    """Fixed Asset / Accumulated Depreciation / Depreciation Expense / CWIP
+    accounts configured for this category+company. Empty dict if the
+    category has no row set up for that company yet."""
+    if not asset_category or not company:
+        return {}
+    row = frappe.db.get_value(
+        "Asset Category Account",
+        {"parenttype": "Asset Category", "parent": asset_category, "company": company},
+        [
+            "fixed_asset_account",
+            "accumulated_depreciation_account",
+            "depreciation_expense_account",
+            "cwip_account",
+        ],
+        as_dict=True,
+    )
+    return row or {}
+
+
+def validate_capitalization_setup(doc) -> None:
+    """Called from Asset.validate() so the person finds out about missing
+    setup while still editing, not only at submit time."""
+    if doc.is_existing_asset:
+        return
+
+    if not doc.company:
+        frappe.throw(_("Company is required before this asset can be submitted."))
+
+    accounts = get_category_accounts(doc.asset_category, doc.company)
+    if not accounts.get("fixed_asset_account"):
+        frappe.throw(
+            _(
+                "Asset Category {0} has no Fixed Asset Account configured for company {1}. "
+                "Add a row under Asset Category \u2192 Accounting (per Company) first."
+            ).format(frappe.bold(doc.asset_category), frappe.bold(doc.company))
+        )
+
+    if not doc.credit_account:
+        frappe.throw(
+            _("Credit Account (Payable / Bank / Cash) is required to capitalize this asset.")
+        )
+
+
+def post_asset_capitalization(doc) -> None:
+    """DR Fixed Asset Account / CR doc.credit_account for purchase_cost.
+    Skipped for existing/opening assets (already reflected in the books
+    elsewhere) and for a second submit-attempt if already posted."""
+    if doc.is_existing_asset:
+        return
+    if doc.capitalization_posted:
+        return
+
+    validate_capitalization_setup(doc)
+
+    amount = flt(doc.purchase_cost)
+    if amount <= 0:
+        frappe.throw(_("Purchase Cost must be greater than zero to capitalize this asset."))
+
+    accounts = get_category_accounts(doc.asset_category, doc.company)
+    fixed_asset_account = accounts.get("fixed_asset_account")
+    goes_to_cwip = _needs_cwip(doc, accounts)
+    debit_account = accounts.get("cwip_account") if goes_to_cwip else fixed_asset_account
+
+    remarks = f"Asset capitalized \u2014 {doc.asset_name} ({doc.name})" + (
+        " (to CWIP)" if goes_to_cwip else ""
+    )
+    gl_map = [
+        {
+            "account": debit_account,
+            "debit": amount,
+            "credit": 0,
+            "voucher_type": _VOUCHER_TYPE,
+            "voucher_no": doc.name,
+            "posting_date": doc.purchase_date,
+            "company": doc.company,
+            "remarks": remarks,
+        },
+        {
+            "account": doc.credit_account,
+            "debit": 0,
+            "credit": amount,
+            "voucher_type": _VOUCHER_TYPE,
+            "voucher_no": doc.name,
+            "posting_date": doc.purchase_date,
+            "company": doc.company,
+            "remarks": remarks,
+        },
+    ]
+
+    make_gl_entries(gl_map)
+    doc.db_set("capitalization_posted", 1, update_modified=False)
+    doc.db_set("cwip_transferred", 0 if goes_to_cwip else 1, update_modified=False)
+
+
+def transfer_cwip_to_fixed_asset(asset_name: str) -> bool:
+    """DR Fixed Asset Account / CR CWIP Account for purchase_cost, once
+    available_for_use_date has arrived. Called by assets/cwip_posting.py's
+    daily job; also safe to call directly/manually. Returns True if a
+    transfer was posted, False if there was nothing due."""
+    doc = frappe.get_doc("Asset", asset_name)
+
+    if not doc.capitalization_posted or doc.cwip_transferred:
+        return False
+    if not doc.available_for_use_date or getdate(doc.available_for_use_date) > getdate(frappe.utils.nowdate()):
+        return False
+
+    accounts = get_category_accounts(doc.asset_category, doc.company)
+    fixed_asset_account = accounts.get("fixed_asset_account")
+    cwip_account = accounts.get("cwip_account")
+    if not fixed_asset_account or not cwip_account:
+        frappe.log_error(
+            f"Asset {asset_name} is due for CWIP transfer but its category+company "
+            f"is missing Fixed Asset Account and/or CWIP Account.",
+            "CWIP transfer: missing account setup",
+        )
+        return False
+
+    amount = flt(doc.purchase_cost)
+    remarks = f"CWIP transfer \u2014 {doc.asset_name} ({doc.name})"
+    gl_map = [
+        {
+            "account": fixed_asset_account,
+            "debit": amount,
+            "credit": 0,
+            "voucher_type": _CWIP_VOUCHER_TYPE,
+            "voucher_no": _cwip_voucher_no(doc.name),
+            "posting_date": doc.available_for_use_date,
+            "company": doc.company,
+            "remarks": remarks,
+        },
+        {
+            "account": cwip_account,
+            "debit": 0,
+            "credit": amount,
+            "voucher_type": _CWIP_VOUCHER_TYPE,
+            "voucher_no": _cwip_voucher_no(doc.name),
+            "posting_date": doc.available_for_use_date,
+            "company": doc.company,
+            "remarks": remarks,
+        },
+    ]
+    make_gl_entries(gl_map)
+    doc.db_set("cwip_transferred", 1, update_modified=False)
+    return True
+
+
+def reverse_asset_capitalization(doc) -> None:
+    """Best-effort reversal on cancel — mirrors Landed Cost Voucher /
+    Stock Entry: never block the cancel itself on a GL-side failure.
+    Reverses the CWIP transfer leg too, if one was posted, before the
+    original capitalization leg."""
+    if not doc.capitalization_posted:
+        return
+    try:
+        if doc.cwip_transferred:
+            make_gl_entries(
+                [{"voucher_type": _CWIP_VOUCHER_TYPE, "voucher_no": _cwip_voucher_no(doc.name)}],
+                cancel=True,
+            )
+        make_gl_entries(
+            [{"voucher_type": _VOUCHER_TYPE, "voucher_no": doc.name}],
+            cancel=True,
+        )
+        doc.db_set("capitalization_posted", 0, update_modified=False)
+        doc.db_set("cwip_transferred", 0, update_modified=False)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "Asset capitalization GL reversal failed")

@@ -28,6 +28,14 @@ COA = [
     ("CGST Input",            "Tax",        "Input Tax Credits",   0),
     ("SGST Input",            "Tax",        "Input Tax Credits",   0),
     ("IGST Input",            "Tax",        "Input Tax Credits",   0),
+    # Fixed Assets — required so the Asset Category "Accounting" section has
+    # accounts to offer (it filters strictly by account_type: "Fixed Asset",
+    # "Accumulated Depreciation", "Depreciation"). Without these, every new
+    # company's account pickers there are permanently empty.
+    ("Fixed Assets",              "Asset",                  "Assets",       1),
+    ("Fixed Assets - Cost",       "Fixed Asset",             "Fixed Assets", 0),
+    ("Accumulated Depreciation",  "Accumulated Depreciation","Fixed Assets", 0),
+    ("Capital Work in Progress",  "Asset",                  "Fixed Assets", 0),
     ("Liabilities",           "Liability",  None,                  1),
     ("Current Liabilities",   "Liability",  "Liabilities",         1),
     ("Accounts Payable",      "Payable",    "Current Liabilities", 0),
@@ -48,6 +56,7 @@ COA = [
     ("Salaries & Wages",      "Expense",    "Operating Expenses",  0),
     ("Rent",                  "Expense",    "Operating Expenses",  0),
     ("Office Supplies",       "Expense",    "Operating Expenses",  0),
+    ("Depreciation Expense",  "Depreciation", "Operating Expenses", 0),
     # Phase 10 rollout — Landed Cost Voucher charge accounts (client-requested).
     ("Freight & Parcel Charges - Inward",   "Expense", "Operating Expenses", 0),
     ("Local Transport Charges - Inward",    "Expense", "Operating Expenses", 0),

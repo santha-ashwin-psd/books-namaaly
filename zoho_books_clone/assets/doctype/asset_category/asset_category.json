@@ -8,7 +8,10 @@
  "field_order": [
   "category_name",
   "description",
-  "is_active"
+  "is_active",
+  "books_company",
+  "accounts_section",
+  "accounts"
  ],
  "fields": [
   {
@@ -28,6 +31,28 @@
    "fieldname": "is_active",
    "fieldtype": "Check",
    "label": "Is Active"
+  },
+  {
+   "fieldname": "books_company",
+   "fieldtype": "Link",
+   "options": "Books Company",
+   "label": "Books Company",
+   "hidden": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1,
+   "description": "Owning company — used to isolate categories between tenants. Auto-set on create."
+  },
+  {
+   "fieldname": "accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting (per Company)"
+  },
+  {
+   "fieldname": "accounts",
+   "fieldtype": "Table",
+   "label": "Company Accounts",
+   "options": "Asset Category Account",
+   "description": "Fixed Asset / Accumulated Depreciation / Depreciation Expense accounts to use for this category, per company. Required before any asset in this category can be submitted for that company."
   }
  ],
  "grid_page_length": 50,

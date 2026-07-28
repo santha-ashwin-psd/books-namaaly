@@ -6,14 +6,22 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "period_no",
   "depreciation_date",
   "year",
+  "is_pro_rata",
   "opening_value",
   "depreciation_amount",
   "closing_value",
-  "status"
+  "status",
+  "gl_entry"
  ],
  "fields": [
+  {
+   "fieldname": "period_no",
+   "fieldtype": "Int",
+   "label": "Period No"
+  },
   {
    "fieldname": "depreciation_date",
    "fieldtype": "Date",
@@ -23,6 +31,11 @@
    "fieldname": "year",
    "fieldtype": "Int",
    "label": "Year"
+  },
+  {
+   "fieldname": "is_pro_rata",
+   "fieldtype": "Check",
+   "label": "Is Pro-Rata"
   },
   {
    "fieldname": "opening_value",
@@ -44,6 +57,13 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Pending\nCompleted"
+  },
+  {
+   "fieldname": "gl_entry",
+   "fieldtype": "Data",
+   "label": "GL Voucher No",
+   "read_only": 1,
+   "description": "Voucher No (JE) this period's depreciation was posted against, once Completed."
   }
  ],
  "grid_page_length": 50,

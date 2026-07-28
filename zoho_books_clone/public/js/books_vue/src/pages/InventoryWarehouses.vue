@@ -330,6 +330,15 @@
                 <span v-html="icon('x', 11)"></span>
               </button>
             </div>
+            <select class="sales-select" v-model="stockGroupFilter" title="Filter by item group">
+              <option value="">All Groups</option>
+              <option v-for="g in stockItemGroups" :key="g" :value="g">{{ g }}</option>
+            </select>
+            <select class="sales-select" v-model="stockStatusFilter" title="Filter by status">
+              <option value="">All Status</option>
+              <option value="ok">✓ OK</option>
+              <option value="low">⚠ Low Stock</option>
+            </select>
             <button v-if="selectedChild" class="wh-action-btn" @click="selectedChild = null; loadStockForWarehouse(selectedWH.name)">
               <span v-html="icon('x', 12)"></span> Clear
             </button>
@@ -367,7 +376,7 @@
         <!-- Stock data: mobile cards + desktop table (toggled via CSS) -->
         <template v-else>
         <div class="wh-tbl-mobile">
-          <div v-for="r in filteredStockItems" :key="'mc-' + r.item_code" class="wh-stock-mc">
+          <div v-for="r in sortedStockItems" :key="'mc-' + r.item_code" class="wh-stock-mc">
             <div class="wh-smc-top">
               <div class="wh-smc-name-wrap">
                 <div class="wh-smc-name">{{ r.item_name }}</div>
@@ -434,20 +443,20 @@
             <thead>
               <tr>
                 <th class="wh-th" style="width:24px"></th>
-                <th class="wh-th">Item</th>
-                <th class="wh-th wh-th-hide-sm">Group</th>
-                <th class="wh-th wh-th-hide-sm">UOM</th>
-                <th class="wh-th wh-th-r">Actual Qty</th>
-                <th class="wh-th wh-th-r wh-th-hide-md">Reserved</th>
-                <th class="wh-th wh-th-r wh-th-hide-md">Ordered</th>
-                <th class="wh-th wh-th-r wh-th-hide-md">Val. Rate</th>
-                <th class="wh-th wh-th-r">Stock Value</th>
+                <th class="wh-th sortable" @click="stockSortBy('item_name')">Item <span v-html="stockSortArrow('item_name')"></span></th>
+                <th class="wh-th wh-th-hide-sm sortable" @click="stockSortBy('item_group')">Group <span v-html="stockSortArrow('item_group')"></span></th>
+                <th class="wh-th wh-th-hide-sm sortable" @click="stockSortBy('uom')">UOM <span v-html="stockSortArrow('uom')"></span></th>
+                <th class="wh-th wh-th-r sortable" @click="stockSortBy('actual_qty')">Actual Qty <span v-html="stockSortArrow('actual_qty')"></span></th>
+                <th class="wh-th wh-th-r wh-th-hide-md sortable" @click="stockSortBy('reserved_qty')">Reserved <span v-html="stockSortArrow('reserved_qty')"></span></th>
+                <th class="wh-th wh-th-r wh-th-hide-md sortable" @click="stockSortBy('ordered_qty')">Ordered <span v-html="stockSortArrow('ordered_qty')"></span></th>
+                <th class="wh-th wh-th-r wh-th-hide-md sortable" @click="stockSortBy('valuation_rate')">Val. Rate <span v-html="stockSortArrow('valuation_rate')"></span></th>
+                <th class="wh-th wh-th-r sortable" @click="stockSortBy('stock_value')">Stock Value <span v-html="stockSortArrow('stock_value')"></span></th>
                 <th class="wh-th wh-th-c">Status</th>
                 <th v-if="adjustTargetWH" class="wh-th wh-th-c">Adjust</th>
               </tr>
             </thead>
             <tbody>
-              <template v-for="r in filteredStockItems" :key="r.item_code">
+              <template v-for="r in sortedStockItems" :key="r.item_code">
               <tr class="wh-tr" :class="{ 'wh-tr-clickable': r.has_batch_no }" @click="r.has_batch_no && toggleBatches(r.item_code)">
                 <td class="wh-td wh-td-c">
                   <span v-if="r.has_batch_no" class="wh-expand-chevron" :class="{ 'wh-expand-chevron--open': expandedRows[r.item_code] }">
@@ -772,6 +781,8 @@ const warehouseBatches = ref({});
 const expandedRows     = ref({});
 const search         = ref("");
 const itemSearch     = ref("");
+const stockGroupFilter  = ref("");
+const stockStatusFilter = ref("");
 const filterType     = ref("All");
 const filterDDOpen   = ref(false);
 
@@ -850,15 +861,46 @@ const adjustTargetWH = computed(() => {
   return null;
 });
 
-// Stock items filtered by the item search box (matches item code or name)
+// Distinct item groups present in the currently loaded stock rows — feeds
+// the "Filter by item group" dropdown without a separate API call.
+const stockItemGroups = computed(() =>
+  [...new Set(stockItems.value.map((r) => r.item_group).filter(Boolean))].sort()
+);
+
+// Stock items filtered by search box, item group, and reorder status
 const filteredStockItems = computed(() => {
+  let r = stockItems.value;
+  if (stockGroupFilter.value) r = r.filter((row) => row.item_group === stockGroupFilter.value);
+  if (stockStatusFilter.value === "ok")  r = r.filter((row) => !row.below_reorder);
+  if (stockStatusFilter.value === "low") r = r.filter((row) =>  row.below_reorder);
   const q = itemSearch.value.toLowerCase().trim();
-  if (!q) return stockItems.value;
-  return stockItems.value.filter((r) =>
-    (r.item_code || "").toLowerCase().includes(q) ||
-    (r.item_name || "").toLowerCase().includes(q)
-  );
+  if (q) {
+    r = r.filter((row) =>
+      (row.item_code || "").toLowerCase().includes(q) ||
+      (row.item_name || "").toLowerCase().includes(q)
+    );
+  }
+  return r;
 });
+
+// ── Sorting ──
+const stockSortCol = ref("item_name"), stockSortDir = ref("asc");
+const sortedStockItems = computed(() => {
+  const col = stockSortCol.value;
+  return [...filteredStockItems.value].sort((a, b) => {
+    const av = a[col] ?? "", bv = b[col] ?? "";
+    const c = typeof av === "number" ? av - bv : String(av).localeCompare(String(bv));
+    return stockSortDir.value === "asc" ? c : -c;
+  });
+});
+function stockSortBy(col) {
+  if (stockSortCol.value === col) stockSortDir.value = stockSortDir.value === "asc" ? "desc" : "asc";
+  else { stockSortCol.value = col; stockSortDir.value = "asc"; }
+}
+function stockSortArrow(col) {
+  if (stockSortCol.value !== col) return '<span style="color:#d1d5db">⇅</span>';
+  return stockSortDir.value === "asc" ? "↑" : "↓";
+}
 
 const whStats = computed(() => {
   if (!filteredStockItems.value.length) return { value: 0, items: 0, reserved: 0, ordered: 0, projected: 0 };
@@ -900,6 +942,8 @@ async function loadStockForWarehouse(name) {
   warehouseBatches.value = {};
   expandedRows.value = {};
   itemSearch.value = "";
+  stockGroupFilter.value = "";
+  stockStatusFilter.value = "";
   try {
     const [stock, batches] = await Promise.all([
       apiGET("zoho_books_clone.api.inventory.get_stock_summary", { warehouse: name }),
@@ -1784,6 +1828,8 @@ onMounted(() => { load(); loadItems(); });
 }
 .wh-th-r { text-align: right; }
 .wh-th-c { text-align: center; }
+.wh-tbl th.sortable { cursor: pointer; user-select: none; }
+.wh-tbl th.sortable:hover { color: #2563eb; }
 
 .wh-tr { border-bottom: 1px solid #f1f4f8; transition: background .1s; }
 .wh-tr:last-child { border-bottom: none; }

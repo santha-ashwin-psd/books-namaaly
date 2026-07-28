@@ -1,0 +1,198 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "AST-ADJ-.YYYY.-.####",
+ "creation": "2026-07-27 08:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "asset",
+  "company",
+  "adjustment_type",
+  "adjustment_date",
+  "reason",
+  "value_section",
+  "current_value_before",
+  "new_value",
+  "adjustment_amount",
+  "adjustment_account",
+  "gl_posted",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "options": "Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1,
+   "description": "Stamped from the Asset on save."
+  },
+  {
+   "fieldname": "adjustment_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Adjustment Type",
+   "options": "Impairment (Write-down)\nRevaluation (Write-up)",
+   "reqd": 1,
+   "description": "Must agree with the direction of New Value vs. Current Value \u2014 Impairment lowers value, Revaluation raises it."
+  },
+  {
+   "fieldname": "adjustment_date",
+   "fieldtype": "Date",
+   "label": "Adjustment Date",
+   "reqd": 1,
+   "default": "Today"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "value_section",
+   "fieldtype": "Section Break",
+   "label": "Value Change"
+  },
+  {
+   "fieldname": "current_value_before",
+   "fieldtype": "Currency",
+   "label": "Current Value (Before)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "new_value",
+   "fieldtype": "Currency",
+   "label": "New Value",
+   "reqd": 1,
+   "description": "The asset's revised carrying value after this adjustment. Must be between 0 and the asset's original Purchase Cost."
+  },
+  {
+   "fieldname": "adjustment_amount",
+   "fieldtype": "Currency",
+   "label": "Adjustment Amount",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "New Value \u2212 Current Value (Before). Negative = impairment, positive = revaluation."
+  },
+  {
+   "fieldname": "adjustment_account",
+   "fieldtype": "Link",
+   "label": "Impairment Loss / Revaluation Surplus Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Debited (Impairment Loss, P&L) for a write-down, or credited (Revaluation Surplus/Reserve) for a write-up. Picked explicitly \u2014 no per-category or per-company default."
+  },
+  {
+   "default": "0",
+   "fieldname": "gl_posted",
+   "fieldtype": "Check",
+   "label": "GL Posted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Asset Value Adjustment",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-27 08:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Value Adjustment",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

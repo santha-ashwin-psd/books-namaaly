@@ -20,6 +20,11 @@ import InventorySettings    from "./pages/InventorySettings.vue";
 import Asset                from "./pages/Asset.vue";
 import AssetDetails         from "./pages/AssetDetails.vue";
 import AssetCategory        from "./pages/AssetCategory.vue";
+import AssetDisposal        from "./pages/AssetDisposal.vue";
+import AssetReports         from "./pages/AssetReports.vue";
+import AssetMovement        from "./pages/AssetMovement.vue";
+import AssetRepair          from "./pages/AssetRepair.vue";
+import AssetValueAdjustment from "./pages/AssetValueAdjustment.vue";
 import Department           from "./pages/Department.vue";
 import DepreciationSchedule from "./pages/DepreciationSchedule.vue";
 import MaintenanceLog       from "./pages/MaintenanceLog.vue";
@@ -199,6 +204,36 @@ const routes = [
     path: "/assets/asset-category",
     name: "assets-asset-category",
     component: AssetCategory,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/disposals",
+    name: "assets-disposals",
+    component: AssetDisposal,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/reports",
+    name: "assets-reports",
+    component: AssetReports,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/movements",
+    name: "assets-movements",
+    component: AssetMovement,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/repairs",
+    name: "assets-repairs",
+    component: AssetRepair,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/value-adjustments",
+    name: "assets-value-adjustments",
+    component: AssetValueAdjustment,
     meta: { module: "inventory" },
   },
   {

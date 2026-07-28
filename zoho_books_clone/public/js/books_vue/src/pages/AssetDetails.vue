@@ -89,6 +89,27 @@
                   />
                 </div>
               </div>
+              <label class="add-toggle-row" style="margin-top:14px">
+                <span>Existing Asset (already on the books)</span>
+                <span class="ad-switch">
+                  <input type="checkbox" :checked="!!asset.is_existing_asset" @change="asset.is_existing_asset=$event.target.checked?1:0"/>
+                  <span class="ad-switch-track"></span>
+                </span>
+              </label>
+              <div v-if="!asset.is_existing_asset" class="inv-fg" style="margin-top:14px">
+                <div>
+                  <label class="inv-lbl">Credit Account (Payable / Bank / Cash) <span class="inv-req">*</span></label>
+                  <SearchableSelect
+                    v-model="asset.credit_account"
+                    :options="creditAccountOptions"
+                    placeholder="Account credited on capitalization"
+                    @search="fetchCreditAccounts"
+                  />
+                  <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+                    Posted on submit: Dr Fixed Asset (from category) / Cr this account, for the Purchase Cost above.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -133,7 +154,7 @@
                   <label class="inv-lbl">Method</label>
                   <select v-model="asset.depreciation_method" class="inv-fi">
                     <option value="">Select method</option>
-                    <option>Straight-Line</option>
+                    <option>Straight Line</option>
                     <option>Written Down Value</option>
                   </select>
                 </div>
@@ -246,9 +267,11 @@ const blankAsset = () => ({
   purchase_date: '',
   purchase_cost: 0,
   supplier: '',
+  is_existing_asset: 0,
+  credit_account: '',
   location: '',
   department: '',
-  depreciation_method: 'Straight-Line',
+  depreciation_method: 'Straight Line',
   useful_life: '',
   salvage_value: 0,
   current_value: 0,
@@ -264,6 +287,7 @@ const categories = ref([]);
 const departments = ref([]);
 const suppliers = ref([]);
 const companies = ref([]);
+const creditAccountOptions = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const statuses = ['Draft', 'Submitted', 'Partially Depreciated', 'Fully Depreciated', 'Scrapped', 'Sold', 'In Maintenance', 'Out of Order'];
@@ -303,18 +327,30 @@ async function fetchSuppliers(q = '') {
 
 async function fetchCompanies(q = '') {
   try {
-    const r = await apiList('Company', {
-      fields: ['name', 'name1'],
-      filters: q ? [['name', 'like', `%${q}%`]] : [],
+    const r = await apiList('Books Company', {
+      fields: ['name', 'company_name'],
+      filters: q ? [['company_name', 'like', `%${q}%`]] : [],
       limit: 100,
     });
-    companies.value = (r || []).map(x => ({ label: x.name1 || x.name, value: x.name }));
+    companies.value = (r || []).map(x => ({ label: x.company_name || x.name, value: x.name }));
   } catch {
     companies.value = [];
   }
   const co = window.__booksCompany || '';
   if (co && !companies.value.some(o => o.value === co)) {
     companies.value.unshift({ label: co, value: co });
+  }
+}
+
+async function fetchCreditAccounts(q = '') {
+  try {
+    const filters = [["is_group", "=", 0], ["disabled", "=", 0], ["account_type", "in", ["Payable", "Bank", "Cash"]]];
+    if (asset.value.company) filters.push(["company", "=", asset.value.company]);
+    if (q) filters.push(["name", "like", `%${q}%`]);
+    const rows = await apiList("Account", { fields: ["name", "account_name"], filters, limit: 30, order: "name asc" });
+    creditAccountOptions.value = rows.map(r => ({ label: r.account_name || r.name, value: r.name }));
+  } catch {
+    creditAccountOptions.value = [];
   }
 }
 
@@ -337,6 +373,10 @@ async function loadAsset() {
 }
 
 async function saveAsset(targetStatus) {
+  if (targetStatus === 'Submitted' && !asset.value.is_existing_asset && !asset.value.credit_account) {
+    toast.error('Credit Account is required to submit a non-existing asset (used for the capitalization entry).');
+    return;
+  }
   saving.value = true;
   try {
     const doc = { ...asset.value, doctype: 'Asset', status: targetStatus || asset.value.status };

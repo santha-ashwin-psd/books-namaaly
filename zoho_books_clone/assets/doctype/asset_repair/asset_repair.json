@@ -1,0 +1,195 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "AST-REP-.YYYY.-.####",
+ "creation": "2026-07-27 07:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "asset",
+  "company",
+  "repair_date",
+  "description",
+  "repair_cost",
+  "is_capitalized",
+  "expense_account",
+  "credit_account",
+  "gl_posted",
+  "capitalized_amount_applied",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "options": "Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1,
+   "description": "Stamped from the Asset on save."
+  },
+  {
+   "fieldname": "repair_date",
+   "fieldtype": "Date",
+   "label": "Repair Date",
+   "reqd": 1,
+   "default": "Today"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "repair_cost",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Repair Cost",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_capitalized",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Capitalize to Asset Value",
+   "description": "Checked: repair cost is added to the asset's value (DR Fixed Asset Account) \u2014 for repairs that extend the asset's useful life or capacity. Unchecked: repair cost is a period expense (DR Repair & Maintenance / chosen Expense Account) \u2014 for routine upkeep."
+  },
+  {
+   "depends_on": "eval:!doc.is_capitalized",
+   "mandatory_depends_on": "eval:!doc.is_capitalized",
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "label": "Expense Account",
+   "options": "Account",
+   "description": "Debited for the repair cost when this repair is expensed rather than capitalized."
+  },
+  {
+   "fieldname": "credit_account",
+   "fieldtype": "Link",
+   "label": "Credit Account (Payable / Bank / Cash)",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Account credited for the repair cost \u2014 the supplier's Payable account, or a Bank/Cash account for a cash payment."
+  },
+  {
+   "default": "0",
+   "fieldname": "gl_posted",
+   "fieldtype": "Check",
+   "label": "GL Posted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "capitalized_amount_applied",
+   "fieldtype": "Check",
+   "label": "Capitalized Amount Applied to Asset",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "description": "Set once repair_cost has been added to the Asset's purchase_cost/current_value, so cancel knows whether to reverse that too."
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Asset Repair",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-27 07:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Repair",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

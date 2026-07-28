@@ -12,14 +12,19 @@
   "asset_category",
   "purchase_details_section",
   "purchase_date",
+  "available_for_use_date",
   "purchase_cost",
   "supplier",
   "company",
+  "is_existing_asset",
+  "credit_account",
+  "capitalization_posted",
   "location_section",
   "department",
   "location",
   "depreciation_section",
   "depreciation_method",
+  "depreciation_posting_frequency",
   "useful_life",
   "salvage_value",
   "current_value",
@@ -78,6 +83,12 @@
    "reqd": 1
   },
   {
+   "fieldname": "available_for_use_date",
+   "fieldtype": "Date",
+   "label": "Available for Use Date",
+   "description": "When the asset actually went into service (e.g. after installation/CWIP). Depreciation is calculated from this date. Leave blank to use Purchase Date."
+  },
+  {
    "fieldname": "purchase_cost",
    "fieldtype": "Currency",
    "label": "Purchase Cost",
@@ -91,9 +102,34 @@
   },
   {
    "fieldname": "company",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Company",
-   "options": "Company"
+   "description": "Must match a Books Company name \u2014 used to resolve this asset's category accounts for GL posting."
+  },
+  {
+   "default": "0",
+   "fieldname": "is_existing_asset",
+   "fieldtype": "Check",
+   "label": "Is Existing Asset",
+   "description": "Check this for legacy/opening assets already reflected in the books elsewhere (e.g. via an opening Journal Entry). No capitalization GL entry is posted on submit."
+  },
+  {
+   "depends_on": "eval:!doc.is_existing_asset",
+   "mandatory_depends_on": "eval:!doc.is_existing_asset",
+   "fieldname": "credit_account",
+   "fieldtype": "Link",
+   "label": "Credit Account (Payable / Bank / Cash)",
+   "options": "Account",
+   "description": "Account credited when this asset is capitalized on submit \u2014 the supplier's Payable account, or a Bank/Cash account for a cash purchase."
+  },
+  {
+   "default": "0",
+   "fieldname": "capitalization_posted",
+   "fieldtype": "Check",
+   "label": "Capitalization Posted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "location_section",
@@ -121,6 +157,14 @@
    "fieldtype": "Select",
    "label": "Depreciation Method",
    "options": "Straight Line\nWritten Down Value"
+  },
+  {
+   "default": "Annually",
+   "fieldname": "depreciation_posting_frequency",
+   "fieldtype": "Select",
+   "label": "Depreciation Posting Frequency",
+   "options": "Annually\nMonthly",
+   "description": "How often depreciation entries are posted/scheduled. Monthly gives finer-grained GL postings and pro-rates the first partial month."
   },
   {
    "fieldname": "salvage_value",

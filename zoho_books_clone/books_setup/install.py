@@ -243,6 +243,9 @@ def create_default_accounts():
         ("Bank Accounts",         "Bank",      "Current Assets",     1),
         ("Accounts Receivable",   "Receivable","Current Assets",     0),
         ("Fixed Assets",          "Asset",     "Assets",             1),
+        ("Fixed Assets - Cost",       "Fixed Asset",              "Fixed Assets", 0),
+        ("Accumulated Depreciation",  "Accumulated Depreciation", "Fixed Assets", 0),
+        ("Capital Work in Progress",  "Asset",                    "Fixed Assets", 0),
         ("Liabilities",           "Liability", None,                 1),
         ("Current Liabilities",   "Liability", "Liabilities",        1),
         ("Accounts Payable",      "Payable",   "Current Liabilities",0),
@@ -268,6 +271,7 @@ def create_default_accounts():
         ("Salaries & Wages",      "Expense",   "Operating Expenses", 0),
         ("Rent",                  "Expense",   "Operating Expenses", 0),
         ("Office Supplies",       "Expense",   "Operating Expenses", 0),
+        ("Depreciation Expense",  "Depreciation", "Operating Expenses", 0),
     ]
 
     def _acc(name):

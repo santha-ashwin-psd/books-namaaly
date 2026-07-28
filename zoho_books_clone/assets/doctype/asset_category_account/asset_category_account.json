@@ -1,0 +1,68 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-27 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "fixed_asset_account",
+  "accumulated_depreciation_account",
+  "depreciation_expense_account",
+  "cwip_account"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fixed_asset_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Fixed Asset Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "accumulated_depreciation_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Accumulated Depreciation Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "depreciation_expense_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Depreciation Expense Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cwip_account",
+   "fieldtype": "Link",
+   "label": "Capital Work In Progress Account",
+   "options": "Account",
+   "description": "Used when an asset is capitalized before it is available for use. Optional \u2014 leave blank if this category never has assets under construction/installation."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-27 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Category Account",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
