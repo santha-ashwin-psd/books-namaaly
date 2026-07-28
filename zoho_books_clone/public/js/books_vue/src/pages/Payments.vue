@@ -288,11 +288,11 @@
           <div class="add-card-body" :class="{collapsed:pmtCollapsed.accounts}">
             <div class="inv-fg inv-fg2">
               <div>
-                <label class="inv-lbl">Paid From <span style="font-weight:400;color:#9ca3af;font-size:10.5px">({{ form.payment_type==='Receive'?'Receivable':'Bank / Cash' }})</span></label>
+                <label class="inv-lbl">Paid From <span style="font-weight:400;color:#9ca3af;font-size:10.5px">({{ form.payment_type==='Receive'?'Receivable':bankCashLabel }})</span></label>
                 <SearchableSelect v-model="form.paid_from" :options="paidFromAccounts" placeholder="Select account…" @search="fetchPaidFromAccounts" @open="fetchPaidFromAccounts('')" />
               </div>
               <div>
-                <label class="inv-lbl">Paid To <span style="font-weight:400;color:#9ca3af;font-size:10.5px">({{ form.payment_type==='Receive'?'Bank / Cash':'Payable' }})</span></label>
+                <label class="inv-lbl">Paid To <span style="font-weight:400;color:#9ca3af;font-size:10.5px">({{ form.payment_type==='Receive'?bankCashLabel:'Payable' }})</span></label>
                 <SearchableSelect v-model="form.paid_to" :options="paidToAccounts" placeholder="Select account…" @search="fetchPaidToAccounts" @open="fetchPaidToAccounts('')" />
               </div>
             </div>
@@ -857,12 +857,27 @@ function onRefCheck(_ref) {
 
 function syncUnallocated() {} // triggers computed
 
+// "Cash" mode maps to the Cash-in-Hand bucket; every other mode (Cheque, Bank
+// Transfer, UPI, NEFT, RTGS, Credit Card, etc.) is a bank-clearing instrument
+// and maps to the Bank bucket. Until a mode is chosen, show both so the user
+// isn't blocked from picking an account first.
+function bankCashTypes() {
+  if (form.mode_of_payment === "Cash") return ["Cash"];
+  if (form.mode_of_payment) return ["Bank"];
+  return ["Bank","Cash"];
+}
+const bankCashLabel = computed(() => {
+  if (form.mode_of_payment === "Cash") return "Cash";
+  if (form.mode_of_payment) return "Bank";
+  return "Bank / Cash";
+});
+
 async function fetchPaidFromAccounts(q = "") {
   try {
     const company = await resolveCompany();
     // Receive: party pays us → Paid From is their Receivable account
-    // Pay: we pay vendor → Paid From is our Bank/Cash account
-    const types = form.payment_type === "Receive" ? ["Receivable"] : ["Bank","Cash"];
+    // Pay: we pay vendor → Paid From is our Bank/Cash account, filtered by Mode of Payment
+    const types = form.payment_type === "Receive" ? ["Receivable"] : bankCashTypes();
     const rows = await apiList("Account", {
       fields: ["name","account_name","account_type"],
       filters: [["is_group","=",0],["company","=",company],["account_type","in",types],...(q?[["name","like",`%${q}%`]]:[])],
@@ -875,9 +890,9 @@ async function fetchPaidFromAccounts(q = "") {
 async function fetchPaidToAccounts(q = "") {
   try {
     const company = await resolveCompany();
-    // Receive: customer pays us → Paid To is our Bank/Cash account
+    // Receive: customer pays us → Paid To is our Bank/Cash account, filtered by Mode of Payment
     // Pay: we pay vendor → Paid To is their Payable account
-    const types = form.payment_type === "Receive" ? ["Bank","Cash"] : ["Payable"];
+    const types = form.payment_type === "Receive" ? bankCashTypes() : ["Payable"];
     const rows = await apiList("Account", {
       fields: ["name","account_name","account_type"],
       filters: [["is_group","=",0],["company","=",company],["account_type","in",types],...(q?[["name","like",`%${q}%`]]:[])],
@@ -886,6 +901,19 @@ async function fetchPaidToAccounts(q = "") {
     paidToAccounts.value = rows.map(r=>({label:r.account_name||r.name,value:r.name}));
   } catch { paidToAccounts.value = []; }
 }
+
+// Re-filter the Bank/Cash side whenever Mode of Payment changes, and drop a
+// stale selection that no longer matches the mode's bucket (e.g. a Bank
+// account left selected after switching the mode to "Cash").
+watch(() => form.mode_of_payment, async () => {
+  if (form.payment_type === "Receive") {
+    await fetchPaidToAccounts("");
+    if (form.paid_to && !paidToAccounts.value.some(a => a.value === form.paid_to)) form.paid_to = "";
+  } else {
+    await fetchPaidFromAccounts("");
+    if (form.paid_from && !paidFromAccounts.value.some(a => a.value === form.paid_from)) form.paid_from = "";
+  }
+});
 
 async function savePayment(submit) {
   if (_savingInFlight) return; // synchronous guard — blocks a second click before Vue can disable the button

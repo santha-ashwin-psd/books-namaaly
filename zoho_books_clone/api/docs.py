@@ -771,6 +771,20 @@ def submit_doc(doctype, name, ignore_budget_warning=0):
     if doctype == "Sales Invoice" and getattr(d, "is_return", 0) and getattr(d, "return_against", None):
         _sync_parent_invoice_after_cn_submit(d.name, d.return_against, d.grand_total)
 
+    # Payment Entry doctype-agnostic drawers (Payments.vue, BankCash.vue,
+    # CustomerProfile.vue, Customers.vue, Vendors.vue) all save a draft via
+    # save_doc and then submit it through this generic endpoint, unlike the
+    # Sales/Purchase Invoice "Record Payment" flows (books_data.py::record_payment,
+    # and this file's create_payment_entry_against_purchase_invoice(s)) which
+    # build + submit their own Payment Entry inline and already call
+    # _create_bank_transaction themselves. Those inline flows never reach this
+    # generic path, so there's no risk of a duplicate Bank Transaction mirror
+    # here — but without this, any Payment Entry submitted through the generic
+    # drawers (including "Bank Transfer" mode payments from Payments.vue) never
+    # got mirrored to Banking at all.
+    if doctype == "Payment Entry":
+        _create_bank_transaction(d)
+
     return d.as_dict()
 
 
