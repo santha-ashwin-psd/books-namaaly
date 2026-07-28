@@ -70,6 +70,10 @@
             <div class="bomx-jc-stat-lbl">Total Time</div>
             <div class="bomx-jc-stat-val mono">{{ row.total_time_in_mins ? fmtMins(row.total_time_in_mins) : '—' }}</div>
           </div>
+          <div class="bomx-jc-stat" style="grid-column:1/-1" v-if="itemNameFor(row.work_order)">
+            <div class="bomx-jc-stat-lbl">Item</div>
+            <div class="bomx-jc-stat-val bomx-jc-stat-val-wrap">{{ itemNameFor(row.work_order) }}</div>
+          </div>
         </div>
         <div class="bomx-jc-foot">
           <span class="mono">{{ fmtDate(row.modified) }}</span>
@@ -91,13 +95,8 @@
         </div>
         <div v-else class="jc-drawer-hdr">
           <div style="min-width:0">
-            <div class="jc-drawer-title">{{ isNew ? 'New Job Card' : doc.name }}</div>
-            <div class="jc-drawer-sub">
-              <span v-if="!isNew && doc.work_order">{{ doc.work_order }}</span>
-              <span v-if="!isNew && doc.work_order && doc.operation"> · </span>
-              <span v-if="doc.operation">{{ doc.operation }}</span>
-              <span v-if="doc.workstation"> · {{ doc.workstation }}</span>
-            </div>
+            <div class="jc-drawer-title">{{ isNew ? 'New Job Card' : (jobCardItemName || doc.name) }}</div>
+            <div class="jc-drawer-sub">{{ drawerSubtitle }}</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
             <span class="bomx-badge jc-drawer-badge" :class="statusClass(doc)">{{ statusLabel(doc) }}</span>
@@ -120,6 +119,7 @@
                   <option value="">— Select Work Order —</option>
                   <option v-for="w in workOrdersList" :key="w.name" :value="w.name">{{ w.name }}</option>
                 </select>
+                <div class="bomx-field-hint" v-if="jobCardItemName">Manufactures: <strong>{{ jobCardItemName }}</strong></div>
               </div>
               <div>
                 <div class="bomx-hf-label">Operation <span style="color:var(--bx-red)">*</span></div>
@@ -278,10 +278,30 @@ async function loadList() {
     const fields = ["name", "work_order", "operation", "workstation", "status", "employee", "for_quantity", "total_time_in_mins", "modified"];
     const r = await apiList("Job Card", { fields, limit: 2000, order: "modified desc" });
     list.value = r || [];
+    await loadWorkOrderItemNames(list.value.map(i => i.work_order));
   } catch (e) {
     toast("Could not load Job Cards", "error");
   }
   loading.value = false;
+}
+
+// ── Work Order → Production Item lookup (Job Card itself has no item field;
+// the item being manufactured belongs to its Work Order) ────────────────────
+const workOrderItemMap = ref({});
+function itemNameFor(woName) {
+  const w = workOrderItemMap.value[woName];
+  if (!w) return "";
+  return w.item_name || w.production_item || "";
+}
+async function loadWorkOrderItemNames(names) {
+  const unique = [...new Set((names || []).filter(Boolean))].filter(n => !workOrderItemMap.value[n]);
+  if (!unique.length) return;
+  try {
+    const rows = await apiList("Work Order", { fields: ["name", "production_item", "item_name"], filters: [["name", "in", unique]], limit: unique.length });
+    (rows || []).forEach(r => { workOrderItemMap.value[r.name] = r; });
+  } catch (e) {
+    // Non-critical — cards just fall back to showing the Work Order id.
+  }
 }
 
 const sorted = computed(() => {
@@ -362,6 +382,16 @@ function emptyDoc() {
   };
 }
 const doc = ref(emptyDoc());
+const jobCardItemName = computed(() => itemNameFor(doc.value.work_order));
+const drawerSubtitle = computed(() => {
+  const parts = [];
+  if (!isNew.value) parts.push(doc.value.name);
+  if (doc.value.work_order) parts.push(doc.value.work_order);
+  if (doc.value.operation) parts.push(doc.value.operation);
+  if (doc.value.workstation) parts.push(doc.value.workstation);
+  return parts.join(" · ");
+});
+watch(() => doc.value.work_order, (wo) => { if (wo) loadWorkOrderItemNames([wo]); });
 
 const workOrdersList = ref([]);
 const operationsList = ref([]);
@@ -419,6 +449,7 @@ async function loadDoc() {
     if (!r.time_logs) r.time_logs = [];
     ensureUids(r.time_logs);
     doc.value = r;
+    if (r.work_order) await loadWorkOrderItemNames([r.work_order]);
     // keep stale refs selectable
     if (r.work_order && !workOrdersList.value.some(w => w.name === r.work_order))
       workOrdersList.value = [{ name: r.work_order }, ...workOrdersList.value];
@@ -582,6 +613,7 @@ function icon(name, size) {
 .bomx-jc-stat { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .bomx-jc-stat-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }
 .bomx-jc-stat-val { font-size:13.5px; font-weight:700; color:var(--bx-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-jc-stat-val-wrap { white-space:normal; overflow-wrap:break-word; overflow:visible; text-overflow:clip; }
 .bomx-jc-foot { padding:8px 14px; background:var(--bx-surf2); border-top:1px solid var(--bx-border); display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:var(--bx-muted); }
 
 /* ── Badges ── */

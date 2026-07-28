@@ -45,17 +45,6 @@ export function isOverdue(inv) {
 }
 
 // Maps a GL voucher type to the SPA hash route. Mirrors books.js:50-59.
-export function voucherPath(voucher_type, voucher_no) {
-  const map = {
-    "Sales Invoice":    `/invoices/${encodeURIComponent(voucher_no)}`,
-    "Purchase Invoice": `/purchases`,
-    "Payment Entry":    `/payments`,
-    "Credit Note":      `/credit-notes`,
-    "Journal Entry":    `/accounting/journal-entries`,
-  };
-  return "#" + (map[voucher_type] || `/accounting/journal-entries`);
-}
-
 const STATUS_BADGE = {
   Paid: "b-badge-green", "Partly Paid": "b-badge-amber", Submitted: "b-badge-amber",
   Draft: "b-badge-muted", Cancelled: "b-badge-red", Overdue: "b-badge-red",

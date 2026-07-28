@@ -3090,6 +3090,7 @@ def get_sales_order_fulfillment(sales_order):
                 "delivered_qty", "billed_qty"],
         order_by="idx asc")
     # Collect item codes that are missing item_name and fetch from Item master
+    item_codes = [r["item_code"] for r in rows if r.get("item_code")]
     missing = [r["item_code"] for r in rows if not r.get("item_name") and r.get("item_code")]
     if missing:
         item_names = {
@@ -3100,9 +3101,19 @@ def get_sales_order_fulfillment(sales_order):
         for r in rows:
             if not r.get("item_name") and r.get("item_code"):
                 r["item_name"] = item_names.get(r["item_code"]) or r["item_code"]
+    # has_batch_no per item, so the Convert-to-Invoice / Deliver modals know
+    # which lines need a Batch No picker.
+    batch_flags = {}
+    if item_codes:
+        batch_flags = {
+            x["name"]: x["has_batch_no"]
+            for x in frappe.get_all("Item", filters={"name": ["in", item_codes]},
+                                    fields=["name", "has_batch_no"])
+        }
     for r in rows:
         r["remaining_to_deliver"] = max(0.0, flt(r["qty"]) - flt(r["delivered_qty"]))
         r["remaining_to_bill"]    = max(0.0, flt(r["qty"]) - flt(r["billed_qty"]))
+        r["has_batch_no"] = 1 if batch_flags.get(r["item_code"]) else 0
     return {"lines": rows, "computed_status": _so_status_from_fulfillment(sales_order)}
 
 
@@ -3159,9 +3170,11 @@ def mark_so_delivered(sales_order, line_qtys=None):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
+def convert_sales_order_to_invoice(sales_order, line_qtys=None, batch_nos=None, due_date=""):
     """Create a Sales Invoice from an SO (partial or full).
-    line_qtys = {sales_order_item_name: qty_to_invoice}; null → invoice remaining."""
+    line_qtys = {sales_order_item_name: qty_to_invoice}; null → invoice remaining.
+    batch_nos = {sales_order_item_name: batch_no}; only needed for batch-tracked items
+    where the invoice is the doc that deducts stock (no prior Delivery Note)."""
     from zoho_books_clone.utils.access import require_module
     require_module("invoices", write=True)
     if frappe.session.user == "Guest":
@@ -3171,6 +3184,12 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
             line_qtys = json.loads(line_qtys) if line_qtys else None
         except json.JSONDecodeError:
             line_qtys = None
+    if isinstance(batch_nos, str):
+        try:
+            batch_nos = json.loads(batch_nos) if batch_nos else None
+        except json.JSONDecodeError:
+            batch_nos = None
+    batch_nos = {str(k): v for k, v in (batch_nos or {}).items()}
 
     so = frappe.get_doc("Sales Order", sales_order)
     company = so.company
@@ -3184,6 +3203,26 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
     # Frappe's auto-increment row names are stored as integers.
     if line_qtys:
         line_qtys = {str(k): v for k, v in line_qtys.items()}
+
+    # Stock ownership rule (mirrors inventory/stock_link.py):
+    #   SO -> Delivery Note -> Invoice  => DN already deducted stock;
+    #                                      the invoice must NOT deduct it again.
+    #   SO -> Invoice (no DN)           => invoice is the only stock movement,
+    #                                      so it should deduct on submit.
+    has_delivery_note = frappe.db.exists(
+        "Delivery Note", {"sales_order": so.name, "docstatus": 1}
+    )
+    auto_update_stock = 0 if has_delivery_note else 1
+
+    item_codes = list({it.item_code for it in (so.items or []) if it.item_code})
+    batch_flags = {}
+    if item_codes:
+        batch_flags = {
+            x["name"]: x["has_batch_no"]
+            for x in frappe.get_all("Item", filters={"name": ["in", item_codes]},
+                                    fields=["name", "has_batch_no"])
+        }
+
     for it in (so.items or []):
         remaining = max(0.0, flt(it.qty) - flt(it.billed_qty))
         if remaining <= 0:
@@ -3194,6 +3233,18 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
             qty_bill = remaining
         if qty_bill <= 0:
             continue
+
+        # Batch No — only required when this invoice is the doc that will
+        # actually deduct stock (no prior Delivery Note); otherwise Sales
+        # Invoice.validate_batches() clears it anyway.
+        batch_no = ""
+        if auto_update_stock and batch_flags.get(it.item_code):
+            batch_no = (batch_nos.get(str(it.name)) or "").strip()
+            if not batch_no:
+                frappe.throw(_(
+                    "Row #{0}: {1} is a batch-tracked item — select a Batch No before invoicing"
+                ).format(it.idx, it.item_name or it.item_code))
+
         si_items.append({
             "doctype": "Sales Invoice Item",
             "item_code":           it.item_code,
@@ -3207,21 +3258,12 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, due_date=""):
             "hsn_code":            getattr(it, "hsn_code", "") or "",
             "discount_percentage": getattr(it, "discount_percentage", "") or "",
             "tax_code":            getattr(it, "tax_code", "") or "",
+            "batch_no":            batch_no,
         })
         line_updates.append((it.name, qty_bill))
 
     if not si_items:
         frappe.throw("Nothing left to invoice on this Sales Order")
-
-    # Stock ownership rule (mirrors inventory/stock_link.py):
-    #   SO -> Delivery Note -> Invoice  => DN already deducted stock;
-    #                                      the invoice must NOT deduct it again.
-    #   SO -> Invoice (no DN)           => invoice is the only stock movement,
-    #                                      so it should deduct on submit.
-    has_delivery_note = frappe.db.exists(
-        "Delivery Note", {"sales_order": so.name, "docstatus": 1}
-    )
-    auto_update_stock = 0 if has_delivery_note else 1
 
     si = frappe.get_doc({
         "doctype":               "Sales Invoice",

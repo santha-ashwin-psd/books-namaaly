@@ -300,8 +300,8 @@
 .ss-opts { overflow-y: auto; max-height: 210px; padding: 4px 0; }
 .ss-opt {
   padding: 8px 12px; font-size: 13px; color: #374151;
-  cursor: pointer; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; transition: background .1s;
+  cursor: pointer; white-space: normal; overflow: hidden;
+  word-break: break-word; line-height: 1.35; transition: background .1s;
 }
 .ss-opt:hover { background: #f0f6ff; color: #1a6ef7; }
 .ss-opt-sel { background: #eaf1ff; color: #1a6ef7; font-weight: 600; }

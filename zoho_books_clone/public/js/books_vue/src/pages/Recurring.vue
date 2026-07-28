@@ -75,7 +75,7 @@
               <td @click.stop>
                 <input type="checkbox" :checked="selected.includes(r.name)" @change="toggleOne(r.name)" />
               </td>
-              <td><span class="inv-link">{{ r.name }}</span></td>
+              <td><DocLink doctype="Auto Repeat" :name="r.name" /></td>
               <td>
                 <span v-if="r.subscription_name" style="font-size:13px;color:#111827;font-weight:500">{{ r.subscription_name }}</span>
                 <span v-else class="text-muted">—</span>

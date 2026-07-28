@@ -9,7 +9,14 @@ class BankAccount(Document):
         self._post_opening_gl()
 
     def on_update(self):
-        # Only post opening GL once — when a gl_account is newly linked
+        # Only post opening GL once — when a gl_account is newly linked.
+        # Lock this row for the rest of the transaction first: two saves of
+        # the same Bank Account landing at the same instant (double-click,
+        # a retried request) would otherwise both run the exists() check
+        # before either had committed its GL entries, and both post an
+        # opening entry — doubling the GL balance. Same race, same fix as
+        # sync_party_opening_balance() in accounts/opening_balance.py.
+        frappe.db.sql("SELECT name FROM `tabBank Account` WHERE name=%s FOR UPDATE", self.name)
         if self.gl_account and not frappe.db.exists(
             "General Ledger Entry",
             {"voucher_type": "Bank Account", "voucher_no": self.name}

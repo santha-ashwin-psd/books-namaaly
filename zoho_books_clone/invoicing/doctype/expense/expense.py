@@ -31,6 +31,28 @@ class Expense(Document):
         self.status = "Submitted"
         frappe.db.set_value("Expense", self.name, "status", "Submitted", update_modified=False)
         post_expense(self)
+        self._mirror_bank_transaction()
+
+    def _mirror_bank_transaction(self):
+        """Expenses paid from a Bank account move money out of the bank the
+        same way a Payment Entry does — mirror that with an Unreconciled
+        Bank Transaction row so it shows up for reconciliation against a
+        real bank statement. Cash payments don't touch a bank, so skip them.
+        """
+        account_type = frappe.db.get_value("Account", self.paid_through, "account_type")
+        if account_type != "Bank":
+            return
+        from zoho_books_clone.banking.utils import create_bank_transaction_row
+        create_bank_transaction_row(
+            bank_account_gl=self.paid_through,
+            date=self.posting_date,
+            credit=0,
+            debit=flt(self.total_amount) or flt(self.amount),
+            company=self.company,
+            description=self.description or self.name,
+            reference_number=self.name,
+            journal_entry=None,
+        )
 
     def on_cancel(self):
         self.status = "Cancelled"

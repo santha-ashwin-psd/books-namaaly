@@ -36,28 +36,33 @@
             <th @click="sort('expense_type')" class="sortable">Category <span v-html="sortArrow('expense_type')"></span></th>
             <th @click="sort('posting_date')" class="sortable">Date <span v-html="sortArrow('posting_date')"></span></th>
             <th>Status</th>
+            <th>Paid Type</th>
             <th @click="sort('total_claimed_amount')" class="sortable ta-r">Amount <span v-html="sortArrow('total_claimed_amount')"></span></th>
             <th style="width:50px"></th>
           </tr>
         </thead>
         <tbody>
           <template v-if="loading">
-            <tr v-for="n in 8" :key="n"><td colspan="7"><div class="shimmer"></div></td></tr>
+            <tr v-for="n in 8" :key="n"><td colspan="8"><div class="shimmer"></div></td></tr>
           </template>
           <template v-else>
             <tr v-for="e in paged" :key="e.name" class="inv-row" :class="{selected:selected.has(e.name)}">
               <td><input type="checkbox" :checked="selected.has(e.name)" @change="toggle(e.name)" /></td>
-              <td @click="openView(e)"><span class="inv-link">{{ e.name }}</span></td>
+              <td @click="openView(e)"><DocLink doctype="Expense" :name="e.name" /></td>
               <td @click="openView(e)">{{ categoryLabel(e.expense_type)||'—' }}</td>
               <td @click="openView(e)">{{ fmtDate(e.posting_date) }}</td>
               <td @click="openView(e)"><span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
+              <td @click="openView(e)">
+                <span v-if="paidTypeLabel(e.paid_through)" class="exp-paid-type-badge" :class="'exp-paid-type-'+paidTypeLabel(e.paid_through).toLowerCase()">{{ paidTypeLabel(e.paid_through) }}</span>
+                <span v-else>—</span>
+              </td>
               <td @click="openView(e)" class="ta-r mono-sm">{{ fmtCur(e.total_claimed_amount||e.grand_total) }}</td>
               <td style="display:flex;gap:4px;justify-content:flex-end">
                 <button class="inv-act-btn" @click="openView(e)"><span v-html="icon('eye',13)"></span></button>
                 <button v-if="e.docstatus===0" class="inv-act-btn" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
               </td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="7" class="exp-empty">No expenses found</td></tr>
+            <tr v-if="!sorted.length"><td colspan="8" class="exp-empty">No expenses found</td></tr>
           </template>
         </tbody>
       </table>
@@ -84,6 +89,7 @@
             <div class="exp-mc-mid">{{ categoryLabel(e.expense_type) || '—' }}</div>
             <div class="exp-mc-meta">
               <span>{{ fmtDate(e.posting_date) }}</span>
+              <span v-if="paidTypeLabel(e.paid_through)" class="exp-paid-type-badge" :class="'exp-paid-type-'+paidTypeLabel(e.paid_through).toLowerCase()">{{ paidTypeLabel(e.paid_through) }}</span>
               <span class="exp-mc-amount">{{ fmtCur(e.total_claimed_amount || e.grand_total) }}</span>
             </div>
             <div class="exp-mc-footer">
@@ -352,7 +358,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, watch } from "vue";
 import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
@@ -364,6 +370,7 @@ import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 import { useRoute, useRouter } from "vue-router";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -389,6 +396,23 @@ const sortCol=ref("posting_date"),sortDir=ref("desc");
 let _id=1;
 const expenseAccountOptions  = ref([]);
 const paidThroughOptions     = ref([]);
+// name -> "Cash" | "Bank", resolved for whatever paid_through accounts show up
+// in the current expense list (fetched in load()).
+const accountTypeMap = ref({});
+function paidTypeLabel(name){
+  if(!name) return '';
+  return accountTypeMap.value[name] || '';
+}
+async function fetchAccountTypesFor(names){
+  const missing = [...new Set(names.filter(n => n && !(n in accountTypeMap.value)))];
+  if(!missing.length) return;
+  try{
+    const rows = await apiList("Account", { fields:["name","account_type"], filters:[["name","in",missing]], limit:missing.length });
+    const map = { ...accountTypeMap.value };
+    for(const r of rows) map[r.name] = r.account_type;
+    accountTypeMap.value = map;
+  }catch{ /* leave unresolved names showing '—' */ }
+}
 function accountLabel(name){
   if(!name) return '—';
   const opt = expenseAccountOptions.value.find(o=>o.value===name) || paidThroughOptions.value.find(o=>o.value===name);
@@ -441,6 +465,7 @@ async function load(){
       ...e,
       total_claimed_amount: e.total_amount||e.amount||0,
     }));
+    fetchAccountTypesFor(list.value.map(e => e.paid_through));
   }catch(e){toast.error(e.message||"Failed to load expenses");}
   finally{loading.value=false;}
 }
@@ -609,7 +634,7 @@ async function uploadAttachment(file, doctype, docname) {
 const route = useRoute();
 const router = useRouter();
 function _openFromQuery() {
-  const name = route.query.view;
+  const name = route.query.open || route.query.view;
   if (!name) return;
   openView({ name });
   // Normalize the URL back so a page refresh doesn't re-open the drawer.
@@ -617,9 +642,15 @@ function _openFromQuery() {
 }
 
 onMounted(() => { load(); fetchExpenseAccounts(""); fetchPaidThroughAccounts(""); fetchCostCenters(); fetchExpenseCategories(); _openFromQuery(); });
+watch(() => route.query.open, (n) => { if (n) _openFromQuery(); });
 </script>
 
 <style scoped>
+/* ── Paid Type badge (Cash / Bank) ── */
+.exp-paid-type-badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:10px; font-size:11.5px; font-weight:700; text-transform:capitalize; }
+.exp-paid-type-cash { background:#fef3c7; color:#92400e; }
+.exp-paid-type-bank { background:#dbeafe; color:#1d4ed8; }
+
 /* ── Drawer ── */
 .inv-drawer-panel { position:fixed;top:0;right:-540px;bottom:0;width:540px;background:#fff;box-shadow:-12px 0 40px rgba(0,0,0,.12);z-index:8000;display:flex;flex-direction:column;transition:right .24s cubic-bezier(.4,0,.2,1); }
 .inv-drawer-panel.open { right:0; }

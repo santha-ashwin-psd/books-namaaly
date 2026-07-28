@@ -152,7 +152,7 @@
         </div></td></tr>
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
           <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
-          <td @click="openView(row)" data-label="Code"><span class="inv-link">{{row.item_code||row.name}}</span></td>
+          <td @click="openView(row)" data-label="Code"><DocLink doctype="Item" :name="row.name">{{row.item_code||row.name}}</DocLink></td>
           <td class="fw-600" data-label="Name"><span @click="openView(row)">{{row.item_name}}</span><span v-if="row.has_variants" class="it-tpl-badge it-tpl-badge--link" @click.stop="openVariants(row)" title="Manage variants">Template ↗</span><span v-else-if="row.variant_of" class="it-var-badge">Variant</span></td>
           <td @click="openView(row)" class="col-hide-tablet" data-label="Group"><span v-if="row.item_group" class="it-group-badge">{{row.item_group}}</span><span v-else class="text-muted">—</span></td>
           <td @click="openView(row)" data-label="Type">
@@ -262,6 +262,7 @@ import { icon } from "../utils/icons.js";
 import Pagination from "../components/Pagination.vue";
 import BulkActionBar from "../components/BulkActionBar.vue";
 import ItemEditDrawer from "../components/ItemEditDrawer.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const router = useRouter();

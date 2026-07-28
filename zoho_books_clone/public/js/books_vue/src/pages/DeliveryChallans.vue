@@ -127,7 +127,7 @@
         </tr>
         <tr v-else v-for="r in paged" :key="r.name" class="inv-row" :class="{selected: selected.has(r.name)}" @click="openView(r)">
           <td @click.stop><input v-if="r._source==='dn'" type="checkbox" :checked="selected.has(r.name)" @change="toggle(r.name)" /></td>
-          <td><span class="inv-link">{{r.name}}</span></td>
+          <td><DocLink doctype="Delivery Note" :name="r.name" /></td>
           <td class="fw-600">{{r.customer_name||r.customer||'—'}}</td>
           <td class="c-muted" style="font-size:13px">{{r.posting_date||'—'}}</td>
           <td class="c-muted mono" style="font-size:13px">{{r.sales_order||r.name||'—'}}</td>

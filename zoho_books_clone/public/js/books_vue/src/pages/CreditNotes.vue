@@ -68,7 +68,7 @@
           <template v-else>
             <tr v-for="c in paged" :key="c.name" class="inv-row" :class="{selected:selected.has(c.name)}">
               <td><input type="checkbox" :checked="selected.has(c.name)" @change="toggle(c.name)" /></td>
-              <td @click="openView(c)"><span class="inv-link">{{ c.name }}</span></td>
+              <td @click="openView(c)"><DocLink doctype="Credit Note" :name="c.name" /></td>
               <td @click="openView(c)">{{ c.customer_name || c.customer || '—' }}</td>
               <td @click="openView(c)" class="text-muted mono-sm">{{ fmtDate(c.posting_date) }}</td>
               <td @click="openView(c)" class="text-muted mono-sm">{{ c.return_against||'—' }}</td>

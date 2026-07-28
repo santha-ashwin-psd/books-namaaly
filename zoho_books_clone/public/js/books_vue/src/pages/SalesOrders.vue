@@ -176,7 +176,7 @@
                 <input type="checkbox" :checked="selected.has(o.name)" @change="toggle(o.name)"/>
               </td>
               <td @click="openView(o)" class="text-muted mono-sm">{{ fmtDate(o.transaction_date) }}</td>
-              <td @click="openView(o)"><span class="inv-link">{{ o.name }}</span></td>
+              <td @click="openView(o)"><DocLink doctype="Sales Order" :name="o.name" /></td>
               <td @click="openView(o)"><span class="inv-customer">{{ o.customer_name || o.customer || '—' }}</span></td>
               <td @click="openView(o)" :class="isPastDelivery(o)?'text-danger':'text-muted'" class="mono-sm">{{ fmtDate(o.delivery_date)||'—' }}</td>
               <td @click="openView(o)">
@@ -866,7 +866,7 @@
                   <div v-if="viewDoc.ref_quote" style="margin-bottom:16px">
                     <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Originating Quote</div>
                     <div style="padding:10px 14px;border:1px solid #e8ecf0;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:space-between">
-                      <span class="inv-link">{{ viewDoc.ref_quote }}</span>
+                      <DocLink doctype="Quotation" :name="viewDoc.ref_quote" />
                       <span class="text-muted">Quotation</span>
                     </div>
                   </div>
@@ -884,7 +884,7 @@
                         </thead>
                         <tbody>
                           <tr v-for="dn in links.delivery_challans" :key="dn.name">
-                            <td><span class="inv-link">{{ dn.name }}</span></td>
+                            <td><DocLink doctype="Delivery Note" :name="dn.name" /></td>
                             <td class="mono-sm text-muted">{{ fmtDate(dn.posting_date) }}</td>
                             <td class="td-r mono-sm">{{ dn.total_qty }}</td>
                             <td class="mono-sm">{{ dn.status }}</td>
@@ -907,7 +907,7 @@
                         </thead>
                         <tbody>
                           <tr v-for="si in links.sales_invoices" :key="si.name">
-                            <td><span class="inv-link">{{ si.name }}</span></td>
+                            <td><DocLink doctype="Sales Invoice" :name="si.name" /></td>
                             <td class="mono-sm text-muted">{{ fmtDate(si.posting_date) }}</td>
                             <td class="td-r mono-sm">{{ fmtCur(si.outstanding_amount) }}</td>
                             <td class="td-r mono-sm" style="font-weight:600">{{ fmtCur(si.grand_total) }}</td>
@@ -998,28 +998,40 @@
             <div style="font-size:12.5px;color:#374151;margin-bottom:12px">Enter the quantity to invoice for each line:</div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
               <!-- Header -->
-              <div class="inv-ci-grid inv-ci-header">
+              <div class="inv-ci-grid inv-ci-header" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
                 <span>Item Code</span>
                 <span>Item Name</span>
                 <span class="ta-r">Remaining</span>
                 <span class="ta-r">Invoice Qty</span>
+                <span v-if="invModalNeedsBatch">Batch No</span>
               </div>
               <!-- Fully-invoiced lines (read-only) -->
               <div v-for="l in invModal.allLines.filter(l => l.remaining_to_bill <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done">
+                class="inv-ci-grid inv-ci-row inv-ci-done" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
+                <span v-if="invModalNeedsBatch"></span>
               </div>
               <!-- Pending lines (editable) -->
-              <div v-for="l in invModal.lines" :key="l.name" class="inv-ci-grid inv-ci-row">
-                <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
-                <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
-                <input v-model.number="l.toInvoice" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
-                  class="inv-ci" style="width:100%;text-align:right"/>
-              </div>
+              <template v-for="l in invModal.lines" :key="l.name">
+                <div class="inv-ci-grid inv-ci-row" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
+                  <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
+                  <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                  <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
+                  <input v-model.number="l.toInvoice" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
+                    class="inv-ci" style="width:100%;text-align:right"/>
+                  <SearchableSelect v-if="invModalNeedsBatch && l.has_batch_no" v-model="l.batch_no"
+                    :options="l.batchOptions" placeholder="Select batch"
+                    @update:modelValue="onInvBatchSelect(l, $event)"
+                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                  <span v-else-if="invModalNeedsBatch"></span>
+                </div>
+                <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
+                  <span v-html="icon('alert-circle',12)"></span> {{ l.item_name || l.item_code }} is batch-tracked — select a Batch No
+                </div>
+              </template>
             </div>
             <div>
               <label class="inv-lbl">Due Date</label>
@@ -1435,6 +1447,9 @@ const tlProgressWidth = computed(() => {
 const invModalTotal = computed(() =>
   (invModal.lines || []).reduce((s, l) => s + flt(l.toInvoice) * flt(l.rate), 0)
 );
+const invModalNeedsBatch = computed(() =>
+  (invModal.lines || []).some(l => l.has_batch_no)
+);
 const deliverModalQty = computed(() =>
   (deliverModal.lines || []).reduce((s, l) => s + flt(l.toDeliver), 0)
 );
@@ -1743,26 +1758,42 @@ async function emailSO(o) {
   });
 }
 
+async function fetchInvLineBatches(line) {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  try {
+    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: line.item_code }) || [];
+    line.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
+  } catch { line.batchOptions = []; }
+}
+function onInvBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+}
 function openInvoiceModal(o) {
   apiGET("zoho_books_clone.api.docs.get_sales_order_fulfillment", { sales_order: o.name })
-    .then(r => {
+    .then(async (r) => {
       const ful = r?.lines || [];
       const pending = ful.filter(l => l.remaining_to_bill > 0)
-                        .map(l => ({ ...l, toInvoice: l.remaining_to_bill }));
+                        .map(l => ({ ...l, toInvoice: l.remaining_to_bill, batch_no: "", batchOptions: [] }));
       Object.assign(invModal, {
         open: true, saving: false, soName: o.name,
         allLines: ful,
         lines: pending,
         dueDate: o.delivery_date || todayStr(),
       });
-      if (!invModal.lines.length) { invModal.open = false; toast.info("Nothing left to invoice"); }
+      if (!invModal.lines.length) { invModal.open = false; toast.info("Nothing left to invoice"); return; }
+      // Load batch options for batch-tracked pending lines.
+      await Promise.all(pending.filter(l => l.has_batch_no).map(l => fetchInvLineBatches(l)));
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }
 async function submitInvoice() {
   const lineMap = {};
+  const batchMap = {};
   for (const l of invModal.lines) {
-    if (flt(l.toInvoice) > 0) lineMap[l.name] = flt(l.toInvoice);
+    if (flt(l.toInvoice) > 0) {
+      lineMap[l.name] = flt(l.toInvoice);
+      if (l.has_batch_no && l.batch_no) batchMap[l.name] = l.batch_no;
+    }
   }
   if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to invoice"); return; }
   invModal.saving = true;
@@ -1770,6 +1801,7 @@ async function submitInvoice() {
     const r = await apiPOST("zoho_books_clone.api.docs.convert_sales_order_to_invoice", {
       sales_order: invModal.soName,
       line_qtys: JSON.stringify(lineMap),
+      batch_nos: JSON.stringify(batchMap),
       due_date: invModal.dueDate || "",
     });
     toast.success(`Invoice created: ${r?.sales_invoice}`);
@@ -2003,6 +2035,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
   gap: 10px;
   padding: 8px 14px;
   align-items: center;
+}
+.inv-ci-grid-batch {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 90px 100px 150px;
 }
 .inv-ci-header {
   background: #f8fafc;

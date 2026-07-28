@@ -182,7 +182,7 @@
               <input type="checkbox" :checked="selected.has(q.name)" @change="toggle(q.name)"/>
             </td>
             <td @click="openView(q)" class="text-muted mono-sm">{{ fmtDate(q.transaction_date) }}</td>
-            <td @click="openView(q)"><span class="inv-link">{{ q.name }}</span></td>
+            <td @click="openView(q)"><DocLink doctype="Quotation" :name="q.name" /></td>
             <td @click="openView(q)"><span class="inv-customer">{{ q.customer_name || q.customer || '—' }}</span></td>
             <td @click="openView(q)" :class="isExpired(q)?'text-danger':'text-muted'" class="mono-sm">{{ fmtDate(q.valid_till) || '—' }}</td>
             <td @click="openView(q)">

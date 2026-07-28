@@ -28,11 +28,37 @@ def create_bank_transaction_row(
     bank_account_gl: the COA account (not the Bank Account record) —
     resolved to a Bank Account here so callers don't need to.
     """
-    bank_acc = frappe.db.get_value(
-        "Bank Account", {"gl_account": bank_account_gl, "company": company}, "name"
+    # NOTE: company names can differ in casing between where a Payment Entry/
+    # Expense resolves its `company` and how the Bank Account record stores
+    # it (see the LOWER(company) fixes throughout api/books_data.py and
+    # api/docs.py for the same root cause). An exact-match dict filter here
+    # silently returns nothing whenever casing doesn't line up — which was
+    # why Bank Transaction rows weren't appearing for Invoice/Bill payments
+    # even though a matching Bank Account record existed. Match
+    # case-insensitively instead.
+    rows = frappe.db.sql(
+        """SELECT name FROM `tabBank Account`
+           WHERE LOWER(TRIM(gl_account)) = LOWER(TRIM(%s))
+             AND LOWER(company) = LOWER(%s)
+           LIMIT 1""",
+        (bank_account_gl, company),
     )
+    bank_acc = rows[0][0] if rows else None
     if not bank_acc:
-        # No Bank Account record linked — skip silently (Cash payments are fine without one)
+        # No Bank Account record linked — skip silently for Cash (expected).
+        # For a genuine Bank-type GL account this is a real setup gap (the
+        # transaction posts fine, it just won't show up for reconciliation),
+        # so log it instead of failing silently forever.
+        acct_type = frappe.db.get_value("Account", bank_account_gl, "account_type")
+        if acct_type == "Bank":
+            frappe.log_error(
+                title="Bank Transaction mirror skipped",
+                message=(
+                    f"No Bank Account record found linking GL account '{bank_account_gl}' "
+                    f"(company '{company}'). Bank Transaction mirror skipped — create a "
+                    f"Bank Account under Banking → Accounts with this GL account set."
+                ),
+            )
         return None
 
     bt = frappe.get_doc({
@@ -49,6 +75,13 @@ def create_bank_transaction_row(
         "status":           "Unreconciled",  # awaiting confirmation from an imported bank statement
         "company":          company,
     })
+    # This row only mirrors a movement whose real Dr/Cr GL entries were
+    # already posted by the source document (Payment Entry, Journal Entry,
+    # Expense, ...). Skip _post_gl explicitly rather than relying solely on
+    # payment_entry/journal_entry being set — callers like Expense have no
+    # Journal Entry/Payment Entry to link to and would otherwise fail Link
+    # validation if we faked one in just to trip that check.
+    bt.flags.skip_gl_posting = True
     bt.insert(ignore_permissions=True)
     bt.flags.ignore_permissions = True
     bt.submit()

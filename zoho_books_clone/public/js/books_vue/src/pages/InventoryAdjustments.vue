@@ -97,6 +97,10 @@
             <label class="ia-label">Item <span class="req">*</span></label>
             <SearchableSelect v-model="form.item_code" :options="items" placeholder="Select item…" @search="fetchItems" @select="onItemPick" />
           </div>
+          <div class="ia-field" style="grid-column:1/-1" v-if="form.item_code">
+            <label class="ia-label">Stock UOM</label>
+            <input :value="form.stock_uom || '—'" type="text" class="ia-input" disabled />
+          </div>
           <div class="ia-field" style="grid-column:1/-1" v-if="form.item_has_batch_no">
             <label class="ia-label">Batch No <span class="req">*</span></label>
             <SearchableSelect v-model="form.batch_no" :options="batchOptions" placeholder="Select batch…" @select="onBatchSelect" />
@@ -212,7 +216,7 @@ const currentQty = ref(0), currentRate = ref(0), stockLoading = ref(false);
 const batchOptions = ref([]), batchesLoading = ref(false);
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 const reasons = ["Stock count discrepancy", "Damaged", "Expired", "Theft / Loss", "Found / Surplus", "Other"];
-const form = reactive({ warehouse: "", item_code: "", new_qty: null, reason: "", notes: "", adjustment_account: "", batch_no: "", item_has_batch_no: 0 });
+const form = reactive({ warehouse: "", item_code: "", new_qty: null, reason: "", notes: "", adjustment_account: "", batch_no: "", item_has_batch_no: 0, stock_uom: "" });
 
 async function load() {
   loading.value = true;
@@ -243,7 +247,7 @@ function fmtCur(v){ return new Intl.NumberFormat("en-IN",{style:"currency",curre
 function fmtQty(v){ return Number(flt(v)).toLocaleString("en-IN",{maximumFractionDigits:3}); }
 
 async function fetchWarehouses(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Warehouse",{fields:["name"],filters:[["company","=",co],["is_group","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); warehouses.value=r.map(x=>({label:x.name,value:x.name})); }catch{warehouses.value=[];} }
-async function fetchItems(q=""){ try{ const r=await apiList("Item",{fields:["name","item_name","has_batch_no"],filters:[["disabled","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); items.value=r.map(x=>({label:x.name,value:x.name,has_batch_no:x.has_batch_no?1:0})); }catch{items.value=[];} }
+async function fetchItems(q=""){ try{ const r=await apiList("Item",{fields:["name","item_name","has_batch_no","stock_uom"],filters:[["disabled","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); items.value=r.map(x=>({label:x.name,value:x.name,has_batch_no:x.has_batch_no?1:0,stock_uom:x.stock_uom||""})); }catch{items.value=[];} }
 async function fetchAccounts(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Account",{fields:["name","account_name"],filters:[["company","=",co],["is_group","=",0],["account_type","in",["Stock Adjustment","Expense","Temporary"]],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); accounts.value=r.map(x=>({label:x.account_name||x.name,value:x.name})); }catch{accounts.value=[];} }
 
 async function loadCurrentStock(){
@@ -307,13 +311,14 @@ function onBatchSelect(opt){
 function onItemPick(opt){
   form.item_code = opt?.value ?? opt;
   form.item_has_batch_no = opt?.has_batch_no ? 1 : 0;
+  form.stock_uom = opt?.stock_uom || "";
   refreshStockAndBatches();
 }
 
 watch(() => form.warehouse, () => { if(form.item_code) refreshStockAndBatches(); });
 
 async function openNew(prefill){
-  Object.assign(form, { warehouse:"", item_code:"", new_qty:null, reason:"", notes:"", adjustment_account:"", batch_no:"", item_has_batch_no:0 });
+  Object.assign(form, { warehouse:"", item_code:"", new_qty:null, reason:"", notes:"", adjustment_account:"", batch_no:"", item_has_batch_no:0, stock_uom:"" });
   currentQty.value=0; currentRate.value=0; batchOptions.value=[];
   await Promise.all([fetchWarehouses(""), fetchItems(""), fetchAccounts(""), loadDefaultAccount()]);
   if(prefill){
@@ -322,6 +327,7 @@ async function openNew(prefill){
     if(form.item_code){
       const found = items.value.find(i=>i.value===form.item_code);
       form.item_has_batch_no = found?.has_batch_no ? 1 : 0;
+      form.stock_uom = found?.stock_uom || "";
     }
     if(form.item_code&&form.warehouse) await refreshStockAndBatches();
   }

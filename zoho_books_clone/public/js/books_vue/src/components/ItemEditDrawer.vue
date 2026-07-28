@@ -120,6 +120,15 @@
                 <label class="ad-label">HSN / SAC Code</label>
                 <input class="ad-input" v-model="form.hsn_code" placeholder="e.g. 847130"/>
               </div>
+              <div class="ad-field">
+                <label class="ad-label">Barcode</label>
+                <div style="display:flex;gap:6px">
+                  <input class="ad-input" v-model="form.barcode" placeholder="Scan or type barcode/SKU" style="flex:1"/>
+                  <button type="button" class="add-lines-add-btn" style="flex-shrink:0" @click="openItemScanCamera" title="Scan a barcode to fill this field">
+                    <span v-html="icon('qr',13)"></span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="ad-field">
               <label class="ad-label">Description</label>
@@ -399,6 +408,29 @@
       </div>
 
     </div>
+
+    <!-- ── Barcode scan modal (camera) — fills form.barcode ── -->
+    <div v-if="itemScanCameraOpen" class="rp-bg" @click.self="closeItemScanCamera">
+      <div class="rp-modal" style="max-width:420px">
+        <div class="rp-header">
+          <h3>Scan Barcode</h3>
+          <button class="inv-dclose" @click="closeItemScanCamera"><span v-html="icon('x',16)"></span></button>
+        </div>
+        <div style="padding:16px">
+          <div v-if="itemScanCameraError" style="font-size:13px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px">
+            {{ itemScanCameraError }}
+          </div>
+          <template v-else>
+            <video ref="itemScanVideoRef" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000"></video>
+            <p style="font-size:12px;color:#6b7280;margin-top:10px;text-align:center">Point the camera at the barcode</p>
+          </template>
+          <p style="font-size:11.5px;color:#9ca3af;margin-top:8px;text-align:center">
+            Tip: a USB/Bluetooth barcode scanner also works directly — just scan while this field is on screen.
+          </p>
+        </div>
+      </div>
+    </div>
+
   </Teleport>
 </template>
 
@@ -407,11 +439,25 @@ import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { apiList, apiGET, apiPOST, apiSave, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
+import { useBarcodeScanner } from "../composables/useBarcodeScanner.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
 import SearchableSelect from "./SearchableSelect.vue";
 
 const { toast } = useToast();
+
+// ── Barcode scan-to-fill (Item drawer) ──────────────────────────────────
+// Reuses the same hardware-scanner/camera composable as Invoices.vue, but
+// here a successful scan just fills form.barcode instead of adding a line.
+function handleItemBarcodeScan(code) {
+  code = (code || "").trim();
+  if (!code || !showDrawer.value) return;
+  form.barcode = code;
+  toast(`Barcode captured: ${code}`, "success");
+  closeItemScanCamera();
+}
+const { cameraSupported: itemScanCameraSupported, cameraOpen: itemScanCameraOpen, cameraError: itemScanCameraError, videoRef: itemScanVideoRef, openCamera: openItemScanCamera, closeCamera: closeItemScanCamera }
+  = useBarcodeScanner({ onScan: handleItemBarcodeScan });
 const router = useRouter();
 
 const emit = defineEmits(["saved"]);
@@ -436,7 +482,7 @@ const bomOptions       = ref([]);   // Active, submitted BOMs for the item being
 
 const form = reactive({
   name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
-  stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
+  stock_uom: "Nos", hsn_code: "", barcode: "", description: "", disabled: 0, brand: "",
   standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
   income_account: "", expense_account: "",
   is_sales_item: 1, is_purchase_item: 1,
@@ -674,7 +720,7 @@ function openAdd(presetType) {
   const d = ITEM_TYPE_DEFAULTS[defaultType] || {};
   Object.assign(form, {
     name: "", item_code: "", item_name: "", item_group: "", item_type: defaultType,
-    stock_uom: "Nos", hsn_code: "", description: "", disabled: 0, brand: "",
+    stock_uom: "Nos", hsn_code: "", barcode: "", description: "", disabled: 0, brand: "",
     standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
     income_account:  defaultAccounts.value.income,
     expense_account: defaultAccounts.value.expense,
@@ -705,7 +751,7 @@ async function openEdit(row) {
   drawerMode.value = "edit"; drawerTab.value = "basic";
   Object.assign(form, {
     ...row,
-    hsn_code: "", description: "", standard_buying_rate: 0, mrp: 0, brand: "",
+    hsn_code: "", barcode: "", description: "", standard_buying_rate: 0, mrp: 0, brand: "",
     tax_code: "", income_account: "", expense_account: "",
     valuation_method: "FIFO", default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
@@ -716,6 +762,7 @@ async function openEdit(row) {
     const full = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: row.name });
     Object.assign(form, {
       hsn_code:             full.hsn_code             || "",
+      barcode:              full.barcode              || "",
       description:          full.description          || "",
       standard_rate:        flt(full.standard_rate),
       standard_buying_rate: flt(full.standard_buying_rate),
@@ -808,7 +855,7 @@ async function saveItem({ close = true } = {}) {
     const doc = {
       doctype: "Item", item_name: form.item_name, item_code: itemCode,
       item_group: form.item_group || "Products", item_type: form.item_type, stock_uom: form.stock_uom,
-      hsn_code: form.hsn_code, description: form.description, disabled: form.disabled ? 1 : 0, brand: form.brand || "",
+      hsn_code: form.hsn_code, barcode: form.barcode || "", description: form.description, disabled: form.disabled ? 1 : 0, brand: form.brand || "",
       standard_rate: flt(form.standard_rate), standard_buying_rate: flt(form.standard_buying_rate),
       mrp: flt(form.mrp),
       tax_code: form.tax_code,

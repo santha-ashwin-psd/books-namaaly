@@ -73,7 +73,7 @@
           <template v-else>
             <tr v-for="b in paged" :key="b.name" class="inv-row" :class="{selected:selected.has(b.name)}">
               <td class="td-check"><input type="checkbox" :checked="selected.has(b.name)" @change="toggle(b.name)" /></td>
-              <td class="td-id" @click="openView(b)"><span class="inv-link">{{ b.name }}</span></td>
+              <td class="td-id" @click="openView(b)"><DocLink doctype="Purchase Invoice" :name="b.name" /></td>
               <td class="td-customer" @click="openView(b)">{{ b.supplier_name || b.supplier || '—' }}</td>
               <td class="td-date text-muted mono-sm" @click="openView(b)">{{ fmtDate(b.posting_date) }}</td>
               <td class="td-due mono-sm" :class="isOverdue(b)?'text-danger':'text-muted'" @click="openView(b)">{{ fmtDate(b.due_date)||'—' }}</td>
@@ -787,7 +787,7 @@
                     </thead>
                     <tbody>
                       <tr v-for="(a, i) in viewDebitApps" :key="i">
-                        <td class="mono-sm" style="color:#7c3aed;font-weight:600">{{ a.debit_note }}</td>
+                        <td style="color:#7c3aed;font-weight:600"><DocLink doctype="Debit Note" :name="a.debit_note" /></td>
                         <td class="mono-sm">{{ fmtDate(a.date) }}</td>
                         <td>
                           <span v-if="a.type==='direct'" class="bil-dn-badge bil-dn-badge-direct">Issued</span>
@@ -923,6 +923,7 @@ import { usePagination } from "../composables/usePagination.js";
 import BulkActionBar from "../components/BulkActionBar.vue";
 import TimelineStepper from "../components/TimelineStepper.vue";
 import JournalTab from "../components/JournalTab.vue";
+import DocLink from "../components/DocLink.vue";
 
 const TDS_RATES = { "194C": 1, "194J": 10, "194A": 10, "194H": 5, "194I": 10, "192": 0, "195": 20, "Other": 10 };
 const INDIAN_STATES = [

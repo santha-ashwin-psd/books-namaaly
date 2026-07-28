@@ -152,7 +152,8 @@
                 <div v-for="r in inlineLedger[selectedAccount.name].rows.slice(0, inlineLedger[selectedAccount.name].visible)"
                   :key="(r.voucher_no||'')+'-'+r.posting_date+'-'+r.balance" class="coa-txn-row">
                   <span class="coa-txn-date">{{ r.posting_date }}</span>
-                  <span class="coa-txn-detail" :title="r.party_name || r.party || r.voucher_no">{{ r.party_name || r.party || r.voucher_no }}</span>
+                  <span class="coa-txn-detail" v-if="r.party_name || r.party" :title="r.party_name || r.party">{{ r.party_name || r.party }}</span>
+                  <span class="coa-txn-detail" v-else :title="r.voucher_no"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></span>
                   <span class="coa-txn-type">{{ r.voucher_type }}</span>
                   <span class="ta-r coa-txn-dr">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
                   <span class="ta-r coa-txn-cr">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
@@ -262,7 +263,7 @@
             <template v-else>
               <div v-for="r in inlineLedger[row.name].rows.slice(0, inlineLedger[row.name].visible)" :key="(r.voucher_no||'')+'-'+r.posting_date+'-'+r.balance"
                 style="padding:8px 12px;border-top:1px solid #f3f4f6;font-size:12px">
-                <div style="display:flex;justify-content:space-between"><b style="color:#2563eb">{{r.voucher_no}}</b><span style="color:#6b7280">{{r.posting_date}}</span></div>
+                <div style="display:flex;justify-content:space-between"><b style="color:#2563eb" @click.stop><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></b><span style="color:#6b7280">{{r.posting_date}}</span></div>
                 <div style="display:flex;justify-content:space-between;margin-top:2px;color:#6b7280">
                   <span>{{r.voucher_type}} · {{r.party_name||r.party||'—'}}</span>
                   <span :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151', fontWeight:700}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
@@ -457,7 +458,7 @@
                 <tr v-for="r in ledgerDrawer.rows" :key="(r.name||r.voucher_no)+'-'+r.posting_date"
                   style="border-top:1px solid #f3f4f6">
                   <td style="padding:8px 10px;color:#6b7280">{{ r.posting_date }}</td>
-                  <td style="padding:8px 10px;color:#2563eb;font-weight:600">{{ r.voucher_no }}</td>
+                  <td style="padding:8px 10px;color:#2563eb;font-weight:600"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" /></td>
                   <td style="padding:8px 10px;color:#6b7280">{{ r.voucher_type }}</td>
                   <td style="padding:8px 10px;color:#374151" :title="r.party || ''">{{ r.party_name || r.party || '—' }}</td>
                   <td style="padding:8px 10px;text-align:right;color:#16a34a">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
@@ -490,7 +491,7 @@
                 </div>
                 <!-- Row 2: Voucher no + Party -->
                 <div class="ldg-card-mid">
-                  <span class="ldg-card-voucher">{{ r.voucher_no }}</span>
+                  <span class="ldg-card-voucher" @click.stop><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></span>
                   <span class="ldg-card-party">{{ r.party_name || r.party || '—' }}</span>
                 </div>
                 <!-- Row 3: Debit | Credit | Balance strip -->
@@ -535,6 +536,7 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 

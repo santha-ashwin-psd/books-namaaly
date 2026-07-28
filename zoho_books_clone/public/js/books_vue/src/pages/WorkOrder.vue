@@ -1027,30 +1027,33 @@ onMounted(async () => {
     const co = await resolveCompany();
     if (isNew.value) wo.value.company = co;
 
-    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "docstatus", "bom_version", "is_default", "bom_type"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" });
-    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    // Independent of each other — Warehouse only needs `co`, already resolved
+    // above. loadList() and fetchManufacturingDefaults() don't depend on any
+    // of this reference data either, so they're folded in too. Firing all of
+    // this together turns ~9 sequential round trips into 1.
+    const [boms, stk, whs, ops, wks, cos, sos] = await Promise.all([
+      apiList("BOM", { fields: ["name", "item", "quantity", "docstatus", "bom_version", "is_default", "bom_type"], filters: [["docstatus", "=", 1]], limit: 1000, order: "name asc" }),
+      apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "has_batch_no", "shelf_life_in_days", "item_type"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" }),
+      apiList("Warehouse", { fields: ["name"], filters: co ? [["company", "=", co], ["is_group", "=", 0]] : [["is_group", "=", 0]], limit: 1000, order: "name asc" }),
+      apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" }),
+      apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" }),
+      apiList("Company", { fields: ["name"], limit: 200, order: "name asc" }).catch(() => []),
+      apiList("Sales Order", { fields: ["name"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" }).catch(() => []),
+      loadList(),
+      fetchManufacturingDefaults(),
+    ]);
+
     stockItems.value = stk || [];
     const itemNameOf = {};
     stockItems.value.forEach(i => itemNameOf[i.name] = i.item_name);
     bomList.value = (boms || []).map(b => ({ ...b, item_name: itemNameOf[b.item] || b.item }));
 
-    const whs = await apiList("Warehouse", { fields: ["name"], filters: co ? [["company", "=", co], ["is_group", "=", 0]] : [["is_group", "=", 0]], limit: 1000, order: "name asc" });
     warehouseList.value = whs || [];
-
-    const ops = await apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" });
     operationsList.value = ops || [];
-
-    const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], limit: 1000, order: "name asc" });
     workstationsList.value = wks || [];
-
-    const cos = await apiList("Company", { fields: ["name"], limit: 200, order: "name asc" }).catch(() => []);
     companiesList.value = cos || [];
-
-    const sos = await apiList("Sales Order", { fields: ["name"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" }).catch(() => []);
     salesOrdersList.value = sos || [];
 
-    await loadList();
-    await fetchManufacturingDefaults();
     if (route.params.name && !isNew.value) {
       await loadWO();
     } else {

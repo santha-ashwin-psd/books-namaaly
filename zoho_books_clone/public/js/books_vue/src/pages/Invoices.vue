@@ -144,7 +144,7 @@
               <input type="checkbox" :checked="selectedRows.has(inv.name)" @change="toggleRow(inv.name)"/>
             </td>
             <td @click="openView(inv)" class="text-muted mono-sm">{{ fmtDate(inv.posting_date) }}</td>
-            <td @click="openView(inv)"><span class="inv-link">{{ inv.name }}</span></td>
+            <td @click="openView(inv)"><DocLink doctype="Sales Invoice" :name="inv.name" /></td>
             <td @click="openView(inv)"><span class="inv-customer">{{ inv.customer_name||inv.customer }}</span></td>
             <td @click="openView(inv)" :class="isOverdue(inv)?'text-danger':'text-muted'" class="mono-sm">{{ fmtDate(inv.due_date) }}</td>
             <td @click="openView(inv)">
@@ -384,21 +384,17 @@
                     </div>
                   </div>
                 </div>
-                <!-- Inventory toggle card -->
+                <!-- Inventory card — stock is always deducted on submit; warehouse is mandatory -->
                 <div class="inv-details-toggle-col">
-                  <div class="inv-inv-block" :class="form.update_stock ? 'inv-on' : 'inv-off'">
+                  <div class="inv-inv-block inv-on">
                     <div class="inv-inv-toggle-row">
                       <div class="inv-inv-icon" v-html="icon('box',16)"></div>
                       <div class="inv-inv-text">
                         <div class="inv-inv-title">Deduct Inventory on Submit</div>
                         <div class="inv-inv-sub">Stock reduces from the selected warehouse when this invoice is submitted</div>
                       </div>
-                      <label class="inv-inv-switch">
-                        <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
-                        <span class="inv-inv-slider"></span>
-                      </label>
                     </div>
-                    <div v-if="form.update_stock" class="inv-inv-wh-row">
+                    <div class="inv-inv-wh-row">
                       <label class="inv-lbl" style="margin-bottom:6px">Dispatch Warehouse <span style="color:#dc2626">*</span></label>
                       <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
                     </div>
@@ -475,6 +471,9 @@
               <div style="display:flex;align-items:center;gap:8px" @click.stop>
                 <button v-if="form.customer" class="inv-add-line-btn inv-copy-btn" @click="copyLastItems" title="Copy items from last invoice">
                   <span v-html="icon('copy',12)"></span> Copy Last
+                </button>
+                <button class="add-lines-add-btn inv-scan-btn" @click="openScanCamera" title="Scan a barcode to add an item">
+                  <span v-html="icon('qr',13)"></span> Scan Barcode
                 </button>
                 <button class="add-lines-add-btn" @click="addLine">
                   <span v-html="icon('plus',13)"></span> Add Item
@@ -1372,6 +1371,28 @@
       </div>
     </div>
 
+    <!-- ── Barcode scan modal (camera) ── -->
+    <div v-if="scanCameraOpen" class="rp-bg" @click.self="closeScanCamera">
+      <div class="rp-modal" style="max-width:420px">
+        <div class="rp-header">
+          <h3>Scan Item Barcode</h3>
+          <button class="inv-dclose" @click="closeScanCamera"><span v-html="icon('x',16)"></span></button>
+        </div>
+        <div style="padding:16px">
+          <div v-if="scanCameraError" style="font-size:13px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px">
+            {{ scanCameraError }}
+          </div>
+          <template v-else>
+            <video ref="scanVideoRef" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000"></video>
+            <p style="font-size:12px;color:#6b7280;margin-top:10px;text-align:center">Point the camera at the item's barcode</p>
+          </template>
+          <p style="font-size:11.5px;color:#9ca3af;margin-top:8px;text-align:center">
+            Tip: a USB/Bluetooth barcode scanner also works directly — just scan while this invoice is open.
+          </p>
+        </div>
+      </div>
+    </div>
+
   </Teleport>
 </div>
 </template>
@@ -1399,6 +1420,7 @@ import SearchableSelect from "../components/SearchableSelect.vue";
 import IrnQrCode from "../components/IrnQrCode.vue";
 import { useLivePreview } from "../composables/useLivePreview.js";
 import { computeTaxRows, computeDiscountAmount, applyDiscountToLines } from "../composables/useTaxCalc.js";
+import { useBarcodeScanner } from "../composables/useBarcodeScanner.js";
 
 const { toast } = useToast();
 const { canWrite } = usePermissions();
@@ -2176,7 +2198,7 @@ function salesPersonLabel(id) {
   return sp ? sp.label : id;
 }
 async function loadItems() {
-  try { const r=await apiList("Item",{fields:["name","item_name","standard_rate","mrp","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
+  try { const r=await apiList("Item",{fields:["name","item_name","barcode","standard_rate","mrp","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
 async function loadTaxAccount() {
   try {
@@ -2219,6 +2241,42 @@ function toggleRow(name) { const s=new Set(selectedRows.value); s.has(name)?s.de
 
 // ── Line item helpers ──────────────────────────────────────────────────
 function addLine() { lines.value.push({id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}); }
+
+// ── Barcode scanning ──────────────────────────────────────────────────
+// Resolves a scanned code to an Item and either bumps the qty of an
+// existing line for that item, or fills the first empty line / appends a
+// new one. Works for both the hardware-scanner (keyboard-wedge) and
+// camera scan paths — both funnel into this one handler.
+async function handleBarcodeScan(code) {
+  code = (code || "").trim();
+  if (!code) return;
+  if (!drawerOpen.value) { toast("Open an invoice to scan items into it", "error"); return; }
+  let item = items.value.find(i => i.barcode === code) || items.value.find(i => i.name === code);
+  if (!item) {
+    try { item = await apiGET("zoho_books_clone.api.inventory.get_item_by_barcode", { barcode: code }); } catch { item = null; }
+  }
+  if (!item) { toast(`No item found for barcode "${code}"`, "error"); return; }
+
+  const existing = lines.value.find(l => l.item_code === item.name);
+  if (existing) {
+    existing.qty = flt(existing.qty) + 1;
+    onLineQtyChange(existing);
+    calcLine(existing);
+    toast(`${existing.item_name || item.name}: qty ${existing.qty}`, "success");
+    return;
+  }
+  let line = lines.value.find(l => !l.item_code);
+  if (!line) {
+    line = {id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null};
+    lines.value.push(line);
+  }
+  line.item_code = item.name;
+  await onItemChange(line);
+  toast(`Added ${line.item_name || item.name}`, "success");
+}
+
+const { cameraSupported: scanCameraSupported, cameraOpen: scanCameraOpen, cameraError: scanCameraError, videoRef: scanVideoRef, openCamera: openScanCamera, closeCamera: closeScanCamera }
+  = useBarcodeScanner({ onScan: handleBarcodeScan });
 function removeLine(id) { lines.value=lines.value.filter(l=>l.id!==id); }
 function calcLine(line) {
   if (line.discount_percentage > 100) line.discount_percentage = 100;
@@ -2406,7 +2464,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:0,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:1,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2414,7 +2472,7 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:0,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:1,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
   fetchWarehouses("");
@@ -2432,7 +2490,7 @@ async function openEdit(inv) {
       terms:doc.terms||"",remarks:doc.remarks||"",docstatus:doc.docstatus||0,
       currency:doc.currency||"INR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
       price_list:doc.price_list||"",
-      update_stock:doc.update_stock||0,set_warehouse:doc.set_warehouse||"",
+      update_stock:1,set_warehouse:doc.set_warehouse||"",
       logo:doc.logo||"",cost_center:doc.cost_center||"",sales_person:doc.sales_person||"",
       discount_type:doc.discount_type||"Percentage",
       additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
@@ -2498,7 +2556,7 @@ async function saveInvoice(docstatus, andNew = false) {
   if ((form.terms||'').length > 500) { toast("Customer Note cannot exceed 500 characters","error"); return; }
   if ((form.remarks||'').length > 500) { toast("Internal Remarks cannot exceed 500 characters","error"); return; }
   if (!lines.value.some(l=>l.item_code&&flt(l.qty)>0)) { toast("Add at least one line item","error"); return; }
-  if (form.update_stock && !form.set_warehouse) { toast("Dispatch Warehouse is required when Update Inventory is on","error"); return; }
+  if (!form.set_warehouse) { toast("Dispatch Warehouse is required","error"); return; }
   // Batch-tracked lines must have a batch selected, and can't sell more than
   // that batch currently has in stock (also enforced server-side).
   const batchErr = lines.value.filter(l=>l.item_code).map(batchQtyError).find(Boolean);
@@ -2527,7 +2585,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:form.update_stock?1:0,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
 

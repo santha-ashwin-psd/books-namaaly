@@ -66,7 +66,7 @@
           <template v-else>
             <tr v-for="d in paged" :key="d.name" class="inv-row" :class="{selected:selected.has(d.name)}">
               <td class="td-check"><input type="checkbox" :checked="selected.has(d.name)" @change="toggle(d.name)" /></td>
-              <td class="td-id" @click="openView(d)"><span class="inv-link">{{ d.name }}</span></td>
+              <td class="td-id" @click="openView(d)"><DocLink doctype="Debit Note" :name="d.name" /></td>
               <td class="td-customer" @click="openView(d)">{{ d.supplier_name || d.supplier || '—' }}</td>
               <td class="td-date text-muted mono-sm" @click="openView(d)">{{ fmtDate(d.posting_date) }}</td>
               <td class="td-against text-muted mono-sm" @click="openView(d)">{{ d.return_against||'—' }}</td>
@@ -699,6 +699,8 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
+import { useRoute } from "vue-router";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import { apiList, apiSave, apiGet, apiGET, apiPOST, apiSubmit, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePermissions } from "../composables/usePermissions.js";
@@ -1400,11 +1402,13 @@ function exportCSV() {
   toast.success(`CSV exported — ${rows.length} note(s)`);
 }
 
-onMounted(() => {
-  load();
+const route = useRoute();
+onMounted(async () => {
+  await load();
   apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 })
     .then(r => { if (r && r.length) uomList.value = r.map(u => u.name); })
     .catch(() => {});
+  useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(x => x.name === n) || { name: n }) });
 });
 </script>
 

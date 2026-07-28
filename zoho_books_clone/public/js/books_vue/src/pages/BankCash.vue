@@ -17,9 +17,10 @@
     </div>
 
     <SummaryStrip v-if="!loading" :cards="[
-      { label: 'Cash In', tone: 'success', value: fmtCur(cashIn), valueClass: 'green' },
-      { label: 'Cash Out', tone: 'danger', value: fmtCur(cashOut), valueClass: 'red' },
-      { label: 'Net Cash', tone: 'accent', value: fmtCur(cashIn-cashOut), valueClass: (cashIn-cashOut)>=0?'green':'red' },
+      { label: 'Cash In', tone: 'success', value: fmtCur(cashSummary.cash_in), valueClass: 'green' },
+      { label: 'Cash Out', tone: 'danger', value: fmtCur(cashSummary.cash_out), valueClass: 'red' },
+      { label: 'Transfers', tone: 'warn', value: fmtCur(cashSummary.transfers), valueClass: 'orange' },
+      { label: 'Net Cash', tone: 'accent', value: fmtCur(cashSummary.net_cash), valueClass: cashSummary.net_cash>=0?'green':'red' },
       { label: 'Entries', tone: 'default', value: list.length },
     ]" />
 
@@ -60,7 +61,7 @@
           <template v-else>
             <tr v-for="p in paged" :key="p.name" class="cash-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
-              <td><span class="cash-num">{{ p.name }}</span></td>
+              <td><DocLink :doctype="p._dt || 'Payment Entry'" :name="p.name" /></td>
               <td>{{ p.party_name||p.party||'—' }}</td>
               <td class="mono-sm text-muted">{{ fmtDate(p.payment_date) }}</td>
               <td><span class="cash-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Cash In':'Cash Out' }}</span></td>
@@ -87,7 +88,7 @@
         <template v-else>
           <div v-for="p in paged" :key="p.name" class="cash-mobile-card" @click="openView(p)">
             <div class="cash-mc-top">
-              <span class="cash-mc-docno">{{ p.name }}</span>
+              <span class="cash-mc-docno"><DocLink :doctype="p._dt || 'Payment Entry'" :name="p.name" /></span>
               <span class="cash-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Cash In':'Cash Out' }}</span>
             </div>
             <div class="cash-mc-mid">{{ p.party_name || p.party || '—' }}</div>
@@ -359,7 +360,7 @@
                     <span class="cash-ledger-voucher-chip" :class="'vt-'+(e.voucher_type||'').toLowerCase().replace(/[^a-z]/g,'')">
                       {{ e.voucher_type }}
                     </span>
-                    <span class="cash-num">{{ e.voucher_no }}</span>
+                    <DocLink :doctype="e.voucher_type" :name="e.voucher_no" :mono-style="false" />
                   </td>
                   <td class="cash-ledger-party">{{ e.party || e.remarks || '—' }}</td>
                   <td class="ta-r mono-sm cash-ledger-debit">{{ e.debit>0 ? fmtCur(e.debit) : '—' }}</td>
@@ -390,6 +391,7 @@ import SummaryStrip from "../components/SummaryStrip.vue";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
+import DocLink from "../components/DocLink.vue";
 const { toast } = useToast();
 const { confirm } = useConfirm();
 const cashAccount=ref(""),cashAccounts=ref([]),receivableAccount=ref(""),payableAccount=ref(""),companyCurrency=ref("INR");
@@ -508,6 +510,21 @@ function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"d
 function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db">⇅</span>';return sortDir.value==="asc"?"↑":"↓";}
 const cashIn=computed(()=>list.value.filter(p=>p.payment_type==="Receive").reduce((s,p)=>s+flt(p.paid_amount),0));
 const cashOut=computed(()=>list.value.filter(p=>p.payment_type==="Pay").reduce((s,p)=>s+flt(p.paid_amount),0));
+// Authoritative, uncapped, all-time totals for the summary strip — sourced
+// from a single backend endpoint so Cash In / Cash Out / Transfers / Net Cash
+// always reconcile (Net Cash = Cash In - Cash Out - Transfers) instead of
+// each card being computed independently from the (200-row-capped) list above.
+const cashSummary=ref({cash_in:0,cash_out:0,transfers:0,net_cash:0});
+async function loadCashSummary(){
+  try{
+    const co=await resolveCompany();
+    const d=await apiGET("zoho_books_clone.api.books_data.get_cash_summary",{company:co});
+    cashSummary.value={
+      cash_in: flt(d?.cash_in), cash_out: flt(d?.cash_out),
+      transfers: flt(d?.transfers), net_cash: flt(d?.net_cash),
+    };
+  }catch(e){ /* leave previous values in place — non-fatal for the page */ }
+}
 function tabCount(key){if(key==="all")return list.value.length;return list.value.filter(p=>p.payment_type===key).length;}
 function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
 
@@ -538,7 +555,7 @@ async function bulkDelete(){
   const ok=await confirm({title:`Delete ${rows.length} cash entr${rows.length>1?'ies':'y'}?`,body:"This cancels and deletes the selected entries, reversing their ledger impact. This cannot be undone.",okLabel:"Delete",okStyle:"danger"});
   if(!ok)return;
   bulkBusy.value=true;let done=0;
-  try{for(const p of rows){const dt=p._dt||"Payment Entry";try{await apiCancel(dt,p.name);}catch{}try{await apiDelete(dt,p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await Promise.all([load(),refreshUndepositedCount()]);}
+  try{for(const p of rows){const dt=p._dt||"Payment Entry";try{await apiCancel(dt,p.name);}catch{}try{await apiDelete(dt,p.name);done++;}catch{}}toast.success(`Deleted ${done} entr${done>1?'ies':'y'}`);await Promise.all([load(),refreshUndepositedCount(),loadCashSummary()]);}
   finally{bulkBusy.value=false;}
 }
 
@@ -603,7 +620,7 @@ async function saveCash(){
       const saved=await apiSave(doc);await apiSubmit("Journal Entry",saved.name);
       toast.success(`Cash entry ${saved?.name||""} created`);
     }
-    drawerOpen.value=false;await Promise.all([load(),refreshUndepositedCount()]);
+    drawerOpen.value=false;await Promise.all([load(),refreshUndepositedCount(),loadCashSummary()]);
   }catch(e){toast.error(e.message||"Failed to save");}finally{drawerSaving.value=false;}
 }
 
@@ -612,7 +629,7 @@ async function deleteEntry(p){
   if(!ok)return;
   actionBusy.value=true;
   const dt=p._dt||"Payment Entry";
-  try{try{await apiCancel(dt,p.name);}catch{}await apiDelete(dt,p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await Promise.all([load(),refreshUndepositedCount()]);}
+  try{try{await apiCancel(dt,p.name);}catch{}await apiDelete(dt,p.name);toast.success(`${p.name} deleted`);viewOpen.value=false;await Promise.all([load(),refreshUndepositedCount(),loadCashSummary()]);}
   catch(e){toast.error(e.message||"Failed to delete");}finally{actionBusy.value=false;}
 }
 
@@ -695,12 +712,12 @@ async function saveDeposit(){
     });
     toast.success(`Deposited ${fmtCur(res?.amount||depositForm.amount)} to ${depositForm.destination_account} via ${res?.journal_entry||"Journal Entry"}`);
     depositOpen.value=false;
-    await Promise.all([load(),refreshUndepositedCount()]);
+    await Promise.all([load(),refreshUndepositedCount(),loadCashSummary()]);
   }catch(e){toast.error(e.message||"Deposit failed");}
   finally{depositSaving.value=false;}
 }
 
-onMounted(()=>{load();loadAccounts();refreshUndepositedCount();});
+onMounted(()=>{load();loadAccounts();refreshUndepositedCount();loadCashSummary();});
 </script>
 <style scoped>
 .cash-page{display:flex;flex-direction:column;gap:16px;padding:24px;}

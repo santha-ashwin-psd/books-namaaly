@@ -44,10 +44,12 @@ const DOCTYPE_ROUTE = {
   "Auto Repeat":       "list:/recurring",
   "E Way Bill":        "list:/eway-bills",
   "Customer":          "path:/customers",
-  "Supplier":          "path:/vendors",
+  "Supplier":          "list:/vendors",
   "Item":              "list:/inventory/items",
   "Journal Entry":     "list:/accounting/journal-entries",
   "Expense":           "list:/expenses",
+  "Landed Cost Voucher": "path:/purchasing/landed-cost-vouchers",
+  "Stock Entry":       "list:/inventory/stock-entries",
 };
 
 const to = computed(() => {

@@ -60,6 +60,12 @@ def get_account_balance(account: str, as_of_date: str | None = None) -> float:
     so this matches the closing balance shown by get_account_ledger() —
     GL entries alone don't carry the opening balance, it's a static field
     on the Account doc.
+
+    Exception: a Bank Account's opening balance IS posted as a real GL
+    Entry (voucher_type='Bank Account', see banking/doctype/bank_account/
+    bank_account.py::_post_opening_gl). Adding the static field on top of
+    that entry for the same account double-counts the opening balance, so
+    skip the static field whenever such an entry already exists.
     """
     params: dict = {"account": account}
     date_cond = ""
@@ -73,7 +79,13 @@ def get_account_balance(account: str, as_of_date: str | None = None) -> float:
         WHERE account = %(account)s AND is_cancelled = 0 {date_cond}
     """, params, as_dict=True)
     gl_balance = flt(result[0].balance) if result else 0.0
-    opening = flt(frappe.db.get_value("Account", account, "opening_balance") or 0)
+
+    has_bank_opening_entry = frappe.db.exists(
+        "General Ledger Entry", {"account": account, "voucher_type": "Bank Account"}
+    )
+    opening = 0.0 if has_bank_opening_entry else flt(
+        frappe.db.get_value("Account", account, "opening_balance") or 0
+    )
     return opening + gl_balance
 
 @frappe.whitelist()
@@ -82,7 +94,9 @@ def get_account_balances_bulk(
 ) -> dict[str, float]:
     """Return {account_name: closing_balance} for a list of accounts (single
     query). Includes each Account's `opening_balance` field, same as
-    get_account_balance(), so results are consistent with the ledger view.
+    get_account_balance(), so results are consistent with the ledger view —
+    except accounts whose opening balance was already posted as a real GL
+    Entry via a linked Bank Account (see get_account_balance for why).
     """
     # Called from the SPA via GET, where list args travel as a JSON-encoded
     # string (e.g. `?accounts=["A","B"]`) — Frappe doesn't auto-parse those
@@ -102,10 +116,21 @@ def get_account_balances_bulk(
     """, accounts, as_dict=True)
     gl_balances = {r.account: flt(r.balance) for r in rows}
 
+    bank_opening_accounts = {
+        r.account for r in frappe.db.sql(
+            f"""SELECT DISTINCT account FROM `tabGeneral Ledger Entry`
+                WHERE account IN ({placeholders}) AND voucher_type = 'Bank Account'""",
+            accounts, as_dict=True,
+        )
+    }
+
     openings = frappe.get_all(
         "Account", filters={"name": ["in", accounts]}, fields=["name", "opening_balance"]
     )
-    opening_map = {o.name: flt(o.opening_balance) for o in openings}
+    opening_map = {
+        o.name: 0.0 if o.name in bank_opening_accounts else flt(o.opening_balance)
+        for o in openings
+    }
 
     return {a: opening_map.get(a, 0.0) + gl_balances.get(a, 0.0) for a in accounts}
 
@@ -917,8 +942,16 @@ def get_customer_statement(customer: str, company: str = "") -> dict:
     ignored opening_balance entirely, so a customer with only an opening
     balance and no invoices showed ₹0 outstanding here even though the
     Customers list page (a different endpoint) showed it correctly.
+
+    Uses `get_opening_balance_outstanding` (net of any Payment Entry already
+    allocated against the opening Journal Entry) rather than the raw
+    `opening_balance` field — otherwise a customer who has since paid off
+    their opening balance still had the full original amount added back
+    into Total Outstanding here, double-counting money already collected
+    and disagreeing with the Customers list page's figure for the same
+    customer.
     """
-    from zoho_books_clone.accounts.opening_balance import get_opening_balance
+    from zoho_books_clone.accounts.opening_balance import get_opening_balance_outstanding
 
     if not company:
         from zoho_books_clone.api.session import _get_company
@@ -943,7 +976,7 @@ def get_customer_statement(customer: str, company: str = "") -> dict:
         LIMIT 20
     """, {"company": company, "customer": customer}, as_dict=True)
 
-    opening_balance = get_opening_balance("Customer", customer)
+    opening_balance = get_opening_balance_outstanding("Customer", customer)
     if opening_balance:
         invoices.insert(0, {
             "name": "Opening Balance", "posting_date": None, "due_date": None,
@@ -967,6 +1000,7 @@ def get_customer_statement(customer: str, company: str = "") -> dict:
         "total_outstanding": total_outstanding,
         "overdue_amount": overdue_amount,
     }
+
 
 
 @frappe.whitelist()

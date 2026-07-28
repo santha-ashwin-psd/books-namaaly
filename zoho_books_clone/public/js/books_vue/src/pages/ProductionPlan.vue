@@ -256,7 +256,7 @@
                       <tr>
                         <th>Item</th>
                         <th>BOM</th>
-                        <th class="right">Planned Qty</th>
+                        <th class="right" style="width:70px">Planned Qty</th>
                         <th>UOM</th>
                         <th>FG Warehouse</th>
                         <th class="right">WO Created Qty</th>
@@ -265,23 +265,23 @@
                     </thead>
                     <tbody>
                       <tr v-for="(row, idx) in pp.po_items" :key="idx">
-                        <td style="min-width:180px">
+                        <td style="min-width:150px">
                           <select class="bomx-fi" v-model="row.item_code" @change="onPOItemChange(row)" :disabled="readOnly">
                             <option value="">— Select —</option>
                             <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                           </select>
                         </td>
-                        <td style="min-width:160px">
+                        <td style="min-width:130px">
                           <select class="bomx-fi" v-model="row.bom_no" :disabled="readOnly || !row.item_code">
                             <option value="">{{ row.item_code ? '— Select Submitted BOM —' : '— Select an Item first —' }}</option>
                             <option v-for="b in bomsFor(row.item_code)" :key="b.name" :value="b.name">{{ b.name }}</option>
                           </select>
                         </td>
-                        <td class="right" style="min-width:100px">
+                        <td class="right" style="width:70px;min-width:70px;max-width:70px">
                           <input class="bomx-fi bomx-fi-mono" style="text-align:right" type="number" v-model="row.planned_qty" min="0.01" step="any" :disabled="readOnly"/>
                         </td>
                         <td class="mono" style="color:var(--bx-muted)">{{ row.stock_uom || '—' }}</td>
-                        <td style="min-width:160px">
+                        <td style="min-width:130px">
                           <select class="bomx-fi" v-model="row.warehouse" :disabled="readOnly">
                             <option value="">— Use Default —</option>
                             <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
@@ -573,16 +573,19 @@ onMounted(async () => {
     const co = await resolveCompany();
     if (isNew.value) pp.value.company = co;
 
-    const stk = await apiList("Item", { fields: ["name", "item_name", "stock_uom"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    // Independent of each other — Warehouse only needs `co`, already resolved
+    // above. loadList() doesn't depend on this reference data either, so it's
+    // folded in too, turning ~4 sequential round trips into 1.
+    const [stk, boms, whs] = await Promise.all([
+      apiList("Item", { fields: ["name", "item_name", "stock_uom"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" }),
+      apiList("BOM", { fields: ["name", "item", "quantity", "is_default", "docstatus", "is_active"], filters: [["docstatus", "=", 1], ["is_active", "=", 1]], limit: 2000, order: "name asc" }),
+      apiList("Warehouse", { fields: ["name"], filters: co ? [["company", "=", co], ["is_group", "=", 0]] : [["is_group", "=", 0]], limit: 1000, order: "name asc" }),
+      loadList(),
+    ]);
     stockItems.value = stk || [];
-
-    const boms = await apiList("BOM", { fields: ["name", "item", "quantity", "is_default", "docstatus", "is_active"], filters: [["docstatus", "=", 1], ["is_active", "=", 1]], limit: 2000, order: "name asc" });
     bomList.value = boms || [];
-
-    const whs = await apiList("Warehouse", { fields: ["name"], filters: co ? [["company", "=", co], ["is_group", "=", 0]] : [["is_group", "=", 0]], limit: 1000, order: "name asc" });
     warehouseList.value = whs || [];
 
-    await loadList();
     if (route.params.name) {
       await loadPP();
     } else {
@@ -1041,10 +1044,11 @@ function icon(name, size) {
 
 /* ── Items to Manufacture table ── */
 .bomx-tbl-wrap { overflow-x:auto; }
-.bomx-item-tbl { width:100%; border-collapse:collapse; font-size:13px; }
-.bomx-item-tbl th { text-align:left; padding:8px 10px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
+.bomx-item-tbl { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
+.bomx-item-tbl th { text-align:left; padding:8px 8px; border-bottom:1px solid var(--bx-border); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--bx-muted); font-weight:700; background:var(--bx-surf2); white-space:nowrap; }
 .bomx-item-tbl th.right, .bomx-item-tbl td.right { text-align:right; }
-.bomx-item-tbl td { padding:7px 10px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-item-tbl td { padding:7px 8px; border-bottom:1px solid #F1F3F5; vertical-align:middle; }
+.bomx-item-tbl td select.bomx-fi, .bomx-item-tbl td input.bomx-fi { width:100%; box-sizing:border-box; min-width:0; }
 .bomx-item-tbl tr:last-child td { border-bottom:none; }
 .bomx-item-tbl tr:hover td { background:#FAFBFF; }
 

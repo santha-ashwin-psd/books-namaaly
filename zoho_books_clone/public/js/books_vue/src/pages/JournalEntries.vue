@@ -126,7 +126,7 @@
         </template>
         <template v-else>
           <tr v-for="e in filteredRows" :key="e.name" class="clickable" @click="openView(e.name)">
-            <td style="font-size:12px;font-weight:700;color:#2563eb">{{e.name}}</td>
+            <td @click.stop><DocLink doctype="Journal Entry" :name="e.name" /></td>
             <td style="font-size:12.5px;color:#868e96">{{fmtDateLocal(e.date)}}</td>
             <td><span class="b-badge" :class="JE_TYPE_COLOR[e.type]||'je-type-info'">{{e.type||'Journal Entry'}}</span></td>
             <td style="font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{e.narration||'—'}}</td>
@@ -177,7 +177,7 @@
 
           <!-- Card header: entry # + status badge -->
           <div class="jen-mc-header">
-            <div class="jen-mc-entry-no">{{e.name}}</div>
+            <div class="jen-mc-entry-no" @click.stop><DocLink doctype="Journal Entry" :name="e.name" :mono-style="false" /></div>
             <span class="b-badge jen-mc-status-badge" :class="JE_STATUS_COLOR[e.status]||'je-s-draft'">{{e.status}}</span>
           </div>
 
@@ -587,6 +587,9 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import DocLink from "../components/DocLink.vue";
+import { useRoute } from "vue-router";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 
 const { toast } = useToast();
 
@@ -821,7 +824,11 @@ async function doAction() {
   confTarget.value = null;
 }
 
-onMounted(load);
+const route = useRoute();
+onMounted(async () => {
+  await load();
+  useOpenFromQuery({ route, openByName: (n) => openView(n) });
+});
 </script>
 
 <style scoped>

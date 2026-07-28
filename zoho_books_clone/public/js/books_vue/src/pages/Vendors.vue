@@ -136,7 +136,7 @@
               </td>
               <td class="vt-td vt-td-secondary">
                 <template v-if="lastBillByVendor[v.name]">
-                  <div class="vt-lastinv-ref">{{ lastBillByVendor[v.name].name }}</div>
+                  <div class="vt-lastinv-ref" @click.stop><DocLink doctype="Purchase Invoice" :name="lastBillByVendor[v.name].name" /></div>
                   <div class="vt-lastinv-date">{{ fmtDate(lastBillByVendor[v.name].date) }} · {{ fmtCur(lastBillByVendor[v.name].amount) }}</div>
                 </template>
                 <span v-else>—</span>
@@ -539,7 +539,7 @@
                   background: t.type==='Bill' ? '#FEF3C7' : t.type==='Payment' ? '#D1FAE5' : '#FEE2E2',
                   color: t.type==='Bill' ? '#92400E' : t.type==='Payment' ? '#059669' : '#991B1B'
                 }">{{t.type}}</span>
-                <span style="color:#2563EB;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.name}}</span>
+                <span @click.stop style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><DocLink :doctype="vendDocTypeFor(t.type)" :name="t.name" /></span>
                 <span style="color:#6B7280">{{fmtDate(t.date)}}</span>
                 <span style="text-align:right;font-weight:600" :style="{color: t.amount<0 ? '#059669' : '#374151'}">{{fmtCur(Math.abs(t.amount))}}</span>
                 <span style="text-align:right;" :style="{color: t.outstanding>0 ? '#E67700' : '#9CA3AF'}">{{t.outstanding>0?fmtCur(t.outstanding):'—'}}</span>
@@ -559,7 +559,7 @@
                   <span class="ven-txn-mc-amount" :style="{color: t.amount<0 ? '#059669' : '#374151'}">{{fmtCur(Math.abs(t.amount))}}</span>
                 </div>
                 <div class="ven-txn-mc-mid">
-                  <span class="ven-txn-mc-ref">{{t.name}}</span>
+                  <span class="ven-txn-mc-ref" @click.stop><DocLink :doctype="vendDocTypeFor(t.type)" :name="t.name" /></span>
                   <span class="ven-txn-mc-date">{{fmtDate(t.date)}}</span>
                 </div>
                 <div class="ven-txn-mc-mid" style="margin-top:4px">
@@ -592,26 +592,47 @@
             <input v-model="stmtRange.to" type="date" class="inv-fi" style="width:160px"/>
             <button class="nim-btn" style="border:1px solid #E5E7EB" @click="loadStatement">Refresh</button>
             <div style="margin-left:auto;display:flex;gap:8px">
+              <button v-if="vendorStatement.rows?.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadVendorStatementPdf" :disabled="downloadingVendorStmtPdf">
+                {{downloadingVendorStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
+              </button>
               <button class="nim-btn" style="border:1px solid #E5E7EB" @click="emailVendorStatement">📧 Email Statement</button>
             </div>
           </div>
           <div v-if="detailLoading" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:24px;text-align:center;color:#9CA3AF">Loading statement…</div>
           <div v-else style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
             <!-- Desktop table -->
-            <div class="ven-stmt-desktop">
-              <div style="display:grid;grid-template-columns:100px 160px 100px 110px 110px 130px;gap:8px;background:#F9FAFB;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB">
-                <span>Date</span><span>Reference</span><span>Type</span><span style="text-align:right">Debit</span><span style="text-align:right">Credit</span><span style="text-align:right">Balance</span>
-              </div>
-              <div v-if="!vendorStatement.rows?.length" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No statement rows for this period.</div>
-              <div v-for="(r,i) in stmtRowsVisible" :key="r.ref+'-'+i"
-                style="display:grid;grid-template-columns:100px 160px 100px 110px 110px 130px;gap:8px;padding:8px 14px;border-bottom:1px solid #F3F4F6;font-size:12.5px;align-items:center">
-                <span style="color:#6B7280">{{fmtDate(r.date)}}</span>
-                <span style="color:#2563EB;font-weight:600">{{r.ref}}</span>
-                <span style="font-size:11px;color:#6B7280">{{r.type}}</span>
-                <span style="text-align:right;color:#059669">{{r.debit>0?fmtCur(r.debit):'—'}}</span>
-                <span style="text-align:right;color:#E67700">{{r.credit>0?fmtCur(r.credit):'—'}}</span>
-                <span style="text-align:right;font-weight:700;color:#111827">{{fmtCur(r.balance)}}</span>
-              </div>
+            <div class="ven-stmt-desktop" style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                <thead>
+                  <tr style="background:#F9FAFB">
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Date</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB">Reference</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Type</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Debit</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Credit</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!vendorStatement.rows?.length">
+                    <td colspan="6" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No statement rows for this period.</td>
+                  </tr>
+                  <tr v-for="(r,i) in stmtRowsVisible" :key="r.ref+'-'+i" style="border-bottom:1px solid #F3F4F6">
+                    <td style="padding:8px 14px;color:#6B7280;white-space:nowrap">{{fmtDate(r.date)}}</td>
+                    <td style="padding:8px 14px" @click.stop><DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" /></td>
+                    <td style="padding:8px 14px;font-size:11px;color:#6B7280;white-space:nowrap">{{r.type}}</td>
+                    <td style="padding:8px 14px;text-align:right;color:#059669;white-space:nowrap">{{r.debit>0?fmtCur(r.debit):'—'}}</td>
+                    <td style="padding:8px 14px;text-align:right;color:#E67700;white-space:nowrap">{{r.credit>0?fmtCur(r.credit):'—'}}</td>
+                    <td style="padding:8px 14px;text-align:right;font-weight:700;color:#111827;white-space:nowrap">{{fmtCur(r.balance)}}</td>
+                  </tr>
+                </tbody>
+                <tfoot v-if="vendorStatement.rows?.length">
+                  <tr style="background:#F9FAFB;font-weight:700">
+                    <td colspan="5" style="padding:10px 14px">Closing Balance</td>
+                    <td style="padding:10px 14px;text-align:right;white-space:nowrap">{{fmtCur(vendorStatement.totals?.closing_balance || 0)}}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
 
             <!-- Mobile card view -->
@@ -619,7 +640,7 @@
               <div v-if="!vendorStatement.rows?.length" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No statement rows for this period.</div>
               <div v-for="(r,i) in stmtRowsVisible" :key="'smc-'+r.ref+'-'+i" class="ven-stmt-mc">
                 <div class="ven-stmt-mc-top">
-                  <span class="ven-stmt-mc-ref">{{r.ref}}</span>
+                  <span class="ven-stmt-mc-ref" @click.stop><DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" /></span>
                   <span class="ven-stmt-mc-type">{{r.type}}</span>
                 </div>
                 <div class="ven-stmt-mc-date">{{fmtDate(r.date)}}</div>
@@ -1110,11 +1131,14 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { apiList, apiGET, apiSave, apiSubmit, apiDelete, apiPOST, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePermissions } from "../composables/usePermissions.js";
 import { usePrompt } from "../composables/usePrompt.js";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import AddressManager from "../components/AddressManager.vue";
+import DocLink from "../components/DocLink.vue";
 import { fmt, fmtDate } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
 import { COUNTRIES, statesFor } from "../composables/useCountryState.js";
@@ -1604,6 +1628,11 @@ async function selectVendor(v) {
   loadOpeningBalance();
 }
 function closeVendor() { selectedVendor.value = null; }
+function vendDocTypeFor(type) {
+  return type === "Bill" ? "Purchase Invoice"
+    : type === "Debit Note" ? "Debit Note"
+    : type === "Payment" ? "Payment Entry" : "";
+}
 
 async function loadOpeningBalance() {
   if (!selectedVendor.value) return;
@@ -1684,6 +1713,112 @@ async function loadStatement() {
     }) || { rows: [], totals: {} };
   } catch (e) { toast(e.message || "Failed to load statement", "error"); }
   detailLoading.value = false;
+}
+
+// ── Vendor statement PDF export ─────────────────────────────────────────
+// Same running-balance ledger layout used for the Customer statement PDF,
+// built client-side from vendorStatement (already has date/type/ref/debit/
+// credit/balance per row) and rendered server-side via render_pdf_from_html.
+const downloadingVendorStmtPdf = ref(false);
+
+function fmtVendStmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d);
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function buildVendorStatementPdfHtml() {
+  const vendName = selectedVendor.value?.supplier_name || selectedVendor.value?.name || "";
+  const company = window.__booksCompany || "";
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  const rowsHtml = (vendorStatement.value.rows || []).map(r => `<tr>
+      <td>${fmtVendStmtDate(r.date)}</td>
+      <td>${r.type || ""}</td>
+      <td>${r.ref || ""}</td>
+      <td class="num">${Number(r.debit||0) ? fmtCur(r.debit) : ""}</td>
+      <td class="num">${Number(r.credit||0) ? fmtCur(r.credit) : ""}</td>
+      <td class="num bal">${fmtCur(r.balance)}</td>
+    </tr>`).join("");
+
+  const closing = vendorStatement.value.totals?.closing_balance || 0;
+  const rangeLabel = stmtRange.from || stmtRange.to
+    ? `From ${stmtRange.from || "start"} to ${stmtRange.to || "today"}`
+    : `As on ${today}`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 12px; }
+  .stmt-header { text-align: center; margin-bottom: 4px; }
+  .stmt-company { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+  .stmt-title { font-size: 13px; font-weight: 600; margin-top: 10px; }
+  .stmt-sub { font-size: 11.5px; color: #444; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th, td { border: 1px solid #999; padding: 5px 8px; font-size: 11.5px; }
+  th { background: #f0f0f0; text-align: left; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td.bal { font-weight: 600; }
+  tfoot td { font-weight: 700; background: #f7f7f7; }
+</style></head>
+<body>
+  <div class="stmt-header">
+    ${company ? `<div class="stmt-company">${company}</div>` : ""}
+    <div class="stmt-title">Vendor Account Statement</div>
+    <div class="stmt-sub">Account: ${vendName} &nbsp;|&nbsp; ${rangeLabel}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Ref No</th>
+        <th class="num">Debit</th>
+        <th class="num">Credit</th>
+        <th class="num">Balance</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Closing Balance</td>
+        <td class="num">${fmtCur(closing)}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body></html>`;
+}
+
+async function downloadVendorStatementPdf() {
+  if (!vendorStatement.value.rows?.length) { toast("No statement rows to export", "error"); return; }
+  downloadingVendorStmtPdf.value = true;
+  try {
+    const html = buildVendorStatementPdfHtml();
+    const filename = `vendor-statement-${selectedVendor.value.name}-${new Date().toISOString().slice(0,10)}.pdf`;
+    const csrf = window.frappe?.csrf_token || "";
+    const res = await fetch("/api/method/zoho_books_clone.api.docs.render_pdf_from_html", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Frappe-CSRF-Token": csrf },
+      credentials: "same-origin",
+      body: new URLSearchParams({ pdf_html: html, filename }),
+    });
+    if (!res.ok) throw new Error("PDF generation failed");
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+  } catch (e) {
+    toast("Failed to generate statement PDF", "error");
+  }
+  downloadingVendorStmtPdf.value = false;
 }
 
 async function emailVendorStatement() {
@@ -1946,10 +2081,12 @@ async function runImport() {
 }
 
 
+const route = useRoute();
 onMounted(async () => {
   await load();
   loadAccounts();
   loadAllBalances();
+  useOpenFromQuery({ route, openByName: (n) => selectVendor(list.value.find(v => v.name === n) || { name: n }) });
 });
 </script>
 

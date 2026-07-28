@@ -47,8 +47,12 @@
         <template v-else>
           <tr v-for="row in paged" :key="row.name" class="inv-row">
             <td @click="openView(row)" class="text-muted mono-sm">{{ row.posting_date }}</td>
-            <td @click="openView(row)"><span class="inv-link">{{ row.name }}</span></td>
-            <td @click="openView(row)" class="mono-sm">{{ row.purchase_receipt || row.purchase_invoice || '—' }}</td>
+            <td @click="openView(row)"><DocLink doctype="Landed Cost Voucher" :name="row.name" /></td>
+            <td @click="openView(row)" class="mono-sm">
+              <DocLink v-if="row.purchase_receipt" doctype="Purchase Receipt" :name="row.purchase_receipt" @click.stop />
+              <DocLink v-else-if="row.purchase_invoice" doctype="Purchase Invoice" :name="row.purchase_invoice" @click.stop />
+              <span v-else>—</span>
+            </td>
             <td @click="openView(row)">{{ row.distribution_method || '—' }}</td>
             <td @click="openView(row)" class="ta-r mono-sm">{{ INR(row.total_charges) }}</td>
             <td @click="openView(row)">
@@ -334,6 +338,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import DocLink from "../components/DocLink.vue";
 import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import Pagination from "../components/Pagination.vue";
@@ -516,7 +521,10 @@ function closeDrawer() {
 
 // Deep-link support: /purchasing/landed-cost-vouchers/new?purchase_receipt=XXX (used by Purchase Receipts)
 // and /purchasing/landed-cost-vouchers/:name open the drawer directly, then normalize the URL back to the list.
-onMounted(async () => {
+// Extracted into a function (not just onMounted) because Vue Router reuses this
+// component instance when navigating between /purchasing/landed-cost-vouchers/:name
+// URLs — onMounted alone would miss those in-place navigations.
+async function _handleRouteParam() {
   const paramName = route.params.name;
   if (paramName === "new") {
     currentName.value = null;
@@ -540,7 +548,10 @@ onMounted(async () => {
     loadDetail(paramName);
     router.replace("/purchasing/landed-cost-vouchers");
   }
-});
+}
+
+onMounted(_handleRouteParam);
+watch(() => route.params.name, (n, old) => { if (n && n !== old) _handleRouteParam(); });
 
 async function loadDetail(name) {
   detailLoading.value = true;

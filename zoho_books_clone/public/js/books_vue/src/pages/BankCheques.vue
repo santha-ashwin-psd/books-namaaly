@@ -53,7 +53,7 @@
           <template v-else>
             <tr v-for="p in paged" :key="p.name" class="chq-row" @click="openView(p)">
               <td @click.stop><input type="checkbox" :checked="selected.has(p.name)" @change="toggleSelect(p.name)" /></td>
-              <td><span class="chq-num">{{ p.name }}</span></td>
+              <td><DocLink doctype="Payment Entry" :name="p.name" /></td>
               <td>{{ p.party_name||p.party||'—' }}</td>
               <td class="mono-sm text-muted">{{ p.reference_no||'—' }}</td>
               <td class="mono-sm text-muted">{{ fmtDate(p.payment_date) }}</td>
@@ -82,7 +82,7 @@
         <template v-else>
           <div v-for="p in paged" :key="p.name" class="chq-mobile-card" @click="openView(p)">
             <div class="chq-mc-top">
-              <span class="chq-mc-docno">{{ p.name }}</span>
+              <span class="chq-mc-docno"><DocLink doctype="Payment Entry" :name="p.name" /></span>
               <span class="chq-badge" :class="statusBadge(p.cheque_status)">{{ p.cheque_status||'Issued' }}</span>
             </div>
             <div class="chq-mc-mid">{{ p.party_name || p.party || '—' }}</div>
@@ -164,6 +164,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
+import DocLink from "../components/DocLink.vue";
 const { toast } = useToast();
 const activeTab = ref("all");
 const tabs = [

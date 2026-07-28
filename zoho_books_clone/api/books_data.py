@@ -769,7 +769,8 @@ _CASH_DEPOSIT_REMARK_PREFIX = "Cash deposited to bank:"
 
 def _cash_account_balance(cash_account, company):
     """Pooled 'yet to deposit' balance for one Cash account: all-time cash
-    received minus all-time cash paid out minus all-time already deposited.
+    received minus all-time cash paid out (both Payment Entries AND
+    Journal-Entry-tagged cash expenses) minus all-time already deposited.
     """
     total_in = flt(frappe.db.sql(
         """SELECT SUM(paid_amount) FROM `tabPayment Entry`
@@ -778,10 +779,23 @@ def _cash_account_balance(cash_account, company):
         (cash_account, company)
     )[0][0] or 0)
 
-    total_out = flt(frappe.db.sql(
+    total_out_pe = flt(frappe.db.sql(
         """SELECT SUM(paid_amount) FROM `tabPayment Entry`
            WHERE docstatus = 1 AND payment_type = 'Pay'
              AND paid_from = %s AND LOWER(company) = LOWER(%s)""",
+        (cash_account, company)
+    )[0][0] or 0)
+
+    # Cash expenses booked with no vendor bill (Dr Expense / Cr Cash-in-Hand),
+    # tagged by the Bank & Cash page's "New Cash Entry → Pay" flow. These
+    # were previously omitted here, which overstated the undeposited pool by
+    # exactly the amount of every such expense.
+    total_out_je = flt(frappe.db.sql(
+        """SELECT SUM(jea.credit)
+           FROM `tabJournal Entry Account` jea
+           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+           WHERE je.docstatus = 1 AND je.custom_cash_out_entry = 1
+             AND jea.account = %s AND LOWER(je.company) = LOWER(%s)""",
         (cash_account, company)
     )[0][0] or 0)
 
@@ -795,7 +809,7 @@ def _cash_account_balance(cash_account, company):
         (cash_account, _CASH_DEPOSIT_REMARK_PREFIX + "%")
     )[0][0] or 0)
 
-    return total_in - total_out - total_deposited
+    return total_in - total_out_pe - total_out_je - total_deposited
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
@@ -857,6 +871,74 @@ def get_undeposited_cash(company=None, exclude_account=None):
         "destination_accounts": destination_accounts,
         "company": company,
     }
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_cash_summary(company=None):
+    """Full-history Cash In / Cash Out / Transfers / Net Cash totals for the
+    Bank & Cash page's summary strip.
+
+    Unlike the page's transaction list (capped at 200 rows per bucket for
+    display performance), these are exact all-time SQL sums, and Net Cash is
+    sourced from the same ledger-truth calculation as get_undeposited_cash
+    (the Deposit button's figure) — so on the summary strip:
+        Net Cash == Cash In - Cash Out - Transfers   (always, by construction)
+        Net Cash == the amount the Deposit button can move
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking")
+
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    company = company or frappe.db.get_default("company")
+    if not company:
+        frappe.throw("No company context found.")
+
+    cash_accounts = [
+        c.name for c in frappe.get_all(
+            "Account", filters={"account_type": "Cash", "is_group": 0, "company": company}
+        )
+    ]
+    if not cash_accounts:
+        return {"cash_in": 0, "cash_out": 0, "transfers": 0, "net_cash": 0}
+
+    cash_in = flt(frappe.db.sql(
+        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+           WHERE docstatus = 1 AND payment_type = 'Receive'
+             AND paid_to IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "co": company}
+    )[0][0] or 0)
+
+    cash_out_pe = flt(frappe.db.sql(
+        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+           WHERE docstatus = 1 AND payment_type = 'Pay'
+             AND paid_from IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "co": company}
+    )[0][0] or 0)
+
+    cash_out_je = flt(frappe.db.sql(
+        """SELECT SUM(jea.credit)
+           FROM `tabJournal Entry Account` jea
+           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+           WHERE je.docstatus = 1 AND je.custom_cash_out_entry = 1
+             AND jea.account IN %(accs)s AND LOWER(je.company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "co": company}
+    )[0][0] or 0)
+
+    transfers = flt(frappe.db.sql(
+        """SELECT SUM(jea.credit)
+           FROM `tabJournal Entry Account` jea
+           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+           WHERE je.docstatus = 1 AND je.voucher_type = 'Contra Entry'
+             AND jea.account IN %(accs)s AND je.remark LIKE %(marker)s""",
+        {"accs": cash_accounts, "marker": _CASH_DEPOSIT_REMARK_PREFIX + "%"}
+    )[0][0] or 0)
+
+    cash_out = cash_out_pe + cash_out_je
+    net_cash = flt(get_undeposited_cash(company=company)["total_undeposited"])
+
+    return {"cash_in": cash_in, "cash_out": cash_out, "transfers": transfers, "net_cash": net_cash}
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
@@ -2176,6 +2258,28 @@ def get_chart_of_accounts(company=None):
                 and not a.get("parent_account")
             )
         ]
+
+    # A Bank Account's opening balance is posted as a real GL Entry
+    # (voucher_type='Bank Account', see banking/doctype/bank_account/
+    # bank_account.py::_post_opening_gl). For those accounts the static
+    # `opening_balance` field is a leftover of how the balance was entered,
+    # not a separate un-posted amount — showing it here alongside a ledger
+    # view that (correctly) already reflects it via the GL entry would look
+    # like two different opening balances for the same account. Zero it out
+    # here so Chart of Accounts stays consistent with the ledger/balance
+    # calculations in api/banking.py and db/queries.py.
+    if "opening_balance" in fields and accounts:
+        bank_posted = {
+            r.account for r in frappe.db.sql(
+                """SELECT DISTINCT account FROM `tabGeneral Ledger Entry`
+                   WHERE voucher_type = 'Bank Account'""",
+                as_dict=True,
+            )
+        }
+        if bank_posted:
+            for a in accounts:
+                if a.get("name") in bank_posted:
+                    a["opening_balance"] = 0
 
     return accounts
 

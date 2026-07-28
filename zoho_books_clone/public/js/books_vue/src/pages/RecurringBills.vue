@@ -60,14 +60,14 @@
             <tr v-for="r in paged" :key="r.name" class="rec-row" :class="{selected:selected.includes(r.name)}" @click="openView(r)">
               <td @click.stop><input type="checkbox" :checked="selected.includes(r.name)" @change="toggleOne(r.name)" /></td>
               <td>
-                <span class="rec-num">{{ r.name }}</span>
+                <router-link :to="{ path: '/recurring-bills', query: { open: r.name } }" class="rec-num" @click.stop="openView(r)">{{ r.name }}</router-link>
                 <div v-if="r.subscription_name" style="font-size:11.5px;color:#6b7280;margin-top:2px;font-weight:500">{{ r.subscription_name }}</div>
               </td>
               <td>
                 <span v-if="r.party" style="font-size:13px;color:#111827;font-weight:500">{{ r.party }}</span>
                 <span v-else class="text-muted">—</span>
               </td>
-              <td><span class="rec-ref">{{ r.reference_document||'—' }}</span></td>
+              <td><DocLink v-if="r.reference_document" doctype="Purchase Invoice" :name="r.reference_document" @click.stop /><span v-else class="rec-ref">—</span></td>
               <td>{{ r.frequency||'—' }}</td>
               <td class="mono-sm" :class="isDue(r)?'text-accent':''">{{ fmtDate(r.next_schedule_date)||'—' }}</td>
               <td><span class="rec-badge" :class="statusClass(r.ui_status||r.status)">{{ r.ui_status||r.status||'Active' }}</span></td>
@@ -389,7 +389,7 @@
                 <thead><tr><th>Document</th><th>Created</th><th>Status</th></tr></thead>
                 <tbody>
                   <tr v-for="d in viewDoc.runs" :key="d.name">
-                    <td class="rec-num">{{ d.name }}</td>
+                    <td><DocLink doctype="Purchase Invoice" :name="d.name" /></td>
                     <td class="text-muted mono-sm">{{ fmtDate(d.creation) }}</td>
                     <td><span class="rec-badge" :class="d.docstatus===1?'badge-green':d.docstatus===2?'badge-red':'badge-grey'">{{ d.docstatus===1?'Submitted':d.docstatus===2?'Cancelled':'Draft' }}</span></td>
                   </tr>
@@ -438,6 +438,9 @@ import SearchableSelect from "../components/SearchableSelect.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
+import DocLink from "../components/DocLink.vue";
+import { useRoute } from "vue-router";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -728,7 +731,14 @@ async function saveRec() {
   finally { drawerSaving.value = false; }
 }
 
-onMounted(load);
+const route = useRoute();
+onMounted(async () => {
+  await load();
+  useOpenFromQuery({
+    route,
+    openByName: (n) => openView(list.value?.find(r => r.name === n) || { name: n }),
+  });
+});
 </script>
 
 <style scoped>

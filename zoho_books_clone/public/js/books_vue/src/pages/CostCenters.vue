@@ -234,7 +234,7 @@
                   <tr v-for="(t,i) in txns" :key="i">
                     <td class="cc-txn-date">{{ fmtDate(t.posting_date) }}</td>
                     <td>
-                      <a :href="voucherPath(t.voucher_type,t.voucher_no)" class="cc-vlink">{{ t.voucher_no }}</a>
+                      <DocLink :doctype="t.voucher_type" :name="t.voucher_no" />
                       <div class="cc-vtype">{{ t.voucher_type }}</div>
                     </td>
                     <td class="cc-txn-acct">{{ t.account }}</td>
@@ -384,10 +384,11 @@ import { apiGET, apiPOST, apiList, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { usePagination } from "../composables/usePagination.js";
-import { fmtDate, voucherPath } from "../utils/format.js";
+import { fmtDate } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();

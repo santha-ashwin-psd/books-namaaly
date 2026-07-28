@@ -356,19 +356,119 @@ async function downloadStatement() {
     const data = await apiGET("zoho_books_clone.api.docs.get_customer_statement",
       { customer: route.params.name });
     if (!data || !data.rows?.length) { toast.error("No statement rows in this period"); return; }
-    const headers = ["Date","Document","Type","Debit","Credit","Balance"];
-    const rows = data.rows.map(r => [r.date, r.name, r.type, r.debit, r.credit, r.balance]);
-    const esc = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const csv = "﻿" + [headers, ...rows].map(r => r.map(esc).join(",")).join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `statement-${route.params.name}-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    await downloadStatementPdf(data);
   } catch (e) {
     toast.error(e.message || "Statement download failed");
+  }
+}
+
+// ── Ledger-style statement PDF ──────────────────────────────────────────
+// Restructured to mirror a traditional running-balance account ledger:
+// one row per voucher (Invoice / Payment / Credit Note / Opening Balance)
+// with Debit, Credit, and a cumulative Balance column (Dr/Cr suffix) —
+// instead of the previous plain CSV export.
+function fmtStmtAmt(v) {
+  const n = Number(v || 0);
+  return n ? n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+}
+
+function fmtStmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d);
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function buildStatementHtml(data) {
+  const custName = customer.value.customer_name || route.params.name;
+  const company = window.__booksCompany || "";
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  const rowsHtml = data.rows.map(r => {
+    const bal = Number(r.balance || 0);
+    const balLabel = `${fmtStmtAmt(Math.abs(bal))} ${bal >= 0 ? "Dr" : "Cr"}`;
+    return `<tr>
+      <td>${fmtStmtDate(r.date)}</td>
+      <td>${r.type || ""}</td>
+      <td>${r.ref || ""}</td>
+      <td class="num">${fmtStmtAmt(r.debit)}</td>
+      <td class="num">${fmtStmtAmt(r.credit)}</td>
+      <td class="num bal">${balLabel}</td>
+    </tr>`;
+  }).join("");
+
+  const t = data.totals || {};
+  const closing = Number(t.closing_balance || 0);
+  const closingLabel = `${fmtStmtAmt(Math.abs(closing))} ${closing >= 0 ? "Dr" : "Cr"}`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 12px; }
+  .stmt-header { text-align: center; margin-bottom: 4px; }
+  .stmt-company { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+  .stmt-title { font-size: 13px; font-weight: 600; margin-top: 10px; }
+  .stmt-sub { font-size: 11.5px; color: #444; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th, td { border: 1px solid #999; padding: 5px 8px; font-size: 11.5px; }
+  th { background: #f0f0f0; text-align: left; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td.bal { font-weight: 600; }
+  tfoot td { font-weight: 700; background: #f7f7f7; }
+</style></head>
+<body>
+  <div class="stmt-header">
+    ${company ? `<div class="stmt-company">${company}</div>` : ""}
+    <div class="stmt-title">Account Statement</div>
+    <div class="stmt-sub">Account: ${custName} &nbsp;|&nbsp; As on ${today}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Ref No</th>
+        <th class="num">Debit</th>
+        <th class="num">Credit</th>
+        <th class="num">Balance</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Closing Balance</td>
+        <td class="num">${closingLabel}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body></html>`;
+}
+
+async function downloadStatementPdf(data) {
+  const html = buildStatementHtml(data);
+  const filename = `statement-${route.params.name}-${new Date().toISOString().slice(0,10)}.pdf`;
+  try {
+    const csrf = window.frappe?.csrf_token || "";
+    const res = await fetch("/api/method/zoho_books_clone.api.docs.render_pdf_from_html", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Frappe-CSRF-Token": csrf },
+      credentials: "same-origin",
+      body: new URLSearchParams({ pdf_html: html, filename }),
+    });
+    if (!res.ok) throw new Error("PDF generation failed");
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+  } catch (e) {
+    toast.error("Failed to generate statement PDF");
   }
 }
 

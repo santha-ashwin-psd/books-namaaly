@@ -96,7 +96,7 @@
                     <div v-if="!suggestions[t.name].matches.length" style="font-size:12.5px;color:#6b7280;padding:8px">No Payment Entries matched on amount + date. You can mark this row Reconciled manually if you reviewed it.</div>
                     <div v-for="m in suggestions[t.name].matches" :key="m.name" class="br-suggest-card">
                       <div class="br-suggest-meta">
-                        <span class="br-num">{{ m.name }}</span>
+                        <span class="br-num" @click.stop><DocLink doctype="Payment Entry" :name="m.name" /></span>
                         <span class="br-score" :style="`background:${m.score>=80?'#dcfce7':m.score>=50?'#fef3c7':'#fee2e2'};color:${m.score>=80?'#16a34a':m.score>=50?'#d97706':'#dc2626'}`">{{ m.score.toFixed(0) }}% confidence</span>
                       </div>
                       <div class="br-suggest-info">
@@ -155,7 +155,7 @@
               <div v-if="!suggestions[t.name].matches.length" style="font-size:12.5px;color:#6b7280;padding:8px">No Payment Entries matched on amount + date. You can mark this row Reconciled manually if you reviewed it.</div>
               <div v-for="m in suggestions[t.name].matches" :key="m.name" class="br-suggest-card">
                 <div class="br-suggest-meta">
-                  <span class="br-num">{{ m.name }}</span>
+                  <span class="br-num" @click.stop><DocLink doctype="Payment Entry" :name="m.name" /></span>
                   <span class="br-score" :style="`background:${m.score>=80?'#dcfce7':m.score>=50?'#fef3c7':'#fee2e2'};color:${m.score>=80?'#16a34a':m.score>=50?'#d97706':'#dc2626'}`">{{ m.score.toFixed(0) }}% confidence</span>
                 </div>
                 <div class="br-suggest-info"><span>{{ m.party_name || m.party }} · {{ fmtDate(m.payment_date) }} · {{ m.mode_of_payment||'—' }}</span></div>
@@ -196,6 +196,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const route = useRoute();

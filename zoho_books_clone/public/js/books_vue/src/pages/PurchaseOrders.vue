@@ -70,7 +70,7 @@
           <template v-else>
             <tr v-for="o in paged" :key="o.name" class="inv-row" :class="{selected:selected.has(o.name)}">
               <td class="td-check"><input type="checkbox" :checked="selected.has(o.name)" @change="toggle(o.name)" /></td>
-              <td class="td-id" @click="openView(o)"><span class="inv-link">{{ o.name }}</span></td>
+              <td class="td-id" @click="openView(o)"><DocLink doctype="Purchase Order" :name="o.name" /></td>
               <td class="td-customer" @click="openView(o)">{{ o.supplier_name || o.supplier || '—' }}</td>
               <td class="td-date text-muted mono-sm" @click="openView(o)">{{ fmtDate(o.transaction_date) }}</td>
               <td class="td-due mono-sm" @click="openView(o)" :class="isPastExpected(o)?'text-danger':'text-muted'">{{ fmtDate(o.expected_delivery_date)||'—' }}</td>
@@ -743,7 +743,7 @@
                       </thead>
                       <tbody>
                         <tr v-for="b in links.bills" :key="b.name">
-                          <td class="inv-link">{{ b.name }}</td>
+                          <td><DocLink doctype="Purchase Invoice" :name="b.name" /></td>
                           <td class="text-muted mono-sm">{{ fmtDate(b.posting_date) }}</td>
                           <td class="td-r mono-sm text-danger">{{ fmtCur(b.outstanding_amount) }}</td>
                           <td class="td-r mono-sm" style="font-weight:600">{{ fmtCur(b.grand_total) }}</td>
@@ -945,6 +945,9 @@ import Pagination from "../components/Pagination.vue";
 import { usePagination } from "../composables/usePagination.js";
 import BulkActionBar from "../components/BulkActionBar.vue";
 import TimelineStepper from "../components/TimelineStepper.vue";
+import DocLink from "../components/DocLink.vue";
+import { useRoute } from "vue-router";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -1725,7 +1728,14 @@ function exportCSV() {
   toast.success(`CSV exported — ${rows.length} PO(s)`);
 }
 
-onMounted(() => { setCompany(window.__booksCompany || ""); document.addEventListener('click', onDocClickForDownloadMenu); load(); loadTaxAccount(); });
+const route = useRoute();
+onMounted(async () => {
+  setCompany(window.__booksCompany || "");
+  document.addEventListener('click', onDocClickForDownloadMenu);
+  await load();
+  loadTaxAccount();
+  useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(o => o.name === n) || { name: n }) });
+});
 onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMenu));
 
 watch(() => form.supplier, (val) => {

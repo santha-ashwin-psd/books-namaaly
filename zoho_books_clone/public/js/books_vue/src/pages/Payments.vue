@@ -60,8 +60,11 @@
           <template v-else>
             <tr v-for="p in paged" :key="p.name" class="inv-row" :class="{selected:selected.has(p.name)}">
               <td><input type="checkbox" :checked="selected.has(p.name)" @change="toggle(p.name)" /></td>
-              <td @click="openView(p)"><span class="inv-link">{{ p.name }}</span></td>
-              <td @click="openView(p)">{{ p.party_name||p.party||'—' }}</td>
+              <td @click="openView(p)"><DocLink doctype="Payment Entry" :name="p.name" /></td>
+              <td @click="openView(p)">
+                <DocLink :doctype="p.party_type || (p.payment_type==='Receive'?'Customer':'Supplier')" :name="p.party" :mono-style="false">{{ p.party_name||p.party||'—' }}</DocLink>
+                <div style="font-size:11px;color:#9ca3af;margin-top:1px">{{ p.party_type || (p.payment_type==='Receive'?'Customer':'Supplier') }}</div>
+              </td>
               <td @click="openView(p)" class="text-muted">{{ p.mode_of_payment||'—' }}</td>
               <td @click="openView(p)" class="text-muted mono-sm" style="overflow: hidden;max-width: 10px">{{ p.reference_no||'—' }}</td>
               <td @click="openView(p)" class="text-muted mono-sm">{{ fmtDate(p.payment_date) }}</td>
@@ -99,10 +102,13 @@
         <template v-else>
           <div v-for="p in paged" :key="p.name" class="pay-mobile-card" @click="openView(p)">
             <div class="pay-mc-top">
-              <span class="pay-mc-docno">{{ p.name }}</span>
+              <span class="pay-mc-docno" @click.stop><DocLink doctype="Payment Entry" :name="p.name" :mono-style="false" /></span>
               <span class="inv-status-badge" :class="p.payment_type==='Receive'?'badge-green':'badge-red'">{{ p.payment_type==='Receive'?'Received':'Paid Out' }}</span>
             </div>
-            <div class="pay-mc-mid">{{ p.party_name || p.party || '—' }}</div>
+            <div class="pay-mc-mid">
+              <span @click.stop><DocLink :doctype="p.party_type || (p.payment_type==='Receive'?'Customer':'Supplier')" :name="p.party" :mono-style="false">{{ p.party_name||p.party||'—' }}</DocLink></span>
+              <span style="font-size:11px;color:#9ca3af;margin-left:6px">{{ p.party_type || (p.payment_type==='Receive'?'Customer':'Supplier') }}</span>
+            </div>
             <div class="pay-mc-meta">
               <span>{{ fmtDate(p.payment_date) }}</span>
               <span class="pay-mc-amount" :class="p.payment_type==='Receive'?'pay-mc-green':'pay-mc-red'">{{ fmtCur(p.paid_amount) }}</span>
@@ -383,6 +389,7 @@
                   {{ viewPmt.party_name || viewPmt.party || '—' }}
                 </DocLink>
               </div>
+              <div style="font-size:11.5px;color:#9ca3af;margin-top:2px">{{ viewPmt.party_type || (viewPmt.payment_type==='Receive'?'Customer':'Supplier') }}</div>
             </div>
             <div class="pmt-vd-hero-right">
               <div class="pmt-vd-hero-amount">{{ fmtCur(viewPmt.paid_amount) }}</div>

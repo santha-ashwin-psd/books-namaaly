@@ -594,9 +594,14 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "item", "is_active", "is_default", "docstatus", "bom_version", "amended_from", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost"];
+    const fields = ["name", "item", "bom_type", "is_active", "is_default", "docstatus", "bom_version", "amended_from", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost"];
     const r = await apiList("BOM", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
+    // Derived from the same fetch instead of a second BOM query — used by the
+    // sub-assembly BOM picker, which only needs submitted (docstatus 1) rows.
+    bomsList.value = list.value
+      .filter(row => row.docstatus === 1)
+      .map(row => ({ name: row.name, item: row.item, bom_type: row.bom_type }));
     if (list.value.length) {
       const uniqueItemCodes = [...new Set(list.value.map(row => row.item).filter(Boolean))];
       if (uniqueItemCodes.length) {
@@ -614,10 +619,16 @@ async function loadList() {
   loading.value = false;
 }
 
+// Built once per `list.value` change instead of once per chainRoot() call —
+// chainRoot is invoked once per row from the `sorted` and `bomVersions`
+// computeds, so rebuilding this map inside the function was O(n) work
+// repeated n times (O(n^2)) on every render, search keystroke, and filter click.
+const byNameMap = computed(() => new Map(list.value.map(r => [r.name, r])));
+
 // Amended revisions link back via `amended_from`. Walk that chain to find the
 // original root document, which we use as the stable grouping key for a version set.
 function chainRoot(name) {
-  const byName = new Map(list.value.map(r => [r.name, r]));
+  const byName = byNameMap.value;
   let cur = byName.get(name);
   const seen = new Set();
   while (cur && cur.amended_from && !seen.has(cur.name)) {
@@ -807,36 +818,41 @@ function formatVersion(v) {
 onMounted(async () => {
   loading.value = true;
   try {
-    const stk = await apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "item_type", "default_warehouse"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" });
+    // These fetches are independent of each other — firing them together
+    // turns what used to be ~7 sequential round trips into 1. mfgDefaults
+    // gets its own .catch so a failure there doesn't take down the rest
+    // (it's non-critical — we keep the "Manufacturing" fallback).
+    const [stk, uoms, ops, wks, rtg, saRows, mfgDefaults] = await Promise.all([
+      apiList("Item", { fields: ["name", "item_name", "standard_rate", "stock_uom", "item_type", "default_warehouse"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" }),
+      apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 }),
+      apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" }),
+      apiList("Workstation", { fields: ["name", "hour_rate"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
+      apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
+      apiList("BOM Item", { fields: ["parent", "sub_assembly_bom"], filters: [["sub_assembly_bom", "!=", ""]], limit: 5000 }),
+      apiCall("zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults").catch(() => null),
+    ]);
+
     stockItems.value = stk || [];
     refreshRmLandedCosts();
-    const uoms = await apiList("UOM", { fields: ["name"], order: "name asc", limit: 200 });
     uomList.value = (uoms || []).map(r => r.name);
-    const ops = await apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" });
     operationsList.value = ops || [];
-    const wks = await apiList("Workstation", { fields: ["name", "hour_rate"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
     workstationsList.value = wks || [];
-    const rtg = await apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" });
     routingsList.value = rtg || [];
-    const bl = await apiList("BOM", { fields: ["name", "item", "bom_type"], filters: [["docstatus", "=", 1]], limit: 2000, order: "name desc" });
-    bomsList.value = bl || [];
-    const saRows = await apiList("BOM Item", { fields: ["parent", "sub_assembly_bom"], filters: [["sub_assembly_bom", "!=", ""]], limit: 5000 });
+
     const edges = {};
     (saRows || []).forEach(r => {
       if (!r.sub_assembly_bom) return;
       (edges[r.parent] || (edges[r.parent] = [])).push(r.sub_assembly_bom);
     });
     subAssemblyEdges.value = edges;
-    try {
-      const mfgDefaults = await apiCall(
-        "zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults"
-      );
-      if (mfgDefaults && mfgDefaults.default_bom_type) mfgDefaultBomType.value = mfgDefaults.default_bom_type;
-      if (mfgDefaults) mfgDefaultSubAssemblyRate.value = !!mfgDefaults.set_rate_of_sub_assembly_item_based_on_bom;
-    } catch (e) { /* non-critical — keep the "Manufacturing" fallback */ }
+
+    if (mfgDefaults && mfgDefaults.default_bom_type) mfgDefaultBomType.value = mfgDefaults.default_bom_type;
+    if (mfgDefaults) mfgDefaultSubAssemblyRate.value = !!mfgDefaults.set_rate_of_sub_assembly_item_based_on_bom;
   } catch (e) {
     toast("Error loading manufacturing data: " + e.message, "error");
   }
+  // bomsList (used by the sub-assembly picker) is derived inside loadList from
+  // the same BOM query instead of a separate request.
   await loadList();
   if (route.params.name) await loadBom();
   loading.value = false;
@@ -913,6 +929,7 @@ function onRmItemChange(rm) {
   if (!rm.item_code) return;
   const item = stockItems.value.find(i => i.name === rm.item_code);
   if (item) { rm.rate = item.standard_rate || 0; rm.uom = item.stock_uom || "Nos"; rm.item_name = item.item_name; }
+  pendingRateAutoFill.add(rm);
   refreshRmLandedCosts();
 }
 
@@ -924,6 +941,11 @@ function onRmItemChange(rm) {
 // see the true landed cost impact without this editable BOM figure silently
 // changing underneath them.
 const rmLanded = ref({}); // item_code -> { valuation_rate, base_rate, landed_rate, has_landed_cost, warehouse }
+// Rows whose rate should be auto-filled from the fetched buy rate (warehouse
+// valuation rate incl. landed cost) the moment it arrives — set whenever the
+// person picks/changes an item on that row. Rows loaded from an existing BOM
+// keep their saved rate untouched; only freshly (re)picked rows get defaulted.
+const pendingRateAutoFill = new Set();
 let rmLandedTimer = null;
 function refreshRmLandedCosts() {
   clearTimeout(rmLandedTimer);
@@ -948,6 +970,13 @@ function refreshRmLandedCosts() {
         if (info) byItem[p.item_code] = { ...info, warehouse: p.warehouse };
       }
       rmLanded.value = byItem;
+      // Default the buy rate for any row that just had its item picked.
+      for (const rm of (rows || [])) {
+        if (!pendingRateAutoFill.has(rm)) continue;
+        const info = byItem[rm.item_code];
+        if (info) rm.rate = info.valuation_rate;
+        pendingRateAutoFill.delete(rm);
+      }
     } catch (e) { /* non-fatal — BOM rate stays user-editable regardless */ }
   }, 300);
 }
@@ -996,6 +1025,8 @@ function onPackingItemChange(pi) {
   if (!pi.item_code) return;
   const item = stockItems.value.find(i => i.name === pi.item_code);
   if (item) { pi.rate = item.standard_rate || 0; pi.uom = item.stock_uom || "Nos"; pi.item_name = item.item_name; }
+  pendingRateAutoFill.add(pi);
+  refreshRmLandedCosts();
 }
 function addPackingMaterial() { bom.value.packing_items.push({ item_code: "", uom: "Nos", qty: 1, rate: 0 }); }
 function removePackingMaterial(idx) { bom.value.packing_items.splice(idx, 1); }

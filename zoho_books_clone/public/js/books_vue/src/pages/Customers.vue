@@ -143,7 +143,7 @@
               </td>
               <td class="vt-td vt-td-secondary">
                 <template v-if="lastInvoiceByCust[c.name]">
-                  <div class="vt-lastinv-ref">{{ lastInvoiceByCust[c.name].name }}</div>
+                  <div class="vt-lastinv-ref" @click.stop><DocLink doctype="Sales Invoice" :name="lastInvoiceByCust[c.name].name" /></div>
                   <div class="vt-lastinv-date">{{ fmtDate(lastInvoiceByCust[c.name].date) }} · {{ fmt(lastInvoiceByCust[c.name].amount) }}</div>
                 </template>
                 <span v-else>—</span>
@@ -540,7 +540,7 @@
                   background: t.type==='Invoice' ? '#DBEAFE' : t.type==='Payment' ? '#D1FAE5' : '#FEE2E2',
                   color: t.type==='Invoice' ? '#1E40AF' : t.type==='Payment' ? '#059669' : '#991B1B'
                 }">{{t.type}}</span>
-                <span style="color:#2563EB;font-weight:600">{{t.name}}</span>
+                <span @click.stop><DocLink :doctype="custDocTypeFor(t.type)" :name="t.name" /></span>
                 <span style="color:#6B7280">{{fmtDate(t.date)}}</span>
                 <span style="text-align:right;font-weight:600" :style="{color: t.amount<0 ? '#059669' : '#374151'}">{{fmt(Math.abs(t.amount))}}</span>
                 <span style="text-align:right;" :style="{color: t.outstanding>0 ? '#dc2626' : '#9CA3AF'}">{{t.outstanding>0?fmt(t.outstanding):''}}</span>
@@ -558,7 +558,7 @@
                   <span class="cus-txn-mc-amount" :style="{color: t.amount<0 ? '#059669' : '#374151'}">{{fmt(Math.abs(t.amount))}}</span>
                 </div>
                 <div class="cus-txn-mc-mid">
-                  <span class="cus-txn-mc-ref">{{t.name}}</span>
+                  <span class="cus-txn-mc-ref" @click.stop><DocLink :doctype="custDocTypeFor(t.type)" :name="t.name" /></span>
                   <span class="cus-txn-mc-date">{{fmtDate(t.date)}}</span>
                 </div>
                 <div v-if="t.outstanding>0" class="cus-txn-mc-outstanding">
@@ -585,6 +585,9 @@
               <span v-if="stmtLoading">Loading…</span><span v-else>↺ Refresh</span>
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">
+              <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadStatementPdf" :disabled="downloadingStmtPdf">
+                {{downloadingStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
+              </button>
               <button v-if="stmt && stmt.email" class="nim-btn" style="border:1px solid #E5E7EB" @click="sendStatement" :disabled="sendingStmt">
                 {{sendingStmt ? 'Sending…' : '📧 Send Statement'}}
               </button>
@@ -630,46 +633,83 @@
               ⚠️ No email on file — add an email to enable sending this statement.
             </div>
             <div class="cus-stmt-inv-wrap" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
-              <div v-if="!stmt.invoices.length" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No outstanding invoices</div>
+              <div v-if="ledgerLoading" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">Loading ledger…</div>
+              <div v-else-if="!ledgerRows.length" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No statement rows</div>
               <template v-else>
-                <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px;padding:12px 14px;background:#F9FAFB;border-bottom:1px solid #E5E7EB">OUTSTANDING INVOICES</div>
-                <div class="cus-stmt-desktop">
-                  <div v-for="inv in stmtInvsVisible" :key="inv.name"
-                    style="display:grid;grid-template-columns:160px 100px 100px auto 80px;gap:8px;padding:8px 14px;border-bottom:1px solid #F3F4F6;font-size:12.5px;align-items:center;min-width:480px">
-                    <span style="color:#2563EB;font-weight:600">{{inv.name}}</span>
-                    <span style="color:#6B7280">{{inv.posting_date}}</span>
-                    <span style="color:#6B7280">{{inv.due_date}}</span>
-                    <span style="text-align:right;font-weight:600">₹{{fmtStmt(inv.outstanding_amount)}}</span>
-                    <span :style="'padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;text-align:center;'+(inv.is_overdue?'background:#FFF5F5;color:#C92A2A':'background:#EBFBEE;color:#2F9E44')">
-                      {{inv.is_overdue ? 'Overdue' : 'Due'}}
-                    </span>
-                  </div>
+                <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px;padding:12px 14px;background:#F9FAFB;border-bottom:1px solid #E5E7EB">ACCOUNT LEDGER</div>
+
+                <!-- Desktop: running-balance ledger table (Date / Type / Ref / Debit / Credit / Balance) -->
+                <div class="cus-stmt-desktop" style="overflow-x:auto">
+                  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                    <thead>
+                      <tr style="background:#F9FAFB">
+                        <th style="text-align:left;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Date</th>
+                        <th style="text-align:left;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Type</th>
+                        <th style="text-align:left;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB">Ref No</th>
+                        <th style="text-align:right;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Debit</th>
+                        <th style="text-align:right;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Credit</th>
+                        <th style="text-align:right;padding:8px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #E5E7EB;white-space:nowrap">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, idx) in ledgerRowsVisible" :key="row.ref+'-'+idx" style="border-bottom:1px solid #F3F4F6">
+                        <td style="padding:8px 14px;color:#6B7280;white-space:nowrap">{{fmtDate(row.date) || '—'}}</td>
+                        <td style="padding:8px 14px;color:#6B7280;white-space:nowrap">{{row.type}}</td>
+                        <td style="padding:8px 14px" @click.stop>
+                          <DocLink v-if="custDocTypeFor(row.type)" :doctype="custDocTypeFor(row.type)" :name="row.ref" />
+                          <span v-else>{{row.ref}}</span>
+                        </td>
+                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.debit ? '₹'+fmtStmt(row.debit) : ''}}</td>
+                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.credit ? '₹'+fmtStmt(row.credit) : ''}}</td>
+                        <td style="padding:8px 14px;text-align:right;font-weight:600;white-space:nowrap" :style="row.balance>=0?'color:#C92A2A':'color:#2F9E44'">
+                          ₹{{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr style="background:#F9FAFB;font-weight:700">
+                        <td colspan="5" style="padding:10px 14px">Closing Balance</td>
+                        <td style="padding:10px 14px;text-align:right;white-space:nowrap" :style="ledgerTotals.closing_balance>=0?'color:#C92A2A':'color:#2F9E44'">
+                          ₹{{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
 
                 <!-- Mobile card view -->
                 <div class="cus-stmt-mobile-cards">
-                  <div v-for="inv in stmtInvsVisible" :key="'mc-'+inv.name" class="cus-stmt-mc">
+                  <div v-for="(row, idx) in ledgerRowsVisible" :key="'mc-'+row.ref+'-'+idx" class="cus-stmt-mc">
                     <div class="cus-stmt-mc-top">
-                      <span class="cus-stmt-mc-name">{{inv.name}}</span>
-                      <span class="cus-stmt-mc-badge" :style="inv.is_overdue?'background:#FFF5F5;color:#C92A2A':'background:#EBFBEE;color:#2F9E44'">
-                        {{inv.is_overdue ? 'Overdue' : 'Due'}}
+                      <span class="cus-stmt-mc-name" @click.stop>
+                        <DocLink v-if="custDocTypeFor(row.type)" :doctype="custDocTypeFor(row.type)" :name="row.ref" />
+                        <span v-else>{{row.ref}}</span>
+                      </span>
+                      <span class="cus-stmt-mc-badge" :style="row.type==='Payment'?'background:#EBFBEE;color:#2F9E44':'background:#EFF6FF;color:#1D4ED8'">
+                        {{row.type}}
                       </span>
                     </div>
                     <div class="cus-stmt-mc-mid">
-                      <span>Posted {{inv.posting_date}}</span>
-                      <span>Due {{inv.due_date}}</span>
+                      <span>{{fmtDate(row.date) || '—'}}</span>
+                      <span>Bal ₹{{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}</span>
                     </div>
-                    <div class="cus-stmt-mc-amount">₹{{fmtStmt(inv.outstanding_amount)}}</div>
+                    <div class="cus-stmt-mc-amount">
+                      {{row.debit ? '₹'+fmtStmt(row.debit)+' Dr' : '₹'+fmtStmt(row.credit)+' Cr'}}
+                    </div>
+                  </div>
+                  <div style="padding:12px 14px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;background:#F9FAFB">
+                    <span>Closing Balance</span>
+                    <span>₹{{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}</span>
                   </div>
                 </div>
 
-                <!-- Load More — statement invoices -->
-                <div v-if="stmtInvsHasMore" class="cus-load-more-wrap" style="border-top:1px solid #F3F4F6">
-                  <span class="cus-load-more-count">Showing {{stmtInvsVisible.length}} of {{stmt.invoices.length}}</span>
+                <!-- Load More — ledger rows -->
+                <div v-if="ledgerRowsHasMore" class="cus-load-more-wrap" style="border-top:1px solid #F3F4F6">
+                  <span class="cus-load-more-count">Showing {{ledgerRowsVisible.length}} of {{ledgerRows.length}}</span>
                   <button class="cus-load-more-btn" @click="stmtPage++">Load more</button>
                 </div>
-                <div v-else-if="stmt.invoices.length > STMT_PAGE_SIZE" class="cus-load-more-wrap cus-load-more-end" style="border-top:1px solid #F3F4F6">
-                  All {{stmt.invoices.length}} invoices shown
+                <div v-else-if="ledgerRows.length > STMT_PAGE_SIZE" class="cus-load-more-wrap cus-load-more-end" style="border-top:1px solid #F3F4F6">
+                  All {{ledgerRows.length}} entries shown
                 </div>
               </template>
             </div>
@@ -1296,10 +1336,13 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { apiList, apiGET, apiSave, apiSubmit, apiDelete, apiPOST, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { usePermissions } from "../composables/usePermissions.js";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import AddressManager from "../components/AddressManager.vue";
+import DocLink from "../components/DocLink.vue";
 import { fmt, fmtDate } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
 import { COUNTRIES, statesFor } from "../composables/useCountryState.js";
@@ -2020,6 +2063,11 @@ async function selectCustomer(c) {
   custTxnsLoading.value = false;
 }
 function closeCustomer()   { selectedCustomer.value = null; showPayModal.value = false; }
+function custDocTypeFor(type) {
+  return type === "Invoice" ? "Sales Invoice"
+    : type === "Credit Note" ? "Credit Note"
+    : type === "Payment" ? "Payment Entry" : "";
+}
 function custInitials(name) {
   return (name || "?").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
@@ -2033,25 +2081,50 @@ const STMT_PAGE_SIZE = 10;
 const sendingStmt = ref(false);
 const fmtStmt = (v) => Number(v||0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Ledger-style running-balance rows (date / type / ref / debit / credit / balance),
+// same shape as the traditional account ledger the client wants to see —
+// pulled from api.docs.get_customer_statement, which already computes the
+// running balance server-side.
+const ledgerRows    = ref([]);
+const ledgerTotals  = ref({});
+const ledgerLoading = ref(false);
+const downloadingStmtPdf = ref(false);
+
 // ── Load-more computed slices ──
 const custTxnsActive    = computed(() => custTxns.value.filter((t) => t.docstatus !== 2 && t.status !== "Cancelled"));
 const custTxnsVisible   = computed(() => custTxnsActive.value.slice(0, txnPage.value * TXN_PAGE_SIZE));
 const custTxnsHasMore   = computed(() => custTxnsActive.value.length > txnPage.value * TXN_PAGE_SIZE);
 const stmtInvsVisible   = computed(() => stmt.value ? stmt.value.invoices.slice(0, stmtPage.value * STMT_PAGE_SIZE) : []);
 const stmtInvsHasMore   = computed(() => stmt.value ? stmt.value.invoices.length > stmtPage.value * STMT_PAGE_SIZE : false);
+const ledgerRowsVisible = computed(() => ledgerRows.value.slice(0, stmtPage.value * STMT_PAGE_SIZE));
+const ledgerRowsHasMore = computed(() => ledgerRows.value.length > stmtPage.value * STMT_PAGE_SIZE);
 
+function fmtBal(v) {
+  const n = Number(v || 0);
+  return `${fmtStmt(Math.abs(n))} ${n >= 0 ? "Dr" : "Cr"}`;
+}
 
 async function loadStatement() {
   if (!selectedCustomer.value || stmtLoaded.value) return;
   stmtLoading.value = true;
+  ledgerLoading.value = true;
   try {
     const co = await resolveCompany();
-    stmt.value = await apiGET("zoho_books_clone.db.queries.get_customer_statement", {
-      customer: selectedCustomer.value.name, company: co,
-    });
+    const [kpiData, ledgerData] = await Promise.all([
+      apiGET("zoho_books_clone.db.queries.get_customer_statement", {
+        customer: selectedCustomer.value.name, company: co,
+      }),
+      apiGET("zoho_books_clone.api.docs.get_customer_statement", {
+        customer: selectedCustomer.value.name,
+      }).catch(() => null),
+    ]);
+    stmt.value = kpiData;
+    ledgerRows.value = ledgerData?.rows || [];
+    ledgerTotals.value = ledgerData?.totals || {};
     stmtLoaded.value = true;
   } catch (e) { toast("Could not load statement: " + e.message, "error"); }
   stmtLoading.value = false;
+  ledgerLoading.value = false;
 }
 
 async function sendStatement() {
@@ -2065,6 +2138,103 @@ async function sendStatement() {
     toast("Statement sent to " + stmt.value.email);
   } catch (e) { toast(e.message || "Failed to send statement", "error"); }
   sendingStmt.value = false;
+}
+
+function fmtStmtDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return String(d);
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function buildStatementPdfHtml() {
+  const custName = selectedCustomer.value?.customer_name || selectedCustomer.value?.name || "";
+  const company = window.__booksCompany || "";
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  const rowsHtml = ledgerRows.value.map(r => `<tr>
+      <td>${fmtStmtDate(r.date)}</td>
+      <td>${r.type || ""}</td>
+      <td>${r.ref || ""}</td>
+      <td class="num">${Number(r.debit||0) ? fmtStmt(r.debit) : ""}</td>
+      <td class="num">${Number(r.credit||0) ? fmtStmt(r.credit) : ""}</td>
+      <td class="num bal">${fmtBal(r.balance)}</td>
+    </tr>`).join("");
+
+  const closing = Number(ledgerTotals.value.closing_balance || 0);
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 12px; }
+  .stmt-header { text-align: center; margin-bottom: 4px; }
+  .stmt-company { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+  .stmt-title { font-size: 13px; font-weight: 600; margin-top: 10px; }
+  .stmt-sub { font-size: 11.5px; color: #444; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th, td { border: 1px solid #999; padding: 5px 8px; font-size: 11.5px; }
+  th { background: #f0f0f0; text-align: left; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td.bal { font-weight: 600; }
+  tfoot td { font-weight: 700; background: #f7f7f7; }
+</style></head>
+<body>
+  <div class="stmt-header">
+    ${company ? `<div class="stmt-company">${company}</div>` : ""}
+    <div class="stmt-title">Account Statement</div>
+    <div class="stmt-sub">Account: ${custName} &nbsp;|&nbsp; As on ${today}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Ref No</th>
+        <th class="num">Debit</th>
+        <th class="num">Credit</th>
+        <th class="num">Balance</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Closing Balance</td>
+        <td class="num">${fmtBal(closing)}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body></html>`;
+}
+
+async function downloadStatementPdf() {
+  if (!ledgerRows.value.length) { toast("No statement rows to export", "error"); return; }
+  downloadingStmtPdf.value = true;
+  try {
+    const html = buildStatementPdfHtml();
+    const filename = `statement-${selectedCustomer.value.name}-${new Date().toISOString().slice(0,10)}.pdf`;
+    const csrf = window.frappe?.csrf_token || "";
+    const res = await fetch("/api/method/zoho_books_clone.api.docs.render_pdf_from_html", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Frappe-CSRF-Token": csrf },
+      credentials: "same-origin",
+      body: new URLSearchParams({ pdf_html: html, filename }),
+    });
+    if (!res.ok) throw new Error("PDF generation failed");
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+  } catch (e) {
+    toast("Failed to generate statement PDF", "error");
+  }
+  downloadingStmtPdf.value = false;
 }
 
 watch(activeCustomerTab, (t) => {
@@ -2271,7 +2441,11 @@ function bulkEmail() {
   toast(`Composing email to ${rows.length} customer(s)`, "info");
 }
 
-onMounted(load);
+const route = useRoute();
+onMounted(async () => {
+  await load();
+  useOpenFromQuery({ route, openByName: (n) => selectCustomer(list.value.find(c => c.name === n) || { name: n }) });
+});
 </script>
 
 <style scoped>

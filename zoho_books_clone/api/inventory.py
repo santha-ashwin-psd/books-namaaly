@@ -35,6 +35,36 @@ def _get_child_warehouses(warehouse_name):
 
 
 @frappe.whitelist(allow_guest=False)
+def get_item_by_barcode(barcode):
+    """
+    Resolve a scanned barcode to an Item. Matches the dedicated ``barcode``
+    field first; falls back to ``item_code`` so QR/1D labels printed with the
+    item code itself still resolve. Returns None if nothing matches so the
+    caller can show a "not found" toast instead of erroring out.
+    """
+    barcode = (barcode or "").strip()
+    if not barcode:
+        return None
+    fields = ["name", "item_name", "standard_rate", "mrp", "stock_uom",
+              "description", "hsn_code", "income_account", "tax_code",
+              "has_batch_no", "barcode"]
+    item = frappe.get_all(
+        "Item",
+        filters={"barcode": barcode, "disabled": 0},
+        fields=fields,
+        limit=1,
+    )
+    if not item:
+        item = frappe.get_all(
+            "Item",
+            filters={"item_code": barcode, "disabled": 0},
+            fields=fields,
+            limit=1,
+        )
+    return item[0] if item else None
+
+
+@frappe.whitelist(allow_guest=False)
 def get_batches_for_item(item_code, search=None):
     """
     Return existing, non-disabled batches for a single item with LIVE qty

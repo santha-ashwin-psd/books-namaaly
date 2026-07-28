@@ -874,3 +874,45 @@
     flex-direction: column;
     overflow: hidden;
 }
+/* ══════════════════════════════════════════════════════
+   Barcode scan modal (camera) — used by ItemEditDrawer.vue
+   and the "Scan a barcode to add an item" button on
+   Invoices.vue. Was previously unstyled (class names
+   didn't match any defined CSS), so the modal rendered
+   as an invisible, unpositioned <div> and clicking the
+   scan icon appeared to do nothing.
+   ══════════════════════════════════════════════════════ */
+.rp-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .45);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-modal {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+  width: min(420px, 95vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.rp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid #e8ecf0;
+  background: #1a1a2e;
+  border-radius: 10px 10px 0 0;
+}
+.rp-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}

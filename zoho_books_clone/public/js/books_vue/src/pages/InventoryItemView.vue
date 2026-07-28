@@ -243,7 +243,7 @@
                     </span>
                   </td>
                   <td class="fw-600">{{ row.party_name || row.party }}</td>
-                  <td class="iv-mono" style="font-size:11.5px;color:#2563eb">{{ row.voucher_no }}</td>
+                  <td class="iv-mono" style="font-size:11.5px"><DocLink :doctype="row.type === 'Purchase' ? 'Purchase Invoice' : 'Sales Invoice'" :name="row.voucher_no" /></td>
                   <td class="ta-r fw-600" :class="row.type === 'Purchase' ? 'clr-red' : 'clr-green'">
                     {{ fmtQty(row.qty) }} {{ row.uom }}
                   </td>
@@ -266,7 +266,7 @@
                 </span>
               </div>
               <div class="fw-600">{{ row.party_name || row.party }}</div>
-              <div class="iv-lc-voucher iv-mono">{{ row.voucher_no }}</div>
+              <div class="iv-lc-voucher iv-mono"><DocLink :doctype="row.type === 'Purchase' ? 'Purchase Invoice' : 'Sales Invoice'" :name="row.voucher_no" :mono-style="false" /></div>
               <div class="iv-lc-meta">
                 <span>{{ row.posting_date }}</span>
                 <span class="iv-sep">·</span>
@@ -308,7 +308,7 @@
                       {{ row.voucher_type || '—' }}
                     </span>
                   </td>
-                  <td class="iv-mono" style="font-size:11.5px;color:#2563eb">{{ row.voucher_no }}</td>
+                  <td class="iv-mono" style="font-size:11.5px"><DocLink :doctype="row.voucher_type" :name="row.voucher_no" /></td>
                   <td class="clr-muted" style="font-size:12px">{{ row.warehouse }}</td>
                   <td class="ta-r fw-600" :class="row.actual_qty > 0 ? 'clr-green' : 'clr-red'">
                     {{ row.actual_qty > 0 ? '+' : '' }}{{ fmtQty(row.actual_qty) }}
@@ -330,7 +330,7 @@
                   {{ row.actual_qty > 0 ? '+' : '' }}{{ fmtQty(row.actual_qty) }}
                 </span>
               </div>
-              <div class="iv-lc-voucher iv-mono">{{ row.voucher_no }}</div>
+              <div class="iv-lc-voucher iv-mono"><DocLink :doctype="row.voucher_type" :name="row.voucher_no" :mono-style="false" /></div>
               <div class="iv-lc-meta">
                 <span>{{ row.posting_date }}</span>
                 <span class="iv-sep">·</span>
@@ -358,6 +358,7 @@ import { useToast } from "../composables/useToast.js";
 import { fmt, flt } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
 import ItemEditDrawer from "../components/ItemEditDrawer.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const route     = useRoute();

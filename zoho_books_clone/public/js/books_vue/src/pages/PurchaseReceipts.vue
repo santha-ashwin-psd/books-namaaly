@@ -101,7 +101,7 @@
         </tr>
         <tr v-else v-for="r in paged" :key="r.name" class="inv-row" :class="{selected:selectedRows.has(r.name)}">
           <td class="td-check"><input type="checkbox" :disabled="r.source!=='real'" :checked="selectedRows.has(r.name)" @change="toggleRow(r.name)"/></td>
-          <td @click="openView(r)"><span class="inv-link">{{r.name}}</span></td>
+          <td @click="openView(r)"><DocLink doctype="Purchase Receipt" :name="r.name" /></td>
           <td class="fw-600" @click="openView(r)">{{r.supplier_name||r.supplier||'—'}}</td>
           <td class="c-muted mono-sm" @click="openView(r)">{{r.posting_date||'—'}}</td>
           <td class="c-muted mono-sm" @click="openView(r)">{{r.purchase_order||'—'}}</td>
@@ -499,7 +499,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiDelete, apiCancel, resolveCompany } from "../api/client.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import DocLink from "../components/DocLink.vue";
@@ -512,6 +513,7 @@ import { usePagination } from "../composables/usePagination.js";
 
 const { toast } = useToast();
 const router = useRouter();
+const route  = useRoute();
 
 function goToLandedCost(doc) {
   router.push({ path: "/purchasing/landed-cost-vouchers/new", query: { purchase_receipt: doc.name } });
@@ -1047,7 +1049,11 @@ async function saveGRN(submit) {
   finally { saving.value = false; }
 }
 
-onMounted(() => { load(); fetchVendors(""); fetchItems(""); fetchPOs(""); });
+onMounted(async () => {
+  await load();
+  fetchVendors(""); fetchItems(""); fetchPOs("");
+  useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(r => r.name === n) || { name: n }) });
+});
 </script>
 
 <style scoped>

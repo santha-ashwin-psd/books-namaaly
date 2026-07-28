@@ -279,7 +279,20 @@ def get_account_ledger(account: str, from_date: str = None, to_date: str = None)
 
     where = " AND ".join(conditions)
 
-    opening = flt(frappe.db.get_value("Account", account, "opening_balance") or 0)
+    # The Account's static `opening_balance` field is a fallback for plain
+    # accounts with no real GL representation of their opening balance. A
+    # Bank Account's opening balance, however, IS posted as a real GL Entry
+    # (voucher_type='Bank Account', see banking/doctype/bank_account/
+    # bank_account.py::_post_opening_gl) — adding the static field on top of
+    # that entry for the same account double-counts it. Skip the static
+    # field whenever such an entry already exists; the GL entry itself will
+    # be picked up by the balance/opening-window math below.
+    has_bank_opening_entry = frappe.db.exists(
+        "General Ledger Entry", {"account": account, "voucher_type": "Bank Account"}
+    )
+    opening = 0.0 if has_bank_opening_entry else flt(
+        frappe.db.get_value("Account", account, "opening_balance") or 0
+    )
     if from_date:
         opening += flt(frappe.db.sql(
             f"""
@@ -309,9 +322,23 @@ def get_account_ledger(account: str, from_date: str = None, to_date: str = None)
         if row.voucher_type in ("Payment Entry", "Journal Entry"):
             row["direction"] = "in" if flt(row.debit) > 0 else "out"
 
+    # Header display value: the account's true opening balance. This is
+    # informational only — it must NOT feed into `opening`/`balance` above,
+    # since that GL entry is already what makes up the running balance /
+    # closing balance (see the double-counting note above). For a plain
+    # account (no linked Bank Account), the static field is the only
+    # source of truth and already equals `opening` when there's no
+    # from_date filter.
+    if has_bank_opening_entry:
+        display_opening = flt(frappe.db.get_value(
+            "Bank Account", {"gl_account": account}, "opening_balance"
+        ) or 0)
+    else:
+        display_opening = opening
+
     return {
         "account": account,
-        "opening_balance": opening,
+        "opening_balance": display_opening,
         "closing_balance": balance,
         "entries": rows,
     }
