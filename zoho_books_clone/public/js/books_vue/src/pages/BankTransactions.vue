@@ -230,6 +230,53 @@
       </div>
     </div>
 
+    <!-- Column mapper: pick which source column is which, before parsing -->
+    <div v-if="mapperOpen" class="bt-map-overlay" @click.self="!importing && (mapperOpen=false)"></div>
+    <div class="bt-map-drawer" :class="{open:mapperOpen}">
+      <div class="bt-dheader">
+        <button class="bt-dclose" @click="mapperOpen=false" :disabled="importing"><span v-html="icon('x',16)"></span></button>
+        <div class="bt-dh-title">Map Columns</div>
+        <div class="bt-dh-sub">Match each field to a column from your file — auto-guessed where possible</div>
+      </div>
+      <div class="bt-map-body">
+        <table class="bt-map-table">
+          <thead><tr><th>Field</th><th>Source column</th></tr></thead>
+          <tbody>
+            <tr v-for="t in MAPPER_TARGETS" :key="t.key">
+              <td>{{ t.label }}<span v-if="t.required" style="color:#dc2626"> *</span></td>
+              <td>
+                <select v-model="columnMap[t.key]" class="bt-select" style="min-width:220px">
+                  <option value="">— Not in file / skip —</option>
+                  <option v-for="h in mapperHeaders" :key="h" :value="h">{{ h }}</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="bt-fmt-hint" style="margin-top:6px">
+          Give either <strong>Debit</strong>/<strong>Credit</strong>, <em>or</em> <strong>Amount</strong> + <strong>Type</strong>. Debit = money out (withdrawal), Credit = money in (deposit).
+        </div>
+
+        <template v-if="mapperSample.length">
+          <div class="bt-section-hdr" style="margin-top:18px"><span v-html="icon('eye',13)"></span> Preview (first {{ mapperSample.length }} row(s) from your file)</div>
+          <table class="bt-map-table">
+            <thead><tr><th v-for="h in mapperHeaders" :key="h">{{ h }}</th></tr></thead>
+            <tbody>
+              <tr v-for="(row, i) in mapperSample" :key="i">
+                <td v-for="h in mapperHeaders" :key="h" class="mono-sm">{{ row[h] || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+      </div>
+      <div class="bt-dfooter">
+        <button class="bt-btn-ghost" @click="mapperOpen=false" :disabled="importing">Cancel</button>
+        <button class="bt-btn-primary" :disabled="importing || !mapperReady" @click="confirmColumnMapping">
+          {{ importing ? 'Parsing…' : 'Continue' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Mapping panel: review every parsed row before anything is posted -->
     <div v-if="mappingOpen" class="bt-map-overlay" @click.self="!confirming && (mappingOpen=false)"></div>
     <div class="bt-map-drawer" :class="{open:mappingOpen}">
@@ -294,7 +341,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
 import { apiList, apiPOST, resolveCompany } from "../api/client.js";
 
 // Import format guide + sample templates
@@ -384,16 +431,66 @@ async function onFileSelected(e) {
   importResult.value = null;
   try {
     const csvText = await fileToCsvText(f);
+    const h = await apiPOST("zoho_books_clone.api.docs.get_bank_statement_headers", { csv_data: csvText });
+    openColumnMapper(csvText, h);
+  } catch (err) {
+    importResult.value = { ok: false, error: err.message || "Could not read file" };
+  } finally {
+    importing.value = false;
+    e.target.value = ""; // reset input so the same file can be re-selected
+  }
+}
+
+// ── Column mapper ──
+// Bank exports vary a lot — different header names, extra/missing columns,
+// headers Excel truncates. Rather than silently skip every row when the
+// guess-based parser doesn't recognise a header, show the actual columns
+// from the file and let the person say which is which, defaulting to a
+// best-effort guess so the common case still needs zero clicks.
+const mapperOpen = ref(false);
+const mapperHeaders = ref([]);
+const mapperSample = ref([]);
+const mapperCsvText = ref("");
+const columnMap = reactive({ date: "", description: "", reference: "", debit: "", credit: "", amount: "", type: "" });
+const MAPPER_TARGETS = [
+  { key: "date", label: "Date", required: true, guesses: ["date", "transaction date", "posting date", "value date"] },
+  { key: "description", label: "Description", required: false, guesses: ["description", "narration", "particulars", "descriptio"] },
+  { key: "reference", label: "Reference", required: false, guesses: ["reference", "reference number", "ref no", "utr", "cheque no"] },
+  { key: "debit", label: "Debit (money out)", required: false, guesses: ["debit", "withdrawal", "withdrawal amt", "dr"] },
+  { key: "credit", label: "Credit (money in)", required: false, guesses: ["credit", "deposit", "deposit amt", "cr"] },
+  { key: "amount", label: "Amount (if no separate Debit/Credit)", required: false, guesses: ["amount", "txn amount"] },
+  { key: "type", label: "Type (Dr/Cr, used with Amount)", required: false, guesses: ["type", "dr/cr", "indicator"] },
+];
+
+function openColumnMapper(csvText, headerResult) {
+  mapperCsvText.value = csvText;
+  mapperHeaders.value = headerResult.headers || [];
+  mapperSample.value = headerResult.sample_rows || [];
+  const lowerHeaders = mapperHeaders.value.map(h => ({ raw: h, lower: h.trim().toLowerCase() }));
+  for (const t of MAPPER_TARGETS) {
+    const hit = lowerHeaders.find(h => t.guesses.includes(h.lower));
+    columnMap[t.key] = hit ? hit.raw : "";
+  }
+  mapperOpen.value = true;
+}
+
+const mapperReady = computed(() => !!columnMap.date && (!!columnMap.debit || !!columnMap.credit || !!columnMap.amount));
+
+async function confirmColumnMapping() {
+  importing.value = true;
+  importResult.value = null;
+  try {
     const r = await apiPOST("zoho_books_clone.api.docs.preview_bank_statement_csv", {
       bank_account: selectedAccount.value,
-      csv_data: csvText,
+      csv_data: mapperCsvText.value,
+      column_map: { ...columnMap },
     });
+    mapperOpen.value = false;
     openMappingPanel(r);
   } catch (err) {
     importResult.value = { ok: false, error: err.message || "Preview failed" };
   } finally {
     importing.value = false;
-    e.target.value = ""; // reset input so the same file can be re-selected
   }
 }
 

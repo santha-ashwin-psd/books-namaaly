@@ -4860,27 +4860,73 @@ def _suggest_account_for_description(description, bank_account):
     return row
 
 
-def _parse_statement_rows(csv_data):
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def get_bank_statement_headers(csv_data):
+    """Step 0 of import: just the header row + a few sample rows, so the
+    frontend can render a column-mapper (\"which column is Date, which is
+    Debit...\") before any real parsing happens. Needed because bank
+    exports vary wildly — a header the guess-based parser doesn't
+    recognise (e.g. a truncated \"Descriptio\" from Excel, or a bank's own
+    label like \"Withdrawal Amt\") used to silently skip every row.
+    """
+    import csv as _csv
+    from io import StringIO
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+    raw_text = (csv_data or "").lstrip("\ufeff")
+    reader = _csv.DictReader(StringIO(raw_text))
+    headers = reader.fieldnames or []
+    sample_rows = []
+    for i, row in enumerate(reader):
+        if i >= 3:
+            break
+        sample_rows.append({h: (row.get(h) or "").strip() for h in headers})
+    return {"headers": headers, "sample_rows": sample_rows}
+
+
+def _parse_statement_rows(csv_data, column_map=None):
     """Shared CSV parsing for preview + (legacy) direct import. Returns a
     list of dicts: date, description, reference, debit, credit — or None
     entries for unparseable rows (caller decides whether to skip/report).
+
+    column_map, if given, is {"date": "<source header>", "description": "...",
+    "reference": "...", "debit": "...", "credit": "...", "amount": "...",
+    "type": "..."} — exactly which source column the person picked in the
+    mapping panel for each target field. Any target left unmapped ("")
+    is simply not read. When column_map is omitted entirely (legacy
+    direct-import callers), falls back to the old guess-by-common-header-name
+    behaviour so nothing already relying on it breaks.
     """
     import csv as _csv
     from io import StringIO
     csv_data = (csv_data or "").lstrip("\ufeff")
     reader = _csv.DictReader(StringIO(csv_data))
+    cm = column_map or {}
     out = []
     for raw in reader:
         row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
-        raw_date = row.get("date") or row.get("transaction_date") or row.get("posting_date")
+
+        def col(target, *fallback_keys):
+            src = (cm.get(target) or "").strip().lower()
+            if src:
+                return row.get(src, "")
+            if column_map is not None:
+                return ""  # explicit map given but this field left unmapped — don't guess
+            for fk in fallback_keys:
+                v = row.get(fk)
+                if v:
+                    return v
+            return ""
+
+        raw_date = col("date", "date", "transaction_date", "posting_date")
         date = _parse_statement_date(raw_date)
-        desc = row.get("description") or row.get("narration") or row.get("particulars") or ""
-        ref  = row.get("reference") or row.get("reference_number") or row.get("ref no") or ""
-        debit  = flt(row.get("debit") or 0)
-        credit = flt(row.get("credit") or 0)
+        desc = col("description", "description", "narration", "particulars")
+        ref  = col("reference", "reference", "reference_number", "ref no")
+        debit  = flt(col("debit", "debit") or 0)
+        credit = flt(col("credit", "credit") or 0)
         if not (debit or credit):
-            amt = flt(row.get("amount") or 0)
-            typ = (row.get("type") or row.get("dr/cr") or "").upper()
+            amt = flt(col("amount", "amount") or 0)
+            typ = (col("type", "type", "dr/cr") or "").upper()
             if typ.startswith("D"): debit = amt
             elif typ.startswith("C"): credit = amt
         out.append({
@@ -4893,7 +4939,7 @@ def _parse_statement_rows(csv_data):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def preview_bank_statement_csv(bank_account, csv_data):
+def preview_bank_statement_csv(bank_account, csv_data, column_map=None):
     """Step 1 of the import flow: parse the file and classify every row,
     but insert/submit nothing yet. The mapping panel renders this so the
     person can review/override before anything hits the ledger.
@@ -4918,6 +4964,11 @@ def preview_bank_statement_csv(bank_account, csv_data):
     if not company:
         frappe.throw(f"Bank Account {bank_account} has no company set — cannot import transactions.")
 
+    if isinstance(column_map, str) and column_map.strip():
+        column_map = frappe.parse_json(column_map)
+    if not column_map:
+        column_map = None
+
     already_linked = set(frappe.db.sql_list("""
         SELECT payment_entry FROM `tabBank Transaction`
         WHERE payment_entry IS NOT NULL AND payment_entry != ''
@@ -4926,7 +4977,7 @@ def preview_bank_statement_csv(bank_account, csv_data):
     linked_this_batch = set()
 
     out = []
-    for row in _parse_statement_rows(csv_data):
+    for row in _parse_statement_rows(csv_data, column_map):
         if not row["valid"]:
             out.append({**row, "action": "skip"})
             continue
