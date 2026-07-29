@@ -975,10 +975,15 @@ const manufacturedItems = computed(() =>
   stockItems.value.filter(i => i.item_type === "Finished Good" || i.item_type === "Work In Progress")
 );
 // Raw-material row picker: exclude Finished Goods (a finished good shouldn't be
-// consumed as a raw material into another Work Order) — mirrors BOM.vue's
-// rawMaterialItems restriction on the BOM component picker.
+// consumed as a raw material into a Manufacturing/Sub-Assembly Work Order) --
+// mirrors BOM.vue's rawMaterialItems restriction on the BOM component picker.
+// Packing BOMs are the deliberate exception: their bulk item and packing
+// materials are frequently Finished Good/Product-type items themselves (e.g.
+// a bulk-manufactured item being packed into retail units), so excluding
+// Finished Goods there just made a validly-set row's <select> render blank
+// (no matching <option> for the already-chosen item_code).
 const rawMaterialItems = computed(() =>
-  stockItems.value.filter(i => i.item_type !== "Finished Good")
+  stockItems.value.filter(i => i.item_type !== "Finished Good" || bomType.value === "Packing")
 );
 const warehouseList = ref([]);
 const stockEntries = ref([]);
@@ -1047,6 +1052,32 @@ onMounted(async () => {
     const itemNameOf = {};
     stockItems.value.forEach(i => itemNameOf[i.name] = i.item_name);
     bomList.value = (boms || []).map(b => ({ ...b, item_name: itemNameOf[b.item] || b.item }));
+
+    // The BOM select's options only come from submitted (docstatus=1) BOMs --
+    // deliberately, so a new/edited Work Order can't be pointed at a Draft or
+    // Cancelled one. But an EXISTING Work Order can be linked to a BOM that
+    // was submitted at the time and has since been cancelled elsewhere; that
+    // BOM name is missing from bomList, so the <select> (bound to wo.bom by
+    // value) has no matching <option> and silently renders blank even though
+    // wo.bom itself still holds the correct name. Fetch and inject it here so
+    // the field actually displays what the Work Order is linked to.
+    if (!isNew.value && wo.value.bom && !bomList.value.some(b => b.name === wo.value.bom)) {
+      try {
+        const missingBom = await apiGet("BOM", wo.value.bom);
+        if (missingBom) {
+          bomList.value.push({
+            name: missingBom.name,
+            item: missingBom.item,
+            quantity: missingBom.quantity,
+            docstatus: missingBom.docstatus,
+            bom_version: missingBom.bom_version,
+            is_default: missingBom.is_default,
+            bom_type: missingBom.bom_type,
+            item_name: itemNameOf[missingBom.item] || missingBom.item,
+          });
+        }
+      } catch (e) { /* non-fatal — field just stays as the raw name if this fails */ }
+    }
 
     warehouseList.value = whs || [];
     operationsList.value = ops || [];

@@ -348,6 +348,9 @@
             <button class="wh-action-btn" :disabled="!filteredStockItems.length" @click="exportStockExcel" title="Export to Excel">
               <span v-html="icon('download', 13)"></span> Export
             </button>
+            <button class="wh-action-btn" :disabled="!filteredStockItems.length" @click="printStockPdf" title="Print / Save as PDF">
+              <span v-html="icon('printer', 13)"></span> PDF
+            </button>
           </div>
         </div>
 
@@ -1015,6 +1018,91 @@ function exportStockExcel() {
   el.click();
   URL.revokeObjectURL(url);
   toast(`Exported ${rows.length} item row(s) for ${whName}`, "success");
+}
+
+// Print / Save-as-PDF preview for the currently filtered stock list — same
+// pattern as the Work Order raw-material print (opens a print-preview tab).
+function printStockPdf() {
+  const rows = filteredStockItems.value;
+  if (!rows.length) return;
+
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  };
+
+  const whName = (selectedChild.value?.warehouse_name || selectedChild.value?.name
+    || selectedWH.value?.warehouse_name || selectedWH.value?.name || "Warehouse");
+
+  const rowsHtml = rows.map(r => {
+    const batches = r.has_batch_no ? batchesFor(r.item_code) : [];
+    const batchNote = batches.length
+      ? batches.map(b => `${esc(b.batch_no || "—")} (${esc(flt(b.qty).toFixed(2))})`).join(", ")
+      : "—";
+    return `
+      <tr>
+        <td>${esc(r.item_code)}</td>
+        <td>${esc(r.item_name)}</td>
+        <td>${esc(r.item_group || "—")}</td>
+        <td style="text-align:right">${esc(flt(r.actual_qty).toFixed(2))} ${esc(r.uom || "Nos")}</td>
+        <td style="text-align:right">${esc(flt(r.reserved_qty).toFixed(2))}</td>
+        <td style="text-align:right">${esc(flt(r.valuation_rate).toFixed(2))}</td>
+        <td style="text-align:right">${esc(flt(r.stock_value).toFixed(2))}</td>
+        <td>${r.below_reorder ? '<span style="color:#e03131;font-weight:700">Low</span>' : '<span style="color:#2f9e44;font-weight:700">OK</span>'}</td>
+        <td>${batchNote}</td>
+      </tr>`;
+  }).join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Stock — ${esc(whName)}</title>
+        <style>
+          * { box-sizing:border-box; margin:0; padding:0; }
+          body { font-family: Arial, Helvetica, sans-serif; color:#1A1D23; background:#e5e7eb; min-height:100vh; }
+          .toolbar { position:sticky; top:0; z-index:10; background:#fff; padding:10px 18px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; gap:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+          .tb-lbl { font-size:11.5px; font-weight:700; color:#374151; letter-spacing:.04em; }
+          .print-btn { margin-left:auto; background:#1a6ef7; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-weight:700; cursor:pointer; font:inherit; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+          .print-btn:hover { background:#1558d0; }
+          .doc-wrap { max-width:1000px; margin:20px auto; background:#fff; box-shadow:0 4px 24px rgba(0,0,0,.1); border-radius:8px; overflow:hidden; }
+          .sheet { padding:28px 30px; }
+          h1 { font-size:18px; margin:0 0 4px; }
+          .sub { color:#868E96; font-size:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid #E2E8F0; }
+          table { width:100%; border-collapse:collapse; font-size:12.5px; border:1px solid #E2E8F0; border-radius:6px; overflow:hidden; }
+          th, td { border:1px solid #E2E8F0; padding:7px 9px; text-align:left; }
+          th { background:#F8F9FC; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:#868E96; }
+          @media print { .toolbar { display:none!important; } body { background:#fff; } .doc-wrap { box-shadow:none; margin:0; max-width:none; border-radius:0; } }
+        </style>
+      </head>
+      <body>
+        <div class="toolbar">
+          <span class="tb-lbl">PRINT PREVIEW</span>
+          <button class="print-btn" onclick="window.print()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print
+          </button>
+        </div>
+        <div class="doc-wrap"><div class="sheet">
+          <h1>Stock — ${esc(whName)}</h1>
+          <div class="sub">Printed ${esc(new Date().toLocaleString())} · ${rows.length} item row(s)</div>
+          <table>
+            <thead>
+              <tr><th>Item Code</th><th>Item Name</th><th>Group</th><th style="text-align:right">Actual Qty</th><th style="text-align:right">Reserved</th><th style="text-align:right">Valuation</th><th style="text-align:right">Stock Value</th><th>Status</th><th>Batches</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div></div>
+      </body>
+    </html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) { toast("Please allow pop-ups to print", "error"); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
 
 async function loadItems() {

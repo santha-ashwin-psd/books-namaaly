@@ -595,6 +595,9 @@
               <!-- <button v-if="vendorStatement.rows?.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadVendorStatementPdf" :disabled="downloadingVendorStmtPdf">
                 {{downloadingVendorStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
               </button> -->
+              <button v-if="vendorStatement.rows?.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="printVendorStatement">
+                🖨️ Print
+              </button>
               <button class="nim-btn" style="border:1px solid #E5E7EB" @click="emailVendorStatement">📧 Email Statement</button>
             </div>
           </div>
@@ -1792,8 +1795,38 @@ function buildVendorStatementPdfHtml() {
 </body></html>`;
 }
 
+// Print-preview for the vendor statement — opens a new tab with the same
+// ledger layout used for the PDF, plus a Print button (browser "Save as PDF"
+// works from there too). Same pattern as the Customer statement print.
+function printVendorStatement() {
+  if (!vendorStatement.value.rows?.length) { toast("No statement rows to print", "error"); return; }
+  const docHtml = buildVendorStatementPdfHtml();
+  const toolbarHtml = `
+    <style>
+      .stmt-toolbar { position:sticky; top:0; z-index:10; background:#fff; padding:10px 18px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; gap:10px; font-family:Arial,Helvetica,sans-serif; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+      .stmt-toolbar .tb-lbl { font-size:11.5px; font-weight:700; color:#374151; letter-spacing:.04em; }
+      .stmt-toolbar .print-btn { margin-left:auto; background:#1a6ef7; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-weight:700; cursor:pointer; font:inherit; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+      .stmt-toolbar .print-btn:hover { background:#1558d0; }
+      @media print { .stmt-toolbar { display:none!important; } }
+    </style>
+    <div class="stmt-toolbar">
+      <span class="tb-lbl">PRINT PREVIEW</span>
+      <button class="print-btn" onclick="window.print()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+    </div>`;
+  const html = docHtml.replace("<body>", "<body>" + toolbarHtml);
+
+  const win = window.open("", "_blank");
+  if (!win) { toast("Please allow pop-ups to print", "error"); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+}
+
 async function downloadVendorStatementPdf() {
-  if (!vendorStatement.value.rows?.length) { toast("No statement rows to export", "error"); return; }
   downloadingVendorStmtPdf.value = true;
   try {
     const html = buildVendorStatementPdfHtml();

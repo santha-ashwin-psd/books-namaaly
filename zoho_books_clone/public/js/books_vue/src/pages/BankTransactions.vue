@@ -53,6 +53,7 @@
             <th @click="sort('date')" class="sortable">Date <span v-html="sortArrow('date')"></span></th>
             <th @click="sort('bank_account')" class="sortable">Account <span v-html="sortArrow('bank_account')"></span></th>
             <th @click="sort('description')" class="sortable">Description <span v-html="sortArrow('description')"></span></th>
+            <th @click="sort('party_name')" class="sortable">Vendor/Customer <span v-html="sortArrow('party_name')"></span></th>
             <th @click="sort('reference_number')" class="sortable">Reference <span v-html="sortArrow('reference_number')"></span></th>
             <th>Status</th>
             <th @click="sort('deposit')" class="sortable ta-r">Deposit <span v-html="sortArrow('deposit')"></span></th>
@@ -61,7 +62,7 @@
         </thead>
         <tbody>
           <template v-if="loading">
-            <tr v-for="n in 8" :key="n"><td colspan="8"><div class="bt-shimmer"></div></td></tr>
+            <tr v-for="n in 8" :key="n"><td colspan="9"><div class="bt-shimmer"></div></td></tr>
           </template>
           <template v-else>
             <tr v-for="t in paged" :key="t.name" class="bt-row" :class="{'bt-row--reconciled':t.status==='Reconciled'}" @click="openView(t)">
@@ -71,12 +72,13 @@
               <td class="mono-sm">{{ fmtDate(t.date) }}</td>
               <td class="text-muted">{{ t.bank_account||'—' }}</td>
               <td class="bt-description">{{ t.description || '—' }}</td>
+              <td class="text-muted">{{ t.party_name || '—' }}</td>
               <td class="mono-sm text-muted">{{ t.reference_number||'—' }}</td>
               <td><span class="bt-badge" :class="t.status==='Reconciled'?'badge-green':t.status==='Unreconciled'?'badge-orange':'badge-grey'">{{ t.status||'Unreconciled' }}</span></td>
               <td class="ta-r mono-sm green">{{ flt(t.deposit)>0 ? fmtCur(t.deposit) : '—' }}</td>
               <td class="ta-r mono-sm red">{{ flt(t.withdrawal)>0 ? fmtCur(t.withdrawal) : '—' }}</td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="8" class="bt-empty">No transactions found</td></tr>
+            <tr v-if="!sorted.length"><td colspan="9" class="bt-empty">No transactions found</td></tr>
           </template>
         </tbody>
       </table>
@@ -104,6 +106,7 @@
               <span class="bt-badge" :class="t.status==='Reconciled'?'badge-green':t.status==='Unreconciled'?'badge-orange':'badge-grey'">{{ t.status||'Unreconciled' }}</span>
             </div>
             <div class="bt-mc-mid">{{ t.description || '—' }}</div>
+            <div v-if="t.party_name" style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:4px">{{ t.party_name }}</div>
             <div class="bt-mc-meta">
               <span>{{ t.bank_account || '—' }}</span>
               <span>
@@ -147,6 +150,7 @@
           <div class="bt-meta-grid">
             <div><div class="bt-meta-lbl">Date</div><div class="mono-sm">{{ fmtDate(viewDoc.date) }}</div></div>
             <div><div class="bt-meta-lbl">Bank Account</div><div>{{ viewDoc.bank_account||'—' }}</div></div>
+            <div><div class="bt-meta-lbl">{{ viewDoc.party_type||'Vendor/Customer' }}</div><div>{{ viewDoc.party_name||'—' }}</div></div>
             <div><div class="bt-meta-lbl">Deposit</div><div class="mono-sm green">{{ flt(viewDoc.deposit)>0?fmtCur(viewDoc.deposit):'—' }}</div></div>
             <div><div class="bt-meta-lbl">Withdrawal</div><div class="mono-sm red">{{ flt(viewDoc.withdrawal)>0?fmtCur(viewDoc.withdrawal):'—' }}</div></div>
             <div><div class="bt-meta-lbl">Reference</div><div class="mono-sm">{{ viewDoc.reference_number||'—' }}</div></div>
@@ -597,19 +601,36 @@ async function load(){
     // Bank Transaction uses `debit`/`credit` columns (not deposit/withdrawal).
     // Pull both then alias for the legacy template.
     const raw=await apiList("Bank Transaction",{
-      fields:["name","date","bank_account","description","reference_number","debit","credit","status","currency"],
+      fields:["name","date","bank_account","description","reference_number","debit","credit","status","currency","payment_entry"],
       filters, limit:300, order: "date desc, creation desc"
     });
-    list.value = raw.map(t => ({
-      ...t,
-      deposit:    flt(t.credit || 0),   // bank-statement convention: credit = money IN
-      withdrawal: flt(t.debit  || 0),   // debit = money OUT
-    }));
+
+    // Resolve vendor/customer via the linked Payment Entry's party fields.
+    const peNames=[...new Set(raw.map(t=>t.payment_entry).filter(Boolean))];
+    let peMap={};
+    if(peNames.length){
+      const pes=await apiList("Payment Entry",{
+        fields:["name","party_type","party","party_name"],
+        filters:[["name","in",peNames]], limit:peNames.length
+      });
+      peMap=Object.fromEntries(pes.map(p=>[p.name,p]));
+    }
+
+    list.value = raw.map(t => {
+      const pe = t.payment_entry ? peMap[t.payment_entry] : null;
+      return {
+        ...t,
+        deposit:    flt(t.credit || 0),   // bank-statement convention: credit = money IN
+        withdrawal: flt(t.debit  || 0),   // debit = money OUT
+        party_type: pe?.party_type || "",
+        party_name: pe?.party_name || pe?.party || "",
+      };
+    });
   }catch(e){toast.error(e.message||"Failed to load transactions");}
   finally{loading.value=false;}
 }
 
-const filtered=computed(()=>{let r=list.value;if(activeTab.value!=="all")r=r.filter(t=>t.status===activeTab.value);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(t=>(t.description||"").toLowerCase().includes(q)||(t.reference_number||"").toLowerCase().includes(q));}return r;});
+const filtered=computed(()=>{let r=list.value;if(activeTab.value!=="all")r=r.filter(t=>t.status===activeTab.value);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(t=>(t.description||"").toLowerCase().includes(q)||(t.reference_number||"").toLowerCase().includes(q)||(t.party_name||"").toLowerCase().includes(q));}return r;});
 const sorted=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
 function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"desc":"asc";else{sortCol.value=col;sortDir.value="asc";}}
 function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db">⇅</span>';return sortDir.value==="asc"?"↑":"↓";}
@@ -736,7 +757,7 @@ onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.a
 .bt-mobile-cards { display: none; }
 .bt-desktop-table { display: table; }
 .bt-description {
-  max-width: 350px; /* adjust as needed */
+  max-width: 200px; /* adjust as needed */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

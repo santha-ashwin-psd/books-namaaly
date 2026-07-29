@@ -31,6 +31,9 @@
         <button class="cp-btn-ghost" @click="downloadStatement">
           <span v-html="icon('download',13)"></span> Statement
         </button>
+        <button class="cp-btn-ghost" @click="printStatement">
+          <span v-html="icon('printer',13)"></span> Print
+        </button>
         <button class="cp-btn-primary" @click="newInvoice">
           <span v-html="icon('plus',13)"></span> New Invoice
         </button>
@@ -359,6 +362,44 @@ async function downloadStatement() {
     await downloadStatementPdf(data);
   } catch (e) {
     toast.error(e.message || "Statement download failed");
+  }
+}
+
+// Print-preview for the statement — opens a new tab with the same ledger
+// layout used for the PDF, plus a Print button (browser "Save as PDF" works
+// from there too). Same pattern as the Warehouse stock / Work Order print.
+async function printStatement() {
+  try {
+    const data = await apiGET("zoho_books_clone.api.docs.get_customer_statement",
+      { customer: route.params.name });
+    if (!data || !data.rows?.length) { toast.error("No statement rows in this period"); return; }
+
+    const docHtml = buildStatementHtml(data);
+    const toolbarHtml = `
+      <style>
+        .stmt-toolbar { position:sticky; top:0; z-index:10; background:#fff; padding:10px 18px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; gap:10px; box-shadow:0 1px 4px rgba(0,0,0,.06); font-family:Arial,Helvetica,sans-serif; }
+        .stmt-toolbar .tb-lbl { font-size:11.5px; font-weight:700; color:#374151; letter-spacing:.04em; }
+        .stmt-toolbar .print-btn { margin-left:auto; background:#1a6ef7; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-weight:700; cursor:pointer; font:inherit; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+        .stmt-toolbar .print-btn:hover { background:#1558d0; }
+        @media print { .stmt-toolbar { display:none!important; } }
+      </style>
+      <div class="stmt-toolbar">
+        <span class="tb-lbl">PRINT PREVIEW</span>
+        <button class="print-btn" onclick="window.print()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print
+        </button>
+      </div>`;
+    const html = docHtml.replace("<body>", "<body>" + toolbarHtml);
+
+    const win = window.open("", "_blank");
+    if (!win) { toast.error("Please allow pop-ups to print"); return; }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  } catch (e) {
+    toast.error(e.message || "Failed to build statement preview");
   }
 }
 
