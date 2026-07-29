@@ -33,7 +33,7 @@
     </div>
 
     <div v-if="importResult" class="bt-import-result" :class="importResult.ok?'ok':'err'">
-      <span v-if="importResult.ok">✓ Imported {{ importResult.count }} transaction(s), auto-reconciled {{ importResult.autoReconciled || 0 }} by date+amount match. Skipped {{ importResult.skipped }}.</span>
+      <span v-if="importResult.ok">✓ Imported {{ importResult.count }} transaction(s), auto-reconciled {{ importResult.autoReconciled || 0 }}. Skipped {{ importResult.skipped }}.<template v-if="importResult.mappedToSuspense"> {{ importResult.mappedToSuspense }} sent to Suspense.</template></span>
       <span v-else>✗ {{ importResult.error }}</span>
       <button class="bt-import-close" @click="importResult=null">×</button>
     </div>
@@ -192,8 +192,8 @@
             <tbody>
               <tr><td class="mono-sm">Date</td><td class="text-muted">Transaction Date, Posting Date</td><td>Yes</td><td>YYYY-MM-DD, DD/MM/YYYY, or an Excel date cell</td></tr>
               <tr><td class="mono-sm">Description</td><td class="text-muted">Narration, Particulars</td><td>No</td><td>Free text, truncated to 140 chars</td></tr>
-              <tr><td class="mono-sm">Debit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money received into the bank (deposit)</td></tr>
-              <tr><td class="mono-sm">Credit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money paid out of the bank (withdrawal)</td></tr>
+              <tr><td class="mono-sm">Debit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money paid out of the bank (withdrawal)</td></tr>
+              <tr><td class="mono-sm">Credit</td><td class="text-muted">—</td><td>One of Debit/Credit, or Amount+Type</td><td>Money received into the bank (deposit)</td></tr>
               <tr><td class="mono-sm">Amount + Type</td><td class="text-muted">Type / Dr/Cr column with D or C</td><td>Alternative to Debit/Credit</td><td>e.g. Amount=5000, Type=Credit</td></tr>
               <tr><td class="mono-sm">Reference</td><td class="text-muted">Reference Number, Ref No</td><td>No</td><td>Cheque/UTR/transaction ref, truncated to 80 chars</td></tr>
             </tbody>
@@ -207,9 +207,9 @@
           <table class="bt-fmt-table">
             <thead><tr><th>Date</th><th>Description</th><th>Reference</th><th>Debit</th><th>Credit</th></tr></thead>
             <tbody>
-              <tr><td class="mono-sm">2026-06-01</td><td>Customer payment received</td><td class="mono-sm">UTR12345</td><td class="mono-sm green">15000</td><td class="mono-sm"></td></tr>
-              <tr><td class="mono-sm">2026-06-03</td><td>Office rent</td><td class="mono-sm">CHQ0091</td><td class="mono-sm"></td><td class="mono-sm red">8000</td></tr>
-              <tr><td class="mono-sm">2026-06-05</td><td>Vendor payment</td><td class="mono-sm">NEFT7788</td><td class="mono-sm"></td><td class="mono-sm red">4200</td></tr>
+              <tr><td class="mono-sm">2026-06-01</td><td>Customer payment received</td><td class="mono-sm">UTR12345</td><td class="mono-sm"></td><td class="mono-sm green">15000</td></tr>
+              <tr><td class="mono-sm">2026-06-03</td><td>Office rent</td><td class="mono-sm">CHQ0091</td><td class="mono-sm red">8000</td><td class="mono-sm"></td></tr>
+              <tr><td class="mono-sm">2026-06-05</td><td>Vendor payment</td><td class="mono-sm">NEFT7788</td><td class="mono-sm red">4200</td><td class="mono-sm"></td></tr>
             </tbody>
           </table>
 
@@ -229,6 +229,67 @@
         </div>
       </div>
     </div>
+
+    <!-- Mapping panel: review every parsed row before anything is posted -->
+    <div v-if="mappingOpen" class="bt-map-overlay" @click.self="!confirming && (mappingOpen=false)"></div>
+    <div class="bt-map-drawer" :class="{open:mappingOpen}">
+      <div class="bt-dheader">
+        <button class="bt-dclose" @click="mappingOpen=false" :disabled="confirming"><span v-html="icon('x',16)"></span></button>
+        <div class="bt-dh-title">Review Import</div>
+        <div class="bt-dh-sub">{{ mappingRows.length }} row(s) parsed — {{ mappingToReconcile.length }} auto-matched, {{ mappingToMap.length }} need an account, {{ mappingSkipped.length }} skipped</div>
+      </div>
+      <div class="bt-map-body">
+        <div v-if="mappingUnaccounted" class="bt-map-warn">
+          {{ mappingUnaccounted }} row(s) have no account picked — these will post to the company's Suspense account on confirm, still fully balanced (Dr Bank / Cr Suspense or reverse), just uncategorized until you fix them later.
+        </div>
+
+        <template v-if="mappingToMap.length">
+          <div class="bt-section-hdr"><span v-html="icon('edit',13)"></span> Needs an account ({{ mappingToMap.length }})</div>
+          <table class="bt-map-table">
+            <thead><tr><th>Date</th><th>Description</th><th class="ta-r">Amount</th><th>Categorize To</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="row in mappingToMap" :key="row.description+row.date+row.debit+row.credit">
+                <td class="mono-sm">{{ fmtDate(row.date) }}</td>
+                <td>{{ row.description || '—' }}</td>
+                <td class="mono-sm ta-r" :class="row.credit>0?'green':'red'">{{ row.credit>0?'+':'-' }}{{ fmtCur(row.credit>0?row.credit:row.debit) }}</td>
+                <td>
+                  <select v-model="row.mapped_account" class="bt-select" style="min-width:200px">
+                    <option value="">— Suspense (uncategorized) —</option>
+                    <option v-for="a in mappingAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
+                  </select>
+                </td>
+                <td><button class="bt-btn-ghost" style="padding:4px 8px;font-size:11.5px" @click="applyAccountToSimilar(row)" :disabled="!row.mapped_account" title="Apply this account to other unmapped rows with a similar description">Apply to similar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+
+        <template v-if="mappingToReconcile.length">
+          <div class="bt-section-hdr" style="margin-top:18px"><span v-html="icon('check',13)"></span> Auto-matched ({{ mappingToReconcile.length }})</div>
+          <table class="bt-map-table">
+            <thead><tr><th>Date</th><th>Description</th><th class="ta-r">Amount</th><th>Matches</th></tr></thead>
+            <tbody>
+              <tr v-for="row in mappingToReconcile" :key="row.match_name">
+                <td class="mono-sm">{{ fmtDate(row.date) }}</td>
+                <td>{{ row.description || '—' }}</td>
+                <td class="mono-sm ta-r" :class="row.credit>0?'green':'red'">{{ row.credit>0?'+':'-' }}{{ fmtCur(row.credit>0?row.credit:row.debit) }}</td>
+                <td class="mono-sm" style="color:#16a34a">{{ row.match_name }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+
+        <template v-if="mappingSkipped.length">
+          <div class="bt-section-hdr" style="margin-top:18px"><span v-html="icon('info',13)"></span> Skipped ({{ mappingSkipped.length }}) — unparseable date or zero amount</div>
+        </template>
+      </div>
+      <div class="bt-dfooter">
+        <button class="bt-btn-ghost" @click="mappingOpen=false" :disabled="confirming">Cancel</button>
+        <button class="bt-btn-primary" :disabled="confirming" @click="confirmMappingImport">
+          {{ confirming ? 'Importing…' : `Confirm Import (${mappingRows.length - mappingSkipped.length})` }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -240,9 +301,9 @@ import { apiList, apiPOST, resolveCompany } from "../api/client.js";
 const showFormatGuide = ref(false);
 const downloadingSample = ref(false);
 const SAMPLE_ROWS = [
-  { Date: "2026-06-01", Description: "Customer payment received", Reference: "UTR12345", Debit: 15000, Credit: "" },
-  { Date: "2026-06-03", Description: "Office rent", Reference: "CHQ0091", Debit: "", Credit: 8000 },
-  { Date: "2026-06-05", Description: "Vendor payment", Reference: "NEFT7788", Debit: "", Credit: 4200 },
+  { Date: "2026-06-01", Description: "Customer payment received", Reference: "UTR12345", Debit: "", Credit: 15000 },
+  { Date: "2026-06-03", Description: "Office rent", Reference: "CHQ0091", Debit: 8000, Credit: "" },
+  { Date: "2026-06-05", Description: "Vendor payment", Reference: "NEFT7788", Debit: 4200, Credit: "" },
 ];
 
 function downloadBlob(blob, filename) {
@@ -323,27 +384,91 @@ async function onFileSelected(e) {
   importResult.value = null;
   try {
     const csvText = await fileToCsvText(f);
-    const r = await apiPOST("zoho_books_clone.api.docs.import_bank_statement_csv", {
+    const r = await apiPOST("zoho_books_clone.api.docs.preview_bank_statement_csv", {
       bank_account: selectedAccount.value,
       csv_data: csvText,
     });
-    importResult.value = {
-      ok: true,
-      count: r?.count || 0,
-      skipped: r?.skipped || 0,
-      autoReconciled: r?.auto_reconciled || 0,
-    };
-    if (r?.auto_reconciled) {
-      toast.success(`${r.auto_reconciled} transaction(s) auto-reconciled by date + amount match`);
-    }
-    await load();
+    openMappingPanel(r);
   } catch (err) {
-    importResult.value = { ok: false, error: err.message || "Import failed" };
+    importResult.value = { ok: false, error: err.message || "Preview failed" };
   } finally {
     importing.value = false;
     e.target.value = ""; // reset input so the same file can be re-selected
   }
 }
+
+// ── Mapping panel ──
+// Preview step surfaces every row before anything is inserted/submitted:
+// "reconcile" rows already match an existing mirror row / Payment Entry and
+// need no input; "map" rows need an account picked (or they fall back to
+// Suspense on confirm) — the person can override any row before committing.
+const mappingOpen = ref(false);
+const mappingRows = ref([]);
+const mappingCompany = ref("");
+const mappingAccounts = ref([]);
+const confirming = ref(false);
+
+function openMappingPanel(previewResult) {
+  mappingRows.value = (previewResult.rows || []).map(r => ({
+    ...r,
+    mapped_account: r.suggested_account || "",
+  }));
+  mappingCompany.value = previewResult.company || "";
+  mappingOpen.value = true;
+  loadMappingAccounts();
+}
+
+async function loadMappingAccounts() {
+  if (mappingAccounts.value.length) return;
+  try {
+    mappingAccounts.value = await apiList("Account", {
+      fields: ["name", "account_name"],
+      filters: [["company", "=", mappingCompany.value], ["is_group", "=", 0]],
+      limit: 500,
+    });
+  } catch { mappingAccounts.value = []; }
+}
+
+const mappingToReconcile = computed(() => mappingRows.value.filter(r => r.action === "reconcile"));
+const mappingToMap = computed(() => mappingRows.value.filter(r => r.action === "map"));
+const mappingSkipped = computed(() => mappingRows.value.filter(r => r.action === "skip"));
+const mappingUnaccounted = computed(() => mappingToMap.value.filter(r => !r.mapped_account).length);
+
+function applyAccountToSimilar(row) {
+  // "Apply to all similar" — same first-two-words prefix, still unmapped.
+  const key = (row.description || "").split(" ").slice(0, 2).join(" ");
+  if (!key) return;
+  for (const r of mappingToMap.value) {
+    if (r !== row && (r.description || "").startsWith(key)) r.mapped_account = row.mapped_account;
+  }
+}
+
+async function confirmMappingImport() {
+  confirming.value = true;
+  try {
+    const r = await apiPOST("zoho_books_clone.api.docs.confirm_bank_statement_import", {
+      bank_account: selectedAccount.value,
+      rows: mappingRows.value.filter(r => r.action !== "skip"),
+    });
+    importResult.value = {
+      ok: true,
+      count: r?.count || 0,
+      skipped: mappingSkipped.value.length,
+      autoReconciled: r?.reconciled || 0,
+      mappedToSuspense: r?.mapped_to_suspense || 0,
+    };
+    if (r?.mapped_to_suspense) {
+      toast.info(`${r.mapped_to_suspense} row(s) posted to Suspense — categorize them later on the transaction.`);
+    }
+    mappingOpen.value = false;
+    await load();
+  } catch (err) {
+    importResult.value = { ok: false, error: err.message || "Import failed" };
+  } finally {
+    confirming.value = false;
+  }
+}
+
 import { useToast } from "../composables/useToast.js";
 import { useRoute } from "vue-router";
 import { icon } from "../utils/icons.js";
@@ -482,6 +607,14 @@ onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.a
 .bt-overlay{position:fixed;inset:0;background:rgba(15,23,42,.28);z-index:40;}
 .bt-drawer{position:fixed;top:0;right:-440px;bottom:0;width:440px;max-width:96vw;background:#fff;border-left:1px solid #e5e7eb;box-shadow:-8px 0 28px rgba(15,23,42,.12);z-index:50;display:flex;flex-direction:column;transition:right .24s ease;}
 .bt-drawer.open{right:0;}
+.bt-map-overlay{position:fixed;inset:0;background:rgba(15,23,42,.28);z-index:40;}
+.bt-map-drawer{position:fixed;top:0;right:-760px;bottom:0;width:760px;max-width:98vw;background:#fff;border-left:1px solid #e5e7eb;box-shadow:-8px 0 28px rgba(15,23,42,.12);z-index:50;display:flex;flex-direction:column;transition:right .24s ease;}
+.bt-map-drawer.open{right:0;}
+.bt-map-body{flex:1;overflow-y:auto;padding:16px 20px;}
+.bt-map-warn{background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:12.5px;padding:10px 12px;border-radius:8px;margin-bottom:14px;}
+.bt-map-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.bt-map-table th{text-align:left;color:#6b7280;font-weight:600;font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid #e5e7eb;}
+.bt-map-table td{padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:middle;}
 .bt-dheader{position:relative;flex-shrink:0;padding:20px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);}
 .bt-dclose{position:absolute;top:12px;right:12px;background:transparent;border:none;cursor:pointer;color:#475569;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;}
 .bt-dclose:hover{background:rgba(255,255,255,.6);color:#0f172a;}

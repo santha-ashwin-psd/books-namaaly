@@ -89,50 +89,59 @@ def _get_default_source_warehouse():
         return ""
 
 
-def _check_stock_availability(requirements, warehouse):
-    """Guard against starting/posting a Packing Slip when `warehouse` doesn't
-    actually have enough of every required item on hand.
+def _check_stock_availability(requirements, default_warehouse):
+    """Guard against starting/posting a Packing Slip when the relevant
+    warehouse doesn't actually have enough of a required item on hand.
 
-    requirements -- list of {"item_code", "qty"} needed from `warehouse`.
-    Rows for the same item_code are summed before checking (a Packing BOM's
-    bulk item and a packing material could theoretically share an item_code).
+    requirements -- list of {"item_code", "qty", "warehouse"(optional)}.
+    Each row is checked against its own "warehouse" if given (a Work Order
+    Item row can override its source warehouse per item -- e.g. packing
+    material sourced from a dedicated Packing Store while the bulk item
+    comes from the WO's main source warehouse); rows with no "warehouse"
+    fall back to `default_warehouse`. Rows for the same (item, warehouse)
+    pair are summed before checking.
 
-    Raises a single error naming every short item, rather than letting the
-    first short row fail deep inside Stock Entry's own negative-stock guard
+    Raises a single error naming every short item (with the warehouse it
+    was actually checked against), rather than letting the first short row
+    fail deep inside Stock Entry's own negative-stock guard
     (inventory/doctype/stock_entry/stock_entry.py's validate()) with every
     other row's shortage still undiscovered until the next attempt.
 
-    No-ops if `warehouse` isn't known yet, or if Manufacturing Settings >
-    Allow Negative Stock is on (same setting Stock Entry itself respects).
+    A row is skipped (not checked) only if it has neither its own warehouse
+    nor a default_warehouse to fall back to -- nothing known to check yet.
+    No-ops entirely if Manufacturing Settings > Allow Negative Stock is on
+    (same setting Stock Entry itself respects).
     """
-    if not warehouse or _allow_negative_stock():
+    if _allow_negative_stock():
         return
 
     needed = {}
     for r in requirements:
         item_code = r.get("item_code")
         qty = flt(r.get("qty"))
-        if not item_code or qty <= 0:
+        warehouse = r.get("warehouse") or default_warehouse
+        if not item_code or qty <= 0 or not warehouse:
             continue
-        needed[item_code] = needed.get(item_code, 0.0) + qty
+        key = (item_code, warehouse)
+        needed[key] = needed.get(key, 0.0) + qty
 
     shortages = []
-    for item_code, qty in needed.items():
+    for (item_code, warehouse), qty in needed.items():
         available = get_stock_balance(item_code, warehouse)
         if available < qty:
-            shortages.append((item_code, available, qty))
+            shortages.append((item_code, warehouse, available, qty))
 
     if shortages:
         lines = "".join(
-            "<li><b>{0}</b> — available {1}, required {2}</li>".format(
-                item_code, round(available, 2), round(qty, 2)
+            "<li><b>{0}</b> (warehouse <b>{1}</b>) — available {2}, required {3}</li>".format(
+                item_code, warehouse, round(available, 2), round(qty, 2)
             )
-            for item_code, available, qty in shortages
+            for item_code, warehouse, available, qty in shortages
         )
         frappe.throw(_(
-            "Not enough stock in warehouse <b>{0}</b> to cover this Packing Slip:"
-            "<ul>{1}</ul>"
-        ).format(warehouse, lines))
+            "Not enough stock to cover this Packing Slip:"
+            "<ul>{0}</ul>"
+        ).format(lines))
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
@@ -227,6 +236,18 @@ def create_packing_slip(work_order, qty_to_pack=None):
                         source_batch_no = latest_batch[0].name
                         source_batch_expiry = latest_batch[0].expiry_date
 
+    # Row-level source warehouse: mirror whatever the Work Order Item row for
+    # this item is set to. A WO Item row can override its own source
+    # warehouse per item (e.g. a packing material sourced from a dedicated
+    # Packing Store while the bulk item comes from the WO's main source
+    # warehouse) -- without carrying that over, every Packing Slip row would
+    # fall back to the single "Consume Materials From" field, which can only
+    # hold one warehouse, so any item actually sourced from somewhere else
+    # would wrongly get checked/consumed against the wrong warehouse.
+    wo_item_warehouse = {
+        row.item_code: row.source_warehouse for row in (wo.items or []) if row.source_warehouse
+    }
+
     # Bulk item row. Scales directly with qty_to_pack (bulk_qty_per_unit is
     # defined as "per packed unit"), NOT with `ratio` (qty_to_pack /
     # bom.quantity) -- ratio is only correct for packing_items, whose qty is
@@ -242,6 +263,7 @@ def create_packing_slip(work_order, qty_to_pack=None):
             "packed_qty": 0,
             "uom": bulk_uom,
             "batch_no": source_batch_no or "",
+            "source_warehouse": wo_item_warehouse.get(bom_doc.bulk_item) or "",
         })
 
     # Packing materials
@@ -251,6 +273,7 @@ def create_packing_slip(work_order, qty_to_pack=None):
             "item_name": r.item_name or "",
             "required_qty": flt(r.qty) * ratio,
             "packed_qty": 0,
+            "source_warehouse": wo_item_warehouse.get(r.item_code) or "",
             "uom": r.uom or "",
         })
 
@@ -259,14 +282,29 @@ def create_packing_slip(work_order, qty_to_pack=None):
 
     # Best-effort guardrail at creation time: the slip's own source_warehouse
     # isn't chosen yet (that happens later, in the UI, before packing starts),
-    # so check against Manufacturing Settings' Default Source Warehouse if one
-    # is configured. If none is set there's nothing to check against yet --
-    # the hard check in post_packing_consumption() below still catches a real
-    # shortage right before stock is actually posted.
-    default_source_wh = _get_default_source_warehouse()
+    # so check each item against its actual source: the row's own
+    # source_warehouse (copied above from the matching Work Order Item row,
+    # if that row had its own override -- e.g. a packing material sourced
+    # from a dedicated Packing Store while the bulk item comes from the WO's
+    # main source warehouse), falling back to the WO's overall
+    # source_warehouse, then to Manufacturing Settings' Default Source
+    # Warehouse. Checking every row against a single warehouse here would
+    # throw false shortages for items actually sourced from a different,
+    # fully-stocked warehouse. If nothing is set anywhere yet there's nothing
+    # to check against yet -- the hard check in post_packing_consumption()
+    # below still catches a real shortage right before stock is actually
+    # posted.
+    fallback_wh = wo.source_warehouse or _get_default_source_warehouse()
     _check_stock_availability(
-        [{"item_code": r.item_code, "qty": r.required_qty} for r in ps.items],
-        default_source_wh,
+        [
+            {
+                "item_code": r.item_code,
+                "qty": r.required_qty,
+                "warehouse": r.source_warehouse or fallback_wh,
+            }
+            for r in ps.items
+        ],
+        fallback_wh,
     )
 
     ps.insert(ignore_permissions=True)

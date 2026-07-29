@@ -103,7 +103,7 @@ def get_default_bom_for_item(item_code):
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
-def get_bom_breakdown(bom, qty):
+def get_bom_breakdown(bom, qty, work_order=None):
     """Preview the raw-material & operation rows a Work Order would get from
     this BOM at the given quantity. Read-only — does not save anything.
 
@@ -114,6 +114,15 @@ def get_bom_breakdown(bom, qty):
       Sub-Assembly   — treated identically to Manufacturing in this context.
       Packing        — materials are packing_items + the bulk_item consumed at
                        bulk_qty_per_unit per packed unit.
+
+    work_order (optional) -- when given, each returned item row is enriched
+    with "source_warehouse": the matching Work Order Item row's own source
+    warehouse override, if that row has one (WO Item rows can be sourced
+    from a different warehouse per item than the WO's overall Default
+    Source Warehouse). Used by the Packing Slip UI's "Reload from WO" so a
+    packing material sourced from a dedicated warehouse doesn't silently
+    fall back to whatever single "Consume Materials From" warehouse the
+    slip happens to have set.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -132,6 +141,15 @@ def get_bom_breakdown(bom, qty):
         # Manufacturing or Sub-Assembly
         items = _explode_bom_items(bom_doc.items, ratio, depth=0, operations_acc=exploded_operations)
         items = _merge_duplicate_rows(items)
+
+    if work_order and frappe.db.exists("Work Order", work_order):
+        row_wh = {
+            r.item_code: r.source_warehouse
+            for r in frappe.get_doc("Work Order", work_order).items or []
+            if r.source_warehouse
+        }
+        for row in items:
+            row["source_warehouse"] = row_wh.get(row.get("item_code")) or ""
 
     # Operations defined on the top-level BOM, plus (below) any operations
     # belonging to sub-BOMs that _explode_bom_items flattened into raw
@@ -172,6 +190,7 @@ def get_bom_breakdown(bom, qty):
         "default_fg_warehouse": ms.get("default_fg_warehouse") or "",
         "default_scrap_warehouse": ms.get("default_scrap_warehouse") or "",
     }
+
 
 
 def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=None):

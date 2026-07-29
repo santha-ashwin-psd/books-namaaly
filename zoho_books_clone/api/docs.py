@@ -4825,6 +4825,217 @@ def _auto_reconcile_bank_transaction(bt, already_linked):
     return candidates[0].name
 
 
+def _suggest_account_for_description(description, bank_account):
+    """Look at previously-categorized Bank Transactions (mapped_account set,
+    submitted) for a similar description on this bank account, and suggest
+    whatever account was used last time. Cheap keyword-ish match: exact
+    description first, then a substring match on the first few words —
+    good enough for recurring statement lines (e.g. 'ATM CHG', 'NEFT-XXX')
+    without needing real ML/fuzzy matching.
+
+    Filtered by bank_account, not company — Bank Transaction has no
+    `company` field of its own (company is only reachable via the linked
+    Bank Account), so filtering directly on "company" 500s with an unknown
+    column error.
+    """
+    if not description:
+        return None
+    exact = frappe.db.get_value(
+        "Bank Transaction",
+        {"description": description, "bank_account": bank_account, "docstatus": 1,
+         "mapped_account": ["is", "set"]},
+        "mapped_account", order_by="modified desc",
+    )
+    if exact:
+        return exact
+    key = " ".join(description.split()[:2])  # first couple words, e.g. "NEFT-", "ATM"
+    if not key:
+        return None
+    row = frappe.db.get_value(
+        "Bank Transaction",
+        {"description": ["like", f"%{key}%"], "bank_account": bank_account, "docstatus": 1,
+         "mapped_account": ["is", "set"]},
+        "mapped_account", order_by="modified desc",
+    )
+    return row
+
+
+def _parse_statement_rows(csv_data):
+    """Shared CSV parsing for preview + (legacy) direct import. Returns a
+    list of dicts: date, description, reference, debit, credit — or None
+    entries for unparseable rows (caller decides whether to skip/report).
+    """
+    import csv as _csv
+    from io import StringIO
+    csv_data = (csv_data or "").lstrip("\ufeff")
+    reader = _csv.DictReader(StringIO(csv_data))
+    out = []
+    for raw in reader:
+        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+        raw_date = row.get("date") or row.get("transaction_date") or row.get("posting_date")
+        date = _parse_statement_date(raw_date)
+        desc = row.get("description") or row.get("narration") or row.get("particulars") or ""
+        ref  = row.get("reference") or row.get("reference_number") or row.get("ref no") or ""
+        debit  = flt(row.get("debit") or 0)
+        credit = flt(row.get("credit") or 0)
+        if not (debit or credit):
+            amt = flt(row.get("amount") or 0)
+            typ = (row.get("type") or row.get("dr/cr") or "").upper()
+            if typ.startswith("D"): debit = amt
+            elif typ.startswith("C"): credit = amt
+        out.append({
+            "date": str(date) if date else None,
+            "description": desc, "reference": ref,
+            "debit": debit, "credit": credit,
+            "valid": bool(date and (debit or credit) > 0),
+        })
+    return out
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def preview_bank_statement_csv(bank_account, csv_data):
+    """Step 1 of the import flow: parse the file and classify every row,
+    but insert/submit nothing yet. The mapping panel renders this so the
+    person can review/override before anything hits the ledger.
+
+    Each row comes back tagged with an `action`:
+      - "reconcile": matches an existing mirror Bank Transaction / raw
+        Payment Entry exactly (same logic as the old auto-import) — no
+        account needed, just confirms a mirror row cleared.
+      - "map": no match found — needs an account. `suggested_account` is
+        filled in from prior categorizations of a similar description if
+        one exists, otherwise null (falls back to Suspense on confirm
+        unless the person picks something in the panel).
+      - "skip": row couldn't be parsed (bad date / zero amount).
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking", write=True)
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+    if not bank_account or not frappe.db.exists("Bank Account", bank_account):
+        frappe.throw("Bank Account is required")
+    company = frappe.db.get_value("Bank Account", bank_account, "company")
+    if not company:
+        frappe.throw(f"Bank Account {bank_account} has no company set — cannot import transactions.")
+
+    already_linked = set(frappe.db.sql_list("""
+        SELECT payment_entry FROM `tabBank Transaction`
+        WHERE payment_entry IS NOT NULL AND payment_entry != ''
+    """))
+    matched_this_batch = set()
+    linked_this_batch = set()
+
+    out = []
+    for row in _parse_statement_rows(csv_data):
+        if not row["valid"]:
+            out.append({**row, "action": "skip"})
+            continue
+
+        existing_match = _find_existing_bank_transaction_match(
+            bank_account, row["date"], row["debit"], row["credit"], matched_this_batch
+        )
+        if existing_match:
+            matched_this_batch.add(existing_match)
+            out.append({**row, "action": "reconcile", "match_name": existing_match, "match_type": "bank_transaction"})
+            continue
+
+        pe_amount = row["debit"] if row["debit"] > 0 else row["credit"]
+        pe_type_pref = "Pay" if row["debit"] > 0 else "Receive"
+        pe_candidates = frappe.db.sql("""
+            SELECT name FROM `tabPayment Entry`
+            WHERE docstatus = 1 AND payment_type = %(t)s AND payment_date = %(d)s
+              AND ABS(paid_amount - %(a)s) <= 0.01
+        """, {"t": pe_type_pref, "d": row["date"], "a": pe_amount}, as_dict=True)
+        pe_candidates = [c.name for c in pe_candidates if c.name not in already_linked and c.name not in linked_this_batch]
+        if len(pe_candidates) == 1:
+            linked_this_batch.add(pe_candidates[0])
+            out.append({**row, "action": "reconcile", "match_name": pe_candidates[0], "match_type": "payment_entry"})
+            continue
+
+        out.append({
+            **row, "action": "map",
+            "suggested_account": _suggest_account_for_description(row["description"], bank_account),
+        })
+
+    return {"rows": out, "bank_account": bank_account, "company": company}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def confirm_bank_statement_import(bank_account, rows):
+    """Step 2: the person has reviewed the preview panel and (optionally)
+    picked an account per unmatched row. `rows` is the list returned by
+    preview_bank_statement_csv, each optionally carrying a `mapped_account`
+    the person chose (or blank/omitted, which falls back to the company's
+    Temporary-type suspense account on submit — see BankTransaction._post_gl).
+    Only rows with action in ("reconcile", "map") are processed; "skip" rows
+    are ignored here since they were already surfaced in the preview.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking", write=True)
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+    if not bank_account or not frappe.db.exists("Bank Account", bank_account):
+        frappe.throw("Bank Account is required")
+    company = frappe.db.get_value("Bank Account", bank_account, "company")
+    if not company:
+        frappe.throw(f"Bank Account {bank_account} has no company set — cannot import transactions.")
+
+    if isinstance(rows, str):
+        rows = frappe.parse_json(rows)
+
+    already_linked = set(frappe.db.sql_list("""
+        SELECT payment_entry FROM `tabBank Transaction`
+        WHERE payment_entry IS NOT NULL AND payment_entry != ''
+    """))
+
+    created, reconciled, mapped_to_suspense, errors = [], 0, 0, []
+    for row in rows or []:
+        action = row.get("action")
+        try:
+            if action == "reconcile":
+                if row.get("match_type") == "bank_transaction":
+                    frappe.db.set_value("Bank Transaction", row["match_name"], {"status": "Reconciled"}, update_modified=True)
+                    reconciled += 1
+                elif row.get("match_type") == "payment_entry" and row["match_name"] not in already_linked:
+                    bt = frappe.get_doc({
+                        "doctype": "Bank Transaction", "bank_account": bank_account, "company": company,
+                        "date": row["date"], "description": (row.get("description") or "")[:140],
+                        "debit": flt(row.get("debit")), "credit": flt(row.get("credit")),
+                        "reference_number": (row.get("reference") or "")[:80],
+                        "status": "Reconciled", "payment_entry": row["match_name"],
+                    })
+                    bt.flags.ignore_permissions = True
+                    bt.flags.ignore_mandatory = True
+                    bt.flags.skip_gl_posting = True  # the Payment Entry already posted the real GL
+                    bt.insert(); bt.submit()
+                    already_linked.add(row["match_name"])
+                    reconciled += 1
+            elif action == "map":
+                mapped_account = (row.get("mapped_account") or "").strip() or None
+                bt = frappe.get_doc({
+                    "doctype": "Bank Transaction", "bank_account": bank_account, "company": company,
+                    "date": row["date"], "description": (row.get("description") or "")[:140],
+                    "debit": flt(row.get("debit")), "credit": flt(row.get("credit")),
+                    "reference_number": (row.get("reference") or "")[:80],
+                    "status": "Unreconciled", "mapped_account": mapped_account,
+                })
+                bt.flags.ignore_permissions = True
+                bt.flags.ignore_mandatory = True
+                bt.insert(); bt.submit()
+                created.append(bt.name)
+                if not mapped_account:
+                    mapped_to_suspense += 1
+        except Exception as e:
+            frappe.log_error(f"Bank statement row import failed: {e}", "confirm_bank_statement_import")
+            errors.append(row.get("description") or row.get("date") or "row")
+
+    frappe.db.commit()
+    return {
+        "created": created, "count": len(created), "reconciled": reconciled,
+        "mapped_to_suspense": mapped_to_suspense, "errors": errors, "bank_account": bank_account,
+    }
+
+
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def import_bank_statement_csv(bank_account, csv_data):
     """Parse a CSV string (also used for Excel files converted to CSV

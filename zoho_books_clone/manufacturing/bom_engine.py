@@ -73,6 +73,18 @@ def _build_tree(bom_name, qty, level, result, seen, max_depth=6):
             if sub_bom:
                 is_phantom = True
 
+        row_rate = flt(r.rate)
+        # Mirror BOM._calc_costs: when parent flags "Set Rate of Sub-Assembly
+        # from BOM", stored r.rate on row go stale once sub BOM's cost change
+        # after parent last saved. Re-derive here so tree/valuation match what
+        # fresh save of parent would produce, not old typed-in rate.
+        if bom_doc.set_rate_of_sub_assembly_from_bom and sub_bom:
+            sub_cost, sub_qty = frappe.db.get_value(
+                "BOM", sub_bom, ["total_cost", "quantity"]
+            ) or (None, None)
+            if sub_cost is not None and flt(sub_qty):
+                row_rate = flt(sub_cost) / flt(sub_qty)
+
         node_qty = flt(r.qty) * ratio
         node = {
             "level": level,
@@ -80,8 +92,8 @@ def _build_tree(bom_name, qty, level, result, seen, max_depth=6):
             "item_name": r.item_name or frappe.db.get_value("Item", r.item_code, "item_name") or r.item_code,
             "qty": node_qty,
             "uom": r.uom or "",
-            "rate": flt(r.rate),
-            "amount": flt(r.rate) * node_qty,
+            "rate": row_rate,
+            "amount": row_rate * node_qty,
             "sub_assembly_bom": sub_bom,
             "is_phantom": is_phantom,
             "has_sub_assembly": bool(sub_bom),
@@ -122,16 +134,24 @@ def compare_boms(bom1, bom2):
 
     def _items_map(bom_doc):
         rows = bom_doc.packing_items if bom_doc.bom_type == "Packing" else (bom_doc.items or [])
-        return {
-            r.item_code: {
+        out = {}
+        for r in rows:
+            rate = flt(r.rate)
+            sub_bom = getattr(r, "sub_assembly_bom", None)
+            if bom_doc.set_rate_of_sub_assembly_from_bom and sub_bom:
+                sub_cost, sub_qty = frappe.db.get_value(
+                    "BOM", sub_bom, ["total_cost", "quantity"]
+                ) or (None, None)
+                if sub_cost is not None and flt(sub_qty):
+                    rate = flt(sub_cost) / flt(sub_qty)
+            out[r.item_code] = {
                 "item_code": r.item_code,
                 "item_name": r.item_name or r.item_code,
                 "qty": flt(r.qty),
                 "uom": r.uom or "",
-                "rate": flt(r.rate),
+                "rate": rate,
             }
-            for r in rows
-        }
+        return out
 
     m1, m2 = _items_map(b1), _items_map(b2)
     all_items = sorted(set(m1) | set(m2))

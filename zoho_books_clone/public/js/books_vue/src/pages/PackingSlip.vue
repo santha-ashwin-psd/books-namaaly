@@ -199,6 +199,13 @@
                       <option v-for="u in uomList" :key="u.name" :value="u.name">{{ u.name }}</option>
                     </select>
                   </div>
+                  <div class="psx-item-field">
+                    <label>Source Warehouse</label>
+                    <select class="psx-fi" v-model="row.source_warehouse" :disabled="postLocked">
+                      <option value="">— Use "Consume Materials From" above —</option>
+                      <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
+                    </select>
+                  </div>
                   <div class="psx-item-field" v-if="row.batch_no || !readOnly">
                     <label>Batch</label>
                     <input class="psx-fi" v-model="row.batch_no" placeholder="—" :disabled="readOnly" />
@@ -436,7 +443,7 @@ async function loadItemsFromWO() {
   try {
     const breakdown = await apiCall(
       "zoho_books_clone.manufacturing.work_order_engine.get_bom_breakdown",
-      { bom: wo.bom, qty: flt(ps.value.qty_to_pack) || flt(wo.qty) || 1 }
+      { bom: wo.bom, qty: flt(ps.value.qty_to_pack) || flt(wo.qty) || 1, work_order: wo.name }
     );
     ps.value.items = (breakdown.items || []).map(r => ({
       item_code: r.item_code,
@@ -444,6 +451,7 @@ async function loadItemsFromWO() {
       required_qty: r.required_qty,
       packed_qty: 0,
       uom: r.uom || "",
+      source_warehouse: r.source_warehouse || "",
     }));
     if (!ps.value.items.length) {
       toast("No materials found in BOM. Make sure the Packing BOM has packing materials.", "error");
@@ -455,7 +463,7 @@ async function loadItemsFromWO() {
 }
 
 function addItem() {
-  ps.value.items.push({ item_code: "", item_name: "", required_qty: 1, packed_qty: 0, uom: "" });
+  ps.value.items.push({ item_code: "", item_name: "", required_qty: 1, packed_qty: 0, uom: "", source_warehouse: "" });
 }
 
 async function save() {

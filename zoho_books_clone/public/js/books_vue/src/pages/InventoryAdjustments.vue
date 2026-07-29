@@ -185,6 +185,7 @@
           </template>
         </div>
         <div class="ia-dfooter">
+          <button v-if="viewDoc.docstatus===1" class="ia-btn-ghost" @click="editAdjustment(viewDoc)" :disabled="actionBusy" title="Cancels this entry (reversing its GL/stock impact) and opens a corrected replacement, so the audit trail shows both"><span v-html="icon('edit',13)"></span> Edit</button>
           <button v-if="viewDoc.docstatus===1" class="ia-btn-danger-ghost" @click="cancelAdjustment(viewDoc)" :disabled="actionBusy"><span v-html="icon('cancel',13)"></span> Cancel Adjustment</button>
           <div style="margin-left:auto"><button class="ia-btn-ghost" @click="viewOpen=false">Close</button></div>
         </div>
@@ -366,6 +367,45 @@ async function cancelAdjustment(a){
   actionBusy.value=true;
   try{ await apiCancel("Stock Entry", a.name); toast.success(`${a.name} cancelled`); viewOpen.value=false; await load(); }
   catch(e){ toast.error(e.message||"Failed to cancel"); }
+  finally{ actionBusy.value=false; }
+}
+
+// A submitted Stock Entry already has stock ledger + GL entries posted
+// against it — editing those fields directly would leave the GL out of
+// sync (or need a hand-written reversal) and destroy the audit trail of
+// what was actually posted. So "Edit" here is really "cancel + re-post":
+// cancel reverses the wrong stock/GL impact exactly, then a corrected
+// entry is created fresh. Both the cancelled original and the new entry
+// stay visible in the list — nothing is overwritten or hidden.
+async function editAdjustment(a){
+  const ok = await confirm({
+    title: "Edit this adjustment?",
+    body: `This cancels ${a.name} — reversing its stock and ledger entries — then opens a corrected adjustment for the same item. Both entries stay in the list for audit purposes.`,
+    okLabel: "Cancel & Correct", okStyle: "danger",
+  });
+  if(!ok) return;
+  actionBusy.value=true;
+  try{
+    await apiCancel("Stock Entry", a.name);
+    viewOpen.value=false;
+    await openNew({ warehouse:a.warehouse, item:a.item_code });
+    form.reason = a.adjustment_reason || "";
+    form.notes = a.remarks || "";
+    if(a.adjustment_account) form.adjustment_account = a.adjustment_account;
+    if(a.batch_no){
+      // refreshStockAndBatches (inside openNew) leaves currentQty at 0 for
+      // batch items until a batch is actually picked via onBatchSelect —
+      // picking it here is what makes currentQty reflect that batch's real
+      // on-hand qty, instead of silently adding the delta to 0.
+      onBatchSelect(a.batch_no);
+    }
+    // Prefill with the qty this entry originally targeted (current
+    // item/batch stock, now reverted, plus the delta it had posted) so the
+    // user only has to fix the wrong number rather than re-enter everything.
+    form.new_qty = flt(currentQty.value) + flt(a.qty);
+    toast.success(`${a.name} cancelled — enter the corrected quantity and post`);
+    await load();
+  }catch(e){ toast.error(e.message||"Failed to start edit"); }
   finally{ actionBusy.value=false; }
 }
 
