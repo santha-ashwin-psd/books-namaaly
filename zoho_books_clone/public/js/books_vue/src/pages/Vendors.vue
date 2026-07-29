@@ -592,9 +592,9 @@
             <input v-model="stmtRange.to" type="date" class="inv-fi" style="width:160px"/>
             <button class="nim-btn" style="border:1px solid #E5E7EB" @click="loadStatement">Refresh</button>
             <div style="margin-left:auto;display:flex;gap:8px">
-              <button v-if="vendorStatement.rows?.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadVendorStatementPdf" :disabled="downloadingVendorStmtPdf">
+              <!-- <button v-if="vendorStatement.rows?.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadVendorStatementPdf" :disabled="downloadingVendorStmtPdf">
                 {{downloadingVendorStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
-              </button>
+              </button> -->
               <button class="nim-btn" style="border:1px solid #E5E7EB" @click="emailVendorStatement">📧 Email Statement</button>
             </div>
           </div>

@@ -585,9 +585,9 @@
               <span v-if="stmtLoading">Loading…</span><span v-else>↺ Refresh</span>
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">
-              <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadStatementPdf" :disabled="downloadingStmtPdf">
+              <!-- <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadStatementPdf" :disabled="downloadingStmtPdf">
                 {{downloadingStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
-              </button>
+              </button> -->
               <button v-if="stmt && stmt.email" class="nim-btn" style="border:1px solid #E5E7EB" @click="sendStatement" :disabled="sendingStmt">
                 {{sendingStmt ? 'Sending…' : '📧 Send Statement'}}
               </button>
