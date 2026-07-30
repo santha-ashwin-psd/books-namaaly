@@ -278,7 +278,7 @@
       <button class="b-btn b-btn-ghost" @click="step=2">← Back to Mapping</button>
       <div class="bi-footer-right">
         <span class="c-muted" style="font-size:12.5px">{{includedCount}} of {{counts.total}} rows selected</span>
-        <button class="b-btn b-btn-primary" :disabled="!includedCount" @click="runImport">
+        <button class="b-btn b-btn-primary" :disabled="!includedCount || !$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="runImport">
           <span v-html="icon('upload',13)" style="vertical-align:-2px"></span> Import {{includedCount}} Record{{includedCount!==1?'s':''}}
         </button>
       </div>

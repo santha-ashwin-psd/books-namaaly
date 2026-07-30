@@ -121,6 +121,8 @@ def get_bank_account(name: str) -> dict:
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking")
     doc = frappe.get_doc("Bank Account", name)
     d = doc.as_dict()
 
@@ -268,6 +270,16 @@ def get_account_ledger(account: str, from_date: str = None, to_date: str = None)
     if not account:
         frappe.throw(_("Account is required."))
 
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("banking")
+    # This runs raw SQL below, which bypasses Frappe's has_permission/
+    # permission_query_conditions hooks entirely — those only guard ORM
+    # calls (frappe.get_doc/get_all). Without this explicit check, any
+    # company member could pull another company's GL ledger trail just by
+    # naming its Account. assert_company throws if the account isn't in
+    # the caller's own company (bypass roles skip it).
+    assert_company(frappe.db.get_value("Account", account, "company"))
+
     conditions = ["IFNULL(is_cancelled, 0) = 0", "account = %(account)s"]
     params = {"account": account}
     if from_date:
@@ -350,8 +362,18 @@ def get_bank_accounts_with_balances(company: str = None) -> list:
     Return all Bank Accounts for the company with their live GL balance,
     reconciliation stats, and recent transactions count.
     """
-    if not company:
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("banking")
+
+    if company:
+        assert_company(company)
+    else:
         company = _get_company(frappe.session.user)
+    if not company:
+        # No resolvable company (and no explicit override survived the
+        # check above) — nothing to show rather than falling through to an
+        # unfiltered, cross-tenant query.
+        return []
 
     # Always include the stored balance fields so we display the per-account value,
     # not a shared GL aggregate.
@@ -363,7 +385,7 @@ def get_bank_accounts_with_balances(company: str = None) -> list:
 
     accounts = frappe.get_all(
         "Bank Account",
-        filters={"company": company} if company else {},
+        filters={"company": company},
         fields=_FIELDS,
         order_by="is_default desc, creation asc",
         limit=100,
@@ -554,10 +576,17 @@ def get_bank_transfers(company: str = None) -> list:
     Legacy transfers (no reference) are reconstructed from the outgoing leg.
     """
     import re
-    if not company:
-        company = _get_company(frappe.session.user)
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("banking")
 
-    acct_names = frappe.get_all("Bank Account", filters={"company": company} if company else {}, pluck="name")
+    if company:
+        assert_company(company)
+    else:
+        company = _get_company(frappe.session.user)
+    if not company:
+        return []
+
+    acct_names = frappe.get_all("Bank Account", filters={"company": company}, pluck="name")
     if not acct_names:
         return []
 

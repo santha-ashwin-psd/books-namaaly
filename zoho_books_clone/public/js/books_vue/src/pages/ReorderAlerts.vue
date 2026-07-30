@@ -184,6 +184,7 @@
                 </div>
               </div>
               <button class="rm-toggle" :class="{ 'rm-toggle--on': cfg.auto_po_enabled }"
+                :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''"
                 @click="onToggleAutoPO">
                 <div class="rm-toggle-knob"></div>
               </button>
@@ -239,11 +240,11 @@
 
             <!-- action buttons -->
             <div class="rm-cfg-actions">
-              <button class="rm-btn-primary" @click="saveConfig" :disabled="saving">
+              <button class="rm-btn-primary" @click="saveConfig" :disabled="saving || !$canEdit('inventory')">
                 <span v-if="saving" class="rm-spinner"></span>
                 {{ saving ? 'Saving…' : 'Save Config' }}
               </button>
-              <button class="rm-btn-secondary" @click="createPONow" :disabled="creatingPO">
+              <button class="rm-btn-secondary" @click="createPONow" :disabled="creatingPO || !$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''">
                 <span v-html="icon('plus', 14)"></span>
                 {{ creatingPO ? 'Creating…' : 'Create PO Now' }}
               </button>
@@ -275,7 +276,7 @@
           </div>
           <div class="rm-modal-actions">
             <button class="rm-btn-ghost" @click="showConfirmModal = false">Cancel</button>
-            <button class="rm-btn-primary" @click="confirmEnableAutoPO">Yes, Enable Auto-PO</button>
+            <button class="rm-btn-primary" :disabled="!$canEdit('inventory')" @click="confirmEnableAutoPO">Yes, Enable Auto-PO</button>
           </div>
         </div>
       </div>

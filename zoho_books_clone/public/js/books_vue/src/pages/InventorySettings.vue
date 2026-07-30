@@ -28,7 +28,7 @@
       <button class="sales-btn-ghost" @click="load" :disabled="loading" title="Refresh">
         <span v-html="icon('refresh', 13)"></span>
       </button>
-      <button class="sales-btn-primary" @click="openAdd">
+      <button class="sales-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd">
         <span v-html="icon('plus', 13)"></span> New {{ activeTabDef.singular }}
       </button>
     </div>
@@ -50,7 +50,7 @@
       {{ search ? 'No matches found' : activeTabDef.emptyTitle }}
     </div>
     <div style="font-size:12.5px;color:#9ca3af">{{ activeTabDef.emptySub }}</div>
-    <button v-if="!search" class="sales-btn-primary" style="margin-top:14px" @click="openAdd">
+    <button v-if="!search" class="sales-btn-primary" style="margin-top:14px" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd">
       <span v-html="icon('plus', 13)"></span> New {{ activeTabDef.singular }}
     </button>
   </div>
@@ -60,10 +60,10 @@
       <div class="is-card-top">
         <div class="is-card-icon" v-html="icon(activeTabDef.icon, 18)"></div>
         <div class="is-card-actions">
-          <button class="is-card-btn" @click="openEdit(row)" title="Edit">
+          <button class="is-card-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : 'Edit'" @click="openEdit(row)">
             <span v-html="icon('edit', 12)"></span>
           </button>
-          <button class="is-card-btn is-card-btn--danger" @click="askDelete(row)" title="Delete">
+          <button class="is-card-btn is-card-btn--danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : 'Delete'" @click="askDelete(row)">
             <span v-html="icon('trash', 12)"></span>
           </button>
         </div>
@@ -141,7 +141,7 @@
 
     <template #footer>
       <button class="nim-btn" @click="showModal = false">Cancel</button>
-      <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving">
+      <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving || !(mode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))">
         {{ saving ? 'Saving…' : 'Save ' + activeTabDef.singular }}
       </button>
     </template>

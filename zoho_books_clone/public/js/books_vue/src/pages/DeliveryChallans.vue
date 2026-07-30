@@ -15,7 +15,7 @@
     <div style="margin-left:auto;display:flex;gap:6px">
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',13)"></span> CSV</button>
       <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',13)"></span></button>
-      <button class="sales-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Challan</button>
+      <button class="sales-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Challan</button>
     </div>
   </div>
 
@@ -72,16 +72,16 @@
           <button class="dc-mob-act" @click.stop="openView(r)" title="View">
             <span v-html="icon('eye', 15)"></span>
           </button>
-          <button v-if="canEdit(r)" class="dc-mob-act" @click.stop="openEdit(r)" title="Edit">
+          <button v-if="canEdit(r) && $canEdit('invoices')" class="dc-mob-act" @click.stop="openEdit(r)" title="Edit">
             <span v-html="icon('edit', 15)"></span>
           </button>
           <button v-if="r._source==='dn' && r.docstatus===0" class="dc-mob-act" @click.stop="submitOne(r)" title="Submit">
             <span v-html="icon('check', 15)"></span>
           </button>
-          <button v-if="r._source==='dn' && r.docstatus===1 && r.status!=='Cancelled' && r.status!=='Delivered' && r.status!=='Fully Delivered'" class="dc-mob-act dc-mob-act-cancel" @click.stop="deleteTarget={row:r,mode:'cancel'}" title="Cancel">
+          <button v-if="r._source==='dn' && r.docstatus===1 && r.status!=='Cancelled' && r.status!=='Delivered' && r.status!=='Fully Delivered'" class="dc-mob-act dc-mob-act-cancel" :disabled="!$canDelete('invoices')" @click.stop="deleteTarget={row:r,mode:'cancel'}" :title="!$canDelete('invoices') ? 'Not permitted' : 'Cancel'">
             <span v-html="icon('x', 15)"></span>
           </button>
-          <button v-if="r._source==='dn' && (r.docstatus===0 || r.docstatus===2 || r.status==='Cancelled')" class="dc-mob-act dc-mob-act-del" @click.stop="deleteTarget={row:r,mode:'delete'}" title="Delete">
+          <button v-if="r._source==='dn' && (r.docstatus===0 || r.docstatus===2 || r.status==='Cancelled')" class="dc-mob-act dc-mob-act-del" :disabled="!$canDelete('invoices')" @click.stop="deleteTarget={row:r,mode:'delete'}" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'">
             <span v-html="icon('trash', 15)"></span>
           </button>
         </div>
@@ -95,9 +95,9 @@
   <!-- Bulk action bar -->
   <div v-if="selected.size" class="inv-bulk-bar">
     <span class="inv-bulk-count">{{ selected.size }} selected</span>
-    <button class="inv-bulk-btn" @click="bulkSubmit" :disabled="bulkBusy">Submit Drafts</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkCancel" :disabled="bulkBusy">Cancel Submitted</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkBusy">Delete Drafts</button>
+    <button class="inv-bulk-btn" :disabled="bulkBusy || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkSubmit">Submit Drafts</button>
+    <button class="inv-bulk-btn inv-bulk-danger" :disabled="bulkBusy || !$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkCancel">Cancel Submitted</button>
+    <button class="inv-bulk-btn inv-bulk-danger" :disabled="bulkBusy || !$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDelete">Delete Drafts</button>
     <button class="inv-bulk-btn" @click="exportCSV" :disabled="bulkBusy">
       <span v-html="icon('download',13)"></span> Export CSV
     </button>
@@ -136,10 +136,10 @@
           <td @click.stop>
             <div class="dc-actions-row">
               <button class="inv-act-btn" @click.stop="openView(r)" title="View"><span v-html="icon('eye',12)"></span></button>
-              <button v-if="canEdit(r)" class="inv-act-btn" @click.stop="openEdit(r)" title="Edit"><span v-html="icon('edit',12)"></span></button>
+              <button v-if="canEdit(r) && $canEdit('invoices')" class="inv-act-btn" @click.stop="openEdit(r)" title="Edit"><span v-html="icon('edit',12)"></span></button>
               <button v-if="r._source==='dn' && r.docstatus===0" class="inv-act-btn" @click.stop="submitOne(r)" title="Submit"><span v-html="icon('check',12)"></span></button>
-              <button v-if="r._source==='dn' && r.docstatus===1 && r.status!=='Cancelled' && r.status!=='Delivered' && r.status!=='Fully Delivered'" class="inv-act-btn dc-act-cancel" @click.stop="deleteTarget={row:r,mode:'cancel'}" title="Cancel"><span v-html="icon('x',12)"></span></button>
-              <button v-if="r._source==='dn' && (r.docstatus===0 || r.docstatus===2 || r.status==='Cancelled')" class="inv-act-btn dc-act-del" @click.stop="deleteTarget={row:r,mode:'delete'}" title="Delete"><span v-html="icon('trash',12)"></span></button>
+              <button v-if="r._source==='dn' && r.docstatus===1 && r.status!=='Cancelled' && r.status!=='Delivered' && r.status!=='Fully Delivered'" class="inv-act-btn dc-act-cancel" :disabled="!$canDelete('invoices')" @click.stop="deleteTarget={row:r,mode:'cancel'}" :title="!$canDelete('invoices') ? 'Not permitted' : 'Cancel'"><span v-html="icon('x',12)"></span></button>
+              <button v-if="r._source==='dn' && (r.docstatus===0 || r.docstatus===2 || r.status==='Cancelled')" class="inv-act-btn dc-act-del" :disabled="!$canDelete('invoices')" @click.stop="deleteTarget={row:r,mode:'delete'}" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',12)"></span></button>
             </div>
           </td>
         </tr>
@@ -173,18 +173,18 @@
 
           <!-- Action bar -->
           <div class="inv-action-bar">
-            <button v-if="canEdit(viewDoc)" class="inv-ab-btn" @click="openEdit(viewDoc);viewOpen=false">
+            <button v-if="canEdit(viewDoc) && $canEdit('invoices')" class="inv-ab-btn" @click="openEdit(viewDoc);viewOpen=false">
               <span v-html="icon('edit',13)"></span> Edit
             </button>
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-primary" @click="submitChallan" :disabled="submitting">
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-primary" :disabled="submitting || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitChallan">
               <span v-html="icon('send',13)"></span> {{ submitting ? 'Submitting…' : 'Submit Challan' }}
             </button>
             <button v-if="viewDoc._source==='dn' && viewDoc.docstatus===1 && viewDoc.status!=='Cancelled' && viewDoc.status!=='Delivered' && viewDoc.status!=='Fully Delivered'"
-              class="inv-ab-btn dc-act-cancel" @click="deleteTarget={row:viewDoc,mode:'cancel'}">
+              class="inv-ab-btn dc-act-cancel" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="deleteTarget={row:viewDoc,mode:'cancel'}">
               <span v-html="icon('x',13)"></span> Cancel
             </button>
             <button v-if="viewDoc._source==='dn' && (viewDoc.docstatus===0 || viewDoc.docstatus===2 || viewDoc.status==='Cancelled')"
-              class="inv-ab-btn dc-act-del" @click="deleteTarget={row:viewDoc,mode:'delete'}">
+              class="inv-ab-btn dc-act-del" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="deleteTarget={row:viewDoc,mode:'delete'}">
               <span v-html="icon('trash',13)"></span> Delete
             </button>
           </div>
@@ -332,10 +332,10 @@
           <div class="inv-dfooter delivery-challan-footer">
             <span class="inv-hdr-badge" :class="statusClass(viewDoc)" style="margin-right:auto">{{ statusLabel(viewDoc) }}</span>
             <button class="form-btn form-btn-outline" @click="viewOpen=false">Close</button>
-            <button v-if="canEdit(viewDoc)" class="form-btn form-btn-outline" @click="openEdit(viewDoc);viewOpen=false">
+            <button v-if="canEdit(viewDoc) && $canEdit('invoices')" class="form-btn form-btn-outline" @click="openEdit(viewDoc);viewOpen=false">
               <span v-html="icon('edit',13)"></span> Edit
             </button>
-            <button v-if="viewDoc.docstatus===0" class="form-btn form-btn-primary" @click="submitChallan" :disabled="submitting">
+            <button v-if="viewDoc.docstatus===0" class="form-btn form-btn-primary" :disabled="submitting || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitChallan">
               {{ submitting ? 'Submitting…' : 'Submit Challan' }}
             </button>
           </div>
@@ -486,7 +486,7 @@
                 </span>
               </div>
               <div style="display:flex;align-items:center;gap:8px" @click.stop>
-                <button class="add-lines-add-btn" @click="addItem">
+                <button class="add-lines-add-btn" :disabled="!(editingName ? $canEdit('invoices') : $canCreate('invoices'))" @click="addItem">
                   <span v-html="icon('plus',13)"></span> Add Item
                 </button>
                 <span class="add-card-chevron" :class="{collapsed:collapsed.items}" @click="collapsed.items=!collapsed.items">
@@ -549,7 +549,7 @@
 
               <div v-if="!form.items.length" class="dc-items-empty" style="padding:20px 0 8px">No items yet — click Add Item</div>
 
-              <button class="inv-add-line-btn" style="margin-top:12px" @click="addItem">
+              <button class="inv-add-line-btn" style="margin-top:12px" :disabled="!(editingName ? $canEdit('invoices') : $canCreate('invoices'))" @click="addItem">
                 <span v-html="icon('plus',12)"></span> Add Item
               </button>
             </div>
@@ -563,10 +563,10 @@
           <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New challan — unsaved changes' }}</div>
           <div class="add-footer-actions">
             <button class="add-btn-cancel" @click="formOpen=false" :disabled="saving">Cancel</button>
-            <button class="add-btn-draft" @click="saveChallan(0)" :disabled="saving">
+            <button class="add-btn-draft" :disabled="saving || !(editingName ? $canEdit('invoices') : $canCreate('invoices'))" :title="!(editingName ? $canEdit('invoices') : $canCreate('invoices')) ? 'Read-only access' : ''" @click="saveChallan(0)">
               <span v-html="icon('save',13)"></span> {{ saving?'Saving…':'Save Draft' }}
             </button>
-            <button class="add-btn-more" @click="saveChallan(1)" :disabled="saving">
+            <button class="add-btn-more" :disabled="saving || !(editingName ? $canEdit('invoices') : $canCreate('invoices'))" :title="!(editingName ? $canEdit('invoices') : $canCreate('invoices')) ? 'Read-only access' : ''" @click="saveChallan(1)">
               <span v-html="icon('check',13)"></span> {{ saving?'Saving…':'Submit' }}
             </button>
           </div>
@@ -633,7 +633,7 @@
       </div>
       <div class="inv-dfooter" style="padding:14px 20px">
         <button class="form-btn form-btn-outline" @click="addrModal.open=false" :disabled="addrModal.saving">Cancel</button>
-        <button class="form-btn form-btn-primary" @click="saveNewAddress" :disabled="addrModal.saving">
+        <button class="form-btn form-btn-primary" :disabled="addrModal.saving || !$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" @click="saveNewAddress">
           {{ addrModal.saving ? 'Saving…' : 'Save Address' }}
         </button>
       </div>

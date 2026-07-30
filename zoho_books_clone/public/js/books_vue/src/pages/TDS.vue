@@ -13,7 +13,7 @@
           </select>
           <button class="tds-btn-ghost" @click="load" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
           <button v-if="list.length" class="tds-btn-ghost" @click="exportCSV"><span v-html="icon('download',13)"></span> CSV</button>
-          <button class="tds-btn-primary" :disabled="!$canWrite('taxes')" :title="!$canWrite('taxes') ? 'Read-only access' : ''" @click="openNewEntry"><span v-html="icon('plus',13)"></span> New TDS Entry</button>
+          <button class="tds-btn-primary" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="openNewEntry"><span v-html="icon('plus',13)"></span> New TDS Entry</button>
         </div>
       </div>
       <div class="tds-search-wrap">
@@ -81,7 +81,7 @@
                 <span v-else class="text-muted" style="font-size:11.5px">From PI</span>
               </td>
               <td>
-                <button v-if="e.source==='entry' && e.status !== 'Deposited' && e.status !== 'Filed'" class="tds-act-btn" @click="openDeposit(e)">Mark Deposited</button>
+                <button v-if="e.source==='entry' && e.status !== 'Deposited' && e.status !== 'Filed'" class="tds-act-btn" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="openDeposit(e)">Mark Deposited</button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="11" class="tds-empty">No TDS transactions found</td></tr>
@@ -114,7 +114,7 @@
               <span class="tds-mc-tds red">{{ fmtCur(e.tds_amount) }}</span>
             </div>
             <div class="tds-mc-footer" v-if="e.source==='entry' && e.status !== 'Deposited' && e.status !== 'Filed'">
-              <button class="tds-act-btn" @click.stop="openDeposit(e)">Mark Deposited</button>
+              <button class="tds-act-btn" :disabled="!$canEdit('accounts')" @click.stop="openDeposit(e)">Mark Deposited</button>
             </div>
           </div>
         </template>
@@ -204,7 +204,7 @@
         </div>
         <div class="tds-drawer-footer">
           <button class="tds-btn-ghost" @click="showEntryDrawer=false">Cancel</button>
-          <button class="tds-btn-primary" :disabled="entrySaving" @click="saveTDSEntry">
+          <button class="tds-btn-primary" :disabled="entrySaving || !$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="saveTDSEntry">
             <span v-if="entrySaving" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite"></span>
             {{ entrySaving ? 'Saving…' : 'Save TDS Entry' }}
           </button>
@@ -232,7 +232,7 @@
         </div>
         <div style="padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #f3f4f6">
           <button class="tds-btn-ghost" @click="showDepositModal=false">Cancel</button>
-          <button class="tds-btn-primary" :disabled="depositSaving" @click="saveDeposit">
+          <button class="tds-btn-primary" :disabled="depositSaving || !$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="saveDeposit">
             {{ depositSaving ? 'Saving…' : 'Mark Deposited' }}
           </button>
         </div>

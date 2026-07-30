@@ -18,7 +18,7 @@
       <button class="bt-btn-ghost" @click="exportCSV" :disabled="!sorted.length">
         <span v-html="icon('download', 13)"></span><span class="bt-btn-label"> Export</span>
       </button>
-      <button class="bt-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openNew">
+      <button class="bt-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew">
         <span v-html="icon('plus', 13)"></span><span class="bt-btn-label"> New Batch</span>
       </button>
     </div>
@@ -209,7 +209,7 @@
       <div class="bt-dfooter">
         <div style="flex:1"></div>
         <button class="bt-btn-ghost" @click="drawerOpen = false">Cancel</button>
-        <button class="bt-btn-primary" :disabled="saving || !$canWrite('inventory')" @click="save">
+        <button class="bt-btn-primary" :disabled="saving || !(editingName ? $canEdit('inventory') : $canCreate('inventory'))" @click="save">
           {{ saving ? 'Saving…' : (editingName ? 'Save Changes' : 'Create Batch') }}
         </button>
       </div>

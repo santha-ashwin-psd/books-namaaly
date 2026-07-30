@@ -16,9 +16,38 @@ function _isWriteMethod(m) {
   if (!m) return false;
   return _FRAPPE_WRITE.has(m) || _WRITE_VERB.test(m) || m.endsWith("ai_execute_pro_action");
 }
-function _assertWritable(method) {
+
+// Mirrors utils/access.py LEVELS/_level_at_least — each level implies
+// everything below it.
+const _LEVELS = ["None", "View", "Create", "Edit", "Delete"];
+function _levelAtLeast(level, threshold) {
+  return _LEVELS.indexOf(level) >= _LEVELS.indexOf(threshold);
+}
+// action -> minimum module level required, mirroring access.py's _ACTION_LEVEL.
+const _ACTION_LEVEL = {
+  create: "Create", write: "Edit", edit: "Edit",
+  submit: "Edit", cancel: "Edit", delete: "Delete",
+};
+
+// `hint`, when given, is `{ module, action }` — e.g. { module: "inventory",
+// action: "create" }. This is an *opt-in* granular check on top of the
+// blanket read-only gate below: callers that already know which module/
+// action a request maps to (Phase 4 rollout, module by module) can pass it
+// instead of relying purely on the _isWriteMethod() regex classifier, which
+// only ever knows "is this a write at all", not which module or action tier
+// it needs. Omitting `hint` keeps today's behavior identical.
+function _assertWritable(method, hint) {
   if (session.permissions && session.permissions.read_only && _isWriteMethod(method)) {
     throw new Error("Read-only access — your role can view but not make changes.");
+  }
+  if (hint && hint.module && hint.action && session.permissions && !session.permissions.is_company_admin) {
+    const threshold = _ACTION_LEVEL[hint.action] || "Edit";
+    const level = (session.permissions.levels && session.permissions.levels[hint.module]) || "None";
+    if (!_levelAtLeast(level, threshold)) {
+      throw new Error(
+        `Your ${hint.module} access (${level}) doesn't allow you to ${hint.action}.`
+      );
+    }
   }
 }
 
@@ -161,8 +190,8 @@ export async function refreshCsrfToken() {
   return "";
 }
 
-export async function apiPOST(method, args) {
-  _assertWritable(method);
+export async function apiPOST(method, args, hint) {
+  _assertWritable(method, hint);
   const csrfToken = await refreshCsrfToken();
   const body = new URLSearchParams();
   for (const [k, v] of Object.entries(args || {})) {
@@ -221,12 +250,12 @@ export async function apiSubmit(doctype, name, ignore_budget_warning = 0) {
   }
 }
 
-export async function apiDelete(doctype, name) {
-  return await apiPOST("zoho_books_clone.api.docs.delete_doc", { doctype, name });
+export async function apiDelete(doctype, name, hint) {
+  return await apiPOST("zoho_books_clone.api.docs.delete_doc", { doctype, name }, hint);
 }
 
-export async function apiCancel(doctype, name) {
-  return await apiPOST("zoho_books_clone.api.docs.cancel_doc", { doctype, name });
+export async function apiCancel(doctype, name, hint) {
+  return await apiPOST("zoho_books_clone.api.docs.cancel_doc", { doctype, name }, hint);
 }
 
 export async function apiAmend(doctype, name) {
@@ -299,8 +328,9 @@ export async function api(method, args) { return await apiGET(method, args); }
 
 // Universal method caller — used by the Quality module and other API endpoints
 // that accept both GET and POST. Sends as POST so CSRF is included.
-export async function apiCall(method, args = {}) {
-  return await apiPOST(method, args);
+// `hint` (optional): { module, action } — see _assertWritable() above.
+export async function apiCall(method, args = {}, hint) {
+  return await apiPOST(method, args, hint);
 }
 
 

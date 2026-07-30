@@ -5,7 +5,7 @@
   <div class="bomx-list-view">
     <div class="bomx-list-toolbar">
       <span class="bomx-panel-title">🗂️ All Job Cards <span class="bomx-count">({{ sorted.length }})</span></span>
-      <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Job Card</button>
+      <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Job Card</button>
     </div>
 
     <div class="bomx-pp-sumstrip">
@@ -236,10 +236,10 @@
 
           <!-- Footer -->
           <div class="jc-drawer-footer">
-            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3);background:#fff" @click="deleteFromDetail">Delete</button>
+            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3);background:#fff" :disabled="!$canDelete('inventory')" @click="deleteFromDetail">Delete</button>
             <div style="flex:1"></div>
             <button class="bomx-btn bomx-btn-light" style="border:1px solid var(--bx-border);color:var(--bx-text)" @click="goBackToList" :disabled="saving">Close</button>
-            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading">
+            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Job Card' : 'Save Changes') }}
             </button>

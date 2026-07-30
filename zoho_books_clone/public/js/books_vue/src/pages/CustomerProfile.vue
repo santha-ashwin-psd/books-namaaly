@@ -114,7 +114,7 @@
           <span v-if="obInfo.outstanding<=0" class="cp-chip" style="margin-left:6px">Paid</span>
         </div>
       </div>
-      <button v-if="obInfo.outstanding>0" class="cp-btn-primary" @click="openPayModal">
+      <button v-if="obInfo.outstanding>0" class="cp-btn-primary" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''" @click="openPayModal">
         <span v-html="icon('plus',13)"></span> Pay
       </button>
     </div>
@@ -146,7 +146,7 @@
         </label>
         <div class="cp-modal-actions">
           <button class="cp-btn-ghost" @click="showPayModal=false">Cancel</button>
-          <button class="cp-btn-primary" :disabled="payLoading" @click="submitPayment">
+          <button class="cp-btn-primary" :disabled="payLoading || !$canCreate('payments')" @click="submitPayment">
             {{ payLoading ? "Recording…" : "Record Payment" }}
           </button>
         </div>

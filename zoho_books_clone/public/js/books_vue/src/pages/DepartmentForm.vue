@@ -17,7 +17,7 @@
           </div>
           <div class="form-actions">
             <button type="button" class="btn-secondary" @click="$emit('close')">Cancel</button>
-            <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="submit" class="btn-primary" :disabled="saving || !(isEdit ? $canEdit('inventory') : $canCreate('inventory'))">{{ saving ? 'Saving…' : 'Save' }}</button>
           </div>
         </form>
       </div>

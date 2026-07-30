@@ -28,10 +28,10 @@
           <input v-model="search" placeholder="Search customers…" class="sales-search-input" autocomplete="off"/>
         </div>
         <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
-        <button class="sales-btn-ghost" @click="triggerImport" title="Import customers from CSV"><span v-html="icon('upload',13)"></span> Import</button>
+        <button class="sales-btn-ghost" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : 'Import customers from CSV'" @click="triggerImport"><span v-html="icon('upload',13)"></span> Import</button>
         <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',13)"></span> Export</button>
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',13)"></span> Refresh</button>
-        <button class="sales-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
+        <button class="sales-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
         <input ref="importInput" type="file" accept=".csv,text/csv" style="display:none" @change="importCSV" />
       </div>
     </div>
@@ -56,12 +56,12 @@
     <!-- Bulk action bar -->
     <div v-if="selectedRows.size" class="inv-bulk-bar" style="margin: 0 24px 12px">
       <span class="inv-bulk-count">{{ selectedRows.size }} selected</span>
-      <button class="inv-bulk-btn" @click="bulkSetDisabled(false)" :disabled="bulkBusy">Enable</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkSetDisabled(true)" :disabled="bulkBusy">Disable</button>
+      <button class="inv-bulk-btn" @click="bulkSetDisabled(false)" :disabled="bulkBusy || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">Enable</button>
+      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkSetDisabled(true)" :disabled="bulkBusy || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">Disable</button>
       <button class="inv-bulk-btn" @click="exportCSV" :disabled="bulkBusy">
         <span v-html="icon('download',13)"></span> Export CSV
       </button>
-      <button class="inv-bulk-btn" @click="bulkEmail" :disabled="bulkBusy">
+      <button class="inv-bulk-btn" @click="bulkEmail" :disabled="bulkBusy || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">
         <span v-html="icon('mail',13)"></span> Send Email
       </button>
       <button class="inv-bulk-clear" @click="clearSelection">✕ Clear</button>
@@ -102,7 +102,7 @@
                 </div>
                 <div class="vt-empty-title">{{search ? 'No results found' : 'No customers yet'}}</div>
                 <div class="vt-empty-sub">{{search ? 'Try adjusting your search or filter' : 'Add your first customer to get started'}}</div>
-                <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
+                <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
               </td>
             </tr>
             <tr v-else v-for="c in filtered" :key="c.name"
@@ -156,8 +156,8 @@
               </td>
               <td class="vt-td vt-td-actions" @click.stop>
                 <div class="vt-actions">
-                  <button class="inv-act-btn vt-act-edit" @click="openEdit(c.name)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                  <button class="inv-act-btn vt-act-del" @click="confirmDelete(c)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                  <button class="inv-act-btn vt-act-edit" :disabled="!$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : 'Edit'" @click="openEdit(c.name)"><span v-html="icon('edit',13)"></span></button>
+                  <button class="inv-act-btn vt-act-del" :disabled="!$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : 'Delete'" @click="confirmDelete(c)"><span v-html="icon('trash',13)"></span></button>
                 </div>
               </td>
             </tr>
@@ -217,7 +217,7 @@
         <div v-else-if="!filtered.length" style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#9ca3af;font-size:13px">
           <div style="font-size:32px;margin-bottom:8px">👤</div>
           <div>{{ search ? 'No results found' : 'No customers yet' }}</div>
-          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
+          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Customer</button>
         </div>
         <template v-else>
           <div v-for="c in filtered" :key="c.name"
@@ -263,7 +263,7 @@
       <div style="padding:16px 16px 10px;border-bottom:1px solid #f0f2f5;flex-shrink:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <span style="font-size:14px;font-weight:700;color:#111827">Customers</span>
-          <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" style="padding:5px 10px;font-size:12px" @click="openAdd">
+          <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" style="padding:5px 10px;font-size:12px" @click="openAdd">
             <span v-html="icon('plus',12)"></span> New Customer
           </button>
         </div>
@@ -288,7 +288,7 @@
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" style="margin:0 auto 10px;display:block"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:4px">{{search?'No matches':'No customers yet'}}</div>
           <div style="font-size:12px;color:#9ca3af">{{search?'Try different keywords':'Add your first customer'}}</div>
-          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" style="margin-top:12px;font-size:12px" @click="openAdd">New Customer</button>
+          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" style="margin-top:12px;font-size:12px" @click="openAdd">New Customer</button>
         </div>
         <div v-else v-for="c in filtered" :key="c.name"
           @click="selectCustomer(c)"
@@ -344,7 +344,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <button class="nim-btn" style="background:#fff;color:#374151;border:1px solid #E5E7EB;font-size:13px" @click="openEdit(selectedCustomer.name)">
+            <button class="nim-btn" style="background:#fff;color:#374151;border:1px solid #E5E7EB;font-size:13px" :disabled="!$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''" @click="openEdit(selectedCustomer.name)">
               <span v-html="icon('edit',13)"></span> Edit
             </button>
             <button class="nim-btn" style="background:#fff;color:#374151;border:1px solid #E5E7EB;width:32px;height:32px;padding:0;display:grid;place-items:center" @click="closeCustomer" title="Close">
@@ -469,7 +469,7 @@
                   <span v-if="obInfo.outstanding<=0" style="font-size:11px;font-weight:700;padding:1px 8px;border-radius:12px;background:#dcfce7;color:#16a34a;margin-left:6px">Paid</span>
                 </div>
               </div>
-              <button v-if="obInfo.outstanding>0" class="nim-btn nim-btn-primary" style="font-size:13px" @click="openPayModal">
+              <button v-if="obInfo.outstanding>0" class="nim-btn nim-btn-primary" style="font-size:13px" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''" @click="openPayModal">
                 <span v-html="icon('plus',13)"></span> Pay
               </button>
             </div>
@@ -504,7 +504,7 @@
             </div>
 
             <div style="padding:4px 0">
-              <button @click="confirmDelete(selectedCustomer)" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:12.5px;display:flex;align-items:center;gap:6px">
+              <button @click="confirmDelete(selectedCustomer)" :disabled="!$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : ''" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:12.5px;display:flex;align-items:center;gap:6px">
                 <span v-html="icon('trash',13)"></span> Delete Customer
               </button>
             </div>
@@ -591,7 +591,7 @@
               <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="printStatement">
                 🖨️ Print
               </button>
-              <button v-if="stmt && stmt.email" class="nim-btn" style="border:1px solid #E5E7EB" @click="sendStatement" :disabled="sendingStmt">
+              <button v-if="stmt && stmt.email" class="nim-btn" style="border:1px solid #E5E7EB" @click="sendStatement" :disabled="sendingStmt || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">
                 {{sendingStmt ? 'Sending…' : '📧 Send Statement'}}
               </button>
             </div>
@@ -746,7 +746,7 @@
         </label>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
           <button class="nim-btn" style="background:#fff;color:#374151;border:1px solid #E5E7EB" @click="showPayModal=false">Cancel</button>
-          <button class="nim-btn nim-btn-primary" :disabled="payLoading" @click="submitPayment">
+          <button class="nim-btn nim-btn-primary" :disabled="payLoading || !$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''" @click="submitPayment">
             {{ payLoading ? "Recording…" : "Record Payment" }}
           </button>
         </div>
@@ -1206,7 +1206,7 @@
         <!-- Footer -->
         <div class="inv-dfooter" style="border-top:1px solid #e8ecf0;padding:14px 24px;background:#fafbfd">
           <button class="form-btn form-btn-outline" @click="showDrawer=false">Cancel</button>
-          <button class="form-btn form-btn-primary" @click="saveCustomer" :disabled="saving" style="background:#16a34a;border-color:#16a34a;min-width:140px;position:relative">
+          <button class="form-btn form-btn-primary" @click="saveCustomer" :disabled="saving || !(drawerMode==='edit' ? $canEdit('customers') : $canCreate('customers'))" :title="!(drawerMode==='edit' ? $canEdit('customers') : $canCreate('customers')) ? 'Read-only access' : ''" style="background:#16a34a;border-color:#16a34a;min-width:140px;position:relative">
             <span v-if="saving" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite"></span>
             {{saving ? 'Saving…' : (drawerMode==='add' ? 'Create Customer' : 'Save Changes')}}
             <span v-if="Object.keys(formErrors).length && !saving"
@@ -1241,7 +1241,7 @@
         </div>
         <div class="inv-dfooter">
           <button class="form-btn form-btn-outline" @click="showDelete=false">Cancel</button>
-          <button @click="doDelete" :disabled="deleting"
+          <button @click="doDelete" :disabled="deleting || !$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : ''"
             style="height:37px;padding:0 18px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;border:none;background:#dc2626;color:#fff;display:inline-flex;align-items:center;gap:7px">
             <span v-if="deleting" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite"></span>
             {{deleting ? 'Deleting…' : 'Yes, Delete'}}
@@ -1320,7 +1320,7 @@
         <div class="inv-dfooter">
           <template v-if="!importModal.done">
             <button class="form-btn form-btn-outline" @click="closeImport" :disabled="importModal.running">Cancel</button>
-            <button class="form-btn form-btn-primary" @click="runImport" :disabled="importModal.running || !importCounts.total"
+            <button class="form-btn form-btn-primary" @click="runImport" :disabled="importModal.running || !importCounts.total || !$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''"
               style="background:#16a34a;border-color:#16a34a;min-width:150px">
               <span v-if="importModal.running" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite"></span>
               {{ importModal.running ? 'Importing…' : `Import ${importCounts.total} Row(s)` }}
@@ -1355,7 +1355,7 @@ import {
 } from "../composables/useValidation.js";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canEdit } = usePermissions();
 
 // ── Static option lists, factored out of inline template arrays in legacy ──
 // COUNTRIES and statesFor() imported from useCountryState.js
@@ -2278,7 +2278,7 @@ watch(activeCustomerTab, (t) => {
 
 // ── Bulk actions ────────────────────────────────────────────────────────────
 async function bulkSetDisabled(disable) {
-  if (!canWrite("customers")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("customers")) { toast("Read-only access", "error"); return; }
   const names = [...selectedRows.value];
   if (!names.length) { toast("No customers selected", "info"); return; }
   bulkBusy.value = true;
@@ -2464,7 +2464,7 @@ async function runImport() {
 }
 
 function bulkEmail() {
-  if (!canWrite("customers")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("customers")) { toast("Read-only access", "error"); return; }
   const rows = [...selectedRows.value]
     .map(n => list.value.find(c => c.name === n))
     .filter(c => c && c.email_id);

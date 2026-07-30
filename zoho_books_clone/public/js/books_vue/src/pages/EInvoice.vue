@@ -19,7 +19,7 @@
         <span style="font-size:11px;color:#9ca3af">to</span>
         <input v-model="toDate" type="date" class="ei-date-in" @change="load" />
         <button class="ei-btn-ghost" @click="load" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-        <button v-if="irnPending.length" class="ei-btn-outline" @click="generateAllPending" :disabled="bulkGenerating">
+        <button v-if="irnPending.length" class="ei-btn-outline" @click="generateAllPending" :disabled="bulkGenerating || !$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''">
           <span v-if="bulkGenerating" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite;display:inline-flex"></span>
           {{ bulkGenerating ? `Generating ${bulkProgress}/${irnPending.length}…` : `Generate All Pending (${irnPending.length})` }}
         </button>
@@ -241,7 +241,7 @@
               <input v-model="manualForm.ack_date" type="date" class="ei-fi" />
               <div style="display:flex;gap:8px;margin-top:14px">
                 <button class="ei-btn-ghost" style="flex:1" @click="showManualForm=false">Cancel</button>
-                <button class="ei-btn-primary" style="flex:1" :disabled="manualSaving" @click="saveManualIRN">
+                <button class="ei-btn-primary" style="flex:1" :disabled="manualSaving || !$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="saveManualIRN">
                   {{ manualSaving ? 'Saving…' : 'Save IRN' }}
                 </button>
               </div>
@@ -255,18 +255,18 @@
             <template v-if="viewing.einvoice_status !== 'Cancelled'">
               <button v-if="!viewing.irn && viewing.customer_gstin && !showManualForm"
                 class="ei-btn-outline"
-                :disabled="!companyGstin"
-                :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : ''"
+                :disabled="!companyGstin || !$canCreate('accounts')"
+                :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : (!$canCreate('accounts') ? 'Read-only access' : '')"
                 @click="showManualForm=true">Enter Manually</button>
               <button v-if="!viewing.irn && viewing.customer_gstin"
                 class="ei-btn-primary"
-                :disabled="generating || !companyGstin"
-                :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : ''"
+                :disabled="generating || !companyGstin || !$canCreate('accounts')"
+                :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : (!$canCreate('accounts') ? 'Read-only access' : '')"
                 @click="doGenerateIRN(viewing)">
                 <span v-if="generating" v-html="icon('refresh',13)" style="animation:spin 1s linear infinite;display:inline-flex"></span>
                 {{ generating ? 'Generating…' : 'Generate IRN' }}
               </button>
-              <button v-if="viewing.irn" class="ei-btn-danger" :disabled="cancelling" @click="doCancelIRN(viewing)">
+              <button v-if="viewing.irn" class="ei-btn-danger" :disabled="cancelling || !$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : ''" @click="doCancelIRN(viewing)">
                 {{ cancelling ? 'Cancelling…' : 'Cancel IRN' }}
               </button>
             </template>

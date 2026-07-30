@@ -57,19 +57,11 @@ const router = useRouter();
 const members = ref([]);
 const loading = ref(true);
 
-// Module keys match the backend Books Company Member `mod_*` flags and the
-// gating in utils/access.py. Per-role rows show each role's default grants;
-// admins can fine-tune any member's modules on the Users page.
-const ROLES = [
-  { name: "Books Admin",   desc: "Full access — manages users, settings, and all transactions", color: "#2563eb", bg: "#eff6ff",
-    perms: { invoices:1, bills:1, payments:1, banking:1, inventory:1, accounts:1, reports:1, customers:1, taxes:1, admin:1 } },
-  { name: "Accountant",    desc: "Read-write on transactions & accounting, views reports. No admin/user access", color: "#1971C2", bg: "#E7F5FF",
-    perms: { invoices:1, bills:1, payments:1, banking:1, inventory:1, accounts:1, reports:1, customers:1, taxes:1, admin:0 } },
-  { name: "Books Manager", desc: "Operational manager — read-write on transactions, no accounting/admin", color: "#2F9E44", bg: "#EBFBEE",
-    perms: { invoices:1, bills:1, payments:1, banking:1, inventory:1, accounts:0, reports:1, customers:1, taxes:0, admin:0 } },
-  { name: "Books Viewer",  desc: "Read-only — can view its modules but cannot create, edit, or delete", color: "#868E96", bg: "#F1F3F5",
-    perms: { invoices:1, bills:1, payments:1, banking:0, inventory:0, accounts:0, reports:1, customers:1, taxes:0, admin:0 } },
-];
+// Cosmetic display order only. Name/description/color/module-flags for each
+// role now come from the backend (get_role_matrix) so this page can't drift
+// from what utils/access.py and the Users page actually enforce.
+const ROLE_ORDER = ["Books Admin", "Accountant", "Books Manager", "Books Viewer"];
+const roleMatrix = ref({});
 
 const MODULES = [
   { key: "invoices",  lbl: "Sales / Invoicing" },
@@ -84,12 +76,29 @@ const MODULES = [
   { key: "admin",     lbl: "Admin / Settings" },
 ];
 
+const ROLES = computed(() =>
+  ROLE_ORDER.map(name => {
+    const r = roleMatrix.value[name] || {};
+    return {
+      name,
+      desc: r.desc || "",
+      color: r.color || "#868E96",
+      bg: r.bg || "#F1F3F5",
+      perms: r.perms || {},
+    };
+  })
+);
+
 async function load() {
   loading.value = true;
   try {
-    const r = await apiGET("zoho_books_clone.api.admin.get_company_members");
-    members.value = Array.isArray(r) ? r : (r?.message || []);
-  } catch (e) { toast.error(e.message || "Failed to load users"); }
+    const [membersRes, matrixRes] = await Promise.all([
+      apiGET("zoho_books_clone.api.admin.get_company_members"),
+      apiGET("zoho_books_clone.api.admin.get_role_matrix"),
+    ]);
+    members.value = Array.isArray(membersRes) ? membersRes : (membersRes?.message || []);
+    roleMatrix.value = matrixRes?.message || matrixRes || {};
+  } catch (e) { toast.error(e.message || "Failed to load roles"); }
   finally { loading.value = false; }
 }
 

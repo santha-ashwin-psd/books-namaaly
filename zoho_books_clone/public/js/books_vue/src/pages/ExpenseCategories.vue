@@ -14,7 +14,7 @@
     </div>
     <div class="sales-actions">
       <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''">
+      <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''">
         <span v-html="icon('plus',13)"></span> New Category
       </button>
     </div>
@@ -39,8 +39,8 @@
             <td data-label="Description" class="text-muted eco-desc" style="font-size:12px" :title="c.description || ''">{{ c.description || '—' }}</td>
             <td data-label="Status"><span class="inv-status-badge" :class="c.disabled ? 'status-inactive' : 'status-active'">{{ c.disabled ? 'Disabled' : 'Active' }}</span></td>
             <td data-label="" @click.stop>
-              <button class="inv-act-btn" @click="openEdit(c)" :title="$canWrite('bills') ? 'Edit' : 'View'"><span v-html="icon($canWrite('bills')?'edit':'eye',14)"></span></button>
-              <button class="inv-act-btn" v-if="$canWrite('bills')" @click="confirmDel(c)" style="margin-left:6px;color:#dc2626" title="Delete"><span v-html="icon('trash',14)"></span></button>
+              <button class="inv-act-btn" @click="openEdit(c)" :title="$canEdit('bills') ? 'Edit' : 'View'"><span v-html="icon($canEdit('bills')?'edit':'eye',14)"></span></button>
+              <button class="inv-act-btn" v-if="$canDelete('bills')" @click="confirmDel(c)" style="margin-left:6px;color:#dc2626" title="Delete"><span v-html="icon('trash',14)"></span></button>
             </td>
           </tr>
           <tr v-if="!filtered.length">
@@ -49,7 +49,7 @@
                 <div class="bk-empty-illus" style="font-size:34px">🗂️</div>
                 <p class="bk-empty-title">No expense categories</p>
                 <p class="bk-empty-sub">Create a category to classify expenses and expense claims.</p>
-                <button class="bk-empty-btn" v-if="$canWrite('bills')" @click="openNew"><span v-html="icon('plus',13)"></span> New Category</button>
+                <button class="bk-empty-btn" v-if="$canCreate('bills')" @click="openNew"><span v-html="icon('plus',13)"></span> New Category</button>
               </div>
             </td>
           </tr>
@@ -90,7 +90,7 @@
 
         <div class="tt-foot">
           <button class="b-btn b-btn-ghost" @click="closeDrawer">Cancel</button>
-          <button class="tt-save" @click="save" :disabled="saving"><span v-html="icon('check',14)"></span> {{ saving ? 'Saving…' : editing ? 'Update' : 'Create' }}</button>
+          <button class="tt-save" @click="save" :disabled="saving || !(editing ? $canEdit('bills') : $canCreate('bills'))" :title="!(editing ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''"><span v-html="icon('check',14)"></span> {{ saving ? 'Saving…' : editing ? 'Update' : 'Create' }}</button>
         </div>
       </div>
     </div>

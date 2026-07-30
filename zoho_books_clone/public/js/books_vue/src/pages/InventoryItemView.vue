@@ -8,7 +8,7 @@
       </button>
       <div class="iv-topbar-actions">
         <button class="iv-btn-ghost" @click="load"><span v-html="icon('refresh', 13)"></span></button>
-        <button class="iv-btn-primary" @click="openEdit">
+        <button class="iv-btn-primary" @click="openEdit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''">
           <span v-html="icon('edit', 13)"></span> Edit Item
         </button>
       </div>

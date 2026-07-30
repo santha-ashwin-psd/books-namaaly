@@ -20,7 +20,7 @@
       <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''">
+      <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''">
         <span v-html="icon('plus',13)"></span> New Quotation
       </button>
     </div>
@@ -141,10 +141,10 @@
   <!-- ── Bulk actions bar ── -->
   <div v-if="selected.size>0" class="inv-bulk-bar">
     <span class="inv-bulk-count">{{ selected.size }} selected</span>
-    <button class="inv-bulk-btn" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-    <button class="inv-bulk-btn" @click="bulkMarkSent">Mark as Sent</button>
-    <button class="inv-bulk-btn" @click="bulkMarkExpired">Mark Expired</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete">Delete Drafts</button>
+    <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
+    <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkMarkSent">Mark as Sent</button>
+    <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkMarkExpired">Mark Expired</button>
+    <button class="inv-bulk-btn inv-bulk-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDelete">Delete Drafts</button>
     <button class="inv-bulk-btn" @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     <button class="inv-bulk-clear" @click="selected=new Set()">✕ Clear</button>
   </div>
@@ -192,8 +192,8 @@
             <td style="text-align:center" @click.stop>
               <div style="display:flex;gap:4px;justify-content:center">
                 <button class="inv-act-btn" @click="openView(q)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="q.docstatus===0" class="inv-act-btn" @click="openEdit(q)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="canConvert(q)" class="inv-act-btn inv-act-pay" @click="openConvertModal(q)" title="Convert to Invoice / SO"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+                <button v-if="q.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(q)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="canConvert(q)" class="inv-act-btn inv-act-pay" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : 'Convert to Invoice / SO'" @click="openConvertModal(q)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
                 <button v-if="q.docstatus!==1" class="inv-act-btn" style="color:#dc2626" @click.stop="deleteQT(q)" title="Delete"><span v-html="icon('trash',13)"></span></button>
               </div>
             </td>
@@ -222,7 +222,7 @@
                   </div>
                   <p class="bk-empty-title">No quotations created yet</p>
                   <p class="bk-empty-sub">Create your first quotation to start managing customer proposals and track approvals.</p>
-                  <button class="bk-empty-btn" @click="openNew">
+                  <button class="bk-empty-btn" :disabled="!$canCreate('invoices')" @click="openNew">
                     <span v-html="icon('plus',13)"></span> New Quotation
                   </button>
                 </template>
@@ -280,7 +280,7 @@
         <div v-else-if="!sorted.length" style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#9ca3af;font-size:13px">
           <div style="font-size:32px;margin-bottom:8px">💬</div>
           <div>{{ search ? 'No quotations match your filters' : 'No quotations yet' }}</div>
-          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Quotation</button>
+          <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Quotation</button>
         </div>
         <template v-else>
           <div v-for="q in paged" :key="q.name"
@@ -638,7 +638,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <button v-if="canConvert(viewDoc)" class="inv-view-cta" @click="openConvertModal(viewDoc)">
+            <button v-if="canConvert(viewDoc)" class="inv-view-cta" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openConvertModal(viewDoc)">
               <span v-html="icon('repeat',14)"></span> Convert
             </button>
             <button class="inv-ab-btn" style="padding:7px 12px;font-size:13px" @click="viewOpen=false">
@@ -674,13 +674,13 @@
 
           <!-- Action buttons bar -->
           <div class="inv-action-bar">
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" @click="viewOpen=false;openEdit(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewDoc)">
               <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
             </button>
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-submit" :disabled="viewSubmitting" @click="submitFromView(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn inv-ab-submit" :disabled="viewSubmitting || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitFromView(viewDoc)">
               <span v-html="icon('check',13)"></span> <span class="ab-label">{{ viewSubmitting ? 'Submitting…' : 'Submit' }}</span>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Converted' && viewDoc.status!=='Accepted'" class="inv-ab-btn quote-cancel-btn" :disabled="viewCancelling" @click="cancelQT(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Converted' && viewDoc.status!=='Accepted'" class="inv-ab-btn quote-cancel-btn" :disabled="viewCancelling || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="cancelQT(viewDoc)">
               <span v-html="icon('x-circle',13)"></span> <span class="ab-label">{{ viewCancelling ? 'Cancelling…' : 'Cancel' }}</span>
             </button>
             <button class="inv-ab-btn" @click="emailQT(viewDoc)">
@@ -709,16 +709,16 @@
                 </button>
               </div>
             </div>
-            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Accepted' && viewDoc.status!=='Converted' && effectiveStatus(viewDoc)!=='Expired'" class="inv-ab-btn" @click="markStatus(viewDoc,'Accepted')">
+            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Accepted' && viewDoc.status!=='Converted' && effectiveStatus(viewDoc)!=='Expired'" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="markStatus(viewDoc,'Accepted')">
               <span v-html="icon('check',13)"></span> <span class="ab-label">Accept</span>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Declined' && viewDoc.status!=='Converted' && effectiveStatus(viewDoc)!=='Expired'" class="inv-ab-btn" @click="markStatus(viewDoc,'Declined')">
+            <button v-if="viewDoc.docstatus===1 && viewDoc.status!=='Declined' && viewDoc.status!=='Converted' && effectiveStatus(viewDoc)!=='Expired'" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="markStatus(viewDoc,'Declined')">
               <span v-html="icon('x',13)"></span> <span class="ab-label">Decline</span>
             </button>
-            <button v-if="canConvert(viewDoc)" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="openConvertModal(viewDoc)">
+            <button v-if="canConvert(viewDoc)" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openConvertModal(viewDoc)">
               <span v-html="icon('repeat',13)"></span> <span class="ab-label">Convert</span>
             </button>
-            <button v-if="viewDoc.docstatus!==1" class="inv-ab-btn quote-delete-btn" @click="deleteQT(viewDoc)">
+            <button v-if="viewDoc.docstatus!==1" class="inv-ab-btn quote-delete-btn" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="deleteQT(viewDoc)">
               <span v-html="icon('trash',13)"></span> <span class="ab-label quote-delete-lbl">Delete</span>
             </button>
           </div>
@@ -933,7 +933,7 @@
                   style="text-align:center;padding:48px;color:#9ca3af;font-size:13px">
                   Not converted yet.
                   <div v-if="canConvert(viewDoc)" style="margin-top:12px">
-                    <button class="inv-view-cta" @click="openConvertModal(viewDoc)">Convert</button>
+                    <button class="inv-view-cta" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openConvertModal(viewDoc)">Convert</button>
                   </div>
                 </div>
               </template>
@@ -1075,7 +1075,7 @@ import { templateHeadlineRate } from "../composables/useTaxCalc.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canCreate, canEdit, canDelete } = usePermissions();
 const route = useRoute();
 const router = useRouter();
 
@@ -1840,6 +1840,7 @@ async function openView(q) {
 
 // ── Save ──────────────────────────────────────────────────────────────
 async function saveQT(newStatus, andNew = false) {
+  if (!(editingName.value ? canEdit("invoices") : canCreate("invoices"))) return toast.error("Read-only access");
   if (!form.customer) return toast.error("Customer is required");
   if (!lines.value.some(l => l.item_code && flt(l.qty) > 0))
     return toast.error("At least one item required");
@@ -1973,7 +1974,7 @@ async function emailQT(q) {
 }
 
 async function markStatus(q, status) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const epMap = { Sent: "mark_quote_sent", Accepted: "mark_quote_accepted", Declined: "mark_quote_declined" };
   const ep = epMap[status];
   if (!ep) return;
@@ -1992,6 +1993,7 @@ function openConvertModal(q) {
   });
 }
 async function submitConvert() {
+  if (!canCreate("invoices")) { toast.error("Read-only access"); return; }
   if (!convertModal.target) return;
   convertModal.saving = true;
   try {
@@ -2012,7 +2014,7 @@ async function submitConvert() {
 }
 
 async function deleteQT(q) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("invoices")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Delete Quotation", body: `Permanently delete ${q.name}?`, okLabel: "Delete" })) return;
   try {
     await apiDelete("Quotation", q.name);
@@ -2023,6 +2025,7 @@ async function deleteQT(q) {
 }
 
 async function submitFromView(q) {
+  if (!canEdit("invoices")) { toast.error("Read-only access"); return; }
   if (!q?.name) return;
   if (!await confirm({ title: "Submit Quotation", body: `Submit ${q.name}? It cannot be edited after submission.`, okLabel: "Submit", okStyle: "primary" })) return;
   viewSubmitting.value = true;
@@ -2039,7 +2042,7 @@ async function submitFromView(q) {
 }
 
 async function cancelQT(q) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   if (!q?.name) return;
   if (!await confirm({ title: 'Cancel Quotation', body: `Cancel ${q.name}? This will reverse the submission.`, okLabel: 'Cancel Quotation', okStyle: 'danger' })) return;
   viewCancelling.value = true;
@@ -2057,7 +2060,7 @@ async function cancelQT(q) {
 
 // ── Bulk actions ──────────────────────────────────────────────────────
 async function bulkDelete() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("invoices")) { toast("Not permitted", "error"); return; }
   const drafts = sorted.value.filter(q => selected.value.has(q.name) && (q.status === "Draft" || !q.status));
   if (!drafts.length) { toast.info("No draft quotations selected"); return; }
   if (!await confirm({ title: "Delete Drafts", body: `Delete ${drafts.length} draft quotation(s)?`, okLabel: "Delete" })) return;
@@ -2067,7 +2070,7 @@ async function bulkDelete() {
   await load();
 }
 async function bulkMarkSent() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const targets = sorted.value.filter(q => selected.value.has(q.name) && effectiveStatus(q) === "Draft");
   if (!targets.length) { toast.info("Select drafts to mark as sent"); return; }
   let done = 0;
@@ -2079,7 +2082,7 @@ async function bulkMarkSent() {
   await load();
 }
 async function bulkMarkExpired() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const targets = sorted.value.filter(q => selected.value.has(q.name));
   if (!targets.length) { toast.info("No quotes selected"); return; }
   try {
@@ -2091,7 +2094,7 @@ async function bulkMarkExpired() {
   } catch (e) { toast.error(e.message || "Bulk expire failed"); }
 }
 async function bulkEmail() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const subs = sorted.value.filter(q => selected.value.has(q.name));
   if (!subs.length) { toast.info("No quotes selected"); return; }
   let sent = 0;

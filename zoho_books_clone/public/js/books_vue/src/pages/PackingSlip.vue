@@ -6,7 +6,7 @@
     <div class="psx-list-panel">
       <div class="psx-panel-hdr">
         <span class="psx-panel-title">📦 Packing Slips <span class="psx-count">({{ filtered.length }})</span></span>
-        <button class="psx-btn psx-btn-mfg psx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <button class="psx-btn psx-btn-mfg psx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
       <select class="psx-fi psx-status-filter" v-model="filterStatus" @change="page=0">
         <option value="">All Status</option>
@@ -58,7 +58,7 @@
         <div class="psx-empty-icon">📄</div>
         <div class="psx-empty-title">Select a Packing Slip</div>
         <div class="psx-empty-sub">Choose a Packing Slip from the list to view or edit its details, or create a new one.</div>
-        <button class="psx-btn psx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Packing Slip</button>
+        <button class="psx-btn psx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Packing Slip</button>
       </div>
 
       <template v-else>
@@ -80,16 +80,16 @@
               </div>
               <div class="psx-hdr-actions">
                 <button class="psx-btn psx-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button v-if="!isNew && ps.status!=='Cancelled'" class="psx-btn psx-btn-light" style="color:#C92A2A" @click="cancelPS" :disabled="saving">
+                <button v-if="!isNew && ps.status!=='Cancelled'" class="psx-btn psx-btn-light" style="color:#C92A2A" @click="cancelPS" :disabled="saving || !$canDelete('inventory')">
                   {{ saving ? 'Cancelling…' : 'Cancel' }}
                 </button>
-                <button v-if="!isNew && ps.status==='In Progress'" class="psx-btn psx-btn-light" style="color:#2F9E44" @click="markPacked" :disabled="saving">
+                <button v-if="!isNew && ps.status==='In Progress'" class="psx-btn psx-btn-light" style="color:#2F9E44" @click="markPacked" :disabled="saving || !$canEdit('inventory')">
                   {{ saving ? 'Saving…' : 'Mark as Packed' }}
                 </button>
-                <button v-if="!isNew && ps.status==='Packed' && !ps.stock_entry" class="psx-btn psx-btn-mfg" @click="postStockConsumption" :disabled="postingStock || saving">
+                <button v-if="!isNew && ps.status==='Packed' && !ps.stock_entry" class="psx-btn psx-btn-mfg" @click="postStockConsumption" :disabled="postingStock || saving || !$canEdit('inventory')">
                   {{ postingStock ? 'Posting…' : '📦 Post Stock Consumption' }}
                 </button>
-                <button v-if="!readOnly" class="psx-btn psx-btn-light" @click="save" :disabled="saving || loading">
+                <button v-if="!readOnly" class="psx-btn psx-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save' : 'Save Changes') }}
                 </button>
               </div>
@@ -249,7 +249,7 @@
           <!-- Footer -->
           <div class="psx-footer">
             <div style="flex:1"></div>
-            <button v-if="!readOnly" class="psx-btn psx-btn-mfg" @click="save" :disabled="saving || loading">
+            <button v-if="!readOnly" class="psx-btn psx-btn-mfg" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Packing Slip' : 'Save Changes') }}
             </button>

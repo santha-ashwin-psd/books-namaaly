@@ -6,7 +6,7 @@
     <div class="aix-list-panel">
       <div class="aix-panel-hdr">
         <span class="aix-panel-title">🔀 Alternative Items <span class="aix-count">({{ filtered.length }})</span></span>
-        <button class="aix-btn aix-btn-mfg aix-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <button class="aix-btn aix-btn-mfg aix-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
       <select class="aix-fi aix-status-filter" v-model="filterDefault" @change="page=0">
         <option value="">All Mappings</option>
@@ -55,7 +55,7 @@
         <div class="aix-empty-icon">🔀</div>
         <div class="aix-empty-title">Select an Alternative Item</div>
         <div class="aix-empty-sub">Choose a mapping from the list to view or edit it, or create a new substitute item mapping.</div>
-        <button class="aix-btn aix-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Mapping</button>
+        <button class="aix-btn aix-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Mapping</button>
       </div>
 
       <template v-else>
@@ -77,10 +77,10 @@
               </div>
               <div class="aix-hdr-actions">
                 <button class="aix-btn aix-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button v-if="!isNew" class="aix-btn aix-btn-light" style="color:#C92A2A" @click="deleteRec" :disabled="saving">
+                <button v-if="!isNew" class="aix-btn aix-btn-light" style="color:#C92A2A" @click="deleteRec" :disabled="saving || !$canDelete('inventory')">
                   {{ saving ? 'Deleting…' : 'Delete' }}
                 </button>
-                <button class="aix-btn aix-btn-light" @click="save" :disabled="saving || loading">
+                <button class="aix-btn aix-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save' : 'Update') }}
                 </button>
               </div>
@@ -138,9 +138,9 @@
 
           <!-- Footer -->
           <div class="aix-footer">
-            <button v-if="!isNew" class="aix-btn aix-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteRec" :disabled="saving">Delete Mapping</button>
+            <button v-if="!isNew" class="aix-btn aix-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteRec" :disabled="saving || !$canDelete('inventory')">Delete Mapping</button>
             <div style="flex:1"></div>
-            <button class="aix-btn aix-btn-mfg" @click="save" :disabled="saving || loading">
+            <button class="aix-btn aix-btn-mfg" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Mapping' : 'Update Mapping') }}
             </button>

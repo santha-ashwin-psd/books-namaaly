@@ -7,7 +7,7 @@
       </div>
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="btr-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
-        <button class="btr-btn-primary" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Transfer</button>
+        <button class="btr-btn-primary" :disabled="!$canCreate('banking')" :title="!$canCreate('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Transfer</button>
       </div>
     </div>
 
@@ -37,7 +37,7 @@
     <div v-if="selected.size>0" class="btr-selbar">
       <span class="btr-sel-count">{{ selected.size }} selected</span>
       <button class="btr-sel-export" @click="exportCSV"><span v-html="icon('download',13)"></span> Export selected</button>
-      <button class="btr-sel-danger" @click="bulkDelete" :disabled="bulkBusy">
+      <button class="btr-sel-danger" @click="bulkDelete" :disabled="bulkBusy || !$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''">
         <span v-html="icon('trash',13)"></span> Delete {{ selected.size }}
       </button>
       <div style="flex:1"></div>
@@ -212,7 +212,7 @@
           />
         </div>
         <div class="btr-dfooter">
-          <button class="btr-btn-danger-ghost" @click="deleteTransfer(viewDoc)" :disabled="actionBusy"><span v-html="icon('trash',13)"></span> Delete</button>
+          <button class="btr-btn-danger-ghost" @click="deleteTransfer(viewDoc)" :disabled="actionBusy || !$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> Delete</button>
           <div style="margin-left:auto"><button class="btr-btn-ghost" @click="viewOpen=false">Close</button></div>
         </div>
       </template>
@@ -310,7 +310,7 @@ async function bulkDelete(){
   bulkBusy.value=true;let done=0;
   try{
     for(const t of rows){
-      try{await apiPOST("zoho_books_clone.api.banking.delete_bank_transfer",{reference:t.reference||"",from_transaction:t.from_transaction||""});done++;}catch{}
+      try{await apiPOST("zoho_books_clone.api.banking.delete_bank_transfer",{reference:t.reference||"",from_transaction:t.from_transaction||""},{module:"banking",action:"delete"});done++;}catch{}
     }
     toast.success(`Deleted ${done} transfer(s)`);await load();
   }finally{bulkBusy.value=false;}
@@ -326,7 +326,7 @@ async function saveTransfer(){
   if(!flt(form.amount))return toast.error("Amount is required");
   drawerSaving.value=true;
   try{
-    const res=await apiPOST("zoho_books_clone.api.banking.post_bank_transfer",{from_account:form.from_account,to_account:form.to_account,amount:flt(form.amount),date:form.posting_date,purpose:form.purpose||"",description:form.remark||""});
+    const res=await apiPOST("zoho_books_clone.api.banking.post_bank_transfer",{from_account:form.from_account,to_account:form.to_account,amount:flt(form.amount),date:form.posting_date,purpose:form.purpose||"",description:form.remark||""},{module:"banking",action:"create"});
     const amt=res?.message?.amount??res?.amount??form.amount;
     toast.success(`Transfer of ${fmtCur(amt)} posted`);
     drawerOpen.value=false;await load();
@@ -337,7 +337,7 @@ async function deleteTransfer(t){
   const ok=await confirm({title:"Delete this transfer?",body:`This reverses the ledger entries and removes both legs of ${t.reference||t.from_transaction}.`,okLabel:"Delete",okStyle:"danger"});
   if(!ok)return;
   actionBusy.value=true;
-  try{await apiPOST("zoho_books_clone.api.banking.delete_bank_transfer",{reference:t.reference||"",from_transaction:t.from_transaction||""});toast.success("Transfer deleted");viewOpen.value=false;await load();}
+  try{await apiPOST("zoho_books_clone.api.banking.delete_bank_transfer",{reference:t.reference||"",from_transaction:t.from_transaction||""},{module:"banking",action:"delete"});toast.success("Transfer deleted");viewOpen.value=false;await load();}
   catch(e){toast.error(e.message||"Failed to delete");}finally{actionBusy.value=false;}
 }
 

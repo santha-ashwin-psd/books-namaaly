@@ -40,6 +40,34 @@ from zoho_books_clone.quality.qc_engine import (
 )
 
 
+def _reference_company(reference_type: str, reference_name: str) -> str | None:
+    """Resolve the company a QC Inspection belongs to via its reference doc
+    (Purchase Receipt / Purchase Invoice / Delivery Note / Sales Invoice /
+    Stock Entry — all company-scoped). QC Inspection itself has no `company`
+    field, so it isn't covered by tenancy.py's permission_query_conditions;
+    this is the only way to scope it to the caller's own company."""
+    if not reference_type or not reference_name:
+        return None
+    try:
+        if not frappe.get_meta(reference_type).has_field("company"):
+            return None
+    except Exception:
+        return None
+    return frappe.db.get_value(reference_type, reference_name, "company")
+
+
+def _assert_inspection_company(inspection_name: str) -> None:
+    """assert_company-equivalent for an existing QC Inspection, resolved via
+    its reference doc's company (see _reference_company)."""
+    from zoho_books_clone.utils.access import assert_company
+    ref_type, ref_name = frappe.db.get_value(
+        "QC Inspection", inspection_name, ["reference_type", "reference_name"]
+    ) or (None, None)
+    company = _reference_company(ref_type, ref_name)
+    if company:
+        assert_company(company)
+
+
 # ─── Status & summary ─────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -238,6 +266,9 @@ def update_template(
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection Template", "write")
+
     if not frappe.db.exists("QC Inspection Template", template_name):
         frappe.throw(_("QC Inspection Template {0} does not exist.").format(template_name))
 
@@ -300,6 +331,12 @@ def create_qc_inspection(
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    from zoho_books_clone.utils.access import assert_can, assert_company
+    assert_can("QC Inspection", "create")
+    _ref_company = _reference_company(reference_type, reference_name)
+    if _ref_company:
+        assert_company(_ref_company)
 
     # Validate that the reference document exists
     if not frappe.db.exists(reference_type, reference_name):
@@ -390,6 +427,10 @@ def update_qc_inspection(
     if not frappe.db.exists("QC Inspection", inspection_name):
         frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection", "write")
+    _assert_inspection_company(inspection_name)
+
     doc = frappe.get_doc("QC Inspection", inspection_name)
 
     if doc.docstatus != 0:
@@ -445,6 +486,10 @@ def apply_qc_template(inspection_name: str, template_name: str = None) -> dict:
     if not frappe.db.exists("QC Inspection", inspection_name):
         frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection", "write")
+    _assert_inspection_company(inspection_name)
+
     doc = frappe.get_doc("QC Inspection", inspection_name)
 
     if doc.docstatus != 0:
@@ -488,6 +533,10 @@ def save_qc_readings(inspection_name: str, readings_json: str,
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection", "write")
+    _assert_inspection_company(inspection_name)
 
     readings = json.loads(readings_json) if isinstance(readings_json, str) else readings_json
     doc = frappe.get_doc("QC Inspection", inspection_name)
@@ -553,6 +602,10 @@ def submit_qc_inspection(inspection_name: str) -> dict:
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection", "submit")
+    _assert_inspection_company(inspection_name)
+
     doc = frappe.get_doc("QC Inspection", inspection_name)
     if doc.docstatus != 0:
         frappe.throw(_("QC Inspection {0} is not in Draft state.").format(inspection_name))
@@ -579,6 +632,17 @@ def cancel_qc_inspection(inspection_name: str) -> dict:
         roles = set(frappe.get_roles(frappe.session.user))
         if not (roles & {"Books Admin", "System Manager"}):
             frappe.throw(_("Only Books Admin can cancel a QC Inspection."), frappe.PermissionError)
+
+    # Role check above is the real gate (stricter than the Edit-level
+    # threshold assert_can enforces for "cancel" elsewhere); this adds the
+    # module-membership check too, consistent with every other action here.
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Inspection", "cancel")
+
+    # The role check above doesn't scope by company (QC Inspection has no
+    # `company` field for tenancy.py to filter on) — without this, a Books
+    # Admin of one company could cancel another company's QC Inspection.
+    _assert_inspection_company(inspection_name)
 
     doc = frappe.get_doc("QC Inspection", inspection_name)
     if doc.docstatus != 1:

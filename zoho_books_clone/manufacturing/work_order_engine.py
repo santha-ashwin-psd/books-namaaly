@@ -668,7 +668,10 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # the rate falls back to the scrap warehouse's current valuation rate
     # (computed above, before this row existed to skew that valuation).
     for s, s_qty, s_rate in scrap_rows_to_append:
-        scrap_row = {"item_code": s["item_code"], "qty": s_qty, "t_warehouse": scrap_warehouse, "basic_rate": s_rate}
+        scrap_row = {
+            "item_code": s["item_code"], "qty": s_qty, "t_warehouse": scrap_warehouse,
+            "basic_rate": s_rate, "is_scrap_item": 1,
+        }
         if frappe.db.get_value("Item", s["item_code"], "has_batch_no"):
             s_batch_no = s.get("batch_no")
             if not s_batch_no or not frappe.db.exists("Batch", s_batch_no):

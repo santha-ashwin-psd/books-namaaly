@@ -31,7 +31,7 @@
     <div class="bomx-list-panel">
       <div class="bomx-panel-hdr">
         <span class="bomx-panel-title">⚙️ All Operations <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
       <div class="bomx-filter-row">
         <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
@@ -79,7 +79,7 @@
         <div class="bomx-empty-icon">⚙️</div>
         <div class="bomx-empty-title">Select an Operation</div>
         <div class="bomx-empty-sub">Choose an Operation from the list to view its settings and sub-operations.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Operation</button>
+        <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Operation</button>
       </div>
 
       <template v-else>
@@ -99,7 +99,7 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading">
+                <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save Operation' : 'Save Changes') }}
                 </button>
               </div>
@@ -177,9 +177,9 @@
 
           <!-- Footer -->
           <div class="bomx-footer">
-            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteFromDetail">Delete Operation</button>
+            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteFromDetail">Delete Operation</button>
             <div style="flex:1"></div>
-            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading">
+            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Operation' : 'Save Changes') }}
             </button>

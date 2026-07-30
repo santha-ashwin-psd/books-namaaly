@@ -17,7 +17,7 @@
         <button class="rec-btn-ghost" @click="load" :disabled="loading">
           <span v-html="icon('refresh',14)"></span>
         </button>
-        <button class="rec-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" @click="openNew">
+        <button class="rec-btn-primary" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="openNew">
           <span v-html="icon('plus',13)"></span> New Recurring Bill
         </button>
       </div>
@@ -73,9 +73,9 @@
               <td><span class="rec-badge" :class="statusClass(r.ui_status||r.status)">{{ r.ui_status||r.status||'Active' }}</span></td>
               <td @click.stop style="text-align:right">
                 <button class="rec-act-btn" @click="openView(r)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="(r.ui_status||r.status||'Active')==='Active'" class="rec-act-btn" @click="quickAction(r,'pause')" title="Pause"><span v-html="icon('pause',13)"></span></button>
-                <button v-else-if="(r.ui_status||r.status||'Active')==='Paused'" class="rec-act-btn" @click="quickAction(r,'resume')" title="Resume"><span v-html="icon('play',13)"></span></button>
-                <button class="rec-act-btn rec-act-danger" @click="quickAction(r,'delete')" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="(r.ui_status||r.status||'Active')==='Active'" class="rec-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Pause'" @click="quickAction(r,'pause')"><span v-html="icon('pause',13)"></span></button>
+                <button v-else-if="(r.ui_status||r.status||'Active')==='Paused'" class="rec-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Resume'" @click="quickAction(r,'resume')"><span v-html="icon('play',13)"></span></button>
+                <button class="rec-act-btn rec-act-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'" @click="quickAction(r,'delete')"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length">
@@ -84,7 +84,7 @@
                   <div class="rec-empty-icon" v-html="icon('repeat',32)"></div>
                   <div class="rec-empty-title">No recurring bills found</div>
                   <div class="rec-empty-sub">Create a recurring bill to auto-generate purchase orders on a schedule.</div>
-                  <button class="rec-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px">
+                  <button class="rec-btn-primary" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px">
                     <span v-html="icon('plus',13)"></span> Create your first recurring bill
                   </button>
                 </div>
@@ -258,7 +258,7 @@
 
       <div class="rec-dfooter">
         <button class="rec-btn-ghost" @click="onOverlayClose" :disabled="drawerSaving">Cancel</button>
-        <button class="rec-btn-primary" :disabled="drawerSaving" @click="saveRec">
+        <button class="rec-btn-primary" :disabled="drawerSaving || !(editMode ? $canEdit('bills') : $canCreate('bills'))" :title="!(editMode ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveRec">
           <span v-html="icon('check',13)"></span>
           {{ drawerSaving ? 'Saving…' : (editMode ? 'Save Changes' : 'Create Recurring Bill') }}
         </button>
@@ -302,12 +302,12 @@
 
         <!-- action bar -->
         <div class="rec-view-actbar">
-          <button class="rec-va-btn" @click="openEdit(viewDoc)" :disabled="(viewDoc.ui_status||viewDoc.status)==='Cancelled'"><span v-html="icon('edit',13)"></span> <div class="rec-va-btn-text">Edit</div></button>
-          <button class="rec-va-btn" @click="runNow(viewDoc)" :disabled="(viewDoc.ui_status||viewDoc.status||'Active')!=='Active' || actionLoading"><span v-html="icon('play',13)"></span> <div class="rec-va-btn-text">Run Now</div></button>
-          <button v-if="(viewDoc.ui_status||viewDoc.status||'Active')==='Active'" class="rec-va-btn" @click="actionOn(viewDoc,'pause')" :disabled="actionLoading"><span v-html="icon('pause',13)"></span> <div class="rec-va-btn-text">Pause</div></button>
-          <button v-else-if="(viewDoc.ui_status||viewDoc.status)==='Paused'" class="rec-va-btn" @click="actionOn(viewDoc,'resume')" :disabled="actionLoading"><span v-html="icon('play',13)"></span> <div class="rec-va-btn-text">Resume</div></button>
-          <button class="rec-va-btn rec-va-warn" @click="actionOn(viewDoc,'cancel')" :disabled="actionLoading || (viewDoc.ui_status||viewDoc.status)==='Cancelled'"><span v-html="icon('x',13)"></span> <div class="rec-va-btn-text">Cancel</div></button>
-          <button class="rec-va-btn rec-va-danger" @click="actionOn(viewDoc,'delete')" :disabled="actionLoading"><span v-html="icon('trash',13)"></span> <div class="rec-va-btn-text">Delete</div></button>
+          <button class="rec-va-btn" @click="openEdit(viewDoc)" :disabled="(viewDoc.ui_status||viewDoc.status)==='Cancelled' || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('edit',13)"></span> <div class="rec-va-btn-text">Edit</div></button>
+          <button class="rec-va-btn" @click="runNow(viewDoc)" :disabled="(viewDoc.ui_status||viewDoc.status||'Active')!=='Active' || actionLoading || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('play',13)"></span> <div class="rec-va-btn-text">Run Now</div></button>
+          <button v-if="(viewDoc.ui_status||viewDoc.status||'Active')==='Active'" class="rec-va-btn" @click="actionOn(viewDoc,'pause')" :disabled="actionLoading || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('pause',13)"></span> <div class="rec-va-btn-text">Pause</div></button>
+          <button v-else-if="(viewDoc.ui_status||viewDoc.status)==='Paused'" class="rec-va-btn" @click="actionOn(viewDoc,'resume')" :disabled="actionLoading || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('play',13)"></span> <div class="rec-va-btn-text">Resume</div></button>
+          <button class="rec-va-btn rec-va-warn" @click="actionOn(viewDoc,'cancel')" :disabled="actionLoading || (viewDoc.ui_status||viewDoc.status)==='Cancelled' || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''"><span v-html="icon('x',13)"></span> <div class="rec-va-btn-text">Cancel</div></button>
+          <button class="rec-va-btn rec-va-danger" @click="actionOn(viewDoc,'delete')" :disabled="actionLoading || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> <div class="rec-va-btn-text">Delete</div></button>
         </div>
 
         <!-- timeline -->

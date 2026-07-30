@@ -12,7 +12,7 @@
           </button>
         </div>
       </div>
-      <button class="ac-new-btn" @click="newCategory">
+      <button class="ac-new-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="newCategory">
         <span v-html="icon('plus', 13)"></span>
         <span class="ac-btn-label">New Category</span>
       </button>
@@ -140,10 +140,10 @@
 
           <!-- View actions -->
           <div class="ac-form-actions">
-            <button class="ac-action-btn ac-action-btn--primary" @click="enterEditMode">
+            <button class="ac-action-btn ac-action-btn--primary" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="enterEditMode">
               <span v-html="icon('edit', 13)"></span> Edit Category
             </button>
-            <button class="ac-action-btn ac-action-btn--danger" @click="deleteCategory">
+            <button class="ac-action-btn ac-action-btn--danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteCategory">
               <span v-html="icon('trash', 13)"></span> Delete
             </button>
           </div>
@@ -262,7 +262,7 @@
                   category. Required before any asset in this category can be submitted.
                 </div>
               </div>
-              <button class="ac-action-btn" @click="addAccountRow" :disabled="form.accounts.length >= 1"
+              <button class="ac-action-btn" @click="addAccountRow" :disabled="form.accounts.length >= 1 || !(panelMode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))"
                 :title="form.accounts.length >= 1 ? 'Only one set of accounts is needed — this category belongs to a single company' : ''">
                 <span v-html="icon('plus', 12)"></span> Add Accounts
               </button>
@@ -283,7 +283,7 @@
                     @search="fetchCompanyOptions"
                   />
                 </div>
-                <button class="ac-acct-remove-btn" title="Remove" @click="removeAccountRow(idx)">
+                <button class="ac-acct-remove-btn" title="Remove" :disabled="!(panelMode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))" @click="removeAccountRow(idx)">
                   <span v-html="icon('trash', 13)"></span>
                 </button>
               </div>
@@ -330,7 +330,7 @@
 
           <!-- Form actions -->
           <div class="ac-form-actions">
-            <button class="ac-action-btn ac-action-btn--primary" :disabled="saving" @click="saveCategory">
+            <button class="ac-action-btn ac-action-btn--primary" :disabled="saving || !(panelMode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))" @click="saveCategory">
               <span v-html="icon('check', 14)"></span>
               {{ saving ? 'Saving…' : (panelMode === 'edit' ? 'Update Category' : 'Create Category') }}
             </button>

@@ -8,7 +8,7 @@
         {{ list.filter(t=>!t.disabled).length }} active
       </span>
     </div>
-    <button class="nim-btn nim-btn-primary" @click="openAdd">
+    <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('taxes')" :title="!$canCreate('taxes') ? 'Read-only access' : ''" @click="openAdd">
       <span v-html="icon('plus',13)" style="vertical-align:-2px;margin-right:4px"/>New Template
     </button>
   </div>
@@ -46,7 +46,7 @@
     <div style="font-size:36px;margin-bottom:10px">🧾</div>
     <div style="font-size:14px;font-weight:600;margin-bottom:4px">No tax templates found</div>
     <div style="font-size:12.5px">Create GST templates for CGST+SGST (intra-state) or IGST (inter-state)</div>
-    <button class="nim-btn nim-btn-primary" @click="openAdd" style="margin-top:16px">Create Template</button>
+    <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('taxes')" :title="!$canCreate('taxes') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:16px">Create Template</button>
   </div>
 
   <!-- ── Template cards ────────────────────────────────────────────── -->
@@ -83,11 +83,13 @@
           <span :style="'background:'+typeMeta(t).bg+';color:'+typeMeta(t).c+';padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600'">
             {{ totalRate(t) }}% total
           </span>
-          <button class="nim-btn nim-btn-ghost" @click="openEdit(t)" style="padding:5px 10px;font-size:12px">
+          <button class="nim-btn nim-btn-ghost" :disabled="!$canEdit('taxes')" @click="openEdit(t)" style="padding:5px 10px;font-size:12px">
             <span v-html="icon('edit',12)" style="vertical-align:-2px;margin-right:3px"/>Edit
           </button>
           <button
             class="nim-btn"
+            :disabled="!$canDelete('taxes')"
+            :title="!$canDelete('taxes') ? 'Not permitted' : ''"
             @click="delTarget=t.name;showDel=true"
             style="padding:5px 10px;font-size:12px;color:#c92a2a;border-color:#ffc9c9;background:#fff5f5"
           ><span v-html="icon('trash',12)" style="vertical-align:-2px"/></button>
@@ -155,11 +157,11 @@
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
               <label class="nim-label" style="margin:0">Tax Rows</label>
               <div style="display:flex;gap:6px">
-                <button class="nim-btn nim-btn-ghost" @click="addRow('CGST')" style="padding:3px 10px;font-size:12px">+ CGST</button>
-                <button class="nim-btn nim-btn-ghost" @click="addRow('SGST')" style="padding:3px 10px;font-size:12px">+ SGST</button>
-                <button class="nim-btn nim-btn-ghost" @click="addRow('IGST')" style="padding:3px 10px;font-size:12px">+ IGST</button>
-                <button class="nim-btn nim-btn-ghost" @click="addRow('Cess')" style="padding:3px 10px;font-size:12px">+ Cess</button>
-                <button class="nim-btn nim-btn-ghost" @click="addRow('Other')" style="padding:3px 10px;font-size:12px">+ Other</button>
+                <button class="nim-btn nim-btn-ghost" :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))" @click="addRow('CGST')" style="padding:3px 10px;font-size:12px">+ CGST</button>
+                <button class="nim-btn nim-btn-ghost" :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))" @click="addRow('SGST')" style="padding:3px 10px;font-size:12px">+ SGST</button>
+                <button class="nim-btn nim-btn-ghost" :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))" @click="addRow('IGST')" style="padding:3px 10px;font-size:12px">+ IGST</button>
+                <button class="nim-btn nim-btn-ghost" :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))" @click="addRow('Cess')" style="padding:3px 10px;font-size:12px">+ Cess</button>
+                <button class="nim-btn nim-btn-ghost" :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))" @click="addRow('Other')" style="padding:3px 10px;font-size:12px">+ Other</button>
               </div>
             </div>
 
@@ -168,6 +170,7 @@
               <span style="font-size:11.5px;color:#868e96;align-self:center">Quick fill:</span>
               <button v-for="q in QUICK_FILLS" :key="q.label"
                 class="nim-btn nim-btn-ghost"
+                :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))"
                 @click="applyQuickFill(q)"
                 style="padding:2px 10px;font-size:11.5px;border-radius:20px"
               >{{ q.label }}</button>
@@ -197,6 +200,7 @@
                 <input class="nim-input" v-model="row.account_head" placeholder="Account Head (optional)"
                   style="padding:6px 8px;font-size:12px"/>
                 <button @click="form.taxes.splice(idx,1)"
+                  :disabled="!(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))"
                   style="width:28px;height:28px;border-radius:6px;border:1px solid #ffc9c9;background:#fff5f5;color:#c92a2a;cursor:pointer;display:flex;align-items:center;justify-content:center"
                 >
                   <span v-html="icon('x',11)"/>
@@ -217,7 +221,7 @@
 
         <div class="nim-footer">
           <button class="nim-btn nim-btn-ghost" @click="showDrawer=false">Cancel</button>
-          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving">
+          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving || !(drawerMode==='add' ? $canCreate('taxes') : $canEdit('taxes'))">
             {{ saving ? 'Saving…' : 'Save Template' }}
           </button>
         </div>
@@ -236,7 +240,7 @@
         </div>
         <div class="nim-footer">
           <button class="nim-btn nim-btn-ghost" @click="showDel=false">Cancel</button>
-          <button class="nim-btn" style="background:#c92a2a;color:#fff;border-color:#c92a2a" @click="confirmDel">
+          <button class="nim-btn" style="background:#c92a2a;color:#fff;border-color:#c92a2a" :disabled="!$canDelete('taxes')" @click="confirmDel">
             Delete
           </button>
         </div>

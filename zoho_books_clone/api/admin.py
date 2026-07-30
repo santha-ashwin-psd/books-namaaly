@@ -117,11 +117,14 @@ def _company_member_row(user: str) -> dict | None:
 @frappe.whitelist()
 def get_users_list():
     """Return users that belong to the current admin's company."""
+    from zoho_books_clone.utils.access import _LVL_FIELDS
+
     company = _require_company_admin()
     members = frappe.get_all(
         "Books Company Member",
         filters={"company": company},
-        fields=["user", "books_role", "is_company_admin", "invited_by", "joined_on", *MODULE_FIELDS],
+        fields=["user", "books_role", "is_company_admin", "invited_by", "joined_on",
+                *MODULE_FIELDS, *_LVL_FIELDS],
         ignore_permissions=True,
         order_by="joined_on asc",
         limit=500,
@@ -162,6 +165,7 @@ def get_users_list():
             "is_company_admin": bool(m["is_company_admin"]),
             "is_owner": m["user"] in owner_users,
             "modules": {f.removeprefix("mod_"): bool(m[f]) for f in MODULE_FIELDS},
+            "levels": {f.removeprefix("lvl_"): (m[f] or "None") for f in _LVL_FIELDS},
             "joined_on": m["joined_on"],
         })
     # Sort: owner first, then by joined_on
@@ -291,15 +295,26 @@ def update_user_role(user, role):
 
 
 @frappe.whitelist(methods=["POST"])
-def set_user_permissions(user, modules):
-    """Set module-level access toggles for a user in the admin's company.
-    `modules` is a dict like {'invoices': 1, 'banking': 0}."""
+def set_user_permissions(user, modules, levels=None):
+    """Set module-level access toggles, and optionally granular per-module
+    permission levels, for a user in the admin's company.
+    `modules` is a dict like {'invoices': 1, 'banking': 0}.
+    `levels` is a dict like {'invoices': 'Edit', 'banking': 'None'} — values
+    must be one of utils.access.LEVELS. Stored alongside (not replacing) the
+    mod_<module> booleans; the higher of the two wins per utils/access.py."""
+    from zoho_books_clone.utils.access import LEVELS, MODULES
+
     company = _require_company_admin()
 
     if isinstance(modules, str):
         import json
         modules = json.loads(modules)
     modules = modules or {}
+
+    if isinstance(levels, str):
+        import json
+        levels = json.loads(levels)
+    levels = levels or {}
 
     member_name = frappe.db.get_value("Books Company Member", {"user": user, "company": company}, "name")
     if not member_name:
@@ -313,6 +328,20 @@ def set_user_permissions(user, modules):
         key = f.removeprefix("mod_")
         if key in modules:
             member.set(f, 1 if int(modules[key]) else 0)
+
+    for m in MODULES:
+        if m in levels:
+            val = levels[m]
+            if val not in LEVELS:
+                frappe.throw(_("Invalid permission level {0} for module {1}.").format(val, m))
+            member.set(f"lvl_{m}", val)
+
+    if levels:
+        # First time granular levels are ever explicitly saved for this member,
+        # flip the flag so _membership() trusts lvl_<module> as authoritative
+        # (including an explicit "None") instead of only-ever-escalating past
+        # the legacy mod_<module> checkbox. See utils/access.py._membership().
+        member.set("levels_customized", 1)
 
     member.save(ignore_permissions=True)
     frappe.db.commit()
@@ -350,7 +379,60 @@ def remove_user_from_company(user):
     return {"success": True}
 
 
-# ─── Backwards-compat aliases (the live SPA was built against earlier names) ──
+# ─── Role & Permissions page ───────────────────────────────────────────────
+
+# Cosmetic-only metadata (label/description/color) for each built-in role.
+# NOT a source of permission truth -- actual access is enforced per-user via
+# mod_<module>/lvl_<module> on Books Company Member and utils/access.py.
+ROLE_META = {
+    "Books Admin":   {"desc": "Full access — manages users, settings, and all transactions", "color": "#2563eb", "bg": "#eff6ff"},
+    "Accountant":    {"desc": "Read-write on transactions & accounting, views reports. No admin/user access", "color": "#1971C2", "bg": "#E7F5FF"},
+    "Books Manager": {"desc": "Operational manager — read-write on transactions, no accounting/admin", "color": "#2F9E44", "bg": "#EBFBEE"},
+    "Books Viewer":  {"desc": "Read-only — can view its modules but cannot create, edit, or delete", "color": "#868E96", "bg": "#F1F3F5"},
+}
+
+
+@frappe.whitelist()
+def get_role_matrix():
+    """Backend-driven data for the Roles & Permissions page.
+
+    Books Admin always has full access -- that's hardcoded in utils/access.py's
+    admin bypass, not a per-user toggle, so it's reported as all-True here too.
+    For the other roles, module grants are per-user (mod_<module> toggles set
+    at invite time or via set_user_permissions) -- there's no fixed template
+    server-side either. So for those roles this reports, per module, whether
+    ANY current member of that role in the caller's company has it enabled,
+    computed live from Books Company Member. That keeps the page honest: it
+    reflects real company data instead of a static guess that can silently
+    drift from what set_user_permissions actually did.
+    """
+    company = _require_company_admin()
+    members = frappe.get_all(
+        "Books Company Member",
+        filters={"company": company},
+        fields=["user", "books_role", "is_company_admin", *MODULE_FIELDS],
+        ignore_permissions=True,
+    )
+
+    out = {}
+    for role in BOOKS_ROLES:
+        rows = [m for m in members if m["books_role"] == role]
+        if role == "Books Admin":
+            perms = {f.removeprefix("mod_"): True for f in MODULE_FIELDS}
+        else:
+            perms = {
+                f.removeprefix("mod_"): any(bool(r[f]) for r in rows)
+                for f in MODULE_FIELDS
+            }
+        out[role] = {
+            "user_count": len(rows),
+            "perms": perms,
+            **ROLE_META.get(role, {}),
+        }
+    return out
+
+
+
 
 @frappe.whitelist()
 def get_company_members():

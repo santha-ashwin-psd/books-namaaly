@@ -13,9 +13,9 @@
           <option value="">All Accounts</option>
           <option v-for="a in bankAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
         </select>
-        <label class="bt-import-btn" :class="{disabled:!selectedAccount||importing}" :title="!selectedAccount?'Pick a Bank Account first':''">
+        <label class="bt-import-btn" :class="{disabled:!selectedAccount||importing||!$canCreate('banking')}" :title="!$canCreate('banking')?'Read-only access':(!selectedAccount?'Pick a Bank Account first':'')">
           {{ importing ? 'Importing…' : '📥 Import CSV/Excel' }}
-          <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" :disabled="!selectedAccount||importing" @change="onFileSelected"/>
+          <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" :disabled="!selectedAccount||importing||!$canCreate('banking')" @change="onFileSelected"/>
         </label>
         <button class="bt-btn-ghost" @click="showFormatGuide=true" title="What format should my file be in?">
           <span v-html="icon('info',14)"></span> Format Guide
@@ -26,7 +26,7 @@
 
     <div v-if="selected.size" class="bt-bulkbar">
       <span>{{ selected.size }} selected</span>
-      <button class="bt-btn-primary" :disabled="reconciling" @click="reconcileSelected">
+      <button class="bt-btn-primary" :disabled="reconciling || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="reconcileSelected">
         {{ reconciling ? 'Reconciling…' : 'Mark as Reconciled' }}
       </button>
       <button class="bt-btn-ghost" @click="selected.clear()">Clear</button>
@@ -168,7 +168,7 @@
           />
         </div>
         <div class="bt-dfooter">
-          <button v-if="viewDoc.status!=='Reconciled'" class="bt-btn-primary" :disabled="reconciling" @click="reconcileOne(viewDoc)">
+          <button v-if="viewDoc.status!=='Reconciled'" class="bt-btn-primary" :disabled="reconciling || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="reconcileOne(viewDoc)">
             {{ reconciling ? 'Reconciling…' : 'Mark as Reconciled' }}
           </button>
           <button class="bt-btn-ghost" @click="viewOpen=false">Close</button>
@@ -550,7 +550,7 @@ async function confirmMappingImport() {
     const r = await apiPOST("zoho_books_clone.api.docs.confirm_bank_statement_import", {
       bank_account: selectedAccount.value,
       rows: mappingRows.value.filter(r => r.action !== "skip"),
-    });
+    }, { module: "banking", action: "create" });
     importResult.value = {
       ok: true,
       count: r?.count || 0,
@@ -657,7 +657,7 @@ async function reconcileOne(t){
   if(!t||t.status==="Reconciled")return;
   reconciling.value=true;
   try{
-    await apiPOST("zoho_books_clone.api.banking.mark_transaction_reconciled",{bank_transaction:t.name});
+    await apiPOST("zoho_books_clone.api.banking.mark_transaction_reconciled",{bank_transaction:t.name},{module:"banking",action:"edit"});
     t.status="Reconciled";
     selected.value.delete(t.name);
     toast.success(`${t.name} marked as Reconciled`);
@@ -673,7 +673,7 @@ async function reconcileSelected(){
     await apiPOST("zoho_books_clone.api.banking.reconcile_transactions",{
       bank_account: acc,
       transaction_names: JSON.stringify(names),
-    });
+    },{module:"banking",action:"edit"});
     list.value.forEach(t=>{if(names.includes(t.name))t.status="Reconciled";});
     selected.value=new Set();
     toast.success(`${names.length} transaction(s) marked as Reconciled`);

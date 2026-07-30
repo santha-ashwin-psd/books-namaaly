@@ -12,7 +12,7 @@
         </button>
       </div>
     </div>
-    <button class="ig-new-btn" @click="newGroup('All Item Groups')">
+    <button class="ig-new-btn" @click="newGroup('All Item Groups')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">
       <span v-html="icon('plus', 13)"></span>
       <span class="ig-btn-label">New Group</span>
     </button>
@@ -92,7 +92,7 @@
             {{ childCount(node.name) }}
           </span>
 
-          <button class="ig-add-child-btn" title="Add child group" @click.stop="newGroup(node.name)">
+          <button class="ig-add-child-btn" :title="!$canCreate('inventory') ? 'Read-only access' : 'Add child group'" :disabled="!$canCreate('inventory')" @click.stop="newGroup(node.name)">
             <span v-html="icon('plus', 11)"></span>
           </button>
         </div>
@@ -118,6 +118,7 @@
         <div class="ig-empty-title">Select a group to view</div>
         <div class="ig-empty-sub">Click any item group from the list to see its details</div>
         <button class="ig-action-btn ig-action-btn--primary" style="margin-top:18px"
+          :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''"
           @click="newGroup('All Item Groups')">
           <span v-html="icon('plus', 13)"></span> New Group
         </button>
@@ -184,14 +185,14 @@
 
         <!-- View actions -->
         <div class="ig-form-actions">
-          <button class="ig-action-btn ig-action-btn--primary" @click="enterEditMode">
+          <button class="ig-action-btn ig-action-btn--primary" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="enterEditMode">
             <span v-html="icon('edit', 13)"></span> Edit Group
           </button>
-          <button class="ig-action-btn" @click="newGroup(selectedGroup?.name || 'All Item Groups')">
+          <button class="ig-action-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="newGroup(selectedGroup?.name || 'All Item Groups')">
             <span v-html="icon('plus', 13)"></span> New Child
           </button>
           <div style="flex:1"></div>
-          <button class="ig-action-btn ig-action-btn--danger" @click="deleteGroup">
+          <button class="ig-action-btn ig-action-btn--danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteGroup">
             <span v-html="icon('trash', 13)"></span> Delete
           </button>
         </div>
@@ -334,7 +335,7 @@
 
         <!-- Form actions -->
         <div class="ig-form-actions">
-          <button class="ig-action-btn ig-action-btn--primary" :disabled="saving" @click="saveGroup">
+          <button class="ig-action-btn ig-action-btn--primary" :disabled="saving || !(panelMode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))" @click="saveGroup">
             <span v-html="icon('check', 14)"></span>
             {{ saving ? 'Saving…' : (panelMode === 'edit' ? 'Update Group' : 'Create Group') }}
           </button>

@@ -23,7 +23,7 @@
       </div>
       <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
-      <button class="sales-btn-primary" @click="openAdd()" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New</button>
+      <button class="sales-btn-primary" @click="openAdd()" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New</button>
     </div>
   </div>
 
@@ -117,7 +117,7 @@
                       <div class="bk-empty-illus" style="font-size:34px">🏢</div>
                       <p class="bk-empty-title">No cost centers found</p>
                       <p class="bk-empty-sub">Try a different search or filter, or create a new cost center.</p>
-                      <button class="bk-empty-btn" @click="openAdd()"><span v-html="icon('plus',13)"></span> New Cost Center</button>
+                      <button class="bk-empty-btn" :disabled="!$canCreate('accounts')" @click="openAdd()"><span v-html="icon('plus',13)"></span> New Cost Center</button>
                     </div>
                   </td>
                 </tr>
@@ -141,7 +141,7 @@
         <div class="cc-detail-empty-icon">🏢</div>
         <div class="cc-detail-empty-title">Select a cost center</div>
         <div class="cc-detail-empty-sub">Pick a cost center to see its budget, spend, and the transactions behind it.</div>
-        <button class="b-btn b-btn-primary" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''" @click="openAdd()"><span v-html="icon('plus',13)"></span> Add Cost Center</button>
+        <button class="b-btn b-btn-primary" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="openAdd()"><span v-html="icon('plus',13)"></span> Add Cost Center</button>
       </div>
 
       <template v-else>
@@ -154,8 +154,8 @@
             </div>
           </div>
           <div class="cc-detail-actions">
-            <button class="b-btn b-btn-ghost" @click="openEdit(selectedCC.name)"><span v-html="icon('edit',13)"></span> Edit</button>
-            <button class="cc-del-btn" @click="confirmDel(selectedCC.name)" title="Delete"><span v-html="icon('trash',14)"></span></button>
+            <button class="b-btn b-btn-ghost" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="openEdit(selectedCC.name)"><span v-html="icon('edit',13)"></span> Edit</button>
+            <button class="cc-del-btn" :disabled="!$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'" @click="confirmDel(selectedCC.name)"><span v-html="icon('trash',14)"></span></button>
           </div>
         </div>
 
@@ -389,9 +389,11 @@ import { icon } from "../utils/icons.js";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import DocLink from "../components/DocLink.vue";
+import { usePermissions } from "../composables/usePermissions.js";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
+const { canCreate, canEdit, canDelete } = usePermissions();
 
 const CC_COLORS = ["#3B5BDB","#0C8599","#2F9E44","#E67700","#C92A2A","#2563eb","#D4537E","#1098AD","#495057"];
 const CC_TYPE_ICONS = { Department: "🏢", Project: "📄", Product: "📦", Region: "🌍", Group: "📁" };
@@ -600,6 +602,7 @@ function openEdit(name) {
 function closeDrawer() { showDrawer.value = false; editing.value = null; }
 
 async function saveCC() {
+  if (!(editing.value ? canEdit("accounts") : canCreate("accounts"))) { toast("Read-only access", "error"); return; }
   if (!fForm.name.trim()) { toast("Cost Center Name is required", "error"); return; }
   if (!fForm.parent && !fForm.is_group) { toast("A root-level cost center (no parent) must be marked as a Group. Enable \"Is Group\" in the Settings section.", "error"); return; }
   saving.value = true;
@@ -661,6 +664,7 @@ async function saveCC() {
 
 // ── delete ───────────────────────────────────────────────────────────────────
 async function confirmDel(name) {
+  if (!canDelete("accounts")) { toast("Not permitted", "error"); return; }
   const ok = await confirm({
     title: "Delete Cost Center?",
     body: `"${name}" will be permanently removed. This cannot be undone.`,

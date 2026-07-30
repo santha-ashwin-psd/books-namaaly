@@ -6,40 +6,300 @@
  "autoname": "field:user",
  "track_changes": 1,
  "fields": [
-  {"fieldname": "sec_assign", "fieldtype": "Section Break", "label": "Membership", "idx": 1},
-  {"fieldname": "user", "fieldtype": "Link", "options": "User", "label": "User", "reqd": 1, "unique": 1, "in_list_view": 1, "idx": 2},
-  {"fieldname": "company", "fieldtype": "Link", "options": "Books Company", "label": "Company", "reqd": 1, "in_list_view": 1, "idx": 3},
-  {"fieldname": "col_assign", "fieldtype": "Column Break", "idx": 4},
-  {"fieldname": "books_role", "fieldtype": "Select", "label": "Books Role", "options": "Books Admin\nBooks Manager\nAccountant\nBooks Viewer", "default": "Books Viewer", "reqd": 1, "in_list_view": 1, "idx": 5},
-  {"fieldname": "is_company_admin", "fieldtype": "Check", "label": "Company Admin", "description": "If checked, this user can manage other users and company settings.", "default": "0", "in_list_view": 1, "idx": 6},
-
-  {"fieldname": "sec_modules", "fieldtype": "Section Break", "label": "Module Access", "description": "Controls which sections this user can access. Admins implicitly get all modules.", "idx": 10},
-  {"fieldname": "mod_invoices", "fieldtype": "Check", "label": "Sales Invoices", "default": "1", "idx": 11},
-  {"fieldname": "mod_bills", "fieldtype": "Check", "label": "Bills & Purchases", "default": "1", "idx": 12},
-  {"fieldname": "mod_payments", "fieldtype": "Check", "label": "Payments", "default": "1", "idx": 13},
-  {"fieldname": "mod_banking", "fieldtype": "Check", "label": "Banking", "default": "0", "idx": 14},
-  {"fieldname": "mod_inventory", "fieldtype": "Check", "label": "Inventory", "default": "0", "idx": 15},
-  {"fieldname": "col_modules", "fieldtype": "Column Break", "idx": 16},
-  {"fieldname": "mod_accounts", "fieldtype": "Check", "label": "Chart of Accounts & Journals", "default": "0", "idx": 17},
-  {"fieldname": "mod_reports", "fieldtype": "Check", "label": "Reports", "default": "1", "idx": 18},
-  {"fieldname": "mod_customers", "fieldtype": "Check", "label": "Customers & Suppliers", "default": "1", "idx": 19},
-  {"fieldname": "mod_taxes", "fieldtype": "Check", "label": "Taxes & GST", "default": "0", "idx": 20},
-  {"fieldname": "mod_admin", "fieldtype": "Check", "label": "Admin / Settings", "default": "0", "idx": 21},
-
-  {"fieldname": "sec_meta", "fieldtype": "Section Break", "label": "Metadata", "collapsible": 1, "idx": 30},
-  {"fieldname": "invited_by", "fieldtype": "Link", "options": "User", "label": "Invited By", "read_only": 1, "idx": 31},
-  {"fieldname": "joined_on", "fieldtype": "Datetime", "label": "Joined On", "read_only": 1, "idx": 32}
+  {
+   "fieldname": "sec_assign",
+   "fieldtype": "Section Break",
+   "label": "Membership",
+   "idx": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "User",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "idx": 2
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Books Company",
+   "label": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "idx": 3
+  },
+  {
+   "fieldname": "col_assign",
+   "fieldtype": "Column Break",
+   "idx": 4
+  },
+  {
+   "fieldname": "books_role",
+   "fieldtype": "Select",
+   "label": "Books Role",
+   "options": "Books Admin\nBooks Manager\nAccountant\nBooks Viewer",
+   "default": "Books Viewer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "idx": 5
+  },
+  {
+   "fieldname": "is_company_admin",
+   "fieldtype": "Check",
+   "label": "Company Admin",
+   "description": "If checked, this user can manage other users and company settings.",
+   "default": "0",
+   "in_list_view": 1,
+   "idx": 6
+  },
+  {
+   "fieldname": "sec_modules",
+   "fieldtype": "Section Break",
+   "label": "Module Access",
+   "description": "Controls which sections this user can access. Admins implicitly get all modules.",
+   "idx": 7
+  },
+  {
+   "fieldname": "mod_invoices",
+   "fieldtype": "Check",
+   "label": "Sales Invoices",
+   "default": "1",
+   "idx": 8
+  },
+  {
+   "fieldname": "mod_bills",
+   "fieldtype": "Check",
+   "label": "Bills & Purchases",
+   "default": "1",
+   "idx": 9
+  },
+  {
+   "fieldname": "mod_payments",
+   "fieldtype": "Check",
+   "label": "Payments",
+   "default": "1",
+   "idx": 10
+  },
+  {
+   "fieldname": "mod_banking",
+   "fieldtype": "Check",
+   "label": "Banking",
+   "default": "0",
+   "idx": 11
+  },
+  {
+   "fieldname": "mod_inventory",
+   "fieldtype": "Check",
+   "label": "Inventory",
+   "default": "0",
+   "idx": 12
+  },
+  {
+   "fieldname": "col_modules",
+   "fieldtype": "Column Break",
+   "idx": 13
+  },
+  {
+   "fieldname": "mod_accounts",
+   "fieldtype": "Check",
+   "label": "Chart of Accounts & Journals",
+   "default": "0",
+   "idx": 14
+  },
+  {
+   "fieldname": "mod_reports",
+   "fieldtype": "Check",
+   "label": "Reports",
+   "default": "1",
+   "idx": 15
+  },
+  {
+   "fieldname": "mod_customers",
+   "fieldtype": "Check",
+   "label": "Customers & Suppliers",
+   "default": "1",
+   "idx": 16
+  },
+  {
+   "fieldname": "mod_taxes",
+   "fieldtype": "Check",
+   "label": "Taxes & GST",
+   "default": "0",
+   "idx": 17
+  },
+  {
+   "fieldname": "mod_admin",
+   "fieldtype": "Check",
+   "label": "Admin / Settings",
+   "default": "0",
+   "idx": 18
+  },
+  {
+   "fieldname": "sec_levels",
+   "fieldtype": "Section Break",
+   "label": "Permission Levels",
+   "description": "Granular per-module access (None / View / Create / Edit / Delete). Supersedes the Module Access checkboxes above.",
+   "idx": 19
+  },
+  {
+   "fieldname": "lvl_invoices",
+   "fieldtype": "Select",
+   "label": "Sales Invoices",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 20
+  },
+  {
+   "fieldname": "lvl_bills",
+   "fieldtype": "Select",
+   "label": "Bills & Purchases",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 21
+  },
+  {
+   "fieldname": "lvl_payments",
+   "fieldtype": "Select",
+   "label": "Payments",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 22
+  },
+  {
+   "fieldname": "lvl_banking",
+   "fieldtype": "Select",
+   "label": "Banking",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 23
+  },
+  {
+   "fieldname": "lvl_inventory",
+   "fieldtype": "Select",
+   "label": "Inventory",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 24
+  },
+  {
+   "fieldname": "col_levels",
+   "fieldtype": "Column Break",
+   "idx": 25
+  },
+  {
+   "fieldname": "lvl_accounts",
+   "fieldtype": "Select",
+   "label": "Chart of Accounts & Journals",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 26
+  },
+  {
+   "fieldname": "lvl_reports",
+   "fieldtype": "Select",
+   "label": "Reports",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 27
+  },
+  {
+   "fieldname": "lvl_customers",
+   "fieldtype": "Select",
+   "label": "Customers & Suppliers",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 28
+  },
+  {
+   "fieldname": "lvl_taxes",
+   "fieldtype": "Select",
+   "label": "Taxes & GST",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 29
+  },
+  {
+   "fieldname": "lvl_admin",
+   "fieldtype": "Select",
+   "label": "Admin / Settings",
+   "options": "None\nView\nCreate\nEdit\nDelete",
+   "default": "None",
+   "idx": 30
+  },
+  {
+   "fieldname": "levels_customized",
+   "fieldtype": "Check",
+   "label": "Permission Levels Customized",
+   "default": "0",
+   "description": "Internal flag. Set automatically when granular per-module levels (lvl_<module>) are explicitly saved via Module Access. Distinguishes 'admin explicitly configured this' from 'field just holds its Select default' -- see utils/access.py._membership().",
+   "idx": 31
+  },
+  {
+   "fieldname": "sec_meta",
+   "fieldtype": "Section Break",
+   "label": "Metadata",
+   "collapsible": 1,
+   "idx": 32
+  },
+  {
+   "fieldname": "invited_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Invited By",
+   "read_only": 1,
+   "idx": 33
+  },
+  {
+   "fieldname": "joined_on",
+   "fieldtype": "Datetime",
+   "label": "Joined On",
+   "read_only": 1,
+   "idx": 34
+  }
  ],
  "permissions": [
-  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "report": 1, "share": 1, "permlevel": 0},
-  {"role": "Books Admin", "read": 1, "write": 1, "create": 1, "delete": 1, "permlevel": 0},
-  {"role": "Books Manager", "read": 1, "permlevel": 0},
-  {"role": "Accountant", "read": 1, "permlevel": 0},
-  {"role": "Books Viewer", "read": 1, "permlevel": 0}
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1,
+   "permlevel": 0
+  },
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "permlevel": 0
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "permlevel": 0
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "permlevel": 0
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "permlevel": 0
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "track_changes": 1,
  "search_fields": "user,company,books_role",
  "title_field": "user"
 }

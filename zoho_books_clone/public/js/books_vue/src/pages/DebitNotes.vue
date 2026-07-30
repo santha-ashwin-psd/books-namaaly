@@ -18,7 +18,7 @@
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
         <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Debit Note</button>
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Debit Note</button>
       </div>
     </div>
 
@@ -38,8 +38,8 @@
 
     <!-- ── Bulk action bar ── -->
     <BulkActionBar :count="selected.size" @clear="selected=new Set()">
-      <button @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-      <button class="bab-danger" @click="bulkDelete">Delete Drafts</button>
+      <button @click="bulkEmail" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('mail',13)"></span> Send Email</button>
+      <button class="bab-danger" @click="bulkDelete" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''">Delete Drafts</button>
       <button @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     </BulkActionBar>
 
@@ -78,10 +78,10 @@
               </td>
               <td class="td-actions dn-act-cell">
                 <button class="inv-act-btn" @click="openView(d)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="d.docstatus===0" class="inv-act-btn" @click="openEdit(d)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="d.docstatus===1 && balanceFor(d.name)>0" class="inv-act-btn dn-act-apply" @click="applyDN(d)" title="Apply to Bill">↳</button>
-                <button v-if="d.docstatus===1" class="inv-act-btn dn-act-cancel" @click="cancelDN(d)" title="Cancel Debit Note"><span v-html="icon('x',12)"></span></button>
-                <button v-if="d.docstatus===0 || d.docstatus===2" class="inv-act-btn dn-act-del" @click="deleteDN(d)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="d.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'" @click="openEdit(d)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="d.docstatus===1 && balanceFor(d.name)>0" class="inv-act-btn dn-act-apply" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Apply to Bill'" @click="applyDN(d)">↳</button>
+                <button v-if="d.docstatus===1" class="inv-act-btn dn-act-cancel" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : 'Cancel Debit Note'" @click="cancelDN(d)"><span v-html="icon('x',12)"></span></button>
+                <button v-if="d.docstatus===0 || d.docstatus===2" class="inv-act-btn dn-act-del" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'" @click="deleteDN(d)"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="9" class="dn-empty">No debit notes match</td></tr>
@@ -116,9 +116,9 @@
             <div v-if="d.docstatus===1 && balanceFor(d.name)>0" class="dn-mc-balance">Balance: {{ fmtCur(balanceFor(d.name)) }}</div>
             <div class="dn-mc-footer">
               <button class="dn-mc-btn" @click.stop="openView(d)">View</button>
-              <button v-if="d.docstatus===0" class="dn-mc-btn" @click.stop="openEdit(d)">Edit</button>
-              <button v-if="d.docstatus===1&&balanceFor(d.name)>0" class="dn-mc-btn dn-mc-apply" @click.stop="applyDN(d)">Apply</button>
-              <button v-if="d.docstatus===0||d.docstatus===2" class="dn-mc-btn dn-mc-danger" @click.stop="deleteDN(d)">Delete</button>
+              <button v-if="d.docstatus===0" class="dn-mc-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(d)">Edit</button>
+              <button v-if="d.docstatus===1&&balanceFor(d.name)>0" class="dn-mc-btn dn-mc-apply" :disabled="!$canEdit('bills')" @click.stop="applyDN(d)">Apply</button>
+              <button v-if="d.docstatus===0||d.docstatus===2" class="dn-mc-btn dn-mc-danger" :disabled="!$canDelete('bills')" @click.stop="deleteDN(d)">Delete</button>
             </div>
           </div>
         </template>
@@ -383,8 +383,8 @@
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="drawerOpen=false" :disabled="drawerSaving">Cancel</button>
         <div>
-          <button class="add-btn-draft" style="margin-right:5px" :disabled="drawerSaving" @click="saveDN(0)"><span v-html="icon('save',13)"></span> {{ drawerSaving?'Saving…':'Save Draft' }}</button>
-          <button class="add-btn-more" :disabled="drawerSaving" @click="saveDN(1)"><span v-html="icon('check',13)"></span> {{ drawerSaving?'Saving…':'Submit' }}</button>
+          <button class="add-btn-draft" style="margin-right:5px" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveDN(0)"><span v-html="icon('save',13)"></span> {{ drawerSaving?'Saving…':'Save Draft' }}</button>
+          <button class="add-btn-more" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveDN(1)"><span v-html="icon('check',13)"></span> {{ drawerSaving?'Saving…':'Submit' }}</button>
         </div>
       </div>
     </div>
@@ -538,7 +538,7 @@
               <div v-else style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">
                 No applications yet.
                 <div v-if="viewBalance>0 && viewDoc.docstatus===1" style="margin-top:8px">
-                  <button class="add-btn-draft" @click="applyDN(viewDoc)" style="font-size:12px;padding:6px 12px">↳ Apply to Bill</button>
+                  <button class="add-btn-draft" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="applyDN(viewDoc)" style="font-size:12px;padding:6px 12px">↳ Apply to Bill</button>
                 </div>
               </div>
             </template>
@@ -548,19 +548,19 @@
         <div class="dn-view-footer">
           <!-- Primary actions row -->
           <div class="dn-vf-primary">
-            <button v-if="viewDoc.docstatus===0" class="dn-vf-btn dn-vf-btn-submit" @click="submitDraftDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="dn-vf-btn dn-vf-btn-submit" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitDraftDN(viewDoc)">
               <span v-html="icon('check',14)"></span> Submit
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-apply" @click="applyDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-apply" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="applyDN(viewDoc)">
               ↳ <div class="dn-view-action-btn">Apply to Bill</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-auto" @click="autoApplyDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-auto" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="autoApplyDN(viewDoc)">
               ⚡<div class="dn-view-action-btn">Auto Apply</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-refund" @click="refundDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="dn-vf-btn dn-vf-btn-refund" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="refundDN(viewDoc)">
               ↩ <div class="dn-view-action-btn">Refund Debit</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0 && viewBalance<10" class="dn-vf-btn dn-vf-btn-outline" @click="writeOffDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0 && viewBalance<10" class="dn-vf-btn dn-vf-btn-outline" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="writeOffDN(viewDoc)">
               ✎ <div class="dn-view-action-btn">Write Off</div>
             </button>
           </div>
@@ -569,19 +569,19 @@
             <button class="dn-vf-sec-btn" @click="viewOpen=false">
               <span v-html="icon('x',13)"></span> <div class="dn-view-action-btn">Close</div>
             </button>
-            <button v-if="viewDoc.docstatus===0" class="dn-vf-sec-btn" @click="openEdit(viewDoc);viewOpen=false">
+            <button v-if="viewDoc.docstatus===0" class="dn-vf-sec-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="openEdit(viewDoc);viewOpen=false">
               <span v-html="icon('edit',13)"></span> <div class="dn-view-action-btn">Edit</div>
             </button>
-            <button v-if="viewDoc.docstatus===1" class="dn-vf-sec-btn" @click="emailDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1" class="dn-vf-sec-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="emailDN(viewDoc)">
               <span v-html="icon('mail',13)"></span> <div class="dn-view-action-btn">Email</div>
             </button>
             <button class="dn-vf-sec-btn" @click="printDN(viewDoc)">
               <span v-html="icon('printer',13)"></span> <div class="dn-view-action-btn">Print</div>
             </button>
-            <button v-if="viewDoc.docstatus===1" class="dn-vf-sec-btn dn-vf-sec-danger" @click="cancelDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1" class="dn-vf-sec-btn dn-vf-sec-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="cancelDN(viewDoc)">
               <span v-html="icon('x-circle',13)"></span> <div class="dn-view-action-btn">Cancel</div>
             </button>
-            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="dn-vf-sec-btn dn-vf-sec-danger" @click="deleteDN(viewDoc)">
+            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="dn-vf-sec-btn dn-vf-sec-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="deleteDN(viewDoc)">
               <span v-html="icon('trash',13)"></span> <div class="dn-view-action-btn">Delete</div>
             </button>
           </div>
@@ -651,7 +651,7 @@
       </div>
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="applyModal.open=false" :disabled="applyModal.saving">Cancel</button>
-        <button class="form-btn form-btn-primary" :disabled="applyModal.saving || !applyModal.bill || applyModal.amount<=0" @click="submitApply">
+        <button class="form-btn form-btn-primary" :disabled="applyModal.saving || !applyModal.bill || applyModal.amount<=0 || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitApply">
           {{ applyModal.saving ? 'Applying…' : `Apply ${fmtCur(applyModal.amount)}` }}
         </button>
       </div>
@@ -689,7 +689,7 @@
       </div>
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="refundModal.open=false" :disabled="refundModal.saving">Cancel</button>
-        <button class="form-btn form-btn-outline" :disabled="refundModal.saving || refundModal.amount<=0" @click="submitRefundDN">
+        <button class="form-btn form-btn-outline" :disabled="refundModal.saving || refundModal.amount<=0 || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitRefundDN">
           {{ refundModal.saving ? 'Processing…' : `Refund ${fmtCur(refundModal.amount)}` }}
         </button>
       </div>
@@ -721,7 +721,7 @@ import DocLink from "../components/DocLink.vue";
 import JournalTab from "../components/JournalTab.vue";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canEdit, canDelete } = usePermissions();
 const { confirm } = useConfirm();
 const { printDoc, refreshBranding } = useLivePreview();
 async function printDN(d) { try { await refreshBranding(); } catch {} printDoc(d, { title: "DEBIT NOTE", partyLabel: "Vendor", partyField: "supplier_name", companyName: d?.company || "" }); }
@@ -1207,7 +1207,7 @@ async function emailDN(d) {
   });
 }
 async function applyDN(d) {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("bills")) { toast("Read-only access", "error"); return; }
   try {
     const [r, balData] = await Promise.all([
       apiList("Purchase Invoice", {
@@ -1275,7 +1275,7 @@ async function submitDraftDN(d) {
   } catch (e) { toast.error(e.message || "Submit failed"); }
 }
 async function cancelDN(d) {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Cancel Debit Note", body: `Cancel ${d.name}? Any applications must be cancelled separately.`, okLabel: "Cancel DN" })) return;
   try {
     await apiPOST("zoho_books_clone.api.docs.cancel_doc", { doctype: "Purchase Invoice", name: d.name });
@@ -1343,7 +1343,7 @@ async function submitRefundDN() {
   refundModal.saving = false;
 }
 async function deleteDN(d) {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Delete Debit Note", body: `Permanently delete ${d.name}? This cannot be undone.`, okLabel: "Delete" })) return;
   try {
     await apiDelete("Purchase Invoice", d.name);
@@ -1354,7 +1354,7 @@ async function deleteDN(d) {
 
 // ── Bulk ──────────────────────────────────────────────────────────────────
 async function bulkDelete() {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   const drafts = sorted.value.filter(d => selected.value.has(d.name) && d.docstatus === 0);
   if (!drafts.length) { toast.info("No draft debit notes selected"); return; }
   if (!await confirm({ title: "Delete Drafts", body: `Delete ${drafts.length} draft debit note(s)?`, okLabel: "Delete" })) return;
@@ -1364,7 +1364,7 @@ async function bulkDelete() {
   await load();
 }
 async function bulkEmail() {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("bills")) { toast("Read-only access", "error"); return; }
   const subs = sorted.value.filter(d => selected.value.has(d.name) && d.docstatus === 1);
   if (!subs.length) { toast.info("No submitted debit notes selected"); return; }
   let sent = 0;

@@ -10,7 +10,7 @@
       </div>
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="sales-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Expense</button>
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Expense</button>
       </div>
     </div>
 
@@ -59,7 +59,7 @@
               <td @click="openView(e)" class="ta-r mono-sm">{{ fmtCur(e.total_claimed_amount||e.grand_total) }}</td>
               <td style="display:flex;gap:4px;justify-content:flex-end">
                 <button class="inv-act-btn" @click="openView(e)"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="e.docstatus===0" class="inv-act-btn" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="8" class="exp-empty">No expenses found</td></tr>
@@ -94,7 +94,7 @@
             </div>
             <div class="exp-mc-footer">
               <button class="exp-mc-btn" @click.stop="openView(e)">View</button>
-              <button v-if="e.docstatus===0" class="exp-mc-btn" @click.stop="openEdit(e)">Edit</button>
+              <button v-if="e.docstatus===0" class="exp-mc-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(e)">Edit</button>
             </div>
           </div>
         </template>
@@ -238,10 +238,10 @@
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="drawerOpen=false">Cancel</button>
         <div style="display:flex;gap:8px">
-          <button class="add-btn-draft" :disabled="drawerSaving" @click="saveExpense(0)">
+          <button class="add-btn-draft" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveExpense(0)">
             <span v-html="icon('save',13)"></span> {{ drawerSaving ? 'Saving…' : 'Save Draft' }}
           </button>
-          <button class="add-btn-more" :disabled="drawerSaving" @click="saveExpense(1)">
+          <button class="add-btn-more" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveExpense(1)">
             <span v-html="icon('check',13)"></span> {{ drawerSaving ? 'Saving…' : 'Submit' }}
           </button>
         </div>
@@ -341,10 +341,10 @@
         <!-- View Footer -->
         <div class="inv-dfooter">
           <button class="form-btn form-btn-outline" @click="viewOpen=false">Close</button>
-          <button v-if="viewDoc.docstatus===0" class="form-btn form-btn-primary" @click="openEdit(viewDoc);viewOpen=false">
+          <button v-if="viewDoc.docstatus===0" class="form-btn form-btn-primary" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="openEdit(viewDoc);viewOpen=false">
             <span v-html="icon('edit',13)"></span> Edit
           </button>
-          <button v-if="viewDoc.docstatus===1" class="form-btn form-btn-outline" :disabled="cancelling" @click="cancelExpense(viewDoc)">
+          <button v-if="viewDoc.docstatus===1" class="form-btn form-btn-outline" :disabled="cancelling || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="cancelExpense(viewDoc)">
             <span v-html="icon('x',13)"></span> {{ cancelling ? 'Cancelling…' : 'Cancel Expense' }}
           </button>
         </div>

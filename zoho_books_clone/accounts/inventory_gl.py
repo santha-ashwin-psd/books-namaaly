@@ -82,6 +82,95 @@ def get_stock_adjustment_account(company: str) -> str | None:
     )
 
 
+def get_scrap_account(company: str) -> str | None:
+    """Resolve the Scrap/By-Product ledger account (opt-in GL segregation —
+    see Manufacturing Settings > Segregate Scrap/By-Product GL).
+
+    Unlike the other helpers above, there is no dedicated Account Type for
+    scrap in the Chart of Accounts (only Stock / Stock Adjustment / GRIR /
+    COGS / WIP exist), so this only resolves a company-configured default or
+    a conventionally-named leaf account — it never falls back to a generic
+    account_type match, since guessing wrong here would silently misroute
+    scrap value into an unrelated ledger. Callers must fall back to
+    get_inventory_account() themselves when this returns None, so GL always
+    balances even for companies that haven't configured this yet.
+    """
+    company_default = _books_company_account(company, "default_scrap_account")
+    if company_default:
+        return company_default
+
+    return (
+        _acct_by_name(company, "Scrap / By-Product")
+        or _acct_by_name(company, "Scrap")
+    )
+
+
+def build_manufacture_incoming_gl_lines(
+    *,
+    voucher_no: str,
+    posting_date,
+    company: str,
+    total_incoming_value: float,
+    scrap_incoming_value: float,
+    inventory_account: str | None,
+    scrap_account: str | None,
+    segregate_scrap_gl: bool,
+) -> list[dict]:
+    """
+    Pure builder for the FG+scrap debit leg of a Manufacture Stock Entry
+    (see stock_entry.py::_post_gl_entries). Mirrors
+    build_purchase_invoice_debit_lines' pattern so this split is unit
+    testable without a DB/doc.
+
+    When segregate_scrap_gl is off, or there's no scrap value on this
+    entry, returns a single combined line against inventory_account (today's
+    behavior, unaffected). When on and scrap_incoming_value > 0, splits into
+    an FG line (inventory_account) and a scrap line (scrap_account, falling
+    back to inventory_account if unconfigured so GL always balances).
+
+    Does not include the WIP credit leg — that stays a single
+    total_incoming_value line regardless of this split (see caller).
+    """
+    base = {
+        "voucher_type": "Stock Entry",
+        "voucher_no": voucher_no,
+        "posting_date": posting_date,
+        "company": company,
+    }
+
+    if not flt(total_incoming_value):
+        return []
+
+    fg_incoming_value = flt(total_incoming_value) - flt(scrap_incoming_value)
+
+    if segregate_scrap_gl and flt(scrap_incoming_value):
+        lines: list[dict] = []
+        if flt(fg_incoming_value):
+            lines.append({
+                **base,
+                "account": inventory_account,
+                "debit": flt(fg_incoming_value),
+                "credit": 0,
+                "remarks": f"Inventory addition — FG received from WIP {voucher_no}",
+            })
+        lines.append({
+            **base,
+            "account": scrap_account or inventory_account,
+            "debit": flt(scrap_incoming_value),
+            "credit": 0,
+            "remarks": f"Scrap/By-Product addition — received from WIP {voucher_no}",
+        })
+        return lines
+
+    return [{
+        **base,
+        "account": inventory_account,
+        "debit": flt(total_incoming_value),
+        "credit": 0,
+        "remarks": f"Inventory addition — FG/scrap received from WIP {voucher_no}",
+    }]
+
+
 def is_purchase_stock_receipt(reference_doctype: str | None) -> bool:
     """True when a Material Receipt came from a purchase voucher (use GRIR contra)."""
     return bool(reference_doctype) and reference_doctype in _PURCHASE_RECEIPT_REFS

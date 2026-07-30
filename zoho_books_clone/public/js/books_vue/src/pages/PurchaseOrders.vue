@@ -19,7 +19,7 @@
         <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
         <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''">
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''">
           <span v-html="icon('plus',13)"></span> New Purchase Order
         </button>
       </div>
@@ -42,8 +42,8 @@
 
     <!-- ── Bulk action bar ── -->
     <BulkActionBar :count="selected.size" @clear="selected=new Set()">
-      <button @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-      <button class="bab-danger" @click="bulkDelete">Delete</button>
+      <button :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
+      <button class="bab-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="bulkDelete">Delete</button>
       <button @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     </BulkActionBar>
 
@@ -78,9 +78,9 @@
               <td class="td-amount ta-r mono-sm" @click="openView(o)">{{ fmtCur(o.grand_total) }}</td>
               <td class="td-actions po-act-cell">
                 <button class="inv-act-btn" @click="openView(o)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="canEdit(o)" class="inv-act-btn" @click="openEdit(o)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button class="inv-act-btn po-act-conv" v-if="canBill(o)" @click="openBillModal(o)" title="Bill"><span v-html="icon('arrow-right',13)"></span></button>
-                <button v-if="canDelete(o)" class="inv-act-btn po-act-del" @click="deletePO(o)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="canEdit(o) && $canEdit('bills')" class="inv-act-btn" @click="openEdit(o)" title="Edit"><span v-html="icon('edit',13)"></span></button>
+                <button class="inv-act-btn po-act-conv" v-if="canBill(o) && $canCreate('bills')" @click="openBillModal(o)" title="Bill"><span v-html="icon('arrow-right',13)"></span></button>
+                <button v-if="canDelete(o) && $canDelete('bills')" class="inv-act-btn po-act-del" @click="deletePO(o)" title="Delete"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="8" class="po-empty">No purchase orders match</td></tr>
@@ -135,7 +135,7 @@
           <div v-else-if="!sorted.length" style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#9ca3af;font-size:13px">
             <div style="font-size:32px;margin-bottom:8px">🛒</div>
             <div>{{ search ? 'No purchase orders match your filters' : 'No purchase orders yet' }}</div>
-            <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Purchase Order</button>
+            <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Purchase Order</button>
           </div>
           <template v-else>
             <div v-for="o in paged" :key="o.name"
@@ -367,7 +367,7 @@
                 </div>
               </div>
             </div>
-            <button class="inv-add-line-btn" style="margin-top:10px" @click="addLine"><span v-html="icon('plus',12)"></span> Add Item</button>
+            <button class="inv-add-line-btn" style="margin-top:10px" :disabled="!(editingName ? $canEdit('bills') : $canCreate('bills'))" @click="addLine"><span v-html="icon('plus',12)"></span> Add Item</button>
 
             <!-- Totals -->
             <div class="po-totals" style="margin-top:16px">
@@ -410,10 +410,10 @@
         <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New purchase order — unsaved' }}</div>
         <div class="add-footer-actions">
           <button class="add-btn-cancel" @click="drawerOpen=false">Cancel</button>
-          <button class="add-btn-draft" :disabled="drawerSaving" @click="savePO('Draft')">
+          <button class="add-btn-draft" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="savePO('Draft')">
             <span v-html="icon('save',13)"></span> {{ drawerSaving ? 'Saving…' : 'Save Draft' }}
           </button>
-          <button class="add-btn-more" :disabled="drawerSaving"
+          <button class="add-btn-more" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''"
             @click="savePO(form.purchase_type === 'Services' ? 'To Receive' : 'To Receive')">
             <span v-html="icon('check',13)"></span>
             {{ drawerSaving ? 'Saving…' : (form.purchase_type === 'Services' ? 'Confirm Order' : 'Issue PO') }}
@@ -445,7 +445,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:nowrap">
-            <button v-if="canBill(viewDoc)" class="inv-view-cta" @click="openBillModal(viewDoc)">
+            <button v-if="canBill(viewDoc) && $canCreate('bills')" class="inv-view-cta" @click="openBillModal(viewDoc)">
               <span v-html="icon('arrow-right',15)"></span> Convert to Bill
             </button>
             <button class="inv-ab-btn" style="padding:7px 12px;font-size:13px;white-space:nowrap" @click="viewOpen=false">
@@ -464,13 +464,13 @@
 
           <!-- Action buttons bar -->
           <div class="inv-action-bar">
-            <button v-if="canEdit(viewDoc)" class="inv-ab-btn" @click="openEdit(viewDoc);viewOpen=false">
+            <button v-if="canEdit(viewDoc) && $canEdit('bills')" class="inv-ab-btn" @click="openEdit(viewDoc);viewOpen=false">
               <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
             </button>
-            <button v-if="canEdit(viewDoc)" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="submitPO(viewDoc)">
+            <button v-if="canEdit(viewDoc) && $canEdit('bills')" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="submitPO(viewDoc)">
               <span v-html="icon('check',13)"></span> <span class="ab-label">Submit</span>
             </button>
-            <button class="inv-ab-btn" @click="emailPO(viewDoc)">
+            <button class="inv-ab-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="emailPO(viewDoc)">
               <span v-html="icon('mail',13)"></span> <span class="ab-label">Email</span>
             </button>
             <div style="position:relative;display:inline-flex">
@@ -496,14 +496,14 @@
                 </button>
               </div>
             </div>
-            <button v-if="hasUnreceived && (viewDoc?.purchase_type || 'Goods') === 'Goods' && (viewDoc?.status||'').toLowerCase() !== 'draft' && (viewDoc?.status||'').toLowerCase() !== '' && (viewDoc?.status||'').toLowerCase() !== 'cancelled'" class="inv-ab-btn" @click="markAllReceived" :disabled="actionRunning">
+            <button v-if="hasUnreceived && (viewDoc?.purchase_type || 'Goods') === 'Goods' && (viewDoc?.status||'').toLowerCase() !== 'draft' && (viewDoc?.status||'').toLowerCase() !== '' && (viewDoc?.status||'').toLowerCase() !== 'cancelled'" class="inv-ab-btn" @click="markAllReceived" :disabled="actionRunning || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''">
               <span v-html="icon('truck',13)"></span> <span class="ab-label">Mark Received</span>
             </button>
             <span class="inv-ab-spacer"></span>
-            <button v-if="canCancel(viewDoc)" class="inv-ab-btn inv-ab-danger" @click="cancelPO(viewDoc)">
+            <button v-if="canCancel(viewDoc) && $canDelete('bills')" class="inv-ab-btn inv-ab-danger" @click="cancelPO(viewDoc)">
               Cancel
             </button>
-            <button v-if="canDelete(viewDoc)" class="inv-ab-btn inv-ab-danger" @click="deletePO(viewDoc)">
+            <button v-if="canDelete(viewDoc) && $canDelete('bills')" class="inv-ab-btn inv-ab-danger" @click="deletePO(viewDoc)">
               <span v-html="icon('trash',13)"></span> <span class="ab-label">Delete</span>
             </button>
           </div>
@@ -713,7 +713,7 @@
                 </div>
 
                 <div v-if="hasUnreceived && (viewDoc?.status||'').toLowerCase() !== 'draft' && (viewDoc?.status||'').toLowerCase() !== '' && (viewDoc?.status||'').toLowerCase() !== 'cancelled'" style="display:flex;justify-content:flex-end;margin-top:12px">
-                  <button class="inv-view-cta" @click="markAllReceived" :disabled="actionRunning">
+                  <button class="inv-view-cta" @click="markAllReceived" :disabled="actionRunning || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''">
                     <span v-html="icon('truck',14)"></span> Mark All Received
                   </button>
                 </div>
@@ -771,7 +771,7 @@
                 </template>
                 <div v-if="!links.bills.length" style="text-align:center;padding:48px;color:#9ca3af;font-size:13px">
                   No linked bills yet.
-                  <div v-if="canBill(viewDoc)" style="margin-top:12px">
+                  <div v-if="canBill(viewDoc) && $canCreate('bills')" style="margin-top:12px">
                     <button class="inv-view-cta" @click="openBillModal(viewDoc)">
                       <span v-html="icon('arrow-right',14)"></span> Convert to Bill
                     </button>
@@ -852,7 +852,7 @@
       </div>
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="addrModal.open=false" :disabled="addrModal.saving">Cancel</button>
-        <button class="form-btn form-btn-primary" :disabled="addrModal.saving" @click="saveNewAddress">
+        <button class="form-btn form-btn-primary" :disabled="addrModal.saving || !$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" @click="saveNewAddress">
           {{ addrModal.saving ? 'Saving…' : 'Save Address' }}
         </button>
       </div>
@@ -909,7 +909,7 @@
       </div>
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="billModal.open=false" :disabled="billModal.saving">Cancel</button>
-        <button class="form-btn form-btn-primary" :disabled="billModal.saving||billModalTotal<=0" @click="submitBill">
+        <button class="form-btn form-btn-primary" :disabled="billModal.saving||billModalTotal<=0||!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="submitBill">
           {{ billModal.saving ? 'Creating…' : `Create Bill ${fmtCur(billModalTotal)}` }}
         </button>
       </div>

@@ -10,7 +10,7 @@
         Price Lists
         <span class="pl-count-chip">{{ priceLists.length }}</span>
       </div>
-      <button class="b-btn b-btn-primary pl-new-btn" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openNewListDialog">
+      <button class="b-btn b-btn-primary pl-new-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNewListDialog">
         <span v-html="icon('plus', 12)"></span> New
       </button>
     </div>
@@ -152,7 +152,7 @@
         <div class="pl-es-icon">🏷️</div>
         <div class="pl-es-title">No Price Lists Yet</div>
         <div class="pl-es-sub">Create your first price list to start managing item prices</div>
-        <button class="b-btn b-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" style="margin-top:16px" @click="openNewListDialog">
+        <button class="b-btn b-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" style="margin-top:16px" @click="openNewListDialog">
           <span v-html="icon('plus', 13)"></span> Create Price List
         </button>
       </template>
@@ -224,7 +224,7 @@
         <button class="b-btn b-btn-ghost pl-toolbar-btn" @click="exportCSV" :disabled="!sortedPrices.length">
           <span v-html="icon('download', 13)"></span> Export CSV
         </button>
-        <button class="b-btn b-btn-primary pl-toolbar-btn" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openAddDrawer">
+        <button class="b-btn b-btn-primary pl-toolbar-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddDrawer">
           <span v-html="icon('plus', 13)"></span> Add Item
         </button>
       </div>

@@ -23,7 +23,7 @@
       <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV" :disabled="!filtered.length"><span v-html="icon('download',14)"></span> CSV</button>
-      <button class="sales-btn-primary" @click="openAdd"><span v-html="icon('plus',13)"></span> New Item</button>
+      <button class="sales-btn-primary" @click="openAdd" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Item</button>
     </div>
   </div>
 
@@ -107,19 +107,19 @@
       <span class="bk-mat-count" style="color:#6d28d9">{{ counts.pm }}</span>
     </div>
     <div class="bk-mat-actions">
-      <button class="bk-mat-add-btn" @click="openAdd('Raw Material')">+ RM</button>
-      <button class="bk-mat-add-btn bk-mat-add-wip" @click="openAdd('Work In Progress')">+ WIP</button>
-      <button class="bk-mat-add-btn bk-mat-add-fg" @click="openAdd('Finished Good')">+ FG</button>
-      <button class="bk-mat-add-btn bk-mat-add-pm" @click="openAdd('Packing Material')">+ PM</button>
+      <button class="bk-mat-add-btn" @click="openAdd('Raw Material')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ RM</button>
+      <button class="bk-mat-add-btn bk-mat-add-wip" @click="openAdd('Work In Progress')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ WIP</button>
+      <button class="bk-mat-add-btn bk-mat-add-fg" @click="openAdd('Finished Good')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ FG</button>
+      <button class="bk-mat-add-btn bk-mat-add-pm" @click="openAdd('Packing Material')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ PM</button>
     </div>
   </div>
 
   <!-- ── Bulk action bar ── -->
   <BulkActionBar :count="selected.size" @clear="selected=new Set()">
-    <button @click="bulkEnable"><span v-html="icon('check',13)"></span> Enable</button>
-    <button @click="bulkDisable">Disable</button>
+    <button @click="bulkEnable" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''"><span v-html="icon('check',13)"></span> Enable</button>
+    <button @click="bulkDisable" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''">Disable</button>
     <button @click="exportSelectedCSV"><span v-html="icon('download',13)"></span> Export Selected</button>
-    <button class="bab-danger" @click="bulkDelete">Delete</button>
+    <button class="bab-danger" @click="bulkDelete" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''">Delete</button>
   </BulkActionBar>
 
   <!-- Table view -->
@@ -147,7 +147,7 @@
           <template v-else>
             <p class="bk-empty-title">No items yet</p>
             <p class="bk-empty-sub">Add your first item to start building your catalog.</p>
-            <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New Item</button>
+            <button class="bk-empty-btn" @click="openAdd" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Item</button>
           </template>
         </div></td></tr>
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
@@ -165,8 +165,8 @@
           <td @click="openView(row)" class="ta-r fw-600 mono-sm" data-label="Rate">{{fmt(row.standard_rate)}}</td>
           <td @click="openView(row)" data-label="Status"><span class="inv-status-badge" :class="row.disabled?'status-inactive':'status-active'">{{row.disabled?'Inactive':'Active'}}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
-            <button class="inv-act-btn" @click="openEdit(row)" title="Quick Edit"><span v-html="icon('edit',13)"></span></button>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+            <button class="inv-act-btn" @click="openEdit(row)" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : 'Quick Edit'"><span v-html="icon('edit',13)"></span></button>
+            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',13)"></span></button>
           </td>
         </tr>
       </tbody>
@@ -196,8 +196,8 @@
           <div class="text-muted" style="font-size:11px">{{row.stock_uom||'Nos'}}</div>
         </div>
         <div class="ii-mob-card-actions">
-          <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit" title="Edit" v-html="icon('edit',13)"></button>
-          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" title="Delete" v-html="icon('trash',13)"></button>
+          <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : 'Edit'" v-html="icon('edit',13)"></button>
+          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : 'Delete'" v-html="icon('trash',13)"></button>
         </div>
       </div>
     </div>
@@ -213,7 +213,7 @@
           <span class="inv-status-badge" :class="row.disabled?'status-inactive':'status-active'" style="font-size:10.5px">{{row.disabled?'Inactive':'Active'}}</span>
           <div style="display:flex;align-items:center;gap:4px">
             <span class="b-badge b-badge-muted" style="font-size:10.5px">{{row.item_type||'—'}}</span>
-            <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit ii-card-edit" title="Quick Edit" v-html="icon('edit',12)"></button>
+            <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit ii-card-edit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : 'Quick Edit'" v-html="icon('edit',12)"></button>
           </div>
         </div>
         <div class="fw-700" style="font-size:14px;margin-bottom:3px;line-height:1.3">{{row.item_name}}</div>
@@ -241,7 +241,7 @@
         <div style="font-size:13px;color:#374151;margin-bottom:20px">Delete <strong>{{delTarget?.item_name}}</strong>? This cannot be undone.</div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="b-btn b-btn-ghost" @click="showDel=false">Cancel</button>
-          <button class="b-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" :disabled="deleting" @click="doDelete">{{deleting?'Deleting…':'Yes, Delete'}}</button>
+          <button class="b-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" :disabled="deleting || !$canDelete('inventory')" @click="doDelete">{{deleting?'Deleting…':'Yes, Delete'}}</button>
         </div>
       </div>
     </div>

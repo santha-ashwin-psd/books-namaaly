@@ -23,7 +23,7 @@
       <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV" :disabled="!filtered.length"><span v-html="icon('download',14)"></span> CSV</button>
-      <button class="sales-btn-primary" @click="openAdd"><span v-html="icon('plus',13)"></span> New Asset</button>
+      <button class="sales-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Asset</button>
     </div>
   </div>
 
@@ -122,9 +122,9 @@
 <!-- ── Bulk action bar (appears when assets are selected) ── -->
   <div v-if="selected.size" class="inv-bulk-bar" style="margin:12px 0 0">
     <span class="inv-bulk-count"><strong>{{ selected.size }}</strong> asset{{ selected.size > 1 ? 's' : '' }} selected</span>
-    <button class="inv-bulk-btn" @click="bulkSetActive(true)" :disabled="bulkLoading"><span v-html="icon('check',13)"></span> Enable</button>
-    <button class="inv-bulk-btn" @click="bulkSetActive(false)" :disabled="bulkLoading"><span v-html="icon('cancel',13)"></span> Disable</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkLoading"><span v-html="icon('trash',13)"></span> Delete</button>
+    <button class="inv-bulk-btn" @click="bulkSetActive(true)" :disabled="bulkLoading || !$canEdit('inventory')"><span v-html="icon('check',13)"></span> Enable</button>
+    <button class="inv-bulk-btn" @click="bulkSetActive(false)" :disabled="bulkLoading || !$canEdit('inventory')"><span v-html="icon('cancel',13)"></span> Disable</button>
+    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkLoading || !$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> Delete</button>
     <button class="inv-bulk-clear" @click="clearSelection">✕ Clear</button>
   </div>
 
@@ -152,7 +152,7 @@
           <template v-else>
             <p class="bk-empty-title">No assets yet</p>
             <p class="bk-empty-sub">Add your first asset to start building your catalog.</p>
-            <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New Asset</button>
+            <button class="bk-empty-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Asset</button>
           </template>
         </div></td></tr>
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
@@ -164,8 +164,8 @@
           <td @click="openView(row)" data-label="Status"><span class="inv-status-badge" :class="statusClass(row.status)">{{row.status || 'Draft'}}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
             <button class="inv-act-btn" @click="openView(row)" title="View"><span v-html="icon('eye',13)"></span></button>
-            <button class="inv-act-btn" @click="openEdit(row)" title="Quick Edit"><span v-html="icon('edit',13)"></span></button>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+            <button class="inv-act-btn" @click="openEdit(row)" :disabled="!$canEdit('inventory')" title="Quick Edit"><span v-html="icon('edit',13)"></span></button>
+            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" :disabled="!$canDelete('inventory')" title="Delete"><span v-html="icon('trash',13)"></span></button>
           </td>
         </tr>
       </tbody>
@@ -192,8 +192,8 @@
           <div class="text-muted" style="font-size:11px">{{ fmtDate(row.purchase_date) }}</div>
         </div>
         <div class="ii-mob-card-actions">
-          <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit" title="Edit" v-html="icon('edit',13)"></button>
-          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" title="Delete" v-html="icon('trash',13)"></button>
+          <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit" :disabled="!$canEdit('inventory')" title="Edit" v-html="icon('edit',13)"></button>
+          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" :disabled="!$canDelete('inventory')" title="Delete" v-html="icon('trash',13)"></button>
         </div>
       </div>
     </div>
@@ -208,7 +208,7 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <span class="inv-status-badge" :class="row.status==='Fully Depreciated'?'status-inactive':'status-active'" style="font-size:10.5px">{{row.status}}</span>
           <div style="display:flex;align-items:center;gap:4px">
-            <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit ii-card-edit" title="Quick Edit" v-html="icon('edit',12)"></button>
+            <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit ii-card-edit" :disabled="!$canEdit('inventory')" title="Quick Edit" v-html="icon('edit',12)"></button>
           </div>
         </div>
         <div class="fw-700" style="font-size:14px;margin-bottom:3px;line-height:1.3">{{row.asset_name || row.name}}</div>

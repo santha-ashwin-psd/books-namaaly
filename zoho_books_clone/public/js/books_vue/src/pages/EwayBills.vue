@@ -18,7 +18,7 @@
         <button class="ew-btn-ghost" @click="load" :disabled="loading">
           <span v-html="icon('refresh',14)"></span>
         </button>
-        <button class="ew-btn-primary" @click="openGenerateList">
+        <button class="ew-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openGenerateList">
           <span v-html="icon('plus',13)"></span> Generate E-Way Bill
         </button>
       </div>
@@ -38,8 +38,8 @@
       <button class="inv-bulk-btn" @click="bulkDownloadJson" :disabled="bulkBusy">
         <span v-html="icon('download',13)"></span> Download JSONs
       </button>
-      <button class="inv-bulk-btn" @click="bulkExtend" :disabled="bulkBusy">Extend Validity (+1d)</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkCancelEwb" :disabled="bulkBusy">Cancel EWBs</button>
+      <button class="inv-bulk-btn" @click="bulkExtend" :disabled="bulkBusy || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''">Extend Validity (+1d)</button>
+      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkCancelEwb" :disabled="bulkBusy || !$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''">Cancel EWBs</button>
       <button class="inv-bulk-btn" @click="exportCSV" :disabled="bulkBusy">
         <span v-html="icon('download',13)"></span> Export CSV
       </button>
@@ -84,8 +84,8 @@
                 <div class="ew-actions-row">
                   <button class="ew-act-btn" @click="openView(r)" title="View"><span v-html="icon('eye',13)"></span></button>
                   <button v-if="r.ui_status==='Generated'" class="ew-act-btn" @click="quickDownload(r)" title="Download JSON"><span v-html="icon('download',13)"></span></button>
-                  <button v-if="r.ui_status==='Generated'" class="ew-act-btn" @click="actionOn(r,'cancel')" title="Cancel EWB"><span v-html="icon('x',13)"></span></button>
-                  <button v-if="r.ui_status==='Cancelled' || r.ui_status==='Expired'" class="ew-act-btn ew-act-del" @click.stop="deleteTarget={row:r}" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                  <button v-if="r.ui_status==='Generated'" class="ew-act-btn" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Cancel EWB'" @click="actionOn(r,'cancel')"><span v-html="icon('x',13)"></span></button>
+                  <button v-if="r.ui_status==='Cancelled' || r.ui_status==='Expired'" class="ew-act-btn ew-act-del" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="deleteTarget={row:r}"><span v-html="icon('trash',13)"></span></button>
                 </div>
               </td>
             </tr>
@@ -272,7 +272,7 @@
       </div>
       <div class="ew-dfooter">
         <button class="ew-btn-ghost" @click="genOpen=false" :disabled="generating">Cancel</button>
-        <button class="ew-btn-primary" :disabled="generating || !canGenerate" @click="submitGenerate">
+        <button class="ew-btn-primary" :disabled="generating || !canGenerate || !$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="submitGenerate">
           <span v-html="icon('check',13)"></span>
           {{ generating?'Generating…':'Generate E-Way Bill' }}
         </button>
@@ -310,13 +310,13 @@
           <button class="ew-va-btn" @click="printEwb(viewDoc)" :disabled="actionLoading">
             <span v-html="icon('mail',13)"></span> <div class="ew-va-btn-text">Print</div>
           </button>
-          <button class="ew-va-btn" @click="openVehicleEdit(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated'">
+          <button class="ew-va-btn" @click="openVehicleEdit(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated' || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''">
             <span v-html="icon('edit',13)"></span> <div class="ew-va-btn-text">Update Vehicle</div>
           </button>
-          <button class="ew-va-btn" @click="openExtend(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated' || viewDoc.extended" :title="viewDoc.extended?'Already extended once — NIC permits only one extension':''">
+          <button class="ew-va-btn" @click="openExtend(viewDoc)" :disabled="actionLoading || viewDoc.ui_status!=='Generated' || viewDoc.extended || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : (viewDoc.extended?'Already extended once — NIC permits only one extension':'')">
             <span v-html="icon('refresh',13)"></span> <div class="ew-va-btn-text">{{ viewDoc.extended?'Extended':'Extend' }}</div>
           </button>
-          <button class="ew-va-btn ew-va-danger" @click="doCancel(viewDoc)" :disabled="actionLoading || viewDoc.ui_status==='Cancelled' || viewDoc.ui_status==='Expired'">
+          <button class="ew-va-btn ew-va-danger" @click="doCancel(viewDoc)" :disabled="actionLoading || viewDoc.ui_status==='Cancelled' || viewDoc.ui_status==='Expired' || !$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''">
             <span v-html="icon('x',13)"></span> <div class="ew-va-btn-text">Cancel EWB</div>
           </button>
         </div>
@@ -336,7 +336,7 @@
               </div>
               <div style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end">
                 <button class="ew-btn-ghost" @click="vehicleEdit.open=false">Cancel</button>
-                <button class="ew-btn-primary" @click="saveVehicle">Save</button>
+                <button class="ew-btn-primary" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="saveVehicle">Save</button>
               </div>
             </div>
           </div>
@@ -354,7 +354,7 @@
               </div>
               <div style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end">
                 <button class="ew-btn-ghost" @click="extendEdit.open=false">Cancel</button>
-                <button class="ew-btn-primary" @click="saveExtend">Extend</button>
+                <button class="ew-btn-primary" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="saveExtend">Extend</button>
               </div>
             </div>
           </div>

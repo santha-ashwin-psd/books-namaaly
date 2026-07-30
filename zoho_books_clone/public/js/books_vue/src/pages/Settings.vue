@@ -76,7 +76,7 @@
       </p>
 
       <div class="user-actions">
-        <button class="btn-primary" @click="openInvite">+ Invite User</button>
+        <button class="btn-primary" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="openInvite">+ Invite User</button>
       </div>
 
       <div v-if="usersLoading" class="muted">Loading…</div>
@@ -92,7 +92,7 @@
             <td>{{ u.full_name || "—" }}</td>
             <td class="mono">{{ u.email }}</td>
             <td>
-              <select :value="u.books_role" @change="onRoleChange(u, $event.target.value)" :disabled="u.email===currentUser">
+              <select :value="u.books_role" @change="onRoleChange(u, $event.target.value)" :disabled="u.email===currentUser || !$canEdit('admin')">
                 <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
               </select>
             </td>
@@ -102,12 +102,12 @@
               <span v-else class="pill off">Disabled</span>
             </td>
             <td class="modules-cell">
-              <button class="btn-link" @click="openPerms(u)" :disabled="u.is_company_admin">
+              <button class="btn-link" @click="openPerms(u)" :disabled="u.is_company_admin || !$canEdit('admin')">
                 {{ u.is_company_admin ? "All access" : (moduleSummary(u.modules) || "Edit access…") }}
               </button>
             </td>
             <td class="row-actions">
-              <button v-if="u.email !== currentUser && !u.is_company_admin" class="btn-link danger" @click="removeUser(u)">Remove</button>
+              <button v-if="u.email !== currentUser && !u.is_company_admin" class="btn-link danger" :disabled="!$canDelete('admin')" :title="!$canDelete('admin') ? 'Not permitted' : ''" @click="removeUser(u)">Remove</button>
             </td>
           </tr>
         </tbody>
@@ -171,7 +171,7 @@
         </div>
         <div class="actions">
           <button type="button" class="btn-ghost" @click="showPerms=false">Cancel</button>
-          <button type="button" class="btn-primary" @click="savePerms" :disabled="savingPerms">{{ savingPerms ? "Saving…" : "Save Access" }}</button>
+          <button type="button" class="btn-primary" @click="savePerms" :disabled="savingPerms || !$canEdit('admin')">{{ savingPerms ? "Saving…" : "Save Access" }}</button>
         </div>
         <div v-if="permsErr" class="msg err">{{ permsErr }}</div>
       </div>

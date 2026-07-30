@@ -6,7 +6,7 @@
       <span class="su-title">Team Members</span>
       <span class="su-count-badge">{{ users.length }} members</span>
     </div>
-    <button v-if="!accessDenied" class="nim-btn nim-btn-primary su-add-btn" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openInvite">
+    <button v-if="!accessDenied" class="nim-btn nim-btn-primary su-add-btn" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="openInvite">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Add Member
     </button>
@@ -37,20 +37,20 @@
           </button>
           <!-- Dropdown menu -->
           <div v-if="openMenu === u.name" class="su-dropdown" @click.stop>
-            <button class="su-dd-item" @click="editUser=u;editRole=u.books_role;openMenu=null">
+            <button class="su-dd-item" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="editUser=u;editRole=u.books_role;openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               Change Role
             </button>
-            <button v-if="!u.is_company_admin" class="su-dd-item" @click="openPerms(u);openMenu=null">
+            <button v-if="!u.is_company_admin" class="su-dd-item" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="openPerms(u);openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
               Module Access
             </button>
-            <button class="su-dd-item su-dd-item--warn" @click="toggleActive(u);openMenu=null">
+            <button class="su-dd-item su-dd-item--warn" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="toggleActive(u);openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               {{ u.enabled ? 'Deactivate' : 'Activate' }}
             </button>
             <div class="su-dd-divider"></div>
-            <button class="su-dd-item su-dd-item--danger" @click="showRemoveConfirm=u;openMenu=null">
+            <button class="su-dd-item su-dd-item--danger" :disabled="!$canDelete('admin')" :title="!$canDelete('admin') ? 'Not permitted' : ''" @click="showRemoveConfirm=u;openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               Remove
             </button>
@@ -103,13 +103,13 @@
       </div>
 
       <!-- Add New Member card -->
-      <div class="su-add-card" @click="openInvite">
+      <div class="su-add-card" @click="$canCreate('admin') && openInvite()">
         <div class="su-add-card-icon">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
         </div>
         <div class="su-add-card-title">Add New Member</div>
         <div class="su-add-card-sub">Invite a new team member to your company</div>
-        <button class="su-add-card-btn" @click.stop="openInvite">
+        <button class="su-add-card-btn" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click.stop="openInvite">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add Member
         </button>
@@ -171,27 +171,42 @@
         <div class="nim-footer">
           <button class="nim-btn" @click="step===1?showInvite=false:prevStep()">{{step===1?'Cancel':'Back'}}</button>
           <button v-if="step!==3" class="nim-btn nim-btn-primary" @click="nextStep">{{nextLabel}}</button>
-          <button v-else class="nim-btn nim-btn-primary" @click="sendInvite" :disabled="saving">{{saving?'Sending…':'Send Invite'}}</button>
+          <button v-else class="nim-btn nim-btn-primary" @click="sendInvite" :disabled="saving || !$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''">{{saving?'Sending…':'Send Invite'}}</button>
         </div>
       </div>
     </div>
 
     <!-- Module Access dialog -->
-    <div v-if="permsUser" class="nim-overlay" @click.self="permsUser=null">
-      <div class="nim-dialog" style="width:520px">
+    <div v-if="permsUser" class="nim-overlay" :key="permsUser.name + '-' + permsRenderKey" @click.self="permsUser=null">
+      <div class="nim-dialog" style="width:640px">
         <div class="nim-header"><span style="font-weight:700;color: #fff;">Module Access — {{permsUser.full_name||permsUser.name}}</span><button class="nim-close" @click="permsUser=null">✕</button></div>
-        <div class="nim-body" style="display:grid;gap:14px">
-          <div style="font-size:13px;color:#4a5568">Toggle which modules this member can access.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8f9fc;border-radius:8px;padding:14px">
-            <label v-for="m in MODULES" :key="m.key" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#3b4a7a">
-              <input type="checkbox" :checked="permsDraft[m.key]" @change="permsDraft[m.key] = $event.target.checked" style="width:14px;height:14px;cursor:pointer"/>
-              <span>{{m.label}}</span>
-            </label>
+        <div class="nim-body" style="display:grid;gap:20px">
+          <div>
+            <div style="font-size:13px;color:#4a5568;margin-bottom:10px">Toggle which modules this member can access. Unchecking sets the level below to None; checking defaults it to View.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8f9fc;border-radius:8px;padding:14px">
+              <label v-for="m in MODULES" :key="m.key" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#3b4a7a">
+                <input type="checkbox" :checked="permsDraft[m.key]" @change="onModuleToggle(m.key, $event.target.checked)" style="width:14px;height:14px;cursor:pointer"/>
+                <span>{{m.label}}</span>
+              </label>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:#1a1a2e;margin-bottom:2px">Permission Levels</div>
+            <div style="font-size:12.5px;color:#868e96;margin-bottom:10px">Granular per-module access (None / View / Create / Edit / Delete). Stays in sync with the checkboxes above — the two never disagree.</div>
+            <div v-if="MODULES.some(m => permsDraft[m.key])" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+              <div v-for="m in MODULES" v-show="permsDraft[m.key]" :key="m.key">
+                <label style="display:block;font-size:12.5px;color:#4a5568;margin-bottom:4px">{{m.label}}</label>
+                <select :value="levelsDraft[m.key]" @change="onLevelChange(m.key, $event.target.value)" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #e4e8f0;background:#f8f9fc;font-size:13px;color:#1a1a2e;cursor:pointer">
+                  <option v-for="lvl in LEVELS" :key="lvl" :value="lvl">{{lvl}}</option>
+                </select>
+              </div>
+            </div>
+            <div v-else style="font-size:12.5px;color:#9ca3af;padding:10px 0">No modules checked yet — check a module above to set its access level.</div>
           </div>
         </div>
         <div class="nim-footer">
           <button class="nim-btn" @click="permsUser=null">Cancel</button>
-          <button class="nim-btn nim-btn-primary" @click="savePerms" :disabled="permsSaving">{{permsSaving?'Saving…':'Save Access'}}</button>
+          <button class="nim-btn nim-btn-primary" @click="savePerms" :disabled="permsSaving || !$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''">{{permsSaving?'Saving…':'Save Access'}}</button>
         </div>
       </div>
     </div>
@@ -207,7 +222,7 @@
             <div v-if="editRole===r" style="color:#2563eb">✓</div>
           </div>
         </div>
-        <div class="nim-footer"><button class="nim-btn" @click="editUser=null">Cancel</button><button class="nim-btn nim-btn-primary" @click="changeRole">Save Role</button></div>
+        <div class="nim-footer"><button class="nim-btn" @click="editUser=null">Cancel</button><button class="nim-btn nim-btn-primary" @click="changeRole" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''">Save Role</button></div>
       </div>
     </div>
 
@@ -216,7 +231,7 @@
       <div class="nim-dialog" style="width:400px">
         <div class="nim-header"><span style="font-weight:700;color:#C92A2A">Remove Member</span><button class="nim-close" @click="showRemoveConfirm=null">✕</button></div>
         <div class="nim-body"><p style="color:#4a5568;font-size:13.5px;line-height:1.6">Are you sure you want to remove <strong>{{showRemoveConfirm.full_name||showRemoveConfirm.name}}</strong>? Their account will be deactivated and they will lose access to company data.</p></div>
-        <div class="nim-footer"><button class="nim-btn" @click="showRemoveConfirm=null">Cancel</button><button class="nim-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" @click="confirmRemove(showRemoveConfirm)">Remove Member</button></div>
+        <div class="nim-footer"><button class="nim-btn" @click="showRemoveConfirm=null">Cancel</button><button class="nim-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" @click="confirmRemove(showRemoveConfirm)" :disabled="!$canDelete('admin')" :title="!$canDelete('admin') ? 'Not permitted' : ''">Remove Member</button></div>
       </div>
     </div>
   </Teleport>
@@ -244,6 +259,8 @@ const MODULES = [
   { key: "taxes",     label: "Taxes & GST" },
   { key: "admin",     label: "Admin / Settings" },
 ];
+
+const LEVELS = ["None", "View", "Create", "Edit", "Delete"];
 
 const ROLES = ["Books Admin", "Accountant", "Books Manager", "Books Viewer", "Custom"];
 const CHANGEABLE_ROLES = ["Books Admin", "Accountant", "Books Manager", "Books Viewer"];
@@ -298,7 +315,9 @@ const inviteError = ref("");
 
 const permsUser  = ref(null);
 const permsDraft = reactive(defaultModulesFor("Books Viewer"));
+const levelsDraft = reactive(Object.fromEntries(MODULES.map((m) => [m.key, "None"])));
 const permsSaving = ref(false);
+const permsRenderKey = ref(0);
 const openMenu = ref(null);
 
 function toggleMenu(name) { openMenu.value = openMenu.value === name ? null : name; }
@@ -388,11 +407,29 @@ async function sendInvite() {
   saving.value = false;
 }
 
+// Checkbox and level dropdown are two views of one value now -- keep them
+// in lockstep so they can never silently diverge (that divergence was the
+// root cause of "level set to None but user still had access").
+function onModuleToggle(key, checked) {
+  permsDraft[key] = checked;
+  if (!checked) {
+    levelsDraft[key] = "None";
+  } else if (levelsDraft[key] === "None") {
+    levelsDraft[key] = "View";
+  }
+}
+function onLevelChange(key, value) {
+  levelsDraft[key] = value;
+  permsDraft[key] = value !== "None";
+}
+
 function openPerms(u) {
   if (u.is_company_admin) { toast("Admins always have full module access.", "info"); return; }
   permsUser.value = u;
   const current = u.modules || defaultModulesFor(u.books_role);
   for (const m of MODULES) permsDraft[m.key] = !!current[m.key];
+  const currentLevels = u.levels || {};
+  for (const m of MODULES) levelsDraft[m.key] = currentLevels[m.key] || "None";
 }
 
 async function savePerms() {
@@ -400,13 +437,23 @@ async function savePerms() {
   permsSaving.value = true;
   try {
     const modulePayload = Object.fromEntries(MODULES.map((m) => [m.key, permsDraft[m.key] ? 1 : 0]));
+    const levelPayload = Object.fromEntries(MODULES.map((m) => [m.key, levelsDraft[m.key]]));
+    const savedUser = permsUser.value.email || permsUser.value.name;
     await apiPOST("zoho_books_clone.api.admin.set_user_permissions", {
-      user: permsUser.value.email || permsUser.value.name,
+      user: savedUser,
       modules: modulePayload,
+      levels: levelPayload,
     });
     toast("Module access updated");
-    permsUser.value = null;
-    load();
+    await load();
+    // Keep the dialog open and re-sync its draft state from the freshly
+    // loaded user record, instead of closing it -- avoids the "looks wrong
+    // until you reopen" gap between save and re-render.
+    const refreshed = users.value.find((u) => u.name === savedUser);
+    if (refreshed) {
+      openPerms(refreshed);
+      permsRenderKey.value++;
+    }
   } catch (e) { toast(e.message || "Failed to update access", "error"); }
   permsSaving.value = false;
 }

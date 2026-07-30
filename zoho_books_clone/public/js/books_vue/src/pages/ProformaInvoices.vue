@@ -8,7 +8,7 @@
     </div>
     <div style="display:flex;gap:6px;margin-left:auto">
       <button class="b-btn b-btn-ghost" @click="load"><span v-html="icon('refresh',13)"></span></button>
-      <button class="b-btn b-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Proforma</button>
+      <button class="b-btn b-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Proforma</button>
     </div>
   </div>
 
@@ -46,7 +46,7 @@
           <td class="ta-r mono" style="font-weight:600;color:#2F9E44">₹{{fmtAmt(p.grand_total)}}</td>
           <td><span class="b-badge b-badge-orange">Draft / Proforma</span></td>
           <td style="text-align:center">
-            <button @click.stop="confirmDel(p)" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:4px" v-html="icon('trash',13)"></button>
+            <button @click.stop="confirmDel(p)" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:4px" v-html="icon('trash',13)"></button>
           </td>
         </tr>
       </tbody>
@@ -109,7 +109,7 @@
           <button class="b-btn pf-btn-amber" @click="printProforma">
             <span v-html="icon('print',13)"></span> Print
           </button>
-          <button class="b-btn b-btn-primary" @click="convertToInvoice" :disabled="converting">
+          <button class="b-btn b-btn-primary" :disabled="converting || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="convertToInvoice">
             {{ converting ? 'Converting…' : '→ Convert to Invoice' }}
           </button>
         </div>
@@ -165,7 +165,7 @@
         <div class="pf-section">
           <div class="pf-section-hdr">
             <span v-html="icon('box',13)"></span><span>Items <span class="req">*</span></span>
-            <button class="b-btn b-btn-ghost" style="margin-left:auto;padding:4px 10px;font-size:12px" @click="addItem">
+            <button class="b-btn b-btn-ghost" style="margin-left:auto;padding:4px 10px;font-size:12px" :disabled="!$canCreate('invoices')" @click="addItem">
               <span v-html="icon('plus',11)" style="vertical-align:-1px;margin-right:3px"></span> Add Item
             </button>
           </div>
@@ -181,7 +181,7 @@
             />
             <input class="pf-input ta-r" type="number" v-model.number="it.qty" placeholder="Qty" min="0.01" @input="calcAmount(it)"/>
             <input class="pf-input ta-r" type="number" v-model.number="it.rate" placeholder="Rate" min="0" @input="calcAmount(it)"/>
-            <button class="pf-rm" @click="removeItem(i)"><span v-html="icon('trash',12)"></span></button>
+            <button class="pf-rm" :disabled="!$canCreate('invoices')" @click="removeItem(i)"><span v-html="icon('trash',12)"></span></button>
           </div>
           <div v-if="!form.items.length" class="pf-items-empty">No items yet — click Add Item</div>
           <div class="pf-total"><span>Total</span><span class="mono">₹{{ fmtAmt(itemTotal) }}</span></div>
@@ -190,7 +190,7 @@
 
       <div class="pf-dfooter">
         <button class="b-btn b-btn-ghost" @click="newOpen=false" :disabled="saving">Cancel</button>
-        <button class="b-btn b-btn-primary" @click="saveProforma" :disabled="saving">{{ saving?'Saving…':'Save Proforma' }}</button>
+        <button class="b-btn b-btn-primary" :disabled="saving || !$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="saveProforma">{{ saving?'Saving…':'Save Proforma' }}</button>
       </div>
     </div>
 
@@ -201,7 +201,7 @@
         <div style="font-size:13px;color:#374151;margin-bottom:20px">Delete <strong>{{delTarget?.name}}</strong>? This cannot be undone.</div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="b-btn b-btn-ghost" @click="showDel=false">Cancel</button>
-          <button class="b-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" @click="doDelete">Delete</button>
+          <button class="b-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" :disabled="!$canDelete('invoices')" @click="doDelete">Delete</button>
         </div>
       </div>
     </div>

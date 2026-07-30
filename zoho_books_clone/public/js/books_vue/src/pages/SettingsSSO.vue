@@ -40,8 +40,8 @@
         </div>
 
         <div class="sso-actions">
-          <button v-if="google.enabled" class="sso-btn-ghost" @click="disable('Google')" :disabled="google.saving">Disable</button>
-          <button class="sso-btn-primary" @click="save('Google')" :disabled="google.saving || !google.client_id">
+          <button v-if="google.enabled" class="sso-btn-ghost" @click="disable('Google')" :disabled="google.saving || !$canEdit('admin')">Disable</button>
+          <button class="sso-btn-primary" @click="save('Google')" :disabled="google.saving || !google.client_id || !$canEdit('admin')">
             {{ google.saving ? 'Saving…' : google.enabled ? 'Update' : 'Enable Google Sign-In' }}
           </button>
         </div>
@@ -77,8 +77,8 @@
         </div>
 
         <div class="sso-actions">
-          <button v-if="ms.enabled" class="sso-btn-ghost" @click="disable('Office 365')" :disabled="ms.saving">Disable</button>
-          <button class="sso-btn-primary" @click="save('Office 365')" :disabled="ms.saving || !ms.client_id">
+          <button v-if="ms.enabled" class="sso-btn-ghost" @click="disable('Office 365')" :disabled="ms.saving || !$canEdit('admin')">Disable</button>
+          <button class="sso-btn-primary" @click="save('Office 365')" :disabled="ms.saving || !ms.client_id || !$canEdit('admin')">
             {{ ms.saving ? 'Saving…' : ms.enabled ? 'Update' : 'Enable Microsoft Sign-In' }}
           </button>
         </div>

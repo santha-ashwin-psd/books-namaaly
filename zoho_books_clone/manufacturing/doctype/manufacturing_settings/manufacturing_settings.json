@@ -133,6 +133,18 @@
    "description": "How many days ahead to plan production capacity."
   },
   {
+   "fieldname": "sb_scrap_accounting",
+   "fieldtype": "Section Break",
+   "label": "Scrap Accounting"
+  },
+  {
+   "fieldname": "segregate_scrap_gl",
+   "fieldtype": "Check",
+   "label": "Segregate Scrap/By-Product GL",
+   "default": "0",
+   "description": "If enabled, recoverable scrap/by-products received from a Work Order post to the company's Default Scrap/By-Product Account (Books Company) instead of the Default Inventory Account, for audit/reporting segregation. Falls back to the Default Inventory Account if no Scrap account is configured, so GL always balances. Off by default — existing companies are unaffected until they opt in."
+  },
+  {
    "fieldname": "sb_notifications",
    "fieldtype": "Section Break",
    "label": "Notifications & Alerts"

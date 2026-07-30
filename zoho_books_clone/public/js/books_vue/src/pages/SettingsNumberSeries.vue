@@ -5,7 +5,7 @@
       <span style="font-size:18px;font-weight:700;color:#1a1a2e">Number Series</span>
       <span style="background:#EBFBEE;color:#2F9E44;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600">{{series.length}} series</span>
     </div>
-    <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)" style="vertical-align:-2px;margin-right:4px"/>Add Series</button>
+    <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)" style="vertical-align:-2px;margin-right:4px"/>Add Series</button>
   </div>
 
   <div style="background:linear-gradient(135deg,#EBFBEE,#D3F9D8);border:1px solid #8CE99A;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;align-items:center">
@@ -35,7 +35,7 @@
           <td style="padding:12px 16px;color:#4a5568;text-align:center">{{s.current||0}}</td>
           <td style="padding:12px 16px;color:#2F9E44;font-weight:600">{{preview(s)}}</td>
           <td style="padding:12px 16px;text-align:right">
-            <button class="nim-btn nim-btn-ghost" @click="resetSeries(s)" style="font-size:12px;color:#c92a2a">Reset to 1</button>
+            <button class="nim-btn nim-btn-ghost" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="resetSeries(s)" style="font-size:12px;color:#c92a2a">Reset to 1</button>
           </td>
         </tr>
         <tr v-if="!series.length"><td colspan="6" style="padding:40px;text-align:center;color:#868e96">No number series configured</td></tr>
@@ -57,7 +57,7 @@
           <div class="sns-mc-mid">{{ s.doctype }}</div>
           <div class="sns-mc-meta">
             <span>Current: {{ s.current||0 }} · Padding: {{ s.padding||4 }}</span>
-            <button class="nim-btn nim-btn-ghost" @click.stop="resetSeries(s)" style="font-size:11.5px;color:#c92a2a;padding:3px 8px">Reset</button>
+            <button class="nim-btn nim-btn-ghost" :disabled="!$canEdit('admin')" @click.stop="resetSeries(s)" style="font-size:11.5px;color:#c92a2a;padding:3px 8px">Reset</button>
           </div>
         </div>
       </template>
@@ -99,7 +99,7 @@
         </div>
         <div class="nim-footer">
           <button class="nim-btn nim-btn-ghost" @click="showDrawer=false">Cancel</button>
-          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving">{{saving?'Saving…':'Save'}}</button>
+          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving || !$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''">{{saving?'Saving…':'Save'}}</button>
         </div>
       </div>
     </div>

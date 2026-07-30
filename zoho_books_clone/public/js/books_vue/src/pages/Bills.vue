@@ -19,7 +19,7 @@
         <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
         <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''">
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''">
           <span v-html="icon('plus',13)"></span> New Bill
         </button>
       </div>
@@ -42,10 +42,10 @@
 
     <!-- ── Bulk action bar ── -->
     <BulkActionBar :count="selected.size" @clear="selected=new Set()">
-      <button @click="bulkPayment">₹ Pay Vendor</button>
-      <button @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-      <button @click="bulkCancel">Cancel Submitted</button>
-      <button class="bab-danger" @click="bulkDelete">Delete Drafts</button>
+      <button @click="bulkPayment" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''">₹ Pay Vendor</button>
+      <button @click="bulkEmail" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''"><span v-html="icon('mail',13)"></span> Send Email</button>
+      <button @click="bulkCancel" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''">Cancel Submitted</button>
+      <button class="bab-danger" @click="bulkDelete" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''">Delete Drafts</button>
       <button @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     </BulkActionBar>
 
@@ -82,9 +82,9 @@
               <td class="td-balance ta-r mono-sm" @click="openView(b)" :class="{'text-danger':flt(b.outstanding_amount)>0,'text-success':flt(b.outstanding_amount)<=0&&b.docstatus===1}">{{ fmtCur(b.outstanding_amount) }}</td>
               <td class="td-actions bill-act-cell">
                 <button class="inv-act-btn" @click="openView(b)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="b.docstatus===0" class="inv-act-btn" @click="openEdit(b)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" @click="payBill(b)" title="Record Payment">₹</button>
-                <button v-if="b.docstatus===0 || b.docstatus===2" class="inv-act-btn bill-act-del" @click="deleteBill(b)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="b.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" @click="openEdit(b)" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" :disabled="!$canCreate('payments')" @click="payBill(b)" :title="!$canCreate('payments') ? 'Read-only access' : 'Record Payment'">₹</button>
+                <button v-if="b.docstatus===0 || b.docstatus===2" class="inv-act-btn bill-act-del" :disabled="!$canDelete('bills')" @click="deleteBill(b)" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="10" class="bk-empty-state"><div class="bk-empty-inner"><template v-if="search||filterVendor"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><p class="bk-empty-title">No bills match your filters</p></template><template v-else><div class="bk-empty-illus"><svg width="80" height="96" viewBox="0 0 80 96" fill="none"><rect x="10" y="8" width="60" height="80" rx="6" fill="#e2e8f0"/><rect x="14" y="12" width="52" height="72" rx="4" fill="#fff"/><rect x="22" y="26" width="36" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="34" width="28" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="42" width="32" height="3" rx="2" fill="#e2e8f0"/><rect x="50" y="64" width="18" height="20" rx="3" fill="#f59e0b" opacity=".7"/><rect x="36" y="70" width="12" height="14" rx="3" fill="#2563eb" opacity=".6"/></svg></div><p class="bk-empty-title">No bills created yet</p><p class="bk-empty-sub">Add your first vendor bill to start tracking payables.</p><button class="bk-empty-btn" @click="openNew"><span v-html="icon('plus',13)"></span> New Bill</button></template></div></td></tr>
@@ -121,9 +121,9 @@
             </div>
             <div class="bil-mc-footer">
               <button class="bil-mc-btn" @click.stop="openView(b)">View</button>
-              <button v-if="b.docstatus===0" class="bil-mc-btn" @click.stop="openEdit(b)">Edit</button>
-              <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="bil-mc-btn bil-mc-pay" @click.stop="payBill(b)">Pay</button>
-              <button v-if="b.docstatus===0||b.docstatus===2" class="bil-mc-btn bil-mc-danger" @click.stop="deleteBill(b)">Delete</button>
+              <button v-if="b.docstatus===0" class="bil-mc-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(b)">Edit</button>
+              <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="bil-mc-btn bil-mc-pay" :disabled="!$canCreate('payments')" @click.stop="payBill(b)">Pay</button>
+              <button v-if="b.docstatus===0||b.docstatus===2" class="bil-mc-btn bil-mc-danger" :disabled="!$canDelete('bills')" @click.stop="deleteBill(b)">Delete</button>
             </div>
           </div>
         </template>
@@ -142,7 +142,7 @@
           <div v-else-if="!sorted.length" style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#9ca3af;font-size:13px">
             <div style="font-size:32px;margin-bottom:8px">🧾</div>
             <div>{{ search || filterVendor ? 'No bills match your filters' : 'No bills yet' }}</div>
-            <button v-if="!search && !filterVendor" class="nim-btn nim-btn-primary" :disabled="!$canWrite('bills')" :title="!$canWrite('bills') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Bill</button>
+            <button v-if="!search && !filterVendor" class="nim-btn nim-btn-primary" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" style="margin-top:14px" @click="openNew"><span v-html="icon('plus',13)"></span> New Bill</button>
           </div>
           <template v-else>
             <div v-for="b in paged" :key="b.name"
@@ -163,9 +163,9 @@
               </div>
               <div style="display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px">
                 <button class="inv-act-btn" @click.stop="openView(b)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="b.docstatus===0" class="inv-act-btn" @click.stop="openEdit(b)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" @click.stop="payBill(b)" title="Record Payment">₹</button>
-                <button v-if="b.docstatus===0||b.docstatus===2" class="inv-act-btn" style="color:#dc2626" @click.stop="deleteBill(b)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="b.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(b)" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" :disabled="!$canCreate('payments')" @click.stop="payBill(b)" :title="!$canCreate('payments') ? 'Read-only access' : 'Record Payment'">₹</button>
+                <button v-if="b.docstatus===0||b.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('bills')" @click.stop="deleteBill(b)" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',13)"></span></button>
               </div>
             </div>
           </template>
@@ -463,10 +463,10 @@
         <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New bill — unsaved changes' }}</div>
         <div class="add-footer-actions">
           <button class="add-btn-cancel" @click="drawerOpen=false">Cancel</button>
-          <button class="add-btn-draft" :disabled="drawerSaving" @click="saveBill(0)">
+          <button class="add-btn-draft" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveBill(0)">
             <span v-html="icon('save',13)"></span> {{ drawerSaving ? 'Saving…' : 'Save Draft' }}
           </button>
-          <button class="add-btn-more" :disabled="drawerSaving" @click="saveBill(1)">
+          <button class="add-btn-more" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveBill(1)">
             <span v-html="icon('check',13)"></span> {{ drawerSaving ? 'Saving…' : 'Submit' }}
           </button>
         </div>
@@ -496,6 +496,7 @@
             <div class="bill-view-cta-wrap">
               <button v-if="flt(viewDoc.outstanding_amount)>0 && viewDoc.docstatus===1"
                       class="inv-view-cta"
+                      :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''"
                       @click="payBill(viewDoc)">
                 <span v-html="icon('indianrupee',15)"></span> Record Payment
               </button>
@@ -516,10 +517,10 @@
 
           <!-- Action buttons bar -->
           <div class="inv-action-bar">
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" @click="viewOpen=false;openEdit(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewDoc)">
               <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
             </button>
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="submitBill(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitBill(viewDoc)">
               <span v-html="icon('check',13)"></span> <span class="ab-label">Submit</span>
             </button>
             <div style="position:relative;display:inline-flex">
@@ -545,19 +546,19 @@
                 </button>
               </div>
             </div>
-            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn" @click="emailBill(viewDoc)">
+            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="emailBill(viewDoc)">
               <span v-html="icon('mail',13)"></span> <span class="ab-label">Email</span>
             </button>
-            <button v-if="viewDoc.docstatus===1 && flt(viewDoc.outstanding_amount) > 0" class="inv-ab-btn" @click="issueDebitNote(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && flt(viewDoc.outstanding_amount) > 0" class="inv-ab-btn" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="issueDebitNote(viewDoc)">
               <span v-html="icon('arrow-left',13)"></span> <span class="ab-label">Debit Note</span>
             </button>
-            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn" @click="makeRecurringBill(viewDoc)">
+            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="makeRecurringBill(viewDoc)">
               <span v-html="icon('repeat',13)"></span> <span class="ab-label">Make Recurring</span>
             </button>
-            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn inv-ab-danger" @click="cancelBill(viewDoc)">
+            <button v-if="viewDoc.docstatus===1" class="inv-ab-btn inv-ab-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="cancelBill(viewDoc)">
               Cancel
             </button>
-            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="inv-ab-btn inv-ab-danger" @click="deleteBill(viewDoc)">
+            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="inv-ab-btn inv-ab-danger" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="deleteBill(viewDoc)">
               <span v-html="icon('trash',13)"></span> <span class="ab-label">Delete</span>
             </button>
           </div>
@@ -603,6 +604,7 @@
                   </div>
                   <button v-if="flt(viewDoc.outstanding_amount)>0 && viewDoc.docstatus===1"
                           class="inv-rec-pay-btn"
+                          :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''"
                           @click="payBill(viewDoc)">
                     Record Payment
                   </button>
@@ -803,7 +805,7 @@
                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.3" style="margin-bottom:10px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                   <div>No payments recorded yet.</div>
                   <div v-if="flt(viewDoc.outstanding_amount)>0 && viewDoc.docstatus===1" style="margin-top:12px">
-                    <button class="inv-view-cta" @click="payBill(viewDoc)" style="font-size:12px;padding:7px 14px">₹ Record Payment</button>
+                    <button class="inv-view-cta" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''" @click="payBill(viewDoc)" style="font-size:12px;padding:7px 14px">₹ Record Payment</button>
                   </div>
                 </div>
               </template>
@@ -887,7 +889,7 @@
       </div>
       <div class="inv-dfooter">
         <button class="form-btn form-btn-outline" @click="addrModal.open=false" :disabled="addrModal.saving">Cancel</button>
-        <button class="form-btn form-btn-primary" :disabled="addrModal.saving" @click="saveNewAddress">
+        <button class="form-btn form-btn-primary" :disabled="addrModal.saving || !$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" @click="saveNewAddress">
           {{ addrModal.saving ? 'Saving…' : 'Save Address' }}
         </button>
       </div>
@@ -947,7 +949,7 @@ function matchIndianState(raw) {
 
 const { toast } = useToast();
 const route = useRoute();
-const { canWrite } = usePermissions();
+const { canCreate, canEdit, canDelete } = usePermissions();
 const { confirm } = useConfirm();
 const { printDoc, renderDocument, setCompany, refreshBranding } = useLivePreview();
 async function printBILL(d) { try { await refreshBranding(); } catch {} printDoc({ ...d, items: viewItems.value, taxes: viewTaxes.value }, { title: "BILL", partyLabel: "Vendor", partyField: "supplier_name", companyName: d?.company || "" }); }
@@ -1747,7 +1749,7 @@ async function emailBill(b) {
   });
 }
 async function payBill(b) {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canCreate("payments")) { toast("Read-only access", "error"); return; }
   const paid = await openPayment({
     direction: "pay", doctype: "Purchase Invoice", name: b.name,
     party: b.supplier, partyLabel: b.supplier_name || b.supplier,
@@ -1825,7 +1827,7 @@ async function cancelBill(b) {
   }
 }
 async function deleteBill(b) {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Delete Bill", body: `Permanently delete ${b.name}? This cannot be undone.`, okLabel: "Delete" })) return;
   try {
     await apiDelete("Purchase Invoice", b.name);
@@ -1836,7 +1838,7 @@ async function deleteBill(b) {
 
 // ── Bulk actions ──────────────────────────────────────────────────────────
 async function bulkDelete() {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   const drafts = sorted.value.filter(b => selected.value.has(b.name) && b.docstatus === 0);
   if (!drafts.length) { toast.info("No draft bills selected"); return; }
   if (!await confirm({ title: "Delete Drafts", body: `Delete ${drafts.length} draft bill(s)?`, okLabel: "Delete" })) return;
@@ -1846,7 +1848,7 @@ async function bulkDelete() {
   await load();
 }
 async function bulkCancel() {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("bills")) { toast("Not permitted", "error"); return; }
   const submitted = sorted.value.filter(b => selected.value.has(b.name) && b.docstatus === 1);
   if (!submitted.length) { toast.info("No submitted bills selected"); return; }
   let done = 0, failed = 0;
@@ -1859,7 +1861,7 @@ async function bulkCancel() {
   await load();
 }
 async function bulkPayment() {
-  if (!canWrite("bills")) { toast.error("Read-only access"); return; }
+  if (!canCreate("payments")) { toast.error("Read-only access"); return; }
   const payable = sorted.value.filter(b =>
     selected.value.has(b.name) && b.docstatus === 1 && flt(b.outstanding_amount) > 0
   );
@@ -1893,7 +1895,7 @@ async function bulkPayment() {
   }
 }
 async function bulkEmail() {
-  if (!canWrite("bills")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("bills")) { toast("Read-only access", "error"); return; }
   const subs = sorted.value.filter(b => selected.value.has(b.name) && b.docstatus === 1);
   if (!subs.length) { toast.info("No submitted bills selected"); return; }
   let sent = 0;

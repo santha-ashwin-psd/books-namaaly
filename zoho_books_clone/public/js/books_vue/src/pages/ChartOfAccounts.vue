@@ -42,7 +42,7 @@
         <button class="b-btn b-btn-ghost" @click="collapseAllGroups"><span v-html="icon('chevR',13)"></span> Collapse All</button>
       </template>
     </div>
-    <button class="b-btn b-btn-primary" @click="openAdd()" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> Add Account</button>
+    <button class="b-btn b-btn-primary" @click="openAdd()" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> Add Account</button>
   </div>
 
   <div class="b-card coa-split-card" style="padding:0;overflow:hidden">
@@ -121,13 +121,13 @@
           </div>
             <div style="align-content: center;">
               <button v-if="!selectedAccount.is_group && selectedAccount.source==='frappe'" class="b-icon-btn" @click="openLedger(selectedAccount)" title="View Full Ledger" style="color:#2563eb"><span v-html="icon('book',15)"></span></button>
-              <button class="b-icon-btn" style="margin-left:2px" @click="openEdit(selectedAccount.name)" title="Edit"><span v-html="icon('edit',15)"></span></button>
-              <button v-if="selectedAccount.source!=='frappe'" class="b-icon-btn danger" @click="confirmDelete(selectedAccount.name)" title="Delete"><span v-html="icon('trash',15)"></span></button>
+              <button class="b-icon-btn" style="margin-left:2px" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Edit'" @click="openEdit(selectedAccount.name)"><span v-html="icon('edit',15)"></span></button>
+              <button v-if="selectedAccount.source!=='frappe'" class="b-icon-btn danger" :disabled="!$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'" @click="confirmDelete(selectedAccount.name)"><span v-html="icon('trash',15)"></span></button>
             </div>
             </div>
           </div>
 
-          <div class="coa-detail-edit"><span v-html="icon('edit',12)"></span> <a @click="openEdit(selectedAccount.name)">Edit</a></div>
+          <div v-if="$canEdit('accounts')" class="coa-detail-edit"><span v-html="icon('edit',12)"></span> <a @click="openEdit(selectedAccount.name)">Edit</a></div>
 
           
 
@@ -287,6 +287,7 @@
               <span class="coa-mc-action-lbl">Ledger</span>
             </button>
             <button class="b-icon-btn coa-mc-action-btn"
+              :disabled="!$canEdit('accounts')"
               @click.stop="openEdit(row.name)"
               title="Edit">
               <span v-html="icon('edit',13)"></span>
@@ -294,6 +295,7 @@
             </button>
             <button v-if="row.source!=='frappe'"
               class="b-icon-btn danger coa-mc-action-btn"
+              :disabled="!$canDelete('accounts')"
               @click.stop="confirmDelete(row.name)"
               title="Delete">
               <span v-html="icon('trash',13)"></span>
@@ -537,8 +539,10 @@ import { icon } from "../utils/icons.js";
 import { flt } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import DocLink from "../components/DocLink.vue";
+import { usePermissions } from "../composables/usePermissions.js";
 
 const { toast } = useToast();
+const { canCreate, canEdit, canDelete } = usePermissions();
 
 const TYPE_META_COA = {
   Asset:     { color: "#0C8599", bg: "#E0F7FA", dr: true  },
@@ -796,6 +800,7 @@ function openEdit(acctName) {
 }
 
 async function saveAccount() {
+  if (!(editingName.value ? canEdit("accounts") : canCreate("accounts"))) { toast("Read-only access", "error"); return; }
   if (!form.name.trim())  { toast("Account name is required", "error"); return; }
   if (!form.root_type)    { toast("Root Type is required", "error");    return; }
   drawerSaving.value = true;
@@ -837,9 +842,13 @@ async function saveAccount() {
   }
 }
 
-function confirmDelete(name) { deleteTarget.value = name; showDel.value = true; }
+function confirmDelete(name) {
+  if (!canDelete("accounts")) { toast("Not permitted", "error"); return; }
+  deleteTarget.value = name; showDel.value = true;
+}
 
 async function doDelete() {
+  if (!canDelete("accounts")) { toast("Not permitted", "error"); showDel.value = false; return; }
   const name = deleteTarget.value;
   try {
     await apiPOST("zoho_books_clone.api.books_data.save_account", { op: "delete", name });

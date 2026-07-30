@@ -45,7 +45,7 @@
       <template v-if="selectedUnreconciled.length">
         <label style="font-size:13px;color:#374151">Clearance Date</label>
         <input v-model="clearanceDate" type="date" class="br-input" style="width:150px" />
-        <button class="br-btn-primary" :disabled="reconciling||!clearanceDate" @click="markReconciled">
+        <button class="br-btn-primary" :disabled="reconciling||!clearanceDate||!$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="markReconciled">
           <span v-html="icon('check',13)"></span> {{ reconciling?'Saving…':`Mark ${selectedUnreconciled.length} Reconciled` }}
         </button>
       </template>
@@ -103,7 +103,7 @@
                         <span>{{ m.party_name || m.party }} · {{ fmtDate(m.payment_date) }} · {{ m.mode_of_payment||'—' }}</span>
                       </div>
                       <div class="br-suggest-amt">{{ fmtCur(m.paid_amount) }}</div>
-                      <button class="br-match-confirm" @click="confirmMatch(t, m)" :disabled="matchingFor===m.name">
+                      <button class="br-match-confirm" @click="confirmMatch(t, m)" :disabled="matchingFor===m.name || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">
                         {{ matchingFor===m.name ? '…' : '✓ Match' }}
                       </button>
                     </div>
@@ -160,7 +160,7 @@
                 </div>
                 <div class="br-suggest-info"><span>{{ m.party_name || m.party }} · {{ fmtDate(m.payment_date) }} · {{ m.mode_of_payment||'—' }}</span></div>
                 <div class="br-suggest-amt">{{ fmtCur(m.paid_amount) }}</div>
-                <button class="br-match-confirm" @click="confirmMatch(t, m)" :disabled="matchingFor===m.name">
+                <button class="br-match-confirm" @click="confirmMatch(t, m)" :disabled="matchingFor===m.name || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">
                   {{ matchingFor===m.name ? '…' : '✓ Match' }}
                 </button>
               </div>
@@ -293,7 +293,7 @@ async function markReconciled(){
   try{
     for(const name of names){
       try{
-        await apiPOST("zoho_books_clone.api.docs.reconcile_bank_transaction",{bank_transaction_name:name});
+        await apiPOST("zoho_books_clone.api.docs.reconcile_bank_transaction",{bank_transaction_name:name},{module:"banking",action:"edit"});
         ok++;
       }catch{}
     }
@@ -320,7 +320,8 @@ async function confirmMatch(t, m) {
   matchingFor.value = m.name;
   try {
     await apiPOST("zoho_books_clone.api.docs.reconcile_bank_transaction",
-      { bank_transaction_name: t.name, payment_entry_name: m.name });
+      { bank_transaction_name: t.name, payment_entry_name: m.name },
+      { module: "banking", action: "edit" });
     toast.success(`${t.name} matched to ${m.name}`);
     suggestions[t.name] = null;
     await load();

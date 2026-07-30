@@ -230,10 +230,10 @@
           <div class="add-footer-status">{{ isNew ? 'New asset — unsaved changes' : 'Editing: ' + (asset.name || '') }}</div>
           <div class="add-footer-actions">
             <button class="add-btn-cancel" @click="cancelGuarded">Cancel</button>
-            <button class="add-btn-draft" :disabled="saving" @click="saveAsset('Draft')">
+            <button class="add-btn-draft" :disabled="saving || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))" @click="saveAsset('Draft')">
               <span v-html="icon('save',13)"></span> Save Draft
             </button>
-            <button class="add-btn-more" :disabled="saving" @click="saveAsset('Submitted')">
+            <button class="add-btn-more" :disabled="saving || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))" @click="saveAsset('Submitted')">
               <span v-html="icon('check',13)"></span> {{ saving ? 'Saving…' : 'Save & Submit' }}
             </button>
           </div>

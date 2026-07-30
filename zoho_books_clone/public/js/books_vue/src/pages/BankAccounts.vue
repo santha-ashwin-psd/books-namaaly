@@ -8,7 +8,7 @@
       </div>
       <div class="ba-primary-btn">
         <button class="ba-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
-        <button class="ba-btn-primary" @click="openNew" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Account</button>
+        <button class="ba-btn-primary" @click="openNew" :disabled="!$canCreate('banking')" :title="!$canCreate('banking') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Account</button>
       </div>
     </div>
 
@@ -75,10 +75,10 @@
         <!-- kebab dropdown -->
         <div v-if="openMenuName===acc.name" class="ba-menu" @click.stop>
           <button class="ba-menu-item" @click="openView(acc)"><span v-html="icon('eye',13)"></span> View</button>
-          <button class="ba-menu-item" @click="openEdit(acc)"><span v-html="icon('edit',13)"></span> Edit</button>
-          <button v-if="!acc.is_default" class="ba-menu-item" @click="setDefault(acc)"><span v-html="icon('sparkle',13)"></span> Set as Default</button>
+          <button class="ba-menu-item" :disabled="!$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="openEdit(acc)"><span v-html="icon('edit',13)"></span> Edit</button>
+          <button v-if="!acc.is_default" class="ba-menu-item" :disabled="!$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="setDefault(acc)"><span v-html="icon('sparkle',13)"></span> Set as Default</button>
           <div class="ba-menu-sep"></div>
-          <button class="ba-menu-item danger" @click="confirmDelete(acc)"><span v-html="icon('trash',13)"></span> Delete</button>
+          <button class="ba-menu-item danger" :disabled="!$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''" @click="confirmDelete(acc)"><span v-html="icon('trash',13)"></span> Delete</button>
         </div>
       </div>
     </div>
@@ -90,7 +90,7 @@
         <div style="font-weight:600;color:#374151;margin-bottom:4px">{{ hasFilters ? 'No matching accounts' : 'No bank accounts yet' }}</div>
         <div style="color:#9ca3af;font-size:12.5px;margin-bottom:16px">{{ hasFilters ? 'Try a different filter or search term' : 'Add your first bank account to get started' }}</div>
         <button v-if="hasFilters" class="ba-btn-ghost" @click="clearFilters">Clear filters</button>
-        <button v-else class="ba-btn-primary" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> Add Account</button>
+        <button v-else class="ba-btn-primary" :disabled="!$canCreate('banking')" :title="!$canCreate('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> Add Account</button>
       </div>
     </div>
 
@@ -240,10 +240,10 @@
         </div>
 
         <div class="ba-dfooter">
-          <button class="ba-btn-danger-ghost" @click="confirmDelete(viewDoc)"><span v-html="icon('trash',13)"></span> Delete</button>
+          <button class="ba-btn-danger-ghost" :disabled="!$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''" @click="confirmDelete(viewDoc)"><span v-html="icon('trash',13)"></span> Delete</button>
           <div style="margin-left:auto;display:flex;gap:8px">
             <button class="ba-btn-ghost" @click="viewOpen=false">Close</button>
-            <button class="ba-btn-primary" @click="openEdit(viewDoc)"><span v-html="icon('edit',13)"></span> Edit</button>
+            <button class="ba-btn-primary" :disabled="!$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="openEdit(viewDoc)"><span v-html="icon('edit',13)"></span> Edit</button>
           </div>
         </div>
       </template>
@@ -432,7 +432,8 @@ async function saveAccount() {
       opening_balance: flt(form.opening_balance),
     };
     if (editingName.value) payload.existing_name = editingName.value;
-    const saved = await apiPOST("zoho_books_clone.api.banking.save_bank_account", payload);
+    const saved = await apiPOST("zoho_books_clone.api.banking.save_bank_account", payload,
+      { module: "banking", action: editingName.value ? "edit" : "create" });
     const nm = saved?.message?.name || saved?.name || form.account_name;
     toast.success(`Bank account ${nm} saved`);
     drawerOpen.value = false;
@@ -457,7 +458,7 @@ async function setDefault(a) {
       gl_account: full.gl_account || "", currency: full.currency || "INR",
       is_default: 1, company: full.company || (await resolveCompany()),
       opening_balance: flt(full.opening_balance),
-    });
+    }, { module: "banking", action: "edit" });
     toast.success(`${a.account_name || a.name} set as default`);
     await load();
   } catch (e) {
@@ -475,7 +476,8 @@ async function confirmDelete(a) {
   });
   if (!ok) return;
   try {
-    await apiPOST("zoho_books_clone.api.banking.delete_bank_account", { name: a.name });
+    await apiPOST("zoho_books_clone.api.banking.delete_bank_account", { name: a.name },
+      { module: "banking", action: "delete" });
     toast.success(`${a.account_name || a.name} deleted`);
     viewOpen.value = false;
     await load();
@@ -556,6 +558,7 @@ onMounted(load);
 .ba-menu{position:absolute;top:52px;right:14px;z-index:60;cursor:default;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.14);padding:6px;min-width:168px;}
 .ba-menu-item{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:none;border-radius:7px;padding:8px 10px;font:inherit;font-size:13px;color:#334155;cursor:pointer;text-align:left;}
 .ba-menu-item:hover{background:#f1f5f9;}
+.ba-menu-item:disabled{opacity:.45;cursor:not-allowed;}.ba-menu-item:disabled:hover{background:transparent;}
 .ba-menu-item.danger{color:#dc2626;}.ba-menu-item.danger:hover{background:#fef2f2;}
 .ba-menu-sep{height:1px;background:#f1f5f9;margin:4px 0;}
 .ba-menu-backdrop{position:fixed;inset:0;z-index:20;}

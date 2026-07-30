@@ -51,17 +51,17 @@
           <SearchableSelect v-model="a.attribute" :options="attributeOptions" placeholder="Attribute"
             :createable="true" @create="createAttribute($event, i)" class="iv-attr-name" />
           <input v-model="a.valuesText" class="iv-input iv-attr-vals" placeholder="Values, comma-separated (Red, Green, Blue)" />
-          <button class="iv-icon-btn iv-icon-danger" @click="removeAttrRow(i)" title="Remove" :disabled="!$canWrite('inventory')">
+          <button class="iv-icon-btn iv-icon-danger" @click="removeAttrRow(i)" title="Remove" :disabled="!$canEdit('inventory')">
             <span v-html="icon('trash', 14)"></span>
           </button>
         </div>
         <div class="iv-attr-actions">
-          <button class="b-btn b-btn-ghost" @click="addAttrRow" :disabled="!$canWrite('inventory')">
+          <button class="b-btn b-btn-ghost" @click="addAttrRow" :disabled="!$canEdit('inventory')">
             <span v-html="icon('plus', 13)"></span> Add attribute
           </button>
           <div class="iv-attr-actions-right">
             <span class="iv-gen-preview">{{ comboCount }} variant{{ comboCount === 1 ? '' : 's' }} will exist after regenerating</span>
-            <button class="b-btn b-btn-primary" :disabled="regenerating || !comboCount || !$canWrite('inventory')" @click="saveAndRegenerate">
+            <button class="b-btn b-btn-primary" :disabled="regenerating || !comboCount || !$canEdit('inventory')" @click="saveAndRegenerate">
               <span v-html="icon('refresh', 13)"></span> {{ regenerating ? 'Regenerating…' : 'Save & Regenerate' }}
             </button>
           </div>
@@ -92,7 +92,7 @@
           <label class="iv-radio"><input type="radio" value="selected" v-model="bulk.scope" /> Selected ({{ selectedCodes.length }})</label>
           <label class="iv-radio"><input type="radio" value="all" v-model="bulk.scope" /> All ({{ variants.length }})</label>
         </div>
-        <button class="b-btn b-btn-primary" :disabled="applyingBulk || !$canWrite('inventory') || (bulk.scope === 'selected' && !selectedCodes.length)"
+        <button class="b-btn b-btn-primary" :disabled="applyingBulk || !$canEdit('inventory') || (bulk.scope === 'selected' && !selectedCodes.length)"
           @click="applyBulk">
           {{ applyingBulk ? 'Applying…' : 'Apply' }}
         </button>
@@ -128,7 +128,7 @@
               </td>
               <td class="td-variant" data-label="Variant">
                 <div class="iv-var-name">
-                  <input v-model="v.item_name" class="iv-input iv-name-input" @input="markDirty(v.name)" :disabled="!$canWrite('inventory')" />
+                  <input v-model="v.item_name" class="iv-input iv-name-input" @input="markDirty(v.name)" :disabled="!$canEdit('inventory')" />
                 </div>
                 <div class="iv-var-attrs">
                   <span v-for="a in v.attributes" :key="a.attribute" class="iv-attr-chip">{{ a.attribute_value }}</span>
@@ -137,17 +137,17 @@
               </td>
               <td class="td-sku" data-label="SKU">
                 <input v-model="v.item_code" class="iv-input iv-sku-input mono-sm"
-                  @input="markDirty(v.name)" :disabled="!$canWrite('inventory') || v.in_use"
+                  @input="markDirty(v.name)" :disabled="!$canEdit('inventory') || v.in_use"
                   :title="v.in_use ? 'Used in transactions — code can\'t change' : ''" />
                 <div v-if="v.in_use" class="iv-inuse-tag">in use</div>
               </td>
               <td class="td-sell ta-r" data-label="Selling ₹">
                 <input v-model.number="v.standard_rate" type="number" min="0" step="0.01"
-                  class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canWrite('inventory')" />
+                  class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canEdit('inventory')" />
               </td>
               <td class="td-buy ta-r" data-label="Buying ₹">
                 <input v-model.number="v.standard_buying_rate" type="number" min="0" step="0.01"
-                  class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canWrite('inventory')" />
+                  class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canEdit('inventory')" />
               </td>
               <td v-if="template.is_stock_item" class="td-stock ta-r" data-label="Stock">
                 <div class="iv-stock-qty" :class="{ 'iv-stock-zero': !v.actual_qty }">{{ fmtQty(v.actual_qty) }}</div>
@@ -155,7 +155,7 @@
               </td>
               <td class="td-active ta-c" data-label="Active">
                 <label class="iv-switch">
-                  <input type="checkbox" :checked="!v.disabled" @change="toggleActive(v)" :disabled="!$canWrite('inventory')" />
+                  <input type="checkbox" :checked="!v.disabled" @change="toggleActive(v)" :disabled="!$canEdit('inventory')" />
                   <span class="iv-switch-track"></span>
                 </label>
               </td>
@@ -164,7 +164,7 @@
                   <span v-html="icon('save', 14)"></span>
                 </button>
                 <button class="iv-icon-btn iv-icon-danger" @click="askDelete(v)"
-                  :disabled="!$canWrite('inventory') || v.in_use"
+                  :disabled="!$canDelete('inventory') || v.in_use"
                   :title="v.in_use ? 'Used in transactions — disable instead' : 'Delete variant'">
                   <span v-html="icon('trash', 14)"></span>
                 </button>

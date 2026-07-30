@@ -29,7 +29,7 @@
       </div>
       <div style="display:flex;gap:8px;">
         <button class="ob-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
-        <button class="ob-btn-primary" @click="openNew"><span v-html="icon('plus',13)"></span> New Opening Stock Entry</button>
+        <button class="ob-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Opening Stock Entry</button>
       </div>
     </div>
 
@@ -67,7 +67,7 @@
               <td><span class="ob-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
               <td @click.stop style="display:flex;gap:4px">
                 <button class="ob-act-btn" @click="openView(e)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="e.docstatus===0" class="ob-act-btn" @click="openEdit(e)" title="Edit"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===0" class="ob-act-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(e)" title="Edit"><span v-html="icon('edit',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!filtered.length">
@@ -75,7 +75,7 @@
                 <div style="font-size:32px;margin-bottom:8px">🗃️</div>
                 <div style="font-weight:600;margin-bottom:4px">No opening stock entries yet</div>
                 <div style="font-size:13px;color:#9ca3af;margin-bottom:12px">Set starting balances and batches before go-live</div>
-                <button class="ob-btn-primary" @click="openNew"><span v-html="icon('plus',13)"></span> New Opening Stock Entry</button>
+                <button class="ob-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Opening Stock Entry</button>
               </td>
             </tr>
           </template>
@@ -269,8 +269,8 @@
       </div>
       <div class="ob-dfooter">
         <button class="ob-btn-cancel" @click="drawerOpen=false">Cancel</button>
-        <button class="ob-btn-save" :disabled="drawerSaving" @click="saveEntry(0)"><span v-html="icon('save',13)"></span> {{ drawerSaving?'Saving…':'Save Draft' }}</button>
-        <button class="ob-btn-primary" :disabled="drawerSaving" @click="saveEntry(1)"><span v-html="icon('check',13)"></span> {{ drawerSaving?'Submitting…':'Submit' }}</button>
+        <button class="ob-btn-save" :disabled="drawerSaving || !(editingName ? $canEdit('inventory') : $canCreate('inventory'))" @click="saveEntry(0)"><span v-html="icon('save',13)"></span> {{ drawerSaving?'Saving…':'Save Draft' }}</button>
+        <button class="ob-btn-primary" :disabled="drawerSaving || !(editingName ? $canEdit('inventory') : $canCreate('inventory'))" @click="saveEntry(1)"><span v-html="icon('check',13)"></span> {{ drawerSaving?'Submitting…':'Submit' }}</button>
       </div>
     </div>
 
@@ -323,8 +323,8 @@
             </div>
           </div>
           <div v-if="viewDoc.docstatus===0" style="display:flex;justify-content:flex-end;gap:8px">
-            <button class="ob-btn-cancel" @click="openEdit(viewDoc); viewOpen=false"><span v-html="icon('edit',13)"></span> Edit</button>
-            <button class="ob-btn-primary" @click="submitEntry(viewDoc.name)"><span v-html="icon('check',13)"></span> Submit</button>
+            <button class="ob-btn-cancel" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(viewDoc); viewOpen=false"><span v-html="icon('edit',13)"></span> Edit</button>
+            <button class="ob-btn-primary" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="submitEntry(viewDoc.name)"><span v-html="icon('check',13)"></span> Submit</button>
           </div>
         </div>
       </template>

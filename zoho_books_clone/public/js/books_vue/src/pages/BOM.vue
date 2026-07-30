@@ -6,7 +6,7 @@
     <div class="bomx-list-panel">
       <div class="bomx-panel-hdr">
         <span class="bomx-panel-title">📋 All BOMs <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
       <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
         <option value="">All Status</option>
@@ -54,7 +54,7 @@
         <div class="bomx-empty-icon">📄</div>
         <div class="bomx-empty-title">Select a BOM</div>
         <div class="bomx-empty-sub">Choose a Bill of Materials from the list to view components, costs, and versions.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create BOM</button>
+        <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create BOM</button>
       </div>
 
       <template v-else>
@@ -77,18 +77,18 @@
               <div class="bomx-hdr-actions">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
                 <button v-if="!isNew && isLatestInChain && (bom.docstatus===1 || bom.docstatus===2)"
-                        class="bomx-btn bomx-btn-light" @click="newVersion" :disabled="submitting">
+                        class="bomx-btn bomx-btn-light" @click="newVersion" :disabled="submitting || !$canCreate('inventory')">
                   {{ submitting ? 'Creating…' : '+ New Version' }}
                 </button>
                 <button v-if="!isNew && isLatestInChain && bom.docstatus===1"
                         class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(255,255,255,.4);background-color:white;"
-                        @click="cancelBom" :disabled="submitting || cancelling">
+                        @click="cancelBom" :disabled="submitting || cancelling || !$canDelete('inventory')">
                   {{ cancelling ? 'Cancelling…' : 'Cancel BOM' }}
                 </button>
-                <button v-if="!isNew && bom.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitBom" :disabled="submitting || saving">
+                <button v-if="!isNew && bom.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitBom" :disabled="submitting || saving || !$canEdit('inventory')">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save BOM' : 'Save Changes') }}
                 </button>
               </div>
@@ -556,9 +556,9 @@
 
           <!-- Footer -->
           <div class="bomx-footer">
-            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteFromDetail" v-if="!isNew && bom.docstatus===0">Delete BOM</button>
+            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" @click="deleteFromDetail" v-if="!isNew && bom.docstatus===0">Delete BOM</button>
             <div style="flex:1"></div>
-            <button v-if="!readOnly" class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || loading">
+            <button v-if="!readOnly" class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save BOM' : 'Save Changes') }}
             </button>

@@ -49,3 +49,9 @@ zoho_books_clone.patches.v1_8.flip_qc_hard_block_default
 # template entirely, so the Asset Category "Accounting" section's account
 # pickers were permanently empty for every company, old and new.
 zoho_books_clone.patches.v1_9.seed_fixed_asset_accounts
+
+# Phase 1 of the granular roles & permissions rework: back-fills the new
+# lvl_<module> Select fields on Books Company Member from the existing
+# books_role/is_company_admin/mod_<module> fields. New columns, so must
+# run after schema sync (post_model_sync).
+zoho_books_clone.patches.v1_10.backfill_permission_levels

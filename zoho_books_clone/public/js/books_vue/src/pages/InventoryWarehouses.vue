@@ -60,7 +60,7 @@
       <button class="wh-action-btn" @click="load">
         <span v-html="icon('refresh', 14)"></span>
       </button>
-      <button class="wh-action-btn wh-action-btn--primary" @click="openAddChild">
+      <button class="wh-action-btn wh-action-btn--primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddChild">
         <span v-html="icon('plus', 13)"></span><span class="wh-btn-label"> New Warehouse</span>
       </button>
     </div>
@@ -148,13 +148,13 @@
       <div v-if="!treeRoots.length" class="wh-tree-empty">
         <div style="font-size:28px;margin-bottom:6px">🏭</div>
         <div style="font-size:12px;color:#94a3b8">No warehouse groups yet</div>
-        <button class="wh-action-btn wh-action-btn--primary" style="margin-top:10px;font-size:12px" @click="openAddGroup">+ Create Group</button>
+        <button class="wh-action-btn wh-action-btn--primary" style="margin-top:10px;font-size:12px" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddGroup">+ Create Group</button>
       </div>
     </div>
 
     <!-- Tree footer actions -->
     <div class="wh-tree-footer">
-      <button class="wh-action-btn wh-action-btn--primary" style="width:100%;justify-content:center" @click="openAddGroup">
+      <button class="wh-action-btn wh-action-btn--primary" style="width:100%;justify-content:center" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddGroup">
         <span v-html="icon('plus', 12)"></span> New Warehouse Group
       </button>
     </div>
@@ -167,7 +167,7 @@
       <div class="wh-empty-icon">🏭</div>
       <div class="wh-empty-title">No warehouse groups yet</div>
       <div class="wh-empty-sub">Create a group warehouse first to start organizing stock</div>
-      <button class="wh-action-btn wh-action-btn--primary" style="margin-top:18px" @click="openAddGroup">
+      <button class="wh-action-btn wh-action-btn--primary" style="margin-top:18px" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddGroup">
         <span v-html="icon('plus', 13)"></span> Create Warehouse Group
       </button>
     </div>
@@ -189,10 +189,10 @@
           <span v-if="childWarehouses.length" class="wh-stock-count">{{ childWarehouses.length }}</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="wh-action-btn" @click="openEdit(selectedWH)">
+          <button class="wh-action-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(selectedWH)">
             <span v-html="icon('edit', 13)"></span> Edit Group
           </button>
-          <button class="wh-action-btn wh-action-btn--danger" @click="confirmDel(selectedWH)">
+          <button class="wh-action-btn wh-action-btn--danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="confirmDel(selectedWH)">
             <span v-html="icon('trash', 13)"></span>
           </button>
         </div>
@@ -214,7 +214,7 @@
         <div style="font-size:32px;margin-bottom:8px">🏭</div>
         <div style="font-size:14px;font-weight:700;color:#334155;margin-bottom:4px">No warehouses in this group</div>
         <div style="font-size:13px;color:#94a3b8;margin-bottom:14px">Add a warehouse to start tracking stock</div>
-        <button class="wh-action-btn wh-action-btn--primary" @click="openAddChild">
+        <button class="wh-action-btn wh-action-btn--primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAddChild">
           <span v-html="icon('plus', 13)"></span> Add Warehouse
         </button>
       </div>
@@ -253,17 +253,18 @@
             <button
               class="wh-adj-btn"
               :class="{ 'wh-adj-btn--active': selectedChild?.name === child.name }"
+              :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''"
               @click="openNewAdjustment(child)"
             >
               <span v-html="icon('plus', 11)"></span> Add Stock
             </button>
-            <button v-if="!child.is_group" class="wh-action-btn" style="padding:5px 10px" @click="openTransfer(child)" title="Transfer stock to another warehouse">
+            <button v-if="!child.is_group" class="wh-action-btn" style="padding:5px 10px" :disabled="!$canCreate('inventory')" @click="openTransfer(child)" :title="!$canCreate('inventory') ? 'Read-only access' : 'Transfer stock to another warehouse'">
               <span v-html="icon('truck', 13)"></span>
             </button>
-            <button class="wh-action-btn" style="padding:5px 10px" @click="openEdit(child)">
+            <button class="wh-action-btn" style="padding:5px 10px" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(child)">
               <span v-html="icon('edit', 13)"></span>
             </button>
-            <button class="wh-action-btn wh-action-btn--danger" style="padding:5px 10px" @click="confirmDel(child)">
+            <button class="wh-action-btn wh-action-btn--danger" style="padding:5px 10px" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="confirmDel(child)">
               <span v-html="icon('trash', 13)"></span>
             </button>
           </div>
@@ -416,7 +417,7 @@
               <button v-if="r.has_batch_no" class="wh-smc-batch-toggle" @click="toggleBatches(r.item_code)">
                 {{ batchesFor(r.item_code).length }} batch{{ batchesFor(r.item_code).length===1?'':'es' }} {{ expandedRows[r.item_code] ? '▲' : '▼' }}
               </button>
-              <button v-if="adjustTargetWH" class="wh-adj-btn wh-smc-adj" @click="openAdjustment(r)">
+              <button v-if="adjustTargetWH" class="wh-adj-btn wh-smc-adj" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openAdjustment(r)">
                 <span v-html="icon('edit', 12)"></span> {{ r.has_batch_no ? 'Adjust Batches' : 'Adjust' }}
               </button>
             </div>
@@ -482,7 +483,7 @@
                   <span v-else class="wh-status-ok">✓ OK</span>
                 </td>
                 <td v-if="adjustTargetWH" class="wh-td wh-td-c" @click.stop>
-                  <button class="wh-adj-btn" @click="openAdjustment(r)">
+                  <button class="wh-adj-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openAdjustment(r)">
                     <span v-html="icon('edit', 12)"></span> {{ r.has_batch_no ? 'Adjust Batches' : 'Adjust' }}
                   </button>
                 </td>
@@ -507,7 +508,7 @@
                             <span v-else-if="b.expires_soon" class="wh-batch-flag wh-batch-flag--soon">Expires soon</span>
                           </td>
                           <td v-if="adjustTargetWH" @click.stop>
-                            <button class="wh-adj-btn" @click="openBatchAdjustment(r, b)">
+                            <button class="wh-adj-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openBatchAdjustment(r, b)">
                               <span v-html="icon('edit', 12)"></span> Adjust
                             </button>
                           </td>
@@ -602,7 +603,7 @@
         <div class="nim-dialog-footer">
           <button class="nim-btn nim-btn-ghost" @click="adjDrawer.open=false">Cancel</button>
           <button class="nim-btn" style="background:#2563eb;color:#fff;border-color:#2563eb"
-            :disabled="adjDrawer.saving || !adjDrawer.item_code || adjDrawer.new_qty==='' || adjDrawer.new_qty===null || !adjDrawer.reason || (adjDrawer.pick_item && adjDrawer.pickedHasBatch)"
+            :disabled="adjDrawer.saving || !adjDrawer.item_code || adjDrawer.new_qty==='' || adjDrawer.new_qty===null || !adjDrawer.reason || (adjDrawer.pick_item && adjDrawer.pickedHasBatch) || !$canEdit('inventory')"
             @click="submitAdjustment">
             {{ adjDrawer.saving ? 'Saving…' : 'Save Adjustment' }}
           </button>
@@ -673,7 +674,7 @@
           <div></div>
           <div style="display:flex;gap:10px">
             <button class="nim-btn nim-btn-ghost" @click="showDrawer=false">Cancel</button>
-            <button class="nim-btn nim-btn-primary" :disabled="saving" @click="saveWarehouse">
+            <button class="nim-btn nim-btn-primary" :disabled="saving || !(drawerMode === 'edit' ? $canEdit('inventory') : $canCreate('inventory'))" @click="saveWarehouse">
               <span v-html="icon('check')"></span> {{ saving ? 'Saving…' : 'Save' }}
             </button>
           </div>
@@ -712,7 +713,7 @@
           <div></div>
           <div style="display:flex;gap:10px">
             <button class="nim-btn nim-btn-ghost" @click="showTransfer=false">Cancel</button>
-            <button class="nim-btn nim-btn-primary" :disabled="transferSaving" @click="doTransfer">
+            <button class="nim-btn nim-btn-primary" :disabled="transferSaving || !$canCreate('inventory')" @click="doTransfer">
               <span v-html="icon('check')"></span> {{ transferSaving ? 'Processing…' : 'Create Transfer' }}
             </button>
           </div>
@@ -727,7 +728,7 @@
         <div style="font-size:14px;color:#868E96;margin-bottom:24px">Delete <b>{{ delTarget?.warehouse_name }}</b>? This cannot be undone.</div>
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button class="nim-btn nim-btn-ghost" @click="showDel=false">Cancel</button>
-          <button class="nim-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" @click="doDelete">Yes, Delete</button>
+          <button class="nim-btn" style="background:#C92A2A;color:#fff;border-color:#C92A2A" :disabled="!$canDelete('inventory')" @click="doDelete">Yes, Delete</button>
         </div>
       </div>
     </div>

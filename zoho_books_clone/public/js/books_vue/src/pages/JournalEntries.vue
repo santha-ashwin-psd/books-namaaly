@@ -51,7 +51,7 @@
         <input v-model="searchQ" placeholder="Search JE, narration..." style="border:none;outline:none;font-size:13px;background:transparent;width:180px"/>
       </div>
       <button class="b-btn b-btn-ghost" @click="load"><span v-html="icon('refresh',13)"></span> Refresh</button>
-      <button class="b-btn b-btn-primary" @click="openAdd" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Entry</button>
+      <button class="b-btn b-btn-primary" @click="openAdd" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''"><span v-html="icon('plus',13)"></span> New Entry</button>
     </div>
   </div>
 
@@ -93,7 +93,7 @@
         <span v-html="icon('refresh',15)"></span>
         Refresh
       </button>
-      <button class="jen-mob-btn jen-mob-btn--primary" @click="openAdd">
+      <button class="jen-mob-btn jen-mob-btn--primary" @click="openAdd" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''">
         <span v-html="icon('plus',15)"></span>
         New Entry
       </button>
@@ -121,7 +121,7 @@
             <div style="font-size:32px;margin-bottom:8px">📄</div>
             <div style="font-weight:600;margin-bottom:4px">{{searchQ?'No entries match':'No journal entries yet'}}</div>
             <div style="font-size:13px;color:#868e96;margin-bottom:12px">{{searchQ?'Try a different search':'Record adjustments, depreciation, accruals and more'}}</div>
-            <button v-if="!searchQ" class="b-btn b-btn-primary" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Entry</button>
+            <button v-if="!searchQ" class="b-btn b-btn-primary" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Entry</button>
           </td></tr>
         </template>
         <template v-else>
@@ -136,9 +136,9 @@
             <td style="text-align:center">
               <div style="display:flex;gap:4px;justify-content:center">
                 <button class="b-icon-btn" @click.stop="openView(e.name)" title="View"><span v-html="icon('eye',14)"></span></button>
-                <button v-if="e.status==='Draft'" class="b-icon-btn" @click.stop="openEdit(e.name)" title="Edit"><span v-html="icon('edit',14)"></span></button>
-                <button v-if="e.status==='Draft'" class="b-icon-btn danger" @click.stop="confirmAction(e.name,'delete')" title="Delete"><span v-html="icon('trash',14)"></span></button>
-                <button v-if="e.status==='Submitted'" class="b-icon-btn danger" @click.stop="confirmAction(e.name,'cancel')" title="Cancel"><span v-html="icon('cancel',14)"></span></button>
+                <button v-if="e.status==='Draft'" class="b-icon-btn" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(e.name)"><span v-html="icon('edit',14)"></span></button>
+                <button v-if="e.status==='Draft'" class="b-icon-btn danger" :disabled="!$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction(e.name,'delete')"><span v-html="icon('trash',14)"></span></button>
+                <button v-if="e.status==='Submitted'" class="b-icon-btn danger" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Cancel'" @click.stop="confirmAction(e.name,'cancel')"><span v-html="icon('cancel',14)"></span></button>
               </div>
             </td>
           </tr>
@@ -163,7 +163,7 @@
         <div class="jen-mc-empty-icon">📄</div>
         <div class="jen-mc-empty-title">{{searchQ?'No entries match':'No journal entries yet'}}</div>
         <div class="jen-mc-empty-sub">{{searchQ?'Try a different search':'Record adjustments, depreciation, accruals and more'}}</div>
-        <button v-if="!searchQ" class="b-btn b-btn-primary" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''" style="margin-top:10px" @click="openAdd">
+        <button v-if="!searchQ" class="b-btn b-btn-primary" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" style="margin-top:10px" @click="openAdd">
           <span v-html="icon('plus',13)"></span> New Entry
         </button>
       </div>
@@ -215,6 +215,7 @@
             </button>
             <button v-if="e.status==='Draft'"
               class="jen-mc-action-btn"
+              :disabled="!$canEdit('accounts')"
               @click.stop="openEdit(e.name)"
               title="Edit">
               <span v-html="icon('edit',13)"></span>
@@ -222,6 +223,7 @@
             </button>
             <button v-if="e.status==='Draft'"
               class="jen-mc-action-btn jen-mc-action-btn--danger"
+              :disabled="!$canDelete('accounts')"
               @click.stop="confirmAction(e.name,'delete')"
               title="Delete">
               <span v-html="icon('trash',13)"></span>
@@ -229,6 +231,7 @@
             </button>
             <button v-if="e.status==='Submitted'"
               class="jen-mc-action-btn jen-mc-action-btn--danger"
+              :disabled="!$canEdit('accounts')"
               @click.stop="confirmAction(e.name,'cancel')"
               title="Cancel">
               <span v-html="icon('cancel',13)"></span>
@@ -555,8 +558,8 @@
         <div class="coa-dfooter" style="justify-content:space-between">
           <div style="font-size:12px;color:#868e96"></div>
           <div style="display:flex;gap:10px">
-            <button v-if="viewEntry.status==='Draft'" class="b-btn b-btn-ghost" @click="viewOpen=false;openEdit(viewEntry.name)"><span v-html="icon('edit',13)"></span> Edit</button>
-            <button v-if="viewEntry.status==='Submitted'" class="b-btn b-btn-ghost" style="border-color:rgba(201,42,42,.4);color:#c92a2a" @click="viewOpen=false;confirmAction(viewEntry.name,'cancel')"><span v-html="icon('cancel',13)"></span> Cancel</button>
+            <button v-if="viewEntry.status==='Draft'" class="b-btn b-btn-ghost" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewEntry.name)"><span v-html="icon('edit',13)"></span> Edit</button>
+            <button v-if="viewEntry.status==='Submitted'" class="b-btn b-btn-ghost" style="border-color:rgba(201,42,42,.4);color:#c92a2a" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="viewOpen=false;confirmAction(viewEntry.name,'cancel')"><span v-html="icon('cancel',13)"></span> Cancel</button>
             <button class="b-btn b-btn-ghost" @click="viewOpen=false">Close</button>
           </div>
         </div>
@@ -590,8 +593,10 @@ import SearchableSelect from "../components/SearchableSelect.vue";
 import DocLink from "../components/DocLink.vue";
 import { useRoute } from "vue-router";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
+import { usePermissions } from "../composables/usePermissions.js";
 
 const { toast } = useToast();
+const { canCreate, canEdit, canDelete } = usePermissions();
 
 const JE_TYPE_COLOR   = { "Journal Entry": "je-type-info", Depreciation: "je-type-muted", Accrual: "je-type-info", Prepaid: "je-type-info", Provision: "je-type-muted", Contra: "je-type-muted", Rectification: "je-type-muted", "Opening Entry": "je-type-info" };
 const JE_STATUS_COLOR = { Draft: "je-s-draft", Submitted: "je-s-submitted", Cancelled: "je-s-cancelled" };
@@ -763,6 +768,7 @@ function removeLine(id) {
 }
 
 async function saveEntry(status) {
+  if (!(editingName.value ? canEdit("accounts") : canCreate("accounts"))) { toast("Read-only access", "error"); return; }
   if (!form.date)             { toast("Date is required", "error"); return; }
   if (!form.narration.trim()) { toast("Narration is required", "error"); return; }
   const hasLines = lines.value.some((l) => l.account && (flt(l.dr) > 0 || flt(l.cr) > 0));
@@ -808,13 +814,15 @@ function confirmAction(name, type) {
 
 async function doAction() {
   const name = confTarget.value;
+  if (confType.value === "delete" && !canDelete("accounts")) { toast("Not permitted", "error"); showConf.value = false; return; }
+  if (confType.value === "cancel" && !canEdit("accounts")) { toast("Read-only access", "error"); showConf.value = false; return; }
   try {
     if (confType.value === "delete") {
-      await apiDelete("Journal Entry", name);
+      await apiDelete("Journal Entry", name, { module: "accounts", action: "delete" });
       allEntries.value = allEntries.value.filter((e) => e.name !== name);
       toast("Entry deleted", "success");
     } else if (confType.value === "cancel") {
-      await apiPOST("frappe.client.cancel", { doctype: "Journal Entry", name });
+      await apiPOST("frappe.client.cancel", { doctype: "Journal Entry", name }, { module: "accounts", action: "cancel" });
       const idx = allEntries.value.findIndex((e) => e.name === name);
       if (idx >= 0) allEntries.value[idx] = { ...allEntries.value[idx], status: "Cancelled" };
       toast("Entry cancelled", "success");

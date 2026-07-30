@@ -1,14 +1,13 @@
 import frappe
 import frappe.sessions
 
-from zoho_books_clone.utils.tenancy import _is_bypass
+# Import MODULES (not the private _MOD_FIELDS) so this stays the single
+# source of truth shared with utils/access.py rather than a second list
+# that could drift out of sync with it.
+from zoho_books_clone.utils.access import MODULES, _membership as _access_membership
 
 _SYSTEM_USERS = {"Administrator", "Guest"}
-
-_MODULE_FIELDS = (
-    "mod_invoices", "mod_bills", "mod_payments", "mod_banking", "mod_inventory",
-    "mod_accounts", "mod_reports", "mod_customers", "mod_taxes", "mod_admin",
-)
+_MODULE_FIELDS = tuple(f"mod_{m}" for m in MODULES)
 
 
 def _get_company(user: str) -> str:
@@ -57,42 +56,24 @@ def _is_new_user(user: str) -> bool:
 def _get_membership(user: str) -> dict:
     """Return the user's Books Company Member fields needed for SPA permission gating.
 
-    Bypass roles (Administrator / System Manager) get all module flags = True
-    and a synthetic admin role, since they see everything anyway. Users without
-    a membership row get all flags = False — the SPA will route them to a
-    "no access" state rather than crash."""
-    flags = {f: False for f in _MODULE_FIELDS}
+    Delegates the actual capability resolution to utils.access._membership()
+    (Phase 1's granular level engine) so this file and access.py can never
+    drift apart on who's an admin / what "read-only" means / what a module
+    flag resolves to — there is exactly one place that logic lives now.
 
-    if _is_bypass(user):
-        return {
-            "books_role":       "Books Admin",
-            "is_company_admin": True,
-            "read_only":        False,
-            **{f: True for f in _MODULE_FIELDS},
-        }
-
-    row = frappe.db.get_value(
-        "Books Company Member",
-        {"user": user},
-        ["books_role", "is_company_admin", *_MODULE_FIELDS],
-        as_dict=True,
-    )
-    if not row:
-        return {"books_role": "", "is_company_admin": False, "read_only": True, **flags}
-
-    # Company admins implicitly get every module.
-    if row.get("is_company_admin"):
-        for f in _MODULE_FIELDS:
-            row[f] = 1
-
-    # Normalise int/None → bool for the JSON payload.
-    is_admin = bool(row.get("is_company_admin"))
+    Adds `levels`: {module: "None"|"View"|"Create"|"Edit"|"Delete"} on top of
+    the legacy mod_<module> booleans (kept as-is for existing SPA code —
+    usePermissions().can()/canWrite() still read those) so the frontend can
+    move to granular per-action gating (Phase 4) without a breaking payload
+    change today."""
+    m = _access_membership(user)
+    read_only = bool(m["readonly"] and not m["admin"])
     return {
-        "books_role":       row.get("books_role") or "",
-        "is_company_admin": is_admin,
-        # Read-only when the role is Books Viewer and not a company admin.
-        "read_only":        (row.get("books_role") == "Books Viewer") and not is_admin,
-        **{f: bool(row.get(f)) for f in _MODULE_FIELDS},
+        "books_role":       m["role"],
+        "is_company_admin": m["admin"],
+        "read_only":        read_only,
+        **{f"mod_{mod}": bool(m["mods"].get(mod)) for mod in MODULES},
+        "levels":           dict(m["levels"]),
     }
 
 

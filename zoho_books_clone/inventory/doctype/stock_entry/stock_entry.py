@@ -35,6 +35,17 @@ def _allow_negative_stock():
         return False
 
 
+def _segregate_scrap_gl():
+    """Manufacturing Settings > Segregate Scrap/By-Product GL (opt-in Phase 5
+    feature). Defaults to off (False) if unset or the setting hasn't been
+    migrated yet, so existing companies keep posting scrap through the same
+    inventory_account as FG until they explicitly opt in."""
+    try:
+        return bool(frappe.db.get_single_value("Manufacturing Settings", "segregate_scrap_gl"))
+    except Exception:
+        return False
+
+
 class StockEntry(Document):
 
     # ── Validate ──────────────────────────────────────────────────────────────
@@ -470,6 +481,11 @@ class StockEntry(Document):
         Material Transfer: no net GL impact (value stays in inventory).
         Manufacture:       DR Work In Progress / CR Inventory Asset  (raw materials consumed)
                             DR Inventory Asset / CR Work In Progress  (FG + scrap received)
+                            When Manufacturing Settings > Segregate Scrap/By-Product GL is
+                            on, the FG+scrap debit above splits into two lines by row
+                            (is_scrap_item): scrap debits get_scrap_account() (falling back
+                            to Inventory Asset if unconfigured) while FG keeps debiting
+                            Inventory Asset -- the WIP credit stays one combined line.
                             The two WIP legs net to the process-loss variance whenever
                             incoming value differs from outgoing value, which is the normal
                             case since FG/scrap value reflects the BOM cost roll-up rather
@@ -486,6 +502,7 @@ class StockEntry(Document):
             get_cogs_account,
             get_grir_account,
             get_inventory_account,
+            get_scrap_account,
             get_stock_adjustment_account,
             is_purchase_stock_receipt,
         )
@@ -567,28 +584,44 @@ class StockEntry(Document):
                     },
                 ]
             if flt(self.total_incoming_value):
-                gl_map += [
-                    {
-                        "account":      inventory_account,
-                        "debit":        flt(self.total_incoming_value),
-                        "credit":       0,
-                        "voucher_type": "Stock Entry",
-                        "voucher_no":   self.name,
-                        "posting_date": self.posting_date,
-                        "company":      self.company,
-                        "remarks":      f"Inventory addition — FG/scrap received from WIP {self.name}",
-                    },
-                    {
-                        "account":      wip_account,
-                        "debit":        0,
-                        "credit":       flt(self.total_incoming_value),
-                        "voucher_type": "Stock Entry",
-                        "voucher_no":   self.name,
-                        "posting_date": self.posting_date,
-                        "company":      self.company,
-                        "remarks":      f"WIP — finished goods/scrap received {self.name}",
-                    },
-                ]
+                # Split the combined FG+scrap debit by row (is_scrap_item)
+                # when Manufacturing Settings > Segregate Scrap/By-Product GL
+                # is on, so recoverable scrap posts to its own ledger account
+                # for audit/reporting instead of blending into FG inventory.
+                # The WIP credit leg stays a single total_incoming_value line
+                # either way -- the manufacturing variance write-off logic
+                # below nets against that one WIP leg and is untouched by
+                # this split.
+                from zoho_books_clone.accounts.inventory_gl import (
+                    build_manufacture_incoming_gl_lines,
+                )
+
+                incoming_rows = [r for r in self.items if r.t_warehouse]
+                scrap_incoming_value = sum(
+                    flt(r.amount) for r in incoming_rows if flt(getattr(r, "is_scrap_item", 0))
+                )
+
+                gl_map += build_manufacture_incoming_gl_lines(
+                    voucher_no=self.name,
+                    posting_date=self.posting_date,
+                    company=self.company,
+                    total_incoming_value=flt(self.total_incoming_value),
+                    scrap_incoming_value=flt(scrap_incoming_value),
+                    inventory_account=inventory_account,
+                    scrap_account=get_scrap_account(self.company),
+                    segregate_scrap_gl=_segregate_scrap_gl(),
+                )
+
+                gl_map.append({
+                    "account":      wip_account,
+                    "debit":        0,
+                    "credit":       flt(self.total_incoming_value),
+                    "voucher_type": "Stock Entry",
+                    "voucher_no":   self.name,
+                    "posting_date": self.posting_date,
+                    "company":      self.company,
+                    "remarks":      f"WIP — finished goods/scrap received {self.name}",
+                })
             if flt(self.operating_cost_absorbed):
                 # Fund WIP with the labor/overhead absorbed into this run's FG
                 # valuation (see work_order_engine.py::complete_work_order and

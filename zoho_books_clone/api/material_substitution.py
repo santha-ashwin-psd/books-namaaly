@@ -49,6 +49,16 @@ def _require_approver():
         )
 
 
+def _assert_work_order_company(work_order: str) -> None:
+    """Material Substitution Log has no `company` field (so tenancy.py's
+    permission_query_conditions never filters it) — scope via the parent
+    Work Order's company instead."""
+    from zoho_books_clone.utils.access import assert_company
+    company = frappe.db.get_value("Work Order", work_order, "company")
+    if company:
+        assert_company(company)
+
+
 # ─── Options ──────────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -73,6 +83,11 @@ def request_material_substitution(work_order: str, work_order_item_row: str,
                                    alternative_item_code: str, reason: str) -> dict:
     if frappe.session.user == "Guest":
         frappe.throw(_(""), frappe.PermissionError)
+
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Material Substitution Log", "create")
+    _assert_work_order_company(work_order)
+
     if not (reason or "").strip():
         frappe.throw(_("A reason is required for any material substitution."))
 
@@ -182,11 +197,16 @@ def list_material_substitution_logs(
 def approve_material_substitution(log_name: str, remarks: str = "") -> dict:
     _require_approver()
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Material Substitution Log", "write")
+
     doc = frappe.get_doc("Material Substitution Log", log_name)
     if doc.approval_status != "Pending":
         frappe.throw(_(
             "Only Pending substitutions can be approved. Current status: {0}."
         ).format(doc.approval_status))
+
+    _assert_work_order_company(doc.work_order)
 
     result = work_order_engine.apply_row_substitution(
         doc.work_order, doc.work_order_item_row, doc.alternative_item_code,
@@ -213,6 +233,9 @@ def approve_material_substitution(log_name: str, remarks: str = "") -> dict:
 def reject_material_substitution(log_name: str, rejection_reason: str) -> dict:
     _require_approver()
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Material Substitution Log", "write")
+
     if not (rejection_reason or "").strip():
         frappe.throw(_("Rejection Reason is required when rejecting a Material Substitution."))
 
@@ -221,6 +244,8 @@ def reject_material_substitution(log_name: str, rejection_reason: str) -> dict:
         frappe.throw(_(
             "Only Pending substitutions can be rejected. Current status: {0}."
         ).format(doc.approval_status))
+
+    _assert_work_order_company(doc.work_order)
 
     doc.approval_status = "Rejected"
     doc.approved_by = frappe.session.user

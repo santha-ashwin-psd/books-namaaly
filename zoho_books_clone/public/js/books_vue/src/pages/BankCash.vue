@@ -7,12 +7,12 @@
         <button
           class="cash-btn-ghost"
           v-if="totalUndeposited>0"
-          :disabled="!$canWrite('banking')"
-          :title="!$canWrite('banking') ? 'Read-only access' : ''"
+          :disabled="!$canCreate('banking')"
+          :title="!$canCreate('banking') ? 'Read-only access' : ''"
           @click="openDeposit"
         ><span v-html="icon('bank',14)"></span> Deposit <span class="cash-dep-count" style="margin-left:4px">{{ fmtCur(totalUndeposited) }}</span></button>
         <button class="cash-btn-ghost" v-if="cashAccounts.length" @click="openLedger()"><span v-html="icon('file',14)"></span> Ledger</button>
-        <button class="cash-btn-primary" :disabled="!$canWrite('banking')" :title="!$canWrite('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Cash Entry</button>
+        <button class="cash-btn-primary" :disabled="!$canCreate('banking')" :title="!$canCreate('banking') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Cash Entry</button>
       </div>
     </div>
 
@@ -41,7 +41,7 @@
     <div v-if="selected.size>0" class="cash-selbar">
       <span class="cash-sel-count">{{ selected.size }} selected</span>
       <button class="cash-sel-export" @click="exportCSV"><span v-html="icon('download',13)"></span> Export selected</button>
-      <button class="cash-sel-danger" @click="bulkDelete" :disabled="bulkBusy"><span v-html="icon('trash',13)"></span> Delete {{ selected.size }}</button>
+      <button class="cash-sel-danger" @click="bulkDelete" :disabled="bulkBusy || !$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> Delete {{ selected.size }}</button>
       <div style="flex:1"></div>
       <button class="cash-sel-clear" @click="selected=new Set()">Clear</button>
     </div>
@@ -267,7 +267,7 @@
           </template>
         </div>
         <div class="cash-dfooter">
-          <button class="cash-btn-danger-ghost" @click="deleteEntry(viewDoc)" :disabled="actionBusy"><span v-html="icon('trash',13)"></span> Delete</button>
+          <button class="cash-btn-danger-ghost" @click="deleteEntry(viewDoc)" :disabled="actionBusy || !$canDelete('banking')" :title="!$canDelete('banking') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> Delete</button>
           <div style="margin-left:auto"><button class="cash-btn-ghost" @click="viewOpen=false">Close</button></div>
         </div>
       </template>

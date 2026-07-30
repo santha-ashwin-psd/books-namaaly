@@ -5,7 +5,7 @@
       <div style="display:flex;gap:8px;">
         <button class="ia-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
         <button class="ia-btn-ghost" @click="exportCSV" :disabled="!sorted.length"><span v-html="icon('download',14)"></span> Export</button>
-        <button class="ia-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openNew()"><span v-html="icon('plus',13)"></span> New Adjustment</button>
+        <button class="ia-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew()"><span v-html="icon('plus',13)"></span> New Adjustment</button>
       </div>
     </div>
 

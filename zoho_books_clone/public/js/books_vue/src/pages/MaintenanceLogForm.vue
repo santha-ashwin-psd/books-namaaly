@@ -82,7 +82,7 @@
         <!-- Footer -->
         <div class="inv-dfooter">
           <button type="button" class="nim-btn" style="border:1px solid #e5e7eb" @click="close">Cancel</button>
-          <button type="button" class="nim-btn nim-btn-primary" :disabled="saving" @click="onSave">
+          <button type="button" class="nim-btn nim-btn-primary" :disabled="saving || !(isEdit ? $canEdit('inventory') : $canCreate('inventory'))" @click="onSave">
             <span v-html="icon('save',13)"></span> {{ saving ? 'Saving…' : (isEdit ? 'Update Log' : 'Save Log') }}
           </button>
         </div>

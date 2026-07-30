@@ -18,7 +18,7 @@
         <button class="sales-btn-ghost" @click="load" :disabled="loading">
           <span v-html="icon('refresh',14)"></span>
         </button>
-        <button class="sales-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" @click="openNew">
+        <button class="sales-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openNew">
           <span v-html="icon('plus',13)"></span> New Subscription
         </button>
       </div>
@@ -41,10 +41,10 @@
     <!-- ============================================================ BULK BAR -->
     <div v-if="selected.length" class="inv-bulk-bar">
       <span class="inv-bulk-count">{{ selected.length }} selected</span>
-      <button class="inv-bulk-btn" @click="bulkDo('pause')">Pause</button>
-      <button class="inv-bulk-btn" @click="bulkDo('resume')">Resume</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDo('cancel')">Cancel</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDo('delete')">Delete</button>
+      <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkDo('pause')">Pause</button>
+      <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkDo('resume')">Resume</button>
+      <button class="inv-bulk-btn inv-bulk-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDo('cancel')">Cancel</button>
+      <button class="inv-bulk-btn inv-bulk-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDo('delete')">Delete</button>
       <button class="inv-bulk-btn" @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
       <button class="inv-bulk-clear" @click="selected=[]">✕ Clear</button>
     </div>
@@ -94,9 +94,9 @@
               <td><span class="inv-status-badge" :class="statusClass(r.ui_status)">{{ r.ui_status }}</span></td>
               <td @click.stop style="text-align:right">
                 <button class="inv-act-btn" @click="openView(r)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="r.ui_status==='Active'" class="inv-act-btn" @click="quickAction(r,'pause')" title="Pause"><span v-html="icon('pause',13)"></span></button>
-                <button v-else-if="r.ui_status==='Paused'" class="inv-act-btn" @click="quickAction(r,'resume')" title="Resume"><span v-html="icon('play',13)"></span></button>
-                <button v-if="r.ui_status!=='Cancelled'&&r.ui_status!=='Completed'" class="inv-act-btn rec-act-danger" @click="quickAction(r,'delete')" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="r.ui_status==='Active'" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Pause'" @click="quickAction(r,'pause')"><span v-html="icon('pause',13)"></span></button>
+                <button v-else-if="r.ui_status==='Paused'" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Resume'" @click="quickAction(r,'resume')"><span v-html="icon('play',13)"></span></button>
+                <button v-if="r.ui_status!=='Cancelled'&&r.ui_status!=='Completed'" class="inv-act-btn rec-act-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click="quickAction(r,'delete')"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="10" class="rec-empty">
@@ -104,7 +104,7 @@
                 <div class="rec-empty-icon" v-html="icon('repeat',32)"></div>
                 <div class="rec-empty-title">No subscriptions yet</div>
                 <div class="rec-empty-sub">Create a recurring subscription to auto-generate invoices, bills, or journals on a schedule.</div>
-                <button class="sales-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px"><span v-html="icon('plus',13)"></span> Create your first subscription</button>
+                <button class="sales-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px"><span v-html="icon('plus',13)"></span> Create your first subscription</button>
               </div>
             </td></tr>
           </template>
@@ -124,7 +124,7 @@
           <div class="rec-empty-icon" v-html="icon('repeat',32)"></div>
           <div class="rec-empty-title">No subscriptions yet</div>
           <div class="rec-empty-sub">Create a recurring subscription to auto-generate invoices, bills, or journals on a schedule.</div>
-          <button class="sales-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px"><span v-html="icon('plus',13)"></span> Create your first subscription</button>
+          <button class="sales-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="openNew" style="margin-top:12px"><span v-html="icon('plus',13)"></span> Create your first subscription</button>
         </div>
         <div v-for="r in paged" :key="r.name" class="rec-mob-card" @click="openView(r)">
           <div class="rec-mob-card-top">
@@ -369,7 +369,7 @@
             <div class="add-footer-status">{{ editMode ? 'Editing: ' + form._name : 'New subscription — unsaved changes' }}</div>
             <div class="add-footer-actions">
               <button class="add-btn-cancel" @click="onOverlayClose" :disabled="drawerSaving">Cancel</button>
-              <button class="add-btn-more" :disabled="drawerSaving" @click="saveRec">
+              <button class="add-btn-more" :disabled="drawerSaving || !(editMode ? $canEdit('invoices') : $canCreate('invoices'))" :title="!(editMode ? $canEdit('invoices') : $canCreate('invoices')) ? 'Read-only access' : ''" @click="saveRec">
                 <span v-html="icon('check',13)"></span>
                 {{ drawerSaving ? 'Saving…' : (editMode ? 'Save Changes' : 'Create Subscription') }}
               </button>
@@ -408,12 +408,12 @@
 
         <!-- action bar -->
         <div class="rec-view-actbar">
-          <button class="rec-va-btn" @click="openEdit(viewDoc)" :disabled="viewDoc.ui_status==='Completed'||viewDoc.ui_status==='Cancelled'"><span v-html="icon('edit',13)"></span><div class="rec-va-btn-text"> Edit</div></button>
-          <button class="rec-va-btn" @click="runNow(viewDoc)" :disabled="viewDoc.ui_status!=='Active' || actionLoading"><span v-html="icon('play',13)"></span><div class="rec-va-btn-text"> Run Now</div></button>
-          <button v-if="viewDoc.ui_status==='Active'" class="rec-va-btn" @click="actionOn(viewDoc,'pause')" :disabled="actionLoading"><span v-html="icon('pause',13)"></span><div class="rec-va-btn-text"> Pause</div></button>
-          <button v-else-if="viewDoc.ui_status==='Paused'" class="rec-va-btn" @click="actionOn(viewDoc,'resume')" :disabled="actionLoading"><span v-html="icon('play',13)"></span><div class="rec-va-btn-text"> Resume</div></button>
-          <button class="rec-va-btn rec-va-warn" @click="actionOn(viewDoc,'cancel')" :disabled="actionLoading||viewDoc.ui_status==='Completed'||viewDoc.ui_status==='Cancelled'"><span v-html="icon('x',13)"></span><div class="rec-va-btn-text"> Cancel</div></button>
-          <button class="rec-va-btn rec-va-danger" @click="actionOn(viewDoc,'delete')" :disabled="actionLoading"><span v-html="icon('trash',13)"></span><div class="rec-va-btn-text"> Delete</div></button>
+          <button class="rec-va-btn" :disabled="viewDoc.ui_status==='Completed'||viewDoc.ui_status==='Cancelled'||!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="openEdit(viewDoc)"><span v-html="icon('edit',13)"></span><div class="rec-va-btn-text"> Edit</div></button>
+          <button class="rec-va-btn" :disabled="viewDoc.ui_status!=='Active' || actionLoading || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="runNow(viewDoc)"><span v-html="icon('play',13)"></span><div class="rec-va-btn-text"> Run Now</div></button>
+          <button v-if="viewDoc.ui_status==='Active'" class="rec-va-btn" :disabled="actionLoading || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="actionOn(viewDoc,'pause')"><span v-html="icon('pause',13)"></span><div class="rec-va-btn-text"> Pause</div></button>
+          <button v-else-if="viewDoc.ui_status==='Paused'" class="rec-va-btn" :disabled="actionLoading || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="actionOn(viewDoc,'resume')"><span v-html="icon('play',13)"></span><div class="rec-va-btn-text"> Resume</div></button>
+          <button class="rec-va-btn rec-va-warn" :disabled="actionLoading||viewDoc.ui_status==='Completed'||viewDoc.ui_status==='Cancelled'||!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="actionOn(viewDoc,'cancel')"><span v-html="icon('x',13)"></span><div class="rec-va-btn-text"> Cancel</div></button>
+          <button class="rec-va-btn rec-va-danger" :disabled="actionLoading || !$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="actionOn(viewDoc,'delete')"><span v-html="icon('trash',13)"></span><div class="rec-va-btn-text"> Delete</div></button>
         </div>
 
         <!-- timeline -->

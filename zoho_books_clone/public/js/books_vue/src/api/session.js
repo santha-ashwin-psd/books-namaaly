@@ -24,6 +24,12 @@ export const session = reactive({
     mod_customers:    false,
     mod_taxes:        false,
     mod_admin:        false,
+    // Per-module granular level ("None"|"View"|"Create"|"Edit"|"Delete"),
+    // added in Phase 3 alongside the legacy mod_* booleans above (which
+    // usePermissions().can()/canWrite() still read — this is additive).
+    // Populated from get_books_session()'s `levels` payload; empty until
+    // bootstrapSession() resolves, same as the mod_* flags above.
+    levels: {},
   },
   ready: false,
 });

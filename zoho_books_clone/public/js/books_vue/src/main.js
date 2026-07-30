@@ -20,9 +20,14 @@ bootstrapSession().then((ok) => {
   const app = createApp(App);
   // Global template helpers for role/module gating (backend enforces the same).
   // Usage in any template: :disabled="!$canWrite('invoices')"
-  const { canWrite, can } = usePermissions();
-  app.config.globalProperties.$canWrite = canWrite;
-  app.config.globalProperties.$can      = can;
+  // Phase 4: granular per-action helpers on top of the legacy blanket ones —
+  // :disabled="!$canCreate('banking')" / "!$canEdit('banking')" / "!$canDelete('banking')".
+  const { canWrite, can, canCreate, canEdit, canDelete } = usePermissions();
+  app.config.globalProperties.$canWrite  = canWrite;
+  app.config.globalProperties.$can       = can;
+  app.config.globalProperties.$canCreate = canCreate;
+  app.config.globalProperties.$canEdit   = canEdit;
+  app.config.globalProperties.$canDelete = canDelete;
   app.use(router);
   app.mount("#books-app");
 });

@@ -23,7 +23,7 @@
         <button class="qct-btn-ghost" @click="exportCSV" :disabled="!filtered.length">
           <span v-html="icon('download', 14)"></span> Export
         </button>
-        <button class="qct-btn-primary" @click="openCreate">
+        <button class="qct-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openCreate">
           <span v-html="icon('plus', 13)"></span> New Template
         </button>
       </div>
@@ -129,13 +129,13 @@
                 {{ t.description || '—' }}
               </td>
               <td @click.stop style="display:flex;gap:6px;padding:10px 8px">
-                <button class="qct-act-btn" @click="openEdit(t)" title="Edit">
+                <button class="qct-act-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(t)" title="Edit">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
                 <button class="qct-act-btn" @click="openView(t)" title="View">
                   <span v-html="icon('eye', 13)"></span>
                 </button>
-                <button class="qct-act-btn qct-act-del" @click="deleteTemplate(t)" title="Delete">
+                <button class="qct-act-btn qct-act-del" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteTemplate(t)" title="Delete">
                   <span v-html="icon('trash', 13)"></span>
                 </button>
               </td>
@@ -147,7 +147,7 @@
                 <div style="font-size:13px;color:#9ca3af;margin-bottom:14px">
                   Templates define the parameters inspectors check during a QC Inspection
                 </div>
-                <button class="qct-btn-primary" @click="openCreate">
+                <button class="qct-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openCreate">
                   <span v-html="icon('plus', 13)"></span> Create Template
                 </button>
               </td>
@@ -168,7 +168,7 @@
         <div style="font-size:32px;margin-bottom:8px">📋</div>
         <div style="font-weight:700;margin-bottom:6px;font-size:14px">No QC Templates found</div>
         <div style="font-size:12px;color:#9ca3af;margin-bottom:14px">Templates define the parameters inspectors check during a QC Inspection</div>
-        <button class="qct-btn-primary" @click="openCreate"><span v-html="icon('plus', 13)"></span> Create Template</button>
+        <button class="qct-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openCreate"><span v-html="icon('plus', 13)"></span> Create Template</button>
       </div>
       <!-- cards -->
       <div v-else v-for="t in paginated" :key="t.name" class="qct-mob-card" @click="openView(t)">
@@ -203,11 +203,11 @@
         <div class="qct-mob-footer" @click.stop>
           <span class="qct-mob-footer-hint">Tap to view details</span>
           <div style="display:flex;gap:6px">
-            <button class="qct-act-btn" @click.stop="openEdit(t)">
+            <button class="qct-act-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click.stop="openEdit(t)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
             <button class="qct-act-btn" @click.stop="openView(t)"><span v-html="icon('eye', 13)"></span></button>
-            <button class="qct-act-btn qct-act-del" @click.stop="deleteTemplate(t)"><span v-html="icon('trash', 13)"></span></button>
+            <button class="qct-act-btn qct-act-del" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click.stop="deleteTemplate(t)"><span v-html="icon('trash', 13)"></span></button>
           </div>
         </div>
       </div>
@@ -350,7 +350,7 @@
       </div>
       <div class="qct-dfooter">
         <button class="qct-btn-ghost" @click="createOpen=false">Cancel</button>
-        <button class="qct-btn-primary" :disabled="saving" @click="saveTemplate">
+        <button class="qct-btn-primary" :disabled="saving || !$canCreate('inventory')" @click="saveTemplate">
           <span v-html="icon('save', 13)"></span>{{ saving ? 'Saving…' : 'Save Template' }}
         </button>
       </div>
@@ -442,11 +442,11 @@
         </div>
         <div class="qct-dfooter">
           <button class="qct-btn-ghost" @click="viewOpen=false">Close</button>
-          <button class="qct-btn-edit" @click="openEdit(viewDoc); viewOpen=false">
+          <button class="qct-btn-edit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(viewDoc); viewOpen=false">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </button>
-          <button class="qct-act-btn qct-act-del" style="padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px" @click="deleteTemplate(viewDoc)">
+          <button class="qct-act-btn qct-act-del" style="padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteTemplate(viewDoc)">
             <span v-html="icon('trash', 13)"></span> Delete
           </button>
         </div>
@@ -570,7 +570,7 @@
       </div>
       <div class="qct-dfooter">
         <button class="qct-btn-ghost" @click="editOpen=false">Cancel</button>
-        <button class="qct-btn-primary" :disabled="editSaving" @click="updateTemplate">
+        <button class="qct-btn-primary" :disabled="editSaving || !$canEdit('inventory')" @click="updateTemplate">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           {{ editSaving ? 'Saving…' : 'Save Changes' }}
         </button>

@@ -46,7 +46,7 @@
       <!-- Action buttons -->
       <button class="qc-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
       <button class="qc-btn-ghost" @click="exportCSV" :disabled="!sorted.length"><span v-html="icon('download',14)"></span> Export</button>
-      <button class="qc-btn-primary" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
+      <button class="qc-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
     </div>
 
     <!-- ── Filter bar ── -->
@@ -113,7 +113,7 @@
                 <span class="qc-status-badge" :class="statusClass(r)">{{ r.status }}</span>
               </td>
               <td @click.stop style="white-space:nowrap">
-                <button class="qc-act-btn" @click="openEdit(r)" title="Edit" style="margin-right:2px">
+                <button class="qc-act-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(r)" title="Edit" style="margin-right:2px">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
                 <button class="qc-act-btn" @click="openView(r)" title="View">
@@ -126,7 +126,7 @@
                 <div style="font-size:32px;margin-bottom:8px">🔬</div>
                 <div style="font-weight:600;margin-bottom:4px">No QC Inspections found</div>
                 <div style="font-size:13px;color:#9ca3af;margin-bottom:12px">Create an inspection from a Purchase Receipt, Invoice, or Delivery Note</div>
-                <button class="qc-btn-primary" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
+                <button class="qc-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
               </td>
             </tr>
           </template>
@@ -145,7 +145,7 @@
         <div style="font-size:30px;margin-bottom:8px">🔬</div>
         <div style="font-weight:600;margin-bottom:4px;font-size:14px">No QC Inspections found</div>
         <div style="font-size:12px;color:#9ca3af;margin-bottom:12px">Create an inspection from a Purchase Receipt, Invoice, or Delivery Note</div>
-        <button class="qc-btn-primary" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
+        <button class="qc-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Inspection</button>
       </div>
       <!-- cards -->
       <div v-else v-for="r in paginated" :key="r.name" class="qc-mob-card" :style="'border-left-color:'+typeAccent(r.inspection_type)" @click="openView(r)">
@@ -262,7 +262,7 @@
       </div>
       <div class="qc-dfooter">
         <button class="qc-btn-ghost" @click="drawerOpen=false">Cancel</button>
-        <button class="qc-btn-primary" :disabled="drawerSaving" @click="saveInspection">
+        <button class="qc-btn-primary" :disabled="drawerSaving || !$canCreate('inventory')" @click="saveInspection">
           <span v-html="icon('plus',13)"></span>{{ drawerSaving ? 'Creating…' : 'Create Inspection' }}
         </button>
       </div>
@@ -356,7 +356,7 @@
               </tbody>
             </table>
             <div v-if="viewDoc.docstatus===0 && isDirty" style="margin-top:8px;display:flex;justify-content:flex-end">
-              <button class="qc-btn-save" :disabled="saving" @click="saveReadings">
+              <button class="qc-btn-save" :disabled="saving || !$canEdit('inventory')" @click="saveReadings">
                 <span v-html="icon('save',13)"></span>{{ saving?'Saving…':'Save Readings' }}
               </button>
             </div>
@@ -429,7 +429,7 @@
           <button
             v-if="viewDoc.docstatus === 1 && viewDoc.status === 'Pass' && viewDoc.release_status === 'Not Released'"
             class="qc-btn-approval"
-            :disabled="releaseSending"
+            :disabled="releaseSending || !$canEdit('inventory')"
             @click="releaseFromQuarantine(viewDoc.name)"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
@@ -439,7 +439,7 @@
           <button
             v-if="viewDoc.docstatus === 1 && viewDoc.status === 'Fail'"
             class="qc-btn-approval"
-            :disabled="approvalSending"
+            :disabled="approvalSending || !$canEdit('inventory')"
             @click="requestApproval(viewDoc.name)"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
@@ -455,14 +455,14 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
             {{ coaSending ? 'Generating…' : 'Print / Download COA' }}
           </button>
-          <button v-if="viewDoc.docstatus===0" class="qc-btn-edit" @click="openEdit(viewDoc);viewOpen=false">
+          <button v-if="viewDoc.docstatus===0" class="qc-btn-edit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openEdit(viewDoc);viewOpen=false">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </button>
-          <button v-if="viewDoc.docstatus===0" class="qc-btn-save" :disabled="saving" @click="saveReadings">
+          <button v-if="viewDoc.docstatus===0" class="qc-btn-save" :disabled="saving || !$canEdit('inventory')" @click="saveReadings">
             <span v-html="icon('save',13)"></span>{{ saving?'Saving…':'Save' }}
           </button>
-          <button v-if="viewDoc.docstatus===0 && (viewDoc.readings||[]).length" class="qc-btn-primary" :disabled="saving" @click="submitInspection(viewDoc.name)">
+          <button v-if="viewDoc.docstatus===0 && (viewDoc.readings||[]).length" class="qc-btn-primary" :disabled="saving || !$canEdit('inventory')" @click="submitInspection(viewDoc.name)">
             <span v-html="icon('check',13)"></span>{{ saving?'Submitting…':'Submit' }}
           </button>
         </div>
@@ -561,7 +561,7 @@
       </div>
       <div class="qc-dfooter">
         <button class="qc-btn-ghost" @click="editOpen=false">Cancel</button>
-        <button class="qc-btn-primary" :disabled="editSaving" @click="updateInspection">
+        <button class="qc-btn-primary" :disabled="editSaving || !$canEdit('inventory')" @click="updateInspection">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           {{ editSaving ? 'Saving…' : 'Save Changes' }}
         </button>

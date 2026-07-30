@@ -67,7 +67,7 @@
     </div>
     <span class="bomx-toolbar-count">{{ sorted.length }} order{{ sorted.length===1?'':'s' }}</span>
     <div style="flex:1"></div>
-    <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Work Order</button>
+    <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Work Order</button>
   </div>
 
   <!-- ══════════ WORK ORDER TABLE ══════════ -->
@@ -80,7 +80,7 @@
     <div v-else-if="!sorted.length" class="bomx-list-empty" style="padding:56px 20px">
       <div style="font-size:38px;margin-bottom:10px">🏗️</div>
       No Work Orders found.
-      <div style="margin-top:14px"><button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Work Order</button></div>
+      <div style="margin-top:14px"><button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Work Order</button></div>
     </div>
     <table v-else class="bomx-table">
       <thead>
@@ -142,28 +142,28 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList" :disabled="saving || submitting">Back</button>
-                <button v-if="!isNew && wo.docstatus===2 && !amendedInto" class="bomx-btn bomx-btn-light" @click="amendWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===2 && !amendedInto" class="bomx-btn bomx-btn-light" @click="amendWO" :disabled="submitting || !$canCreate('inventory')">
                   {{ submitting ? 'Amending…' : 'Amend' }}
                 </button>
                 <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
                   View Amended {{ amendedInto }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Cancelling…' : 'Cancel Work Order' }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===1 && bomType==='Packing' && wo.status!=='Completed' && wo.status!=='Cancelled'" class="bomx-btn" style="background:var(--bx-blueS);color:var(--bx-blue)" @click="createPackingSlip" :disabled="actionLoading==='ps'">
+                <button v-if="!isNew && wo.docstatus===1 && bomType==='Packing' && wo.status!=='Completed' && wo.status!=='Cancelled'" class="bomx-btn" style="background:var(--bx-blueS);color:var(--bx-blue)" @click="createPackingSlip" :disabled="actionLoading==='ps' || !$canCreate('inventory')">
                   {{ actionLoading === 'ps' ? 'Creating…' : 'Create Packing Slip' }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===1 && wo.status!=='Stopped' && wo.status!=='Completed'" class="bomx-btn" style="background:var(--bx-amberS);color:var(--bx-amber)" @click="stopWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===1 && wo.status!=='Stopped' && wo.status!=='Completed'" class="bomx-btn" style="background:var(--bx-amberS);color:var(--bx-amber)" @click="stopWO" :disabled="submitting || !$canEdit('inventory')">
                   {{ submitting ? 'Stopping…' : 'Stop' }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===1 && wo.status==='Stopped'" class="bomx-btn" style="background:var(--bx-greenS);color:var(--bx-green)" @click="resumeWO" :disabled="submitting">
+                <button v-if="!isNew && wo.docstatus===1 && wo.status==='Stopped'" class="bomx-btn" style="background:var(--bx-greenS);color:var(--bx-green)" @click="resumeWO" :disabled="submitting || !$canEdit('inventory')">
                   {{ submitting ? 'Resuming…' : 'Resume' }}
                 </button>
-                <button v-if="!isNew && wo.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitWO" :disabled="submitting || saving">
+                <button v-if="!isNew && wo.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitWO" :disabled="submitting || saving || !$canEdit('inventory')">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
-                <button v-if="!readOnly || (wo.docstatus===1 && (warehousesEditable || operatingCostEditable))" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                <button v-if="!readOnly || (wo.docstatus===1 && (warehousesEditable || operatingCostEditable))" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save Work Order' : (readOnly ? 'Save Changes' : 'Save Changes')) }}
                 </button>
               </div>
@@ -308,7 +308,7 @@
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ rm.item_code || 'New Row' }}</span>
                     <span v-if="rm.is_substituted" class="bomx-badge" style="background:#eef2ff;color:#4338ca;font-size:10px" :title="'Substituted from ' + rm.original_item_code">Substituted</span>
                     <div style="flex:1"></div>
-                    <button v-if="readOnly && wo.docstatus===1 && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="openSubstitute(rm)" title="Substitute this material">Substitute</button>
+                    <button v-if="readOnly && wo.docstatus===1 && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canEdit('inventory')" @click="openSubstitute(rm)" :title="!$canEdit('inventory') ? 'Read-only access' : 'Substitute this material'">Substitute</button>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -359,7 +359,7 @@
                       <span v-for="jc in jobCardsFor(op)" :key="jc.name" class="bomx-badge"
                             style="cursor:pointer" :class="jc.status==='Completed' ? 'badge-active' : (jc.status==='Cancelled' ? 'badge-obsolete' : 'badge-wip')"
                             :title="jc.name" @click="router.push('/manufacturing/job-card/' + jc.name)">{{ jc.status || 'Open' }}</span>
-                      <button v-if="!jobCardsFor(op).length" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="createJobCardFor(op)">+ Job Card</button>
+                      <button v-if="!jobCardsFor(op).length" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canCreate('inventory')" @click="createJobCardFor(op)">+ Job Card</button>
                     </template>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeOp(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -408,7 +408,7 @@
                   class="bomx-btn bomx-btn-sm bomx-btn-light"
                   style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)"
                   @click="recalcOperatingCost(false)"
-                  :disabled="recalcLoading"
+                  :disabled="recalcLoading || !$canEdit('inventory')"
                 >{{ recalcLoading ? 'Recalculating…' : 'Recalculate' }}</button>
               </div>
               <div
@@ -418,7 +418,7 @@
               >
                 ⚠ Planned Operating Cost is ₹0.00 despite planned time being set — the Operations table likely has no Hour Rate
                 stored (captured as 0 when this was last loaded from the BOM). Click Recalculate to
-                <button type="button" class="bomx-btn-link" style="border:none;background:none;color:var(--bx-mfgB);text-decoration:underline;cursor:pointer;padding:0;font:inherit" @click="recalcOperatingCost(true)">re-pull current Workstation hour rates</button>
+                <button type="button" class="bomx-btn-link" style="border:none;background:none;color:var(--bx-mfgB);text-decoration:underline;cursor:pointer;padding:0;font:inherit" :disabled="!$canEdit('inventory')" @click="recalcOperatingCost(true)">re-pull current Workstation hour rates</button>
                 and resync.
               </div>
               <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
@@ -465,10 +465,10 @@
                 <div class="bomx-prod-card" v-if="wo.docstatus===1">
                   <div class="bomx-section-lbl">Actions</div>
                   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
-                    <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped'">
+                    <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped' || !$canEdit('inventory')">
                       {{ actionLoading==='issue' ? 'Issuing…' : (allTransferred ? 'Materials Issued' : 'Issue Materials to WIP') }}
                     </button>
-                    <button v-if="bomType!=='Packing'" class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped'">
+                    <button v-if="bomType!=='Packing'" class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped' || !$canEdit('inventory')">
                       Complete Work Order
                     </button>
                   </div>
@@ -717,7 +717,7 @@
       </div>
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeCompleteModal" :disabled="actionLoading">Cancel</button>
-        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading || !!qtyManufacturedError">
+        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading || !!qtyManufacturedError || !$canEdit('inventory')">
           {{ actionLoading==='complete' ? 'Completing…' : 'Complete' }}
         </button>
       </div>
@@ -758,7 +758,7 @@
       </div>
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeSubstituteModal" :disabled="substituteSaving">Cancel</button>
-        <button v-if="substituteOptions.length" class="bomx-btn bomx-btn-mfg" @click="submitSubstitute" :disabled="substituteSaving">
+        <button v-if="substituteOptions.length" class="bomx-btn bomx-btn-mfg" @click="submitSubstitute" :disabled="substituteSaving || !$canEdit('inventory')">
           {{ substituteSaving ? 'Submitting…' : 'Submit Substitution' }}
         </button>
       </div>

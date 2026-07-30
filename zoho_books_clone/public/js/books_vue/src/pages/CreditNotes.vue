@@ -18,7 +18,7 @@
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
         <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''">
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''">
           <span v-html="icon('plus',13)"></span> New Credit Note
         </button>
       </div>
@@ -40,8 +40,8 @@
 
     <!-- ── Bulk action bar ── -->
     <BulkActionBar :count="selected.size" @clear="selected=new Set()">
-      <button @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-      <button class="bab-danger" @click="bulkDelete">Delete Drafts</button>
+      <button :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
+      <button class="bab-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDelete">Delete Drafts</button>
       <button @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     </BulkActionBar>
 
@@ -80,10 +80,10 @@
               </td>
               <td class="cn-act-cell">
                 <button class="inv-act-btn" @click="openView(c)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="c.docstatus===0" class="inv-act-btn" @click="openEdit(c)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="c.docstatus===1 && balanceFor(c.name)>0" class="inv-act-btn cn-act-apply" @click="applyCN(c)" title="Apply to Invoice">↳</button>
-                <button v-if="c.docstatus===1 && cnStatus(c)!=='applied'" class="inv-act-btn cn-act-cancel" @click="cancelCN(c)" title="Cancel Credit Note"><span v-html="icon('x',12)"></span></button>
-                <button v-if="c.docstatus===0 || c.docstatus===2" class="inv-act-btn cn-act-del" @click="deleteCN(c)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="c.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(c)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="c.docstatus===1 && balanceFor(c.name)>0" class="inv-act-btn cn-act-apply" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Apply to Invoice'" @click="applyCN(c)">↳</button>
+                <button v-if="c.docstatus===1 && cnStatus(c)!=='applied'" class="inv-act-btn cn-act-cancel" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Cancel Credit Note'" @click="cancelCN(c)"><span v-html="icon('x',12)"></span></button>
+                <button v-if="c.docstatus===0 || c.docstatus===2" class="inv-act-btn cn-act-del" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click="deleteCN(c)"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="9" class="cn-empty">No credit notes match</td></tr>
@@ -547,7 +547,7 @@
               <div v-else style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">
                 No applications yet.
                 <div v-if="viewBalance>0 && viewDoc.docstatus===1" style="margin-top:8px">
-                  <button class="form-btn form-btn-primary" @click="applyCN(viewDoc)" style="font-size:12px;padding:6px 12px">↳ Apply to Invoice</button>
+                  <button class="form-btn form-btn-primary" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="applyCN(viewDoc)" style="font-size:12px;padding:6px 12px">↳ Apply to Invoice</button>
                 </div>
               </div>
             </template>
@@ -557,19 +557,19 @@
         <div class="cn-view-footer">
           <!-- Primary actions row — contextual, full-width prominence -->
           <div class="cn-vf-primary">
-            <button v-if="viewDoc.docstatus===0" class="cn-vf-btn cn-vf-btn-submit" @click="submitDraftCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===0" class="cn-vf-btn cn-vf-btn-submit" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitDraftCN(viewDoc)">
               <span v-html="icon('check',14)"></span> Submit
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-apply" @click="applyCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-apply" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="applyCN(viewDoc)">
               ↳ <div class="cn-view-action-btn">Apply to Invoice</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-auto" @click="autoApplyCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-auto" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="autoApplyCN(viewDoc)">
               ⚡<div class="cn-view-action-btn">Auto Apply</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-refund" @click="refundCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0" class="cn-vf-btn cn-vf-btn-refund" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="refundCN(viewDoc)">
               ↩  <div class="cn-view-action-btn">Refund Credit</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && viewBalance>0 && viewBalance<=500" class="cn-vf-btn cn-vf-btn-outline" @click="writeOffCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && viewBalance>0 && viewBalance<=500" class="cn-vf-btn cn-vf-btn-outline" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="writeOffCN(viewDoc)">
               ✎ <div class="cn-view-action-btn">Write Off</div>
             </button>
           </div>
@@ -578,7 +578,7 @@
             <button class="cn-vf-sec-btn" @click="viewOpen=false">
               <span v-html="icon('x',13)"></span> <div class="cn-view-action-btn">Close</div>
             </button>
-            <button v-if="viewDoc.docstatus===0" class="cn-vf-sec-btn" @click="openEdit(viewDoc);viewOpen=false">
+            <button v-if="viewDoc.docstatus===0" class="cn-vf-sec-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="openEdit(viewDoc);viewOpen=false">
               <span v-html="icon('edit',13)"></span> <div class="cn-view-action-btn">Edit</div>
             </button>
             <button v-if="viewDoc.docstatus===1" class="cn-vf-sec-btn" @click="emailCN(viewDoc)">
@@ -587,10 +587,10 @@
             <button class="cn-vf-sec-btn" @click="printCN(viewDoc)">
               <span v-html="icon('printer',13)"></span> <div class="cn-view-action-btn">Print</div>
             </button>
-            <button v-if="viewDoc.docstatus===1 && cnStatus(viewDoc)!=='applied'" class="cn-vf-sec-btn cn-vf-sec-danger" @click="cancelCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===1 && cnStatus(viewDoc)!=='applied'" class="cn-vf-sec-btn cn-vf-sec-danger" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="cancelCN(viewDoc)">
               <span v-html="icon('x-circle',13)"></span> <div class="cn-view-action-btn">Cancel</div>
             </button>
-            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="cn-vf-sec-btn cn-vf-sec-danger" @click="deleteCN(viewDoc)">
+            <button v-if="viewDoc.docstatus===0 || viewDoc.docstatus===2" class="cn-vf-sec-btn cn-vf-sec-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="deleteCN(viewDoc)">
               <span v-html="icon('trash',13)"></span> <div class="cn-view-action-btn">Delete</div>
             </button>
           </div>
@@ -734,7 +734,7 @@ import BulkActionBar from "../components/BulkActionBar.vue";
 import TimelineStepper from "../components/TimelineStepper.vue";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canCreate, canEdit, canDelete } = usePermissions();
 const route = useRoute();
 const { confirm } = useConfirm();
 const { printDoc, refreshBranding } = useLivePreview();
@@ -1250,7 +1250,7 @@ async function emailCN(c) {
   });
 }
 async function applyCN(c) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   try {
     // Fetch both invoices and fresh CN balance in parallel
     const [r, balData] = await Promise.all([
@@ -1327,6 +1327,7 @@ async function submitApply() {
   applyModal.saving = false;
 }
 async function refundCN(c) {
+  if (!canEdit("invoices")) { toast.error("Read-only access"); return; }
   const balData = await apiGET("zoho_books_clone.api.docs.get_credit_note_balance", { credit_note_name: c.name }).catch(() => null);
   const balance = flt(balData?.balance ?? 0);
   if (balance <= 0) { toast.info("No available balance to refund"); return; }
@@ -1350,7 +1351,7 @@ async function submitRefund() {
   refundModal.saving = false;
 }
 async function cancelCN(c) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   if (!await confirm({ title: "Cancel Credit Note", body: `Cancel ${c.name}? The against invoice's outstanding will be restored.`, okLabel: "Cancel CN" })) return;
   try {
     await apiPOST("zoho_books_clone.api.docs.cancel_credit_note", { name: c.name });

@@ -5,7 +5,7 @@
   <div v-if="!selectedName" class="bomx-list-view">
     <div class="bomx-list-toolbar">
       <span class="bomx-panel-title">📅 All Production Plans <span class="bomx-count">({{ sorted.length }})</span></span>
-      <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Production Plan</button>
+      <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Production Plan</button>
     </div>
 
     <div class="bomx-pp-sumstrip">
@@ -67,7 +67,7 @@
           <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click.stop="selectPlan(row.name)">
             Open <span v-html="icon('open',11)"></span>
           </button>
-          <button v-if="row.docstatus === 0" class="bomx-btn-icon danger" @click.stop="deletePP(row.name, $event)" title="Delete">
+          <button v-if="row.docstatus === 0" class="bomx-btn-icon danger" :disabled="!$canDelete('inventory')" @click.stop="deletePP(row.name, $event)" :title="!$canDelete('inventory') ? 'Not permitted' : 'Delete'">
             <span v-html="icon('trash',13)"></span>
           </button>
         </div>
@@ -113,19 +113,19 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList" :disabled="saving || submitting">Back</button>
-                <button v-if="!isNew && pp.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendPP" :disabled="submitting">
+                <button v-if="!isNew && pp.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendPP" :disabled="submitting || !$canCreate('inventory')">
                   {{ submitting ? 'Amending…' : 'Amend' }}
                 </button>
-                <button v-if="!isNew && pp.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelPP" :disabled="submitting">
+                <button v-if="!isNew && pp.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelPP" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Cancelling…' : 'Cancel Plan' }}
                 </button>
-                <button v-if="!isNew && pp.docstatus===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="deletePP(pp.name)">
+                <button v-if="!isNew && pp.docstatus===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" :disabled="!$canDelete('inventory')" @click="deletePP(pp.name)">
                   Delete
                 </button>
-                <button v-if="!isNew && pp.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitPP" :disabled="submitting || saving">
+                <button v-if="!isNew && pp.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitPP" :disabled="submitting || saving || !$canEdit('inventory')">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save Production Plan' : 'Save Changes') }}
                 </button>
                 <button v-if="!isNew && pp.docstatus===1" class="bomx-btn bomx-btn-light" @click="saveRemarks" :disabled="saving">
@@ -309,7 +309,7 @@
               <div class="bomx-card-hdr">
                 <span class="bomx-card-hdr-title"><span v-html="icon('package',14)"></span> Material Requirement Summary</span>
                 <div style="display:flex;gap:8px;flex-shrink:0">
-                  <button v-if="!isNew && pp.docstatus===1 && hasShortfall" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="createMaterialRequests" :disabled="actionLoading==='mr'">
+                  <button v-if="!isNew && pp.docstatus===1 && hasShortfall" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="createMaterialRequests" :disabled="actionLoading==='mr' || !$canCreate('inventory')">
                     {{ actionLoading === 'mr' ? 'Creating…' : 'Create Material Requests' }}
                   </button>
                   <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="calculateRawMaterials" :disabled="mrLoading || !pp.po_items || !pp.po_items.length">
@@ -355,10 +355,10 @@
                 <div class="bomx-card-hdr">
                   <span class="bomx-card-hdr-title"><span v-html="icon('settings',14)"></span> Create Work Orders</span>
                   <div style="display:flex;gap:8px;flex-shrink:0">
-                    <button v-if="hasDraftWorkOrders" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="bulkSubmitWorkOrders" :disabled="actionLoading==='bulk-submit'">
+                    <button v-if="hasDraftWorkOrders" class="bomx-btn bomx-btn-ghost bomx-btn-sm" @click="bulkSubmitWorkOrders" :disabled="actionLoading==='bulk-submit' || !$canEdit('inventory')">
                       {{ actionLoading === 'bulk-submit' ? 'Submitting…' : 'Submit All Work Orders' }}
                     </button>
-                    <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty">
+                    <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="createWorkOrders" :disabled="actionLoading || !pendingWOQty || !$canCreate('inventory')">
                       {{ actionLoading==='wo' ? 'Creating…' : 'Create Work Orders' }}
                     </button>
                   </div>

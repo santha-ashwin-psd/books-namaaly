@@ -26,7 +26,7 @@
       <button class="sales-btn-ghost" @click="exportCSV" :disabled="!filteredLogs.length">
         <span v-html="icon('download',14)"></span> <span class="btn-label">CSV</span>
       </button>
-      <button class="sales-btn-primary" @click="openNewLogForm">
+      <button class="sales-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNewLogForm">
         <span v-html="icon('plus',13)"></span> New Log
       </button>
     </div>
@@ -119,9 +119,9 @@
   <!-- ── Bulk action bar ── -->
   <div v-if="selected.size" class="inv-bulk-bar" style="margin:0">
     <span class="inv-bulk-count"><strong>{{ selected.size }}</strong> log{{ selected.size > 1 ? 's' : '' }} selected</span>
-    <button class="inv-bulk-btn" @click="bulkSetStatus('Completed')" :disabled="bulkLoading"><span v-html="icon('check',13)"></span> Mark Completed</button>
-    <button class="inv-bulk-btn" @click="bulkSetStatus('Pending')" :disabled="bulkLoading"><span v-html="icon('calendar',13)"></span> Mark Pending</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkLoading"><span v-html="icon('trash',13)"></span> Delete</button>
+    <button class="inv-bulk-btn" @click="bulkSetStatus('Completed')" :disabled="bulkLoading || !$canEdit('inventory')"><span v-html="icon('check',13)"></span> Mark Completed</button>
+    <button class="inv-bulk-btn" @click="bulkSetStatus('Pending')" :disabled="bulkLoading || !$canEdit('inventory')"><span v-html="icon('calendar',13)"></span> Mark Pending</button>
+    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkLoading || !$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''"><span v-html="icon('trash',13)"></span> Delete</button>
     <button class="inv-bulk-clear" @click="clearSelection">✕ Clear</button>
   </div>
 
@@ -151,7 +151,7 @@
               <p class="bk-empty-title">{{ searchTerm || statusFilter !== 'all' ? 'No matching logs' : 'No maintenance logs yet' }}</p>
               <p v-if="searchTerm || statusFilter !== 'all' || filterAsset" class="bk-empty-sub">Try adjusting your search or filter</p>
               <p v-else class="bk-empty-sub">Add your first maintenance log to get started.</p>
-              <button v-if="!searchTerm && !filterAsset && statusFilter === 'all'" class="bk-empty-btn" @click="openNewLogForm"><span v-html="icon('plus',13)"></span> New Log</button>
+              <button v-if="!searchTerm && !filterAsset && statusFilter === 'all'" class="bk-empty-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNewLogForm"><span v-html="icon('plus',13)"></span> New Log</button>
             </div>
           </td>
         </tr>
@@ -164,8 +164,8 @@
           <td @click="openEditLogForm(log)" class="ta-r mono-sm fw-600" data-label="Cost">{{ fmt(log.cost || 0) }}</td>
           <td @click="openEditLogForm(log)" data-label="Status"><span class="inv-status-badge" :class="statusClass(log.status)">{{ log.status || 'Pending' }}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
-            <button class="inv-act-btn" @click="openEditLogForm(log)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDelete(log)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+            <button class="inv-act-btn" @click="openEditLogForm(log)" :disabled="!$canEdit('inventory')" title="Edit"><span v-html="icon('edit',13)"></span></button>
+            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDelete(log)" :disabled="!$canDelete('inventory')" title="Delete"><span v-html="icon('trash',13)"></span></button>
           </td>
         </tr>
       </tbody>

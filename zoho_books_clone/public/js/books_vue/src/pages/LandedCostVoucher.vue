@@ -14,7 +14,7 @@
     </div>
     <div class="sales-actions">
       <button class="sales-btn-ghost" @click="loadList" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openAdd">
+      <button class="sales-btn-primary" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="openAdd">
         <span v-html="icon('plus',13)"></span> New Voucher
       </button>
     </div>
@@ -77,7 +77,7 @@
                   <div style="font-size:32px;margin-bottom:8px">📦</div>
                   <p class="bk-empty-title">No Landed Cost Vouchers created yet</p>
                   <p class="bk-empty-sub">Capitalize freight and transport charges into stock value.</p>
-                  <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New Voucher</button>
+                  <button class="bk-empty-btn" :disabled="!$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Voucher</button>
                 </template>
               </div>
             </td>
@@ -228,14 +228,14 @@
                       </span>
                     </td>
                     <td v-if="!readOnly" style="text-align:center">
-                      <button class="inv-act-btn" style="color:#dc2626" @click="removeCharge(idx)"><span v-html="icon('trash',13)"></span></button>
+                      <button class="inv-act-btn" style="color:#dc2626" :disabled="!(isNew ? $canCreate('bills') : $canEdit('bills'))" @click="removeCharge(idx)"><span v-html="icon('trash',13)"></span></button>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <div v-else class="lcv-empty-box">No charges added yet.</div>
-            <div v-if="!readOnly" class="lcv-add-row" @click="addCharge">
+            <div v-if="!readOnly" class="lcv-add-row" :class="{disabled: !(isNew ? $canCreate('bills') : $canEdit('bills'))}" @click="(isNew ? $canCreate('bills') : $canEdit('bills')) && addCharge()">
               <span v-html="icon('plus',13)"></span> Add Charge
             </div>
             <div v-if="!readOnly && lcv.charges.length" style="font-size:11.5px;color:#94a3b8;margin:-4px 0 8px 2px">
@@ -310,19 +310,19 @@
 
         <div class="inv-dfooter">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button v-if="!isNew && lcv.docstatus===2" class="sales-btn-ghost" @click="amendLcv" :disabled="amending">
+            <button v-if="!isNew && lcv.docstatus===2" class="sales-btn-ghost" :disabled="amending || !$canCreate('bills')" :title="!$canCreate('bills') ? 'Read-only access' : ''" @click="amendLcv">
               {{ amending ? 'Amending…' : 'Amend' }}
             </button>
-            <button v-if="!isNew && lcv.docstatus===1" class="sales-btn-ghost" style="color:#dc2626" @click="cancelLcv" :disabled="cancelling">
+            <button v-if="!isNew && lcv.docstatus===1" class="sales-btn-ghost" style="color:#dc2626" :disabled="cancelling || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="cancelLcv">
               {{ cancelling ? 'Cancelling…' : 'Cancel Voucher' }}
             </button>
-            <button v-if="!isNew && lcv.docstatus===0" class="sales-btn-primary" @click="submitLcv" :disabled="submitting || saving">
+            <button v-if="!isNew && lcv.docstatus===0" class="sales-btn-primary" :disabled="submitting || saving || !$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitLcv">
               {{ submitting ? 'Submitting…' : 'Submit' }}
             </button>
           </div>
           <div style="display:flex;gap:8px">
             <button class="add-btn-cancel" @click="closeDrawer">Close</button>
-            <button v-if="readOnly===false" class="add-btn-draft" @click="save" :disabled="saving || previewLoading">
+            <button v-if="readOnly===false" class="add-btn-draft" :disabled="saving || previewLoading || !(isNew ? $canCreate('bills') : $canEdit('bills'))" :title="!(isNew ? $canCreate('bills') : $canEdit('bills')) ? 'Read-only access' : ''" @click="save">
               {{ saving ? 'Saving…' : (isNew ? 'Save' : 'Save Changes') }}
             </button>
           </div>

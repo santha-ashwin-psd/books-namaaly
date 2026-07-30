@@ -61,7 +61,7 @@
       </div>
 
       <div style="display:flex;gap:10px;margin-top:20px">
-        <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving">{{saving?'Saving…':'Save SMTP Settings'}}</button>
+        <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving || !$canEdit('admin')">{{saving?'Saving…':'Save SMTP Settings'}}</button>
       </div>
     </div>
 

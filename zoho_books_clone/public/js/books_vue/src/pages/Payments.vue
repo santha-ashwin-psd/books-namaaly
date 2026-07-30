@@ -11,7 +11,7 @@
       </div>
       <div class="pmt-btn-group">
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',14)"></span></button>
-        <button class="sales-btn-primary" @click="openNew" :disabled="!$canWrite('payments')" :title="!$canWrite('payments') ? 'Read-only access' : ''"><span ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg></span> {{ defaultTab === 'Receive' ? 'New Received Payment' : 'New Payment Made' }}</button>
+        <button class="sales-btn-primary" @click="openNew" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''"><span ><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg></span> {{ defaultTab === 'Receive' ? 'New Received Payment' : 'New Payment Made' }}</button>
       </div>
     </div>
 
@@ -32,8 +32,8 @@
     <!-- Bulk action bar -->
     <div v-if="selected.size" class="inv-bulk-bar">
       <span class="inv-bulk-count">{{ selected.size }} selected</span>
-      <button class="inv-bulk-btn" @click="bulkCancel" :disabled="bulkBusy">Cancel Submitted</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkBusy">Delete Drafts</button>
+      <button class="inv-bulk-btn" @click="bulkCancel" :disabled="bulkBusy || !$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : ''">Cancel Submitted</button>
+      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete" :disabled="bulkBusy || !$canDelete('payments')" :title="!$canDelete('payments') ? 'Not permitted' : ''">Delete Drafts</button>
       <button class="inv-bulk-btn" @click="bulkExport" :disabled="bulkBusy">
         <span v-html="icon('download',13)"></span> Export CSV
       </button>
@@ -76,9 +76,9 @@
               <td @click="openView(p)" class="ta-r mono-sm" :class="p.payment_type==='Receive'?'green':'red'">{{ fmtCur(p.paid_amount) }}</td>
               <td class="pmt-act-cell">
                 <button class="inv-act-btn" @click="openView(p)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="p.docstatus===0" class="inv-act-btn" @click="openEdit(p)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="p.docstatus===1" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" @click="cancelPmt(p)" title="Cancel">✕</button>
-                <button v-if="p.docstatus===0 || p.docstatus===2" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" @click="deletePmt(p)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="p.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : 'Edit'" @click="openEdit(p)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="p.docstatus===1" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : 'Cancel'" @click="cancelPmt(p)">✕</button>
+                <button v-if="p.docstatus===0 || p.docstatus===2" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" :disabled="!$canDelete('payments')" :title="!$canDelete('payments') ? 'Not permitted' : 'Delete'" @click="deletePmt(p)"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="9" class="bk-empty-state"><div class="bk-empty-inner"><template v-if="search"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><p class="bk-empty-title">No payments match</p></template><template v-else><div class="bk-empty-illus"><svg width="80" height="80" viewBox="0 0 80 80" fill="none"><rect x="8" y="22" width="64" height="40" rx="8" fill="#e2e8f0"/><rect x="12" y="26" width="56" height="32" rx="6" fill="#fff"/><rect x="12" y="38" width="56" height="6" fill="#cbd5e1"/><circle cx="22" cy="50" r="5" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/><polyline points="19.5 50 21.5 52 24.5 48" stroke="#16a34a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><p class="bk-empty-title">No payments recorded yet</p><p class="bk-empty-sub">Record your first payment to track cash flow.</p><button class="bk-empty-btn" @click="openNew()"><span v-html="icon('plus',13)"></span> Record Payment</button></template></div></td></tr>
@@ -116,9 +116,9 @@
             <div v-if="p.mode_of_payment" class="pay-mc-sub">{{ p.mode_of_payment }}</div>
             <div class="pay-mc-footer">
               <button class="pay-mc-btn" @click.stop="openView(p)">View</button>
-              <button v-if="p.docstatus===0" class="pay-mc-btn" @click.stop="openEdit(p)">Edit</button>
-              <button v-if="p.docstatus===1" class="pay-mc-btn pay-mc-danger" @click.stop="cancelPmt(p)">Cancel</button>
-              <button v-if="p.docstatus===0||p.docstatus===2" class="pay-mc-btn pay-mc-danger" @click.stop="deletePmt(p)">Delete</button>
+              <button v-if="p.docstatus===0" class="pay-mc-btn" :disabled="!$canEdit('payments')" @click.stop="openEdit(p)">Edit</button>
+              <button v-if="p.docstatus===1" class="pay-mc-btn pay-mc-danger" :disabled="!$canEdit('payments')" @click.stop="cancelPmt(p)">Cancel</button>
+              <button v-if="p.docstatus===0||p.docstatus===2" class="pay-mc-btn pay-mc-danger" :disabled="!$canDelete('payments')" @click.stop="deletePmt(p)">Delete</button>
             </div>
           </div>
         </template>
@@ -480,13 +480,13 @@
         <div class="inv-dfooter">
           <button class="pmt-vd-btn-close" @click="viewOpen=false">Close</button>
           <div style="display:flex;gap:8px">
-            <button v-if="viewPmt.docstatus===0" class="form-btn form-btn-success" @click="openEdit(viewPmt);viewOpen=false">
+            <button v-if="viewPmt.docstatus===0" class="form-btn form-btn-success" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : ''" @click="openEdit(viewPmt);viewOpen=false">
               <span v-html="icon('edit',13)"></span> Edit
             </button>
-            <button v-if="viewPmt.docstatus===1" class="pmt-vd-btn-cancel" @click="cancelPmt(viewPmt)">
+            <button v-if="viewPmt.docstatus===1" class="pmt-vd-btn-cancel" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : ''" @click="cancelPmt(viewPmt)">
               Cancel Payment
             </button>
-            <button v-if="viewPmt.docstatus===0 || viewPmt.docstatus===2" class="pmt-vd-btn-cancel" @click="deletePmt(viewPmt)">
+            <button v-if="viewPmt.docstatus===0 || viewPmt.docstatus===2" class="pmt-vd-btn-cancel" :disabled="!$canDelete('payments')" :title="!$canDelete('payments') ? 'Not permitted' : ''" @click="deletePmt(viewPmt)">
               <span v-html="icon('trash',13)"></span> Delete
             </button>
           </div>
@@ -510,21 +510,21 @@ import JournalTab from "../components/JournalTab.vue";
 const { confirm } = useConfirm();
 
 async function cancelPmt(p) {
-  if (!canWrite("payments")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("payments")) { toast("Read-only access", "error"); return; }
   if (!await confirm({ title: "Cancel Payment", body: `Cancel ${p.name}? Linked invoices/bills will reflect the reversal.`, okLabel: "Cancel Payment" })) return;
   try {
     await apiPOST("zoho_books_clone.api.docs.cancel_payment_entry_safe",
-      { payment_entry_name: p.name });
+      { payment_entry_name: p.name }, { module: "payments", action: "cancel" });
     toast.success(`Payment ${p.name} cancelled`);
     viewOpen.value = false;
     await load();
   } catch (e) { toast.error(e.message || "Cancel failed"); }
 }
 async function deletePmt(p) {
-  if (!canWrite("payments")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("payments")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Delete Payment", body: `Permanently delete ${p.name}? This cannot be undone.`, okLabel: "Delete" })) return;
   try {
-    await apiDelete("Payment Entry", p.name);
+    await apiDelete("Payment Entry", p.name, { module: "payments", action: "delete" });
     toast.success(`Payment ${p.name} deleted`);
     viewOpen.value = false;
     await load();
@@ -537,14 +537,14 @@ function selectedRows() {
   return sorted.value.filter(p => selected.value.has(p.name));
 }
 async function bulkCancel() {
-  if (!canWrite("payments")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("payments")) { toast("Read-only access", "error"); return; }
   const rows = selectedRows().filter(p => p.docstatus === 1);
   if (!rows.length) { toast.info?.("No submitted payments selected") || toast.error("No submitted payments selected"); return; }
   if (!await confirm({ title: `Cancel ${rows.length} payment(s)?`, body: "Linked invoices/bills will reflect the reversal.", okLabel: "Cancel All", okStyle: "danger" })) return;
   bulkBusy.value = true;
   let ok = 0, fail = 0;
   for (const p of rows) {
-    try { await apiPOST("zoho_books_clone.api.docs.cancel_payment_entry_safe", { payment_entry_name: p.name }); ok++; }
+    try { await apiPOST("zoho_books_clone.api.docs.cancel_payment_entry_safe", { payment_entry_name: p.name }, { module: "payments", action: "cancel" }); ok++; }
     catch { fail++; }
   }
   bulkBusy.value = false;
@@ -553,14 +553,14 @@ async function bulkCancel() {
   await load();
 }
 async function bulkDelete() {
-  if (!canWrite("payments")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("payments")) { toast("Not permitted", "error"); return; }
   const rows = selectedRows().filter(p => p.docstatus === 0 || p.docstatus === 2);
   if (!rows.length) { toast.error("No draft/cancelled payments selected"); return; }
   if (!await confirm({ title: `Delete ${rows.length} payment(s)?`, body: "Only drafts and cancelled records can be deleted. This cannot be undone.", okLabel: "Delete All", okStyle: "danger" })) return;
   bulkBusy.value = true;
   let ok = 0, fail = 0;
   for (const p of rows) {
-    try { await apiDelete("Payment Entry", p.name); ok++; }
+    try { await apiDelete("Payment Entry", p.name, { module: "payments", action: "delete" }); ok++; }
     catch { fail++; }
   }
   bulkBusy.value = false;
@@ -597,7 +597,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canEdit, canDelete } = usePermissions();
 const route = useRoute();
 const defaultTab = computed(() => route.path === "/payments-received" ? "Receive" : "Pay");
 const activeTab = ref(defaultTab.value);

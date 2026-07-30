@@ -29,7 +29,7 @@
     <div v-if="selected.size>0" class="chq-selbar">
       <span class="chq-sel-count">{{ selected.size }} selected</span>
       <button class="chq-sel-export" @click="exportCSV"><span v-html="icon('download',13)"></span> Export selected</button>
-      <button v-if="selectedIssued.length" class="chq-sel-ok" @click="bulkClear" :disabled="bulkBusy">
+      <button v-if="selectedIssued.length" class="chq-sel-ok" @click="bulkClear" :disabled="bulkBusy || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">
         <span v-html="icon('check',13)"></span> Mark {{ selectedIssued.length }} Cleared
       </button>
       <div style="flex:1"></div>
@@ -134,20 +134,20 @@
 
           <div class="chq-section-hdr"><span v-html="icon('repeat',13)"></span> Lifecycle</div>
           <div class="chq-life-row">
-            <button class="chq-life-btn" :class="{active:isStatus('Issued')}" @click="setStatus('Issued')" :disabled="busy">Issued</button>
-            <button class="chq-life-btn life-cleared" :class="{active:isStatus('Cleared')}" @click="onClear" :disabled="busy">Cleared</button>
-            <button class="chq-life-btn life-bounced" :class="{active:isStatus('Bounced')}" @click="onBounce" :disabled="busy">Bounced</button>
-            <button class="chq-life-btn life-cancelled" :class="{active:isStatus('Cancelled')}" @click="setStatus('Cancelled')" :disabled="busy">Cancel</button>
+            <button class="chq-life-btn" :class="{active:isStatus('Issued')}" @click="setStatus('Issued')" :disabled="busy || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">Issued</button>
+            <button class="chq-life-btn life-cleared" :class="{active:isStatus('Cleared')}" @click="onClear" :disabled="busy || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">Cleared</button>
+            <button class="chq-life-btn life-bounced" :class="{active:isStatus('Bounced')}" @click="onBounce" :disabled="busy || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">Bounced</button>
+            <button class="chq-life-btn life-cancelled" :class="{active:isStatus('Cancelled')}" @click="setStatus('Cancelled')" :disabled="busy || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''">Cancel</button>
           </div>
           <div v-if="showClearedDate" class="chq-life-input">
             <label class="chq-meta-lbl">Cleared Date</label>
             <input v-model="clearedDate" type="date" />
-            <button class="chq-life-confirm" @click="confirmCleared" :disabled="busy">Confirm</button>
+            <button class="chq-life-confirm" @click="confirmCleared" :disabled="busy || !$canEdit('banking')">Confirm</button>
           </div>
           <div v-if="showBounceForm" class="chq-life-input">
             <label class="chq-meta-lbl">Bounce Reason</label>
             <input v-model="bounceReason" type="text" placeholder="Insufficient funds / Account closed / …"/>
-            <button class="chq-life-confirm" @click="confirmBounce" :disabled="busy || !bounceReason.trim()">Confirm</button>
+            <button class="chq-life-confirm" @click="confirmBounce" :disabled="busy || !bounceReason.trim() || !$canEdit('banking')">Confirm</button>
           </div>
         </div>
         <div class="chq-dfooter"><button class="chq-btn-ghost" @click="viewOpen=false">Close</button></div>
@@ -261,7 +261,7 @@ async function bulkClear(){
   const today=new Date().toISOString().slice(0,10);
   try{
     for(const p of rows){
-      try{await apiPOST("zoho_books_clone.api.docs.update_cheque_status",{payment_entry_name:p.name,new_status:"Cleared",cleared_date:today});done++;}catch{}
+      try{await apiPOST("zoho_books_clone.api.docs.update_cheque_status",{payment_entry_name:p.name,new_status:"Cleared",cleared_date:today},{module:"banking",action:"edit"});done++;}catch{}
     }
     toast.success(`${done} cheque(s) marked Cleared`);await load();
   }finally{bulkBusy.value=false;}
@@ -289,7 +289,7 @@ async function setStatus(newStatus, extra = {}) {
       payment_entry_name: viewDoc.value.name,
       new_status: newStatus,
       ...extra,
-    });
+    }, { module: "banking", action: "edit" });
     viewDoc.value.cheque_status = res.cheque_status;
     viewDoc.value.cheque_cleared_date = res.cheque_cleared_date || null;
     viewDoc.value.cheque_bounce_reason = res.cheque_bounce_reason || null;

@@ -173,6 +173,8 @@ def get_subscription(name):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def pause_subscription(name):
+    from zoho_books_clone.utils.access import require_write
+    require_write()
     doc = _get_ar(name)
     if doc.disabled:
         return {"ok": True, "status": _ui_status(doc), "message": "Already paused"}
@@ -184,6 +186,8 @@ def pause_subscription(name):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def resume_subscription(name):
+    from zoho_books_clone.utils.access import require_write
+    require_write()
     doc = _get_ar(name)
     if not doc.disabled:
         return {"ok": True, "status": _ui_status(doc), "message": "Already active"}

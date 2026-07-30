@@ -19,7 +19,7 @@
           <input v-model="search" placeholder="Search sales persons…" class="sales-search-input" autocomplete="off"/>
         </div>
         <button class="sales-btn-ghost" @click="load" title="Refresh"><span v-html="icon('refresh',13)"></span> Refresh</button>
-        <button class="sales-btn-primary" :disabled="!$canWrite('customers')" :title="!$canWrite('customers') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Sales Person</button>
+        <button class="sales-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Sales Person</button>
       </div>
     </div>
 
@@ -43,8 +43,8 @@
     <!-- Bulk action bar -->
     <div v-if="selectedRows.size" class="inv-bulk-bar" style="margin: 0 24px 12px">
       <span class="inv-bulk-count">{{ selectedRows.size }} selected</span>
-      <button class="inv-bulk-btn" @click="bulkSetDisabled(false)" :disabled="bulkBusy">Enable</button>
-      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkSetDisabled(true)" :disabled="bulkBusy">Disable</button>
+      <button class="inv-bulk-btn" @click="bulkSetDisabled(false)" :disabled="bulkBusy || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">Enable</button>
+      <button class="inv-bulk-btn inv-bulk-danger" @click="bulkSetDisabled(true)" :disabled="bulkBusy || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">Disable</button>
       <button class="inv-bulk-clear" @click="selectedRows=new Set()">✕ Clear</button>
     </div>
 
@@ -77,7 +77,7 @@
               </div>
               <div class="vt-empty-title">{{search ? 'No results found' : 'No sales persons yet'}}</div>
               <div class="vt-empty-sub">{{search ? 'Try adjusting your search' : 'Add your first sales person to get started'}}</div>
-              <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canWrite('customers')" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Sales Person</button>
+              <button v-if="!search" class="nim-btn nim-btn-primary" :disabled="!$canCreate('customers')" :title="!$canCreate('customers') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Sales Person</button>
             </td>
           </tr>
           <tr v-else v-for="s in filtered" :key="s.name" class="inv-row"
@@ -106,8 +106,8 @@
             </td>
             <td class="vt-td vt-td-actions" @click.stop>
               <div class="vt-actions">
-                <button class="inv-act-btn vt-act-edit" title="Edit" @click="openEdit(s)"><span v-html="icon('edit',13)"></span></button>
-                <button class="inv-act-btn vt-act-del" title="Delete" @click="removeSP(s)"><span v-html="icon('trash',13)"></span></button>
+                <button class="inv-act-btn vt-act-edit" :disabled="!$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : 'Edit'" @click="openEdit(s)"><span v-html="icon('edit',13)"></span></button>
+                <button class="inv-act-btn vt-act-del" :disabled="!$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : 'Delete'" @click="removeSP(s)"><span v-html="icon('trash',13)"></span></button>
               </div>
             </td>
           </tr>
@@ -146,7 +146,7 @@
         <button class="sp-btn-ghost" :disabled="!selectedSP.email_id" @click="selectedSP.email_id && (location.href='mailto:'+selectedSP.email_id)">
           <span v-html="icon('mail',13)"></span> Email
         </button>
-        <button class="sp-btn-primary" @click="openEdit(selectedSP)">
+        <button class="sp-btn-primary" :disabled="!$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''" @click="openEdit(selectedSP)">
           <span v-html="icon('edit',13)"></span> Edit
         </button>
       </div>
@@ -354,7 +354,7 @@
 
         <div class="inv-dfooter" style="display:flex;gap:10px;padding:16px 24px;border-top:1px solid #e8ecf0">
           <button class="form-btn" @click="showDrawer=false">Cancel</button>
-          <button class="form-btn form-btn-primary" :disabled="saving" @click="saveSP">{{saving?'Saving…':'Save'}}</button>
+          <button class="form-btn form-btn-primary" :disabled="saving || !(drawerMode==='edit' ? $canEdit('customers') : $canCreate('customers'))" :title="!(drawerMode==='edit' ? $canEdit('customers') : $canCreate('customers')) ? 'Read-only access' : ''" @click="saveSP">{{saving?'Saving…':'Save'}}</button>
         </div>
       </div>
     </div>

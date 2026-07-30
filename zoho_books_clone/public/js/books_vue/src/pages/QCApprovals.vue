@@ -186,7 +186,7 @@
                   <option value="">— Select target warehouse —</option>
                   <option v-for="w in warehouses" :key="w.name" :value="w.name">{{ w.warehouse_name || w.name }}</option>
                 </select>
-                <button class="qcar-btn-approve" :disabled="releasing" @click="doRelease">
+                <button class="qcar-btn-approve" :disabled="releasing || !$canEdit('inventory')" @click="doRelease">
                   <span v-html="icon('check',13)"></span>{{ releasing ? 'Releasing…' : 'Release from Hold' }}
                 </button>
               </div>
@@ -204,10 +204,10 @@
               <textarea v-model="actionRemarks" class="qcar-input" rows="2" placeholder="Remarks (optional for approve, required for reject)…"></textarea>
               <textarea v-if="showRejectReason" v-model="rejectReason" class="qcar-input" rows="2" placeholder="Rejection reason (required)…" style="border-color:#fca5a5"></textarea>
               <div style="display:flex;gap:8px">
-                <button class="qcar-btn-approve" :disabled="actionSaving" @click="doApprove">
+                <button class="qcar-btn-approve" :disabled="actionSaving || !$canEdit('inventory')" @click="doApprove">
                   <span v-html="icon('check',13)"></span>{{ actionSaving && actionMode==='approve' ? 'Approving…' : 'Approve' }}
                 </button>
-                <button class="qcar-btn-reject" :disabled="actionSaving" @click="doReject">
+                <button class="qcar-btn-reject" :disabled="actionSaving || !$canEdit('inventory')" @click="doReject">
                   <span v-html="icon('x',13)"></span>{{ actionSaving && actionMode==='reject' ? 'Rejecting…' : 'Reject' }}
                 </button>
               </div>

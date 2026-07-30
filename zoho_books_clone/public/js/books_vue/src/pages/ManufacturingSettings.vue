@@ -10,7 +10,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <span v-if="saved" class="msx-saved">✓ Saved</span>
-        <button class="msx-btn msx-btn-light" @click="save" :disabled="saving || loading">
+        <button class="msx-btn msx-btn-light" :disabled="saving || loading || !$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="save">
           <span v-if="saving" class="msx-spinner"></span>
           <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
           {{ saving ? 'Saving…' : 'Save Settings' }}
@@ -183,7 +183,7 @@
     <div v-if="!loading" class="msx-footer">
       <span v-if="saved" class="msx-saved">✓ Settings saved</span>
       <div style="flex:1"></div>
-      <button class="msx-btn msx-btn-mfg" @click="save" :disabled="saving || loading">
+      <button class="msx-btn msx-btn-mfg" :disabled="saving || loading || !$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="save">
         <span v-if="saving" class="msx-spinner"></span>
         {{ saving ? 'Saving…' : 'Save Settings' }}
       </button>

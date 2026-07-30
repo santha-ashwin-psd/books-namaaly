@@ -23,7 +23,7 @@
       <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV"><span v-html="icon('download',14)"></span> CSV</button>
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openAdd" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''">
+      <button class="sales-btn-primary" @click="openAdd" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''">
         <span v-html="icon('plus',13)"></span> New Invoice
       </button>
     </div>
@@ -101,10 +101,10 @@
   <!-- ── Bulk actions bar ── -->
   <div v-if="selectedRows.size>0" class="inv-bulk-bar">
     <span class="inv-bulk-count">{{ selectedRows.size }} selected</span>
-    <button class="inv-bulk-btn inv-bulk-pay" @click="bulkPayment">₹ Record Payment</button>
-    <button class="inv-bulk-btn" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
-    <button class="inv-bulk-btn" @click="bulkCancel">Cancel Submitted</button>
-    <button class="inv-bulk-btn inv-bulk-danger" @click="bulkDelete">Delete Drafts</button>
+    <button class="inv-bulk-btn inv-bulk-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkPayment">₹ Record Payment</button>
+    <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
+    <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkCancel">Cancel Submitted</button>
+    <button class="inv-bulk-btn inv-bulk-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDelete">Delete Drafts</button>
     <button class="inv-bulk-btn" @click="exportCSV"><span v-html="icon('download',13)"></span> Export CSV</button>
     <button class="inv-bulk-clear" @click="selectedRows=new Set()">✕ Clear</button>
   </div>
@@ -162,9 +162,9 @@
             <td style="text-align:center" @click.stop>
               <div class="inv-row-actions" style="display:flex;gap:4px;justify-content:center">
                 <button class="inv-act-btn" @click="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="inv.docstatus===0" class="inv-act-btn" @click="openEdit(inv)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" @click.stop="confirmAction('delete',inv)" title="Delete"><span v-html="icon('trash',13)"></span></button>
-                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" @click="openPayment(inv)" title="Record Payment">₹</button>
+                <button v-if="inv.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click="openPayment(inv)">₹</button>
               </div>
             </td>
           </tr>
@@ -179,7 +179,7 @@
                   <div class="bk-empty-illus"><svg width="80" height="96" viewBox="0 0 80 96" fill="none"><rect x="10" y="8" width="60" height="80" rx="6" fill="#e2e8f0"/><rect x="14" y="12" width="52" height="72" rx="4" fill="#fff"/><rect x="22" y="26" width="36" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="34" width="28" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="42" width="32" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="58" width="20" height="3" rx="2" fill="#e2e8f0"/><rect x="22" y="66" width="24" height="3" rx="2" fill="#e2e8f0"/><rect x="8" y="22" width="20" height="20" rx="4" fill="#2563eb" opacity=".85"/><line x1="13" y1="32" x2="23" y2="32" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="27" x2="18" y2="37" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
                   <p class="bk-empty-title">No invoices created yet</p>
                   <p class="bk-empty-sub">Create your first invoice to start tracking payments and revenue.</p>
-                  <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New Invoice</button>
+                  <button class="bk-empty-btn" :disabled="!$canCreate('invoices')" @click="openAdd"><span v-html="icon('plus',13)"></span> New Invoice</button>
                 </template>
               </div>
             </td>
@@ -217,9 +217,9 @@
           </div>
           <div class="inv-mc-footer">
             <button class="inv-mc-btn" @click.stop="openView(inv)">View</button>
-            <button v-if="inv.docstatus===0" class="inv-mc-btn" @click.stop="openEdit(inv)">Edit</button>
-            <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-mc-btn inv-mc-pay" @click.stop="openPayment(inv)">Pay</button>
-            <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-mc-btn inv-mc-danger" @click.stop="confirmAction('delete',inv)">Delete</button>
+            <button v-if="inv.docstatus===0" class="inv-mc-btn" :disabled="!$canEdit('invoices')" @click.stop="openEdit(inv)">Edit</button>
+            <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-mc-btn inv-mc-pay" :disabled="!$canEdit('invoices')" @click.stop="openPayment(inv)">Pay</button>
+            <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-mc-btn inv-mc-danger" :disabled="!$canDelete('invoices')" @click.stop="confirmAction('delete',inv)">Delete</button>
           </div>
         </div>
       </template>
@@ -238,7 +238,7 @@
           <div v-else-if="!sorted.length" style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#9ca3af;font-size:13px">
             <div style="font-size:32px;margin-bottom:8px">📄</div>
             <div>{{ search || filterCustomer ? 'No invoices match your filters' : 'No invoices yet' }}</div>
-            <button v-if="!search && !filterCustomer" class="nim-btn nim-btn-primary" :disabled="!$canWrite('invoices')" :title="!$canWrite('invoices') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Invoice</button>
+            <button v-if="!search && !filterCustomer" class="nim-btn nim-btn-primary" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" style="margin-top:14px" @click="openAdd"><span v-html="icon('plus',13)"></span> New Invoice</button>
           </div>
           <template v-else>
             <div v-for="inv in paged" :key="inv.name"
@@ -259,9 +259,9 @@
               </div>
               <div style="display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px">
                 <button class="inv-act-btn" @click.stop="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="inv.docstatus===0" class="inv-act-btn" @click.stop="openEdit(inv)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" @click.stop="openPayment(inv)" title="Record Payment">₹</button>
-                <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" @click.stop="confirmAction('delete',inv)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+                <button v-if="inv.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click.stop="openPayment(inv)">₹</button>
+                <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
               </div>
             </div>
           </template>
@@ -739,6 +739,8 @@
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button v-if="viewInv.outstanding_amount>0&&viewInv.docstatus===1"
                   class="inv-view-cta"
+                  :disabled="!$canEdit('invoices')"
+                  :title="!$canEdit('invoices') ? 'Read-only access' : ''"
                   @click="openPayment(viewInv)">
             <span v-html="icon('indianrupee',15)"></span> <div class="ab-label"> Receive Payment</div>
           </button>
@@ -775,13 +777,13 @@
 
         <!-- Action buttons bar -->
         <div class="inv-action-bar">
-          <button v-if="viewInv.docstatus===0" class="inv-ab-btn" @click="viewOpen=false;openEdit(viewInv)">
+          <button v-if="viewInv.docstatus===0" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewInv)">
             <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
           </button>
-          <button v-if="viewInv.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" @click="submitInv(viewInv)">
+          <button v-if="viewInv.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitInv(viewInv)">
             <span v-html="icon('check',13)"></span> <span class="ab-label">Submit</span>
           </button>
-          <button class="inv-ab-btn" @click="duplicateInvoice(viewInv)">
+          <button class="inv-ab-btn" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="duplicateInvoice(viewInv)">
             <span v-html="icon('copy',13)"></span> <span class="ab-label">Duplicate</span>
           </button>
           <div style="position:relative;display:inline-flex">
@@ -816,10 +818,10 @@
           <button v-if="viewInv.docstatus===1&&!viewInv.is_return" class="inv-ab-btn" @click="makeRecurring(viewInv)">
             <span v-html="icon('repeat',13)"></span> <span class="ab-label">Make Recurring</span>
           </button>
-          <button v-if="viewInv.docstatus===1" class="inv-ab-btn inv-ab-danger" @click="confirmAction('cancel', viewInv)">
+          <button v-if="viewInv.docstatus===1" class="inv-ab-btn inv-ab-danger" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="confirmAction('cancel', viewInv)">
             Cancel
           </button>
-          <button v-if="viewInv.docstatus===0||viewInv.docstatus===2" class="inv-ab-btn inv-ab-danger" @click="confirmAction('delete', viewInv)">
+          <button v-if="viewInv.docstatus===0||viewInv.docstatus===2" class="inv-ab-btn inv-ab-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="confirmAction('delete', viewInv)">
             <span v-html="icon('delete',13)"></span> <span class="ab-label">Delete</span>
           </button>
         </div>
@@ -901,6 +903,8 @@
                 </div>
                 <button v-if="viewInv.outstanding_amount>0&&viewInv.docstatus===1"
                         class="inv-rec-pay-btn"
+                        :disabled="!$canEdit('invoices')"
+                        :title="!$canEdit('invoices') ? 'Read-only access' : ''"
                         @click="openPayment(viewInv)">
                   Record Payment
                 </button>
@@ -1166,7 +1170,7 @@
               <div v-if="!viewPayments.length && !viewCreditApps.length" style="text-align:center;padding:48px;color:#9ca3af;font-size:13px">
                 No payments recorded against this invoice.
                 <div v-if="viewInv.outstanding_amount>0&&viewInv.docstatus===1" style="margin-top:12px">
-                  <button class="inv-view-cta" @click="openPayment(viewInv)">
+                  <button class="inv-view-cta" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="openPayment(viewInv)">
                     <span v-html="icon('indianrupee',14)"></span> Record Payment
                   </button>
                 </div>
@@ -1229,7 +1233,7 @@
               </div>
               <!-- Cancel button -->
               <div v-if="viewInv.einvoice_status !== 'Cancelled'" style="display:flex;justify-content:flex-end">
-                <button class="ei-action-btn danger" :disabled="eiCancelling" @click="cancelInvIRN">
+                <button class="ei-action-btn danger" :disabled="eiCancelling || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="cancelInvIRN">
                   {{ eiCancelling ? 'Cancelling…' : 'Cancel IRN' }}
                 </button>
               </div>
@@ -1241,11 +1245,11 @@
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.3"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                 <div style="font-size:13px;color:#6b7280;text-align:center">No IRN generated yet for this invoice</div>
                 <div style="display:flex;gap:8px">
-                  <button class="ei-action-btn primary" :disabled="eiGenerating || !companyGstin" :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : ''" @click="generateInvIRN">
+                  <button class="ei-action-btn primary" :disabled="eiGenerating || !companyGstin || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : (!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : '')" @click="generateInvIRN">
                     <span v-if="eiGenerating" style="display:inline-block;animation:spin 1s linear infinite">↻</span>
                     {{ eiGenerating ? 'Generating…' : 'Generate IRN' }}
                   </button>
-                  <button class="ei-action-btn outline" :disabled="!companyGstin" :title="!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : ''" @click="eiManualMode=true">Enter Manually</button>
+                  <button class="ei-action-btn outline" :disabled="!companyGstin || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : (!companyGstin ? 'Company GSTIN not configured. Set it under Books Company → GSTIN.' : '')" @click="eiManualMode=true">Enter Manually</button>
                 </div>
               </div>
               <!-- Manual entry form -->
@@ -1265,7 +1269,7 @@
                 </div>
                 <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
                   <button class="ei-action-btn outline" @click="eiManualMode=false">Cancel</button>
-                  <button class="ei-action-btn primary" :disabled="eiManualSaving" @click="saveInvManualIRN">
+                  <button class="ei-action-btn primary" :disabled="eiManualSaving || !$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="saveInvManualIRN">
                     {{ eiManualSaving ? 'Saving…' : 'Save IRN' }}
                   </button>
                 </div>
@@ -1423,7 +1427,7 @@ import { computeTaxRows, computeDiscountAmount, applyDiscountToLines } from "../
 import { useBarcodeScanner } from "../composables/useBarcodeScanner.js";
 
 const { toast } = useToast();
-const { canWrite } = usePermissions();
+const { canCreate, canEdit, canDelete } = usePermissions();
 const route = useRoute();
 const router = useRouter();
 
@@ -1456,6 +1460,7 @@ async function fetchCompanyGstin() {
 }
 
 async function generateInvIRN() {
+  if (!canEdit("invoices")) { toast.error("Read-only access"); return; }
   eiGenerating.value = true;
   try {
     const res = await apiPOST("zoho_books_clone.api.gst.generate_irn", { invoice_name: viewInv.value.name });
@@ -1468,6 +1473,7 @@ async function generateInvIRN() {
 }
 
 async function cancelInvIRN() {
+  if (!canEdit("invoices")) { toast.error("Read-only access"); return; }
   eiCancelling.value = true;
   try {
     await apiPOST("zoho_books_clone.api.gst.cancel_irn", { invoice_name: viewInv.value.name });
@@ -1480,6 +1486,7 @@ async function cancelInvIRN() {
 }
 
 async function saveInvManualIRN() {
+  if (!canEdit("invoices")) { toast.error("Read-only access"); return; }
   if (!eiManualIrn.value || eiManualIrn.value.length !== 64) return toast.error("IRN must be exactly 64 characters");
   if (!eiManualAckNo.value) return toast.error("Ack No. is required");
   eiManualSaving.value = true;
@@ -2550,6 +2557,7 @@ function checkPostingDateLocked(posting_date) {
 }
 
 async function saveInvoice(docstatus, andNew = false) {
+  if (!(editingName.value ? canEdit("invoices") : canCreate("invoices"))) { toast("Read-only access", "error"); return; }
   if (!form.customer) { toast("Customer is required","error"); return; }
   if (!form.posting_date) { toast("Invoice date is required","error"); return; }
   if (lines.value.some(l => (l.description||'').length > 500)) { toast("Item description cannot exceed 500 characters","error"); return; }
@@ -2646,7 +2654,7 @@ async function saveInvoice(docstatus, andNew = false) {
 // Phase 0.9 — delegates to the globally mounted PaymentDialog. Same UX as Bills
 // (vendor payments) but `direction:"receive"` for customer side.
 async function openPayment(inv) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const { openPayment: openShared } = usePaymentDialog();
   const paymentName = await openShared({
     direction: "receive",
@@ -2701,6 +2709,7 @@ async function openEmail(inv) {
 
 // ── Duplicate ──────────────────────────────────────────────────────────
 async function duplicateInvoice(inv) {
+  if (!canCreate("invoices")) { toast("Read-only access", "error"); return; }
   try {
     const doc=await apiGet("Sales Invoice",inv.name);
     delete doc.name; doc.docstatus=0; doc.posting_date=todayStr(); doc.due_date=dueDateDefault(); doc.outstanding_amount=0; doc.status="Draft";
@@ -2714,6 +2723,7 @@ async function duplicateInvoice(inv) {
 
 // ── Cancel / Delete ────────────────────────────────────────────────────
 async function submitInv(inv) {
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   Object.assign(confirmModal, {
     open: true, loading: false, payments: [],
     title: "Submit Invoice",
@@ -2751,7 +2761,7 @@ async function submitInv(inv) {
   });
 }
 async function confirmAction(action, inv) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (action === "delete" ? !canDelete("invoices") : !canEdit("invoices")) { toast(action === "delete" ? "Not permitted" : "Read-only access", "error"); return; }
   if (action==="cancel") {
     const isPaid = inv.outstanding_amount <= 0 && inv.docstatus === 1;
     if (isPaid) {
@@ -2832,14 +2842,14 @@ async function makeRecurring(inv) {
 
 // ── Bulk actions ───────────────────────────────────────────────────────
 async function bulkDelete() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("invoices")) { toast("Not permitted", "error"); return; }
   const drafts=sorted.value.filter(i=>selectedRows.value.has(i.name)&&i.docstatus===0);
   if (!drafts.length) { toast("No draft invoices selected","info"); return; }
   for (const inv of drafts) { try { await apiDelete("Sales Invoice",inv.name); } catch {} }
   selectedRows.value=new Set(); toast(`Deleted ${drafts.length} draft invoice(s)`); await load();
 }
 async function bulkCancel() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const submitted=sorted.value.filter(i=>selectedRows.value.has(i.name)&&i.docstatus===1);
   if (!submitted.length) { toast("No submitted invoices selected","info"); return; }
   let done=0, failed=0;
@@ -2859,7 +2869,7 @@ async function bulkCancel() {
   await load();
 }
 async function bulkPayment() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const payable = sorted.value.filter(i =>
     selectedRows.value.has(i.name) && i.docstatus === 1 && flt(i.outstanding_amount) > 0
   );
@@ -2894,7 +2904,7 @@ async function bulkPayment() {
   }
 }
 async function bulkEmail() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const sel=sorted.value.filter(i=>selectedRows.value.has(i.name));
   if (!sel.length) return;
   if (sel.length===1) { openEmail(sel[0]); return; }

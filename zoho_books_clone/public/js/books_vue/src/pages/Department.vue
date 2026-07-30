@@ -18,7 +18,7 @@
     <div class="sales-actions">
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
       <button class="sales-btn-ghost" @click="exportCSV" title="Export CSV" :disabled="!filtered.length"><span v-html="icon('download',14)"></span> CSV</button>
-      <button class="sales-btn-primary" @click="openNewDepartmentForm"><span v-html="icon('plus',13)"></span> New Department</button>
+      <button class="sales-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNewDepartmentForm"><span v-html="icon('plus',13)"></span> New Department</button>
     </div>
   </div>
 
@@ -113,7 +113,7 @@
           <template v-else>
             <p class="bk-empty-title">No departments yet</p>
             <p class="bk-empty-sub">Create your first department to get started.</p>
-            <button class="bk-empty-btn" @click="openNewDepartmentForm"><span v-html="icon('plus',13)"></span> New Department</button>
+            <button class="bk-empty-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNewDepartmentForm"><span v-html="icon('plus',13)"></span> New Department</button>
           </template>
         </div></td></tr>
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row">
@@ -121,8 +121,8 @@
           <td @click="openEditDepartmentForm(row)" data-label="Description"><span v-if="row.description" class="text-muted">{{ row.description }}</span><span v-else class="text-muted">—</span></td>
           <td @click="openEditDepartmentForm(row)" data-label="Status"><span class="inv-status-badge" :class="statusClass(row)">{{ row.description ? 'Documented' : 'Missing Details' }}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
-            <button class="inv-act-btn" @click="openEditDepartmentForm(row)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDelete(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+            <button class="inv-act-btn" @click="openEditDepartmentForm(row)" :disabled="!$canEdit('inventory')" title="Edit"><span v-html="icon('edit',13)"></span></button>
+            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDelete(row)" :disabled="!$canDelete('inventory')" title="Delete"><span v-html="icon('trash',13)"></span></button>
           </td>
         </tr>
       </tbody>

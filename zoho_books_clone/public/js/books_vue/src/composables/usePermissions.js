@@ -4,6 +4,12 @@
 import { computed } from "vue";
 import { session } from "../api/session.js";
 
+// Mirrors utils/access.py LEVELS — each level implies everything below it.
+const LEVELS = ["None", "View", "Create", "Edit", "Delete"];
+function _levelAtLeast(level, threshold) {
+  return LEVELS.indexOf(level) >= LEVELS.indexOf(threshold);
+}
+
 export function usePermissions() {
   const flags      = computed(() => session.permissions || {});
   const role       = computed(() => session.permissions?.books_role || "");
@@ -17,8 +23,16 @@ export function usePermissions() {
   function can(module) {
     if (!module) return true;       // routes without a module gate (e.g. dashboard) pass through.
     if (isAdmin.value) return true; // admins get everything; backend mirrors this.
-    const key = module.startsWith("mod_") ? module : `mod_${module}`;
-    return !!flags.value[key];
+    // Was: raw mod_<module> boolean flag only, which ignores levels entirely --
+    // so an explicit lvl_<module>="None" (Permission Levels dropdown) never
+    // blocked page navigation/sidebar visibility even after levels_customized
+    // made it authoritative for canCreate/canEdit/canDelete. session.permissions
+    // .levels[module] is resolved server-side by utils/access.py._membership(),
+    // which for untouched members mirrors the same true/false the boolean flag
+    // gave (additive merge), and for customized members honors an explicit
+    // "None". So this is a strict correctness fix, not a behavior change for
+    // any member who hasn't used the granular dropdown.
+    return (session.permissions?.levels?.[module] || "None") !== "None";
   }
 
   // Whether the user may create/edit/delete in `module`. Admins → yes; read-only
@@ -30,5 +44,37 @@ export function usePermissions() {
     return can(module);
   }
 
-  return { flags, role, isAdmin, isReadonly, can, canWrite };
+  // ── Granular (Phase 3) ──────────────────────────────────────────────────
+  // Reads session.permissions.levels[module], populated by
+  // get_books_session() from utils/access.py's _membership() — the same
+  // engine the backend's assert_can()/can_create()/can_edit()/can_delete()
+  // use. These are UX hints only (disable/hide a button); the backend is
+  // still the real enforcement point for every one of these actions.
+  //
+  // Naming note for integrators: some pages (e.g. PurchaseOrders.vue,
+  // DeliveryChallans.vue) already define their own local canEdit(row)/
+  // canDelete(row) functions that check a *document's* state (docstatus
+  // etc.), not the user's *module* permission. If a page needs both, alias
+  // one on import: `const { canEdit: canEditModule } = usePermissions()`.
+  function levelOf(module) {
+    if (isAdmin.value) return "Delete";
+    return session.permissions?.levels?.[module] || "None";
+  }
+  function canCreate(module) {
+    if (isAdmin.value) return true;
+    return _levelAtLeast(levelOf(module), "Create");
+  }
+  function canEdit(module) {
+    if (isAdmin.value) return true;
+    return _levelAtLeast(levelOf(module), "Edit");
+  }
+  function canDelete(module) {
+    if (isAdmin.value) return true;
+    return _levelAtLeast(levelOf(module), "Delete");
+  }
+
+  return {
+    flags, role, isAdmin, isReadonly, can, canWrite,
+    levelOf, canCreate, canEdit, canDelete,
+  };
 }

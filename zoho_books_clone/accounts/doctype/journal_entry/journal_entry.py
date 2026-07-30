@@ -47,3 +47,35 @@ class JournalEntry(Document):
     def on_cancel(self):
         reverse_voucher(self.doctype, self.name)
         self.db_set("status", "Cancelled", update_modified=False)
+
+    def before_cancel(self):
+        self._cleanup_mirror_bank_transactions()
+
+    def on_trash(self):
+        self._cleanup_mirror_bank_transactions()
+
+    def _cleanup_mirror_bank_transactions(self):
+        """Cancel + delete any Bank Transaction rows that only mirror this
+        Journal Entry for the Banking/reconciliation page (see
+        banking/utils.py::create_bank_transaction_row — e.g. the "Deposit
+        Cash" flow). Those rows post no GL of their own (BankTransaction.
+        _post_gl skips entirely when journal_entry is set — the real Dr/Cr
+        was already posted by this Journal Entry), so removing them here is
+        safe. Without this, Frappe's link check blocks cancelling/deleting
+        this Journal Entry with "... is linked with Bank Transaction ...".
+        """
+        names = frappe.get_all(
+            "Bank Transaction", filters={"journal_entry": self.name}, pluck="name"
+        )
+        for nm in names:
+            try:
+                doc = frappe.get_doc("Bank Transaction", nm)
+                if doc.docstatus == 1:
+                    doc.flags.ignore_permissions = True
+                    doc.cancel()
+                frappe.delete_doc("Bank Transaction", nm, ignore_permissions=True, force=True)
+            except Exception:
+                frappe.log_error(
+                    title="Journal Entry: mirror Bank Transaction cleanup failed",
+                    message=frappe.get_traceback(),
+                )

@@ -35,7 +35,7 @@
     <div class="bomx-list-panel">
       <div class="bomx-panel-hdr">
         <span class="bomx-panel-title">🧭 Routings <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn-icon-round" @click="openAdd" title="New Routing">
+        <button class="bomx-btn-icon-round" :disabled="!$canCreate('inventory')" @click="openAdd" :title="!$canCreate('inventory') ? 'Read-only access' : 'New Routing'">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
@@ -72,7 +72,7 @@
         <div class="bomx-empty-icon">🧭</div>
         <div class="bomx-empty-title">Select a Routing</div>
         <div class="bomx-empty-sub">Choose a Routing from the list to view or edit its operation sequence.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Routing</button>
+        <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Routing</button>
       </div>
 
       <template v-else>
@@ -92,7 +92,7 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList">Back</button>
-                <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading">
+                <button class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
                   {{ saving ? 'Saving…' : (isNew ? 'Save Routing' : 'Save Changes') }}
                 </button>
@@ -243,9 +243,9 @@
 
           <!-- Footer -->
           <div class="bomx-footer">
-            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteFromDetail">Delete Routing</button>
+            <button v-if="!isNew" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteFromDetail">Delete Routing</button>
             <div style="flex:1"></div>
-            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading">
+            <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
               {{ saving ? 'Saving…' : (isNew ? 'Save Routing' : 'Save Changes') }}
             </button>

@@ -5,7 +5,7 @@
       <span style="font-size:18px;font-weight:700;color:#1a1a2e">Email Templates</span>
       <span style="background:#F3F0FF;color:#2563eb;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600">{{list.length}}</span>
     </div>
-    <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)" style="vertical-align:-2px;margin-right:4px"/>New Template</button>
+    <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)" style="vertical-align:-2px;margin-right:4px"/>New Template</button>
   </div>
 
   <div style="background:linear-gradient(135deg,#E7F5FF,#D0EBFF);border:1px solid #a5d8ff;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;align-items:center">
@@ -26,7 +26,7 @@
     <div style="font-size:36px;margin-bottom:10px">📭</div>
     <div style="font-size:14px;font-weight:600;margin-bottom:4px">No templates yet</div>
     <div style="font-size:12.5px">Create your first email template to automate customer communications</div>
-    <button class="nim-btn nim-btn-primary" :disabled="!$canWrite('admin')" :title="!$canWrite('admin') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:16px">Create Template</button>
+    <button class="nim-btn nim-btn-primary" :disabled="!$canCreate('admin')" :title="!$canCreate('admin') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:16px">Create Template</button>
   </div>
 
   <div v-else class="et-grid">
@@ -64,11 +64,11 @@
 
       <!-- Actions -->
       <div class="et-grid-actions">
-        <button class="et-grid-btn" @click="openEdit(t)">
+        <button class="et-grid-btn" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="openEdit(t)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Edit
         </button>
-        <button class="et-grid-btn et-grid-btn-del" @click="delTarget=t.name;showDel=true">
+        <button class="et-grid-btn et-grid-btn-del" :disabled="!$canDelete('admin')" :title="!$canDelete('admin') ? 'Not permitted' : ''" @click="delTarget=t.name;showDel=true">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           Delete
         </button>
@@ -242,7 +242,7 @@
         <!-- Footer -->
         <div class="et-footer">
           <button class="nim-btn nim-btn-ghost" @click="showDrawer=false">Cancel</button>
-          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving" style="min-width:150px">
+          <button class="nim-btn nim-btn-primary" @click="save" :disabled="saving || !(drawerMode==='add' ? $canCreate('admin') : $canEdit('admin'))" :title="!(drawerMode==='add' ? $canCreate('admin') : $canEdit('admin')) ? 'Read-only access' : ''" style="min-width:150px">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:-2px;margin-right:5px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             {{saving?'Saving…':'Save Template'}}
           </button>
@@ -258,7 +258,7 @@
         <div class="nim-body"><p style="font-size:13.5px;color:#4a5568">Delete "<b>{{delTarget}}</b>"? This cannot be undone and any automation using this template will stop working.</p></div>
         <div class="nim-footer">
           <button class="nim-btn nim-btn-ghost" @click="showDel=false">Cancel</button>
-          <button class="nim-btn" style="background:#c92a2a;color:#fff;border-color:#c92a2a" @click="confirmDel">Delete</button>
+          <button class="nim-btn" style="background:#c92a2a;color:#fff;border-color:#c92a2a" :disabled="!$canDelete('admin')" :title="!$canDelete('admin') ? 'Not permitted' : ''" @click="confirmDel">Delete</button>
         </div>
       </div>
     </div>

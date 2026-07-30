@@ -6,7 +6,7 @@
     <div class="bomx-list-panel">
       <div class="bomx-panel-hdr">
         <span class="bomx-panel-title">📦 All Material Requests <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
+        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
       </div>
       <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
         <option value="">All Status</option>
@@ -45,7 +45,7 @@
         <div class="bomx-empty-icon">📦</div>
         <div class="bomx-empty-title">Select a Material Request</div>
         <div class="bomx-empty-sub">Choose a Material Request from the list to view or edit its items.</div>
-        <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Material Request</button>
+        <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Material Request</button>
       </div>
 
       <template v-else>
@@ -67,16 +67,16 @@
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
                 <button class="bomx-btn bomx-btn-ghost-inv" @click="goBackToList" :disabled="saving || submitting">Back</button>
-                <button v-if="!isNew && mr.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendMR" :disabled="submitting">
+                <button v-if="!isNew && mr.docstatus===2" class="bomx-btn bomx-btn-light" @click="amendMR" :disabled="submitting || !$canCreate('inventory')">
                   {{ submitting ? 'Amending…' : 'Amend' }}
                 </button>
-                <button v-if="!isNew && mr.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelMR" :disabled="submitting">
+                <button v-if="!isNew && mr.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelMR" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Cancelling…' : 'Cancel' }}
                 </button>
-                <button v-if="!isNew && mr.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitMR" :disabled="submitting || saving">
+                <button v-if="!isNew && mr.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitMR" :disabled="submitting || saving || !$canEdit('inventory')">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
-                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading">
+                <button v-if="!readOnly" class="bomx-btn bomx-btn-light" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
                   {{ saving ? 'Saving…' : (isNew ? 'Save Material Request' : 'Save Changes') }}
                 </button>
               </div>

@@ -59,9 +59,18 @@ def create_qc_approval_request(inspection_name: str, reason: str = "") -> dict:
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Approval Request", "create")
+
     # Validate that the QC Inspection exists
     if not frappe.db.exists("QC Inspection", inspection_name):
         frappe.throw(_("QC Inspection {0} does not exist.").format(inspection_name))
+
+    # QC Approval Request has no `company` field either (same gap as QC
+    # Inspection — see api/qc.py's _reference_company docstring); scope via
+    # the underlying QC Inspection's reference doc.
+    from zoho_books_clone.api.qc import _assert_inspection_company
+    _assert_inspection_company(inspection_name)
 
     qci = frappe.get_doc("QC Inspection", inspection_name)
 
@@ -180,11 +189,19 @@ def approve_qc_approval_request(request_name: str, remarks: str = "") -> dict:
     """
     _require_approver()
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Approval Request", "write")
+
     doc = frappe.get_doc("QC Approval Request", request_name)
     if doc.approval_status != "Pending":
         frappe.throw(
             _("Only Pending requests can be approved. Current status: {0}.").format(doc.approval_status)
         )
+
+    # Same tenancy gap as create_qc_approval_request — scope via the linked
+    # QC Inspection's reference doc.
+    from zoho_books_clone.api.qc import _assert_inspection_company
+    _assert_inspection_company(doc.qc_inspection)
 
     doc.approval_status  = "Approved"
     doc.approved_by      = frappe.session.user
@@ -216,6 +233,9 @@ def reject_qc_approval_request(request_name: str, rejection_reason: str) -> dict
     """
     _require_approver()
 
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("QC Approval Request", "write")
+
     if not (rejection_reason or "").strip():
         frappe.throw(_("Rejection Reason is required when rejecting a QC Approval Request."))
 
@@ -224,6 +244,11 @@ def reject_qc_approval_request(request_name: str, rejection_reason: str) -> dict
         frappe.throw(
             _("Only Pending requests can be rejected. Current status: {0}.").format(doc.approval_status)
         )
+
+    # Same tenancy gap as create/approve — scope via the linked QC
+    # Inspection's reference doc.
+    from zoho_books_clone.api.qc import _assert_inspection_company
+    _assert_inspection_company(doc.qc_inspection)
 
     doc.approval_status  = "Rejected"
     doc.approved_by      = frappe.session.user

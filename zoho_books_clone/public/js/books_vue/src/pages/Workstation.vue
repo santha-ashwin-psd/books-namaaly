@@ -46,7 +46,7 @@
       <button type="button" :class="{active: viewMode==='grid'}" @click="viewMode='grid'" title="Grid view" v-html="icon('grid',15)"></button>
       <button type="button" :class="{active: viewMode==='list'}" @click="viewMode='list'" title="List view" v-html="icon('list',15)"></button>
     </div>
-    <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> New Workstation</button>
+    <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Workstation</button>
   </div>
 
   <!-- ══════════ LOADING ══════════ -->
@@ -59,7 +59,7 @@
     <div class="bomx-empty-icon">⚙️</div>
     <div class="bomx-empty-title">No Workstations found</div>
     <div class="bomx-empty-sub">Try adjusting your search or filters, or create a new workstation.</div>
-    <button class="bomx-btn bomx-btn-mfg" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Workstation</button>
+    <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create Workstation</button>
   </div>
 
   <!-- ══════════ GRID VIEW ══════════ -->
@@ -90,7 +90,7 @@
         <span class="bomx-ws-loc">{{ row.warehouse || '—' }}</span>
         <div style="display:flex;gap:6px">
           <button class="bomx-btn-icon" @click.stop="selectWorkstation(row.name)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-          <button class="bomx-btn-icon danger" @click.stop="quickDelete(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+          <button class="bomx-btn-icon danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click.stop="quickDelete(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
         </div>
       </div>
     </div>
@@ -120,7 +120,7 @@
           <td>
             <div style="display:flex;gap:6px;justify-content:flex-end">
               <button class="bomx-btn-icon" @click.stop="selectWorkstation(row.name)" title="Edit"><span v-html="icon('edit',13)"></span></button>
-              <button class="bomx-btn-icon danger" @click.stop="quickDelete(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
+              <button class="bomx-btn-icon danger" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click.stop="quickDelete(row)" title="Delete"><span v-html="icon('trash',13)"></span></button>
             </div>
           </td>
         </tr>
@@ -214,10 +214,10 @@
         </div>
 
         <div class="bomx-drawer-footer">
-          <button v-if="!isNew" class="bomx-btn bomx-btn-ghost" @click="deleteFromDetail">Delete Workstation</button>
+          <button v-if="!isNew" class="bomx-btn bomx-btn-ghost" :disabled="!$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="deleteFromDetail">Delete Workstation</button>
           <div style="flex:1"></div>
           <button class="bomx-btn bomx-btn-outline" @click="goBackToList">Cancel</button>
-          <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading">
+          <button class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || detailLoading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
             <span v-html="icon('save',13)"></span> {{ saving ? 'Saving…' : (isNew ? 'Save Workstation' : 'Save Changes') }}
           </button>
         </div>

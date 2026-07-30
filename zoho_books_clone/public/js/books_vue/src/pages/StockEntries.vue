@@ -52,7 +52,7 @@
       <div style="display:flex;gap:8px;">
         <button class="se-btn-ghost" @click="load"><span v-html="icon('refresh',14)"></span></button>
         <button class="se-btn-ghost" @click="exportCSV" :disabled="!sorted.length"><span v-html="icon('download',14)"></span> Export</button>
-        <button class="se-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Entry</button>
+        <button class="se-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Entry</button>
       </div>
     </div>
 
@@ -112,7 +112,9 @@
               <td><span class="se-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
               <td @click.stop style="display:flex;gap:4px">
                 <button class="se-act-btn" @click="openView(e)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="e.docstatus===0 && $canWrite('inventory')" class="se-act-btn" @click="openEdit(e)" title="Edit"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===0 && $canEdit('inventory')" class="se-act-btn" @click="openEdit(e)" title="Edit"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click="editSubmittedEntry(e)" title="Edit (cancels &amp; re-posts corrected GL)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click="cancelSubmittedEntry(e)" title="Cancel entry"><span v-html="icon('x',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length">
@@ -120,7 +122,7 @@
                 <div style="font-size:32px;margin-bottom:8px">📦</div>
                 <div style="font-weight:600;margin-bottom:4px">No stock entries found</div>
                 <div style="font-size:13px;color:#9ca3af;margin-bottom:12px">Try changing the filter or date range</div>
-                <button class="se-btn-primary" :disabled="!$canWrite('inventory')" :title="!$canWrite('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Entry</button>
+                <button class="se-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openNew"><span v-html="icon('plus',13)"></span> New Entry</button>
               </td>
             </tr>
           </template>
@@ -146,7 +148,9 @@
               <span class="se-mc-docno">{{ e.name }}</span>
               <span style="display:flex;gap:6px;align-items:center">
                 <span class="se-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span>
-                <button v-if="e.docstatus===0 && $canWrite('inventory')" class="se-act-btn" @click.stop="openEdit(e)" title="Edit"><span v-html="icon('edit',12)"></span></button>
+                <button v-if="e.docstatus===0 && $canEdit('inventory')" class="se-act-btn" @click.stop="openEdit(e)" title="Edit"><span v-html="icon('edit',12)"></span></button>
+                <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click.stop="editSubmittedEntry(e)" title="Edit (cancels &amp; re-posts corrected GL)"><span v-html="icon('edit',12)"></span></button>
+                <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click.stop="cancelSubmittedEntry(e)" title="Cancel entry"><span v-html="icon('x',12)"></span></button>
               </span>
             </div>
             <div class="se-mc-mid">
@@ -506,11 +510,17 @@
         </div>
         <div class="se-dfooter">
           <button class="se-btn-ghost" @click="viewOpen=false">Close</button>
-          <button v-if="viewDoc.docstatus===0 && $canWrite('inventory')" class="se-btn-ghost" @click="openEdit(viewDoc); viewOpen=false">
+          <button v-if="viewDoc.docstatus===0 && $canEdit('inventory')" class="se-btn-ghost" @click="openEdit(viewDoc); viewOpen=false">
             <span v-html="icon('edit',13)"></span> Edit
           </button>
           <button v-if="viewDoc.docstatus===0" class="se-btn-primary" @click="submitEntry(viewDoc.name)">
             <span v-html="icon('check',13)"></span> Submit
+          </button>
+          <button v-if="viewDoc.docstatus===1 && $canEdit('inventory')" class="se-btn-ghost" :disabled="actionBusy" @click="editSubmittedEntry(viewDoc)" title="Cancels this entry and reverses its GL/stock ledger, then opens a corrected draft">
+            <span v-html="icon('edit',13)"></span> Edit
+          </button>
+          <button v-if="viewDoc.docstatus===1 && $canEdit('inventory')" class="se-btn-ghost" :disabled="actionBusy" @click="cancelSubmittedEntry(viewDoc)">
+            <span v-html="icon('x',13)"></span> Cancel Entry
           </button>
         </div>
       </template>
@@ -522,15 +532,18 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiList, apiGet, apiGET, apiSave, apiSubmit, resolveCompany, apiLinkValues } from "../api/client.js";
+import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, resolveCompany, apiLinkValues } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import JournalTab from "../components/JournalTab.vue";
 
 const { toast } = useToast();
+const { confirm } = useConfirm();
 const route = useRoute();
+const actionBusy = ref(false);
 
 const activeTab  = ref("all");
 const sourceFilter = ref("all");
@@ -849,8 +862,8 @@ function openNew() {
   drawerOpen.value = true;
 }
 
-async function openEdit(e) {
-  if (e.docstatus !== 0) return;
+async function openEdit(e, { force = false } = {}) {
+  if (e.docstatus !== 0 && !force) return;
   editingName.value = e.name;
   Object.assign(form, {
     stock_entry_type: e.stock_entry_type || "Material Receipt",
@@ -899,6 +912,53 @@ async function openEdit(e) {
   } catch {
     toast.error("Failed to load entry for editing");
   }
+}
+
+// A submitted Stock Entry already has stock ledger + GL entries posted against
+// it — mutating those fields in place would leave the GL out of sync with the
+// stock ledger (or need a hand-written reversal), and would destroy the audit
+// trail of what was actually posted. So cancelling here calls Stock Entry's
+// own on_cancel, which reverses the SLE and GL entries exactly (including
+// batch qty adjustments), leaving the books consistent.
+async function cancelSubmittedEntry(e) {
+  const ok = await confirm({
+    title: "Cancel this stock entry?",
+    body: `Cancelling ${e.name} reverses its stock movement and ledger entries. This can't be undone.`,
+    okLabel: "Cancel Entry", okStyle: "danger",
+  });
+  if (!ok) return;
+  actionBusy.value = true;
+  try {
+    await apiCancel("Stock Entry", e.name);
+    toast.success(`${e.name} cancelled`);
+    viewOpen.value = false;
+    await load();
+  } catch (err) {
+    toast.error(err.message || "Failed to cancel entry");
+  } finally { actionBusy.value = false; }
+}
+
+// "Edit" on a submitted entry is really "cancel + re-post": cancel reverses
+// the wrong stock/GL impact exactly (via on_cancel), then a corrected draft
+// is opened pre-filled with the same details so it can be fixed and
+// resubmitted. Both the cancelled original and the new entry remain visible
+// in the list for audit purposes — nothing is silently overwritten.
+async function editSubmittedEntry(e) {
+  const ok = await confirm({
+    title: "Edit this stock entry?",
+    body: `This cancels ${e.name} — reversing its stock and ledger entries — then opens a corrected entry with the same details. Both entries stay in the list for audit purposes.`,
+    okLabel: "Cancel & Correct", okStyle: "danger",
+  });
+  if (!ok) return;
+  actionBusy.value = true;
+  try {
+    await apiCancel("Stock Entry", e.name);
+    viewOpen.value = false;
+    await openEdit(e, { force: true }); // pre-fills form + lines from the (now cancelled) doc
+    editingName.value = "";     // clear so Save creates a fresh draft, not an overwrite
+  } catch (err) {
+    toast.error(err.message || "Failed to cancel entry for editing");
+  } finally { actionBusy.value = false; }
 }
 
 // Sum the requested qty per item, then verify the source warehouse holds enough.

@@ -48,13 +48,13 @@
   <div class="ob-go-live-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <label style="font-size:13px;font-weight:600;color:#868E96;white-space:nowrap">Go-live Date</label>
-      <input type="date" v-model="goLiveDate" @change="saveDraft" :disabled="submitted" class="b-input"/>
+      <input type="date" v-model="goLiveDate" @change="saveDraft" :disabled="submitted || !$canCreate('accounts')" class="b-input"/>
       <span style="font-size:12px;color:#868E96">Balances as at the closing of this date from your previous system.</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <span v-if="submitted" style="display:inline-flex;align-items:center;gap:6px;background:#EBFBEE;color:#2F9E44;border:1px solid rgba(47,158,68,.2);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600"><span v-html="icon('check',13)"></span>Submitted</span>
-      <button v-if="hasBalances||submitted" class="b-btn b-btn-ghost" @click="showResetModal=true">Reset</button>
-      <button v-if="!submitted" class="b-btn" :class="Math.abs(eq.diff)<0.01&&hasBalances?'b-btn-primary':'b-btn-ghost'" :disabled="!hasBalances" @click="Math.abs(eq.diff)<0.01&&hasBalances?showSubmitModal=true:null">
+      <button v-if="hasBalances||submitted" class="b-btn b-btn-ghost" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="showResetModal=true">Reset</button>
+      <button v-if="!submitted" class="b-btn" :class="Math.abs(eq.diff)<0.01&&hasBalances?'b-btn-primary':'b-btn-ghost'" :disabled="!hasBalances || !$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="Math.abs(eq.diff)<0.01&&hasBalances?showSubmitModal=true:null">
         <span v-html="icon('check',13)"></span>
         {{Math.abs(eq.diff)<0.01&&hasBalances?'Submit Opening Balances':'Needs Balancing'}}
       </button>
@@ -115,10 +115,10 @@
               <div v-if="a.account_type" style="font-size:11px;color:#868E96">{{a.account_type}}</div>
             </div>
             <input type="number" min="0" step="0.01" class="ob-bal-input" :class="balances[a.name]>0?'ob-has-val':''"
-              :value="balances[a.name]||''" placeholder="0.00" :disabled="submitted"
+              :value="balances[a.name]||''" placeholder="0.00" :disabled="submitted || !$canCreate('accounts')"
               @input="setB(a.name,$event.target.value)" @focus="$event.target.select()"/>
             <select class="ob-dr-cr-sel" :class="(drCrMap[a.name]||'Debit')==='Debit'?'ob-dr':'ob-cr'"
-              :disabled="submitted" @change="setDC(a.name,$event.target.value)">
+              :disabled="submitted || !$canCreate('accounts')" @change="setDC(a.name,$event.target.value)">
               <option value="Debit" :selected="(drCrMap[a.name]||'Debit')==='Debit'">Dr (Debit)</option>
               <option value="Credit" :selected="(drCrMap[a.name]||'Debit')==='Credit'">Cr (Credit)</option>
             </select>
@@ -174,8 +174,10 @@ import { ref, reactive, computed, onMounted } from "vue";
 import { apiGET, apiPOST, apiSave, apiSubmit, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
+import { usePermissions } from "../composables/usePermissions.js";
 
 const { toast } = useToast();
+const { canCreate } = usePermissions();
 
 const OB_TYPE_META = {
   Asset:     { color: "#0C8599", bg: "#E0F7FA", label: "Assets",      balType: "Debit"  },
@@ -301,6 +303,7 @@ function secAccts(t) { return accounts.value.filter((a) => a.root_type === t); }
 function secTotal(t) { return r2(secAccts(t).reduce((s, a) => s + r2(Number(balances[a.name] || 0)), 0)); }
 
 async function doSubmit() {
+  if (!canCreate("accounts")) { toast("Read-only access", "error"); showSubmitModal.value = false; return; }
   showSubmitModal.value = false;
   const date = goLiveDate.value || new Date().toISOString().slice(0, 10);
   const lines = [];
@@ -339,6 +342,7 @@ async function doSubmit() {
 }
 
 function doReset() {
+  if (!canCreate("accounts")) { toast("Read-only access", "error"); showResetModal.value = false; return; }
   Object.keys(balances).forEach((k) => delete balances[k]);
   submitted.value = false;
   localStorage.removeItem("books_ob_status");

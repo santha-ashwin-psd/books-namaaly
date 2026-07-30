@@ -14,7 +14,7 @@
     </div>
     <div class="sales-actions">
       <button class="sales-btn-ghost" @click="loadList" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
-      <button class="sales-btn-primary" @click="openAdd"><span v-html="icon('plus',13)"></span> New Disposal</button>
+      <button class="sales-btn-primary" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Disposal</button>
     </div>
   </div>
 
@@ -112,7 +112,7 @@
                 <template v-else>
                   <p class="bk-empty-title">No asset disposals yet</p>
                   <p class="bk-empty-sub">Scrap or sell an asset to retire it from the register.</p>
-                  <button class="bk-empty-btn" @click="openAdd"><span v-html="icon('plus',13)"></span> New Disposal</button>
+                  <button class="bk-empty-btn" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> New Disposal</button>
                 </template>
               </div>
             </td>
@@ -319,16 +319,16 @@
         <div class="inv-dfooter">
           <template v-if="readOnlyEditable">
             <button class="add-btn-cancel" @click="closeDrawer">Cancel</button>
-            <button class="add-btn-draft" :disabled="saving" @click="save('Draft')">
+            <button class="add-btn-draft" :disabled="saving || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))" @click="save('Draft')">
               <span v-html="icon('save',13)"></span> Save Draft
             </button>
-            <button class="add-btn-more" :disabled="saving" @click="save('Submitted')">
+            <button class="add-btn-more" :disabled="saving || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))" @click="save('Submitted')">
               <span v-html="icon('check',13)"></span> {{ saving ? 'Saving…' : 'Save & Submit' }}
             </button>
           </template>
           <template v-else-if="disposal.docstatus===1">
             <div class="add-footer-status">{{ disposal.name }} — submitted, GL {{ disposal.gl_posted ? 'posted' : 'not applicable' }}</div>
-            <button class="add-btn-cancel" style="color:#dc2626" :disabled="cancelling" @click="cancelDisposal">
+            <button class="add-btn-cancel" style="color:#dc2626" :disabled="cancelling || !$canDelete('inventory')" :title="!$canDelete('inventory') ? 'Not permitted' : ''" @click="cancelDisposal">
               <span v-html="icon('cancel',13)"></span> {{ cancelling ? 'Cancelling…' : 'Cancel Disposal' }}
             </button>
           </template>

@@ -539,6 +539,8 @@ def send_invoice_email(invoice_name, to, subject, body, cc=None, pdf_html=None):
     # Validate invoice exists and user has permission
     if not frappe.has_permission("Sales Invoice", "read", invoice_name):
         frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices")
 
     inv = frappe.get_doc("Sales Invoice", invoice_name)
 
@@ -904,6 +906,14 @@ def delete_doc(doctype, name):
         from zoho_books_clone.inventory.utils import assert_batch_deletable
         assert_batch_deletable(name)
 
+    # force=True above means Journal Entry.on_trash (which cleans up its
+    # mirror Bank Transaction reconciliation rows) never fires — do it here
+    # explicitly, or the Banking page is left with a dangling
+    # journal_entry reference to a document that no longer exists.
+    if doctype == "Journal Entry":
+        je_doc = frappe.get_doc("Journal Entry", name)
+        je_doc._cleanup_mirror_bank_transactions()
+
     frappe.delete_doc(doctype, name, ignore_permissions=True, force=True)
     frappe.db.commit()
     return {"message": "deleted"}
@@ -922,6 +932,14 @@ def safe_delete_party(doctype, name):
         frappe.throw("Not permitted", frappe.PermissionError)
     if doctype not in ("Customer", "Supplier"):
         frappe.throw("safe_delete_party only supports Customer or Supplier")
+
+    from zoho_books_clone.utils.access import assert_can, assert_company
+    assert_can(doctype, "delete")
+    # Customer/Supplier are looked up below via frappe.db.count/get_all, which
+    # bypass Frappe's has_permission hook (that's a doc-level check; these
+    # are raw queries) -- without this, a member of a different company could
+    # delete another company's party just by naming it.
+    assert_company(frappe.db.get_value(doctype, name, "books_company"))
 
     if doctype == "Customer":
         checks = [("Sales Invoice", "customer"), ("Sales Order", "customer"),
@@ -1147,6 +1165,8 @@ def send_bill_email(bill_name, to, subject, body, cc=None, pdf_html=None):
     """Send a bill email; attaches the bill PDF when print format exists."""
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("bills")
     if not frappe.has_permission("Purchase Invoice", "read", bill_name):
         frappe.throw("Not permitted", frappe.PermissionError)
 
@@ -2418,6 +2438,8 @@ def get_credit_note_email_defaults(credit_note_name):
 def send_credit_note_email(credit_note_name, to, subject, body, cc=None, pdf_html=None):
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices")
     if not frappe.has_permission("Sales Invoice", "read", credit_note_name):
         frappe.throw("Not permitted", frappe.PermissionError)
     cn = frappe.get_doc("Sales Invoice", credit_note_name)
@@ -2487,6 +2509,8 @@ def get_debit_note_email_defaults(debit_note_name):
 def send_debit_note_email(debit_note_name, to, subject, body, cc=None, pdf_html=None):
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("bills")
     if not frappe.has_permission("Purchase Invoice", "read", debit_note_name):
         frappe.throw("Not permitted", frappe.PermissionError)
     dn = frappe.get_doc("Purchase Invoice", debit_note_name)
@@ -2893,6 +2917,8 @@ def _quote_items_to_doc_items(quote_doc, target_item_doctype):
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def convert_quote_to_sales_order(quotation_name, delivery_date=""):
     """Create a Sales Order from a Quotation; flips the quote status to Converted."""
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices", write=True)
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
     qd = frappe.get_doc("Quotation", quotation_name)
@@ -3036,6 +3062,8 @@ def send_quote_email(quotation_name, to, subject, body, cc=None, pdf_html=None):
     """Send a quote email and auto-flip status to 'Sent'."""
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices")
     if not frappe.has_permission("Quotation", "read", quotation_name):
         frappe.throw("Not permitted", frappe.PermissionError)
     qd = frappe.get_doc("Quotation", quotation_name)
@@ -3432,6 +3460,8 @@ def get_sales_order_email_defaults(sales_order):
 def send_sales_order_email(sales_order, to, subject, body, cc=None, pdf_html=None):
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices")
     if not frappe.has_permission("Sales Order", "read", sales_order):
         frappe.throw("Not permitted", frappe.PermissionError)
     so = frappe.get_doc("Sales Order", sales_order)
@@ -3797,6 +3827,8 @@ def get_purchase_order_email_defaults(purchase_order):
 def send_purchase_order_email(purchase_order, to, subject, body, cc=None, pdf_html=None):
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module
+    require_module("bills")
     if not frappe.has_permission("Purchase Order", "read", purchase_order):
         frappe.throw("Not permitted", frappe.PermissionError)
     po = frappe.get_doc("Purchase Order", purchase_order)
@@ -4019,8 +4051,18 @@ def get_vendor_email_defaults(vendor):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def send_vendor_statement_email(vendor, to, subject, body, cc=None):
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("customers")
+    # Supplier is only ever touched via frappe.db.get_value below, never
+    # frappe.get_doc, so Frappe's has_permission hook never runs here --
+    # without this, any company member could email another company's
+    # vendor statement just by naming the Supplier.
+    assert_company(frappe.db.get_value("Supplier", vendor, "books_company"))
+
     recipients = [e.strip() for e in to.split(",") if e.strip()]
     cc_list = [e.strip() for e in (cc or "").split(",") if e.strip()]
     _send_business_email(
@@ -4255,8 +4297,14 @@ def get_customer_email_defaults(customer):
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def send_customer_statement_email(customer, to, subject, body, cc=None):
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
     if not to:
         frappe.throw("Recipient email (To) is required.")
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("customers")
+    assert_company(frappe.db.get_value("Customer", customer, "books_company"))
+
     recipients = [e.strip() for e in to.split(",") if e.strip()]
     cc_list = [e.strip() for e in (cc or "").split(",") if e.strip()]
     _send_business_email(
@@ -4514,6 +4562,13 @@ def reconcile_bank_transaction(bank_transaction_name, payment_entry_name=None):
 def unreconcile_bank_transaction(bank_transaction_name):
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("banking", write=True)
+    # Writes below are raw frappe.db.set_value calls, which bypass Frappe's
+    # has_permission hook entirely -- without this, a member of a different
+    # company could unreconcile another company's Bank Transaction by name.
+    assert_company(frappe.db.get_value("Bank Transaction", bank_transaction_name, "company"))
+
     had_payment_entry = frappe.db.get_value("Bank Transaction", bank_transaction_name, "payment_entry")
     frappe.db.set_value("Bank Transaction", bank_transaction_name, "status",
                         "Unreconciled", update_modified=True)

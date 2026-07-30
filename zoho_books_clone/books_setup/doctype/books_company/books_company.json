@@ -501,6 +501,13 @@
    "description": "Debited when stock is issued/sold (Material Issue)."
   },
   {
+   "fieldname": "default_scrap_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Default Scrap/By-Product Account",
+   "description": "Debited for recoverable scrap/by-products received from a Work Order, instead of the Default Inventory Account, when Manufacturing Settings > Segregate Scrap/By-Product GL is enabled. Falls back to the Default Inventory Account if left blank."
+  },
+  {
    "fieldname": "sec_qc",
    "fieldtype": "Section Break",
    "label": "Quality Control"

@@ -39,9 +39,9 @@
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span v-if="lockDate" style="font-size:12px;color:#C92A2A;font-weight:700">Locked up to {{ fmtLock(lockDate) }}</span>
       <span v-else style="font-size:12px;color:#868E96;font-weight:600">No lock set</span>
-      <input v-model="lockDateInput" type="date" style="border:1px solid #E2E8F0;border-radius:7px;padding:6px 10px;font:inherit;font-size:13px;outline:none"/>
-      <button class="b-btn b-btn-primary" @click="saveLockDate" :disabled="lockSaving || !lockDateInput">{{ lockSaving ? 'Saving…' : (lockDate ? 'Update' : 'Lock') }}</button>
-      <button v-if="lockDate" class="b-btn b-btn-ghost" @click="clearLockDate" :disabled="lockSaving">Clear</button>
+      <input v-model="lockDateInput" type="date" :disabled="!$canEdit('accounts')" style="border:1px solid #E2E8F0;border-radius:7px;padding:6px 10px;font:inherit;font-size:13px;outline:none"/>
+      <button class="b-btn b-btn-primary" @click="saveLockDate" :disabled="lockSaving || !lockDateInput || !$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''">{{ lockSaving ? 'Saving…' : (lockDate ? 'Update' : 'Lock') }}</button>
+      <button v-if="lockDate" class="b-btn b-btn-ghost" @click="clearLockDate" :disabled="lockSaving || !$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''">Clear</button>
     </div>
   </div>
 
@@ -100,7 +100,7 @@
           No fiscal years found for this company.
         </div>
 
-        <button class="b-btn b-btn-ghost" @click="openAdd" style="width:100%;justify-content:center">
+        <button class="b-btn b-btn-ghost" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="openAdd" style="width:100%;justify-content:center">
           <span v-html="icon('plus',13)"></span>Add Fiscal Year
         </button>
       </template>
@@ -120,7 +120,7 @@
         <div style="font-size:40px;margin-bottom:14px">📅</div>
         <div style="font-weight:600;font-size:15px;color:#1A1D23;margin-bottom:6px">Select a fiscal year</div>
         <div style="font-size:13px;line-height:1.6">Click any year on the left to view and manage its accounting periods, lock past periods, and run year-end close.</div>
-        <button class="b-btn b-btn-primary" :disabled="!$canWrite('accounts')" :title="!$canWrite('accounts') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:18px">+ Add First Fiscal Year</button>
+        <button class="b-btn b-btn-primary" :disabled="!$canCreate('accounts')" :title="!$canCreate('accounts') ? 'Read-only access' : ''" @click="openAdd" style="margin-top:18px">+ Add First Fiscal Year</button>
       </div>
 
       <template v-else>
@@ -141,8 +141,10 @@
                 style="display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:#F1F3F5;color:#868E96">Closed</span>
               <button v-if="isPast(selectedYearData.end)&&!selectedYearData.is_closed"
                 class="b-btn b-btn-ghost" style="border-color:#C92A2A;color:#C92A2A;font-size:12px;padding:5px 11px"
+                :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''"
                 @click="openCloseYear(selectedYearData.name)">🔒 Close Year</button>
               <button class="b-btn b-btn-ghost" style="font-size:12px;padding:5px 11px"
+                :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''"
                 @click="openEdit(selectedYearData.name)">Edit</button>
             </div>
           </div>
@@ -182,6 +184,7 @@
                 <button v-if="!p.is_current"
                   style="background:none;border:1px solid;border-radius:5px;cursor:pointer;padding:3px 8px;font-size:11px;font-family:inherit;transition:all .15s"
                   :style="{borderColor:p.locked?'#C92A2A':'#CED4DA',color:p.locked?'#C92A2A':'#868E96',background:p.locked?'#FFF5F5':'#fff'}"
+                  :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''"
                   @click="togglePeriodLock(selectedYearData.name,i)">
                   {{p.locked?"Unlock":"Lock"}}
                 </button>
@@ -213,6 +216,7 @@
                 <button v-if="!p.is_current"
                   class="fy-pc-lock-btn"
                   :class="{' fy-pc-lock-btn--locked':p.locked}"
+                  :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''"
                   @click="togglePeriodLock(selectedYearData.name,i)">
                   {{p.locked?"Unlock":"Lock"}}
                 </button>
@@ -226,8 +230,8 @@
               {{(selectedYearData.periods||[]).filter(p=>p.locked).length}} of {{(selectedYearData.periods||[]).length}} periods locked
             </span>
             <div style="display:flex;gap:8px">
-              <button class="b-btn b-btn-ghost" style="font-size:12px;padding:5px 10px" @click="lockAllPeriods(selectedYearData.name,true)">Lock All Past</button>
-              <button class="b-btn b-btn-ghost" style="font-size:12px;padding:5px 10px" @click="lockAllPeriods(selectedYearData.name,false)">Unlock All</button>
+              <button class="b-btn b-btn-ghost" style="font-size:12px;padding:5px 10px" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="lockAllPeriods(selectedYearData.name,true)">Lock All Past</button>
+              <button class="b-btn b-btn-ghost" style="font-size:12px;padding:5px 10px" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="lockAllPeriods(selectedYearData.name,false)">Unlock All</button>
             </div>
           </div>
         </div>
@@ -390,8 +394,10 @@ import { ref, reactive, computed, onMounted } from "vue";
 import { apiGET, apiPOST } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
+import { usePermissions } from "../composables/usePermissions.js";
 
 const { toast } = useToast();
+const { canCreate, canEdit } = usePermissions();
 
 const FY_MONTHS      = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const FY_MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -558,6 +564,7 @@ async function persistFYLockDate(y) {
 }
 
 function togglePeriodLock(yearName, idx) {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); return; }
   const y = allYears.value.find((x) => x.name === yearName);
   if (!y) return;
   const nowLocked = !y.periods[idx].locked;
@@ -566,6 +573,7 @@ function togglePeriodLock(yearName, idx) {
   toast(nowLocked ? "Period locked" : "Period unlocked");
 }
 function lockAllPeriods(yearName, lock) {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); return; }
   const y = allYears.value.find((x) => x.name === yearName);
   if (!y) return;
   y.periods = y.periods.map((p) =>
@@ -623,6 +631,7 @@ function validateForm() {
 }
 
 async function saveYear() {
+  if (!(editingName.value ? canEdit("accounts") : canCreate("accounts"))) { toast("Read-only access", "error"); return; }
   drawerError.value = "";
   const err = validateForm();
   if (err) { drawerError.value = err; return; }
@@ -649,9 +658,13 @@ async function saveYear() {
   }
 }
 
-function openCloseYear(name) { closeModalYear.value = name; showCloseModal.value = true; }
+function openCloseYear(name) {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); return; }
+  closeModalYear.value = name; showCloseModal.value = true;
+}
 
 async function doCloseYear() {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); showCloseModal.value = false; return; }
   const name = closeModalYear.value;
   if (!name) return;
   showCloseModal.value = false; closeModalYear.value = null;
@@ -687,6 +700,7 @@ async function loadLockDate() {
 }
 
 async function saveLockDate() {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); return; }
   if (!lockDateInput.value) return;
   lockSaving.value = true;
   try {
@@ -698,6 +712,7 @@ async function saveLockDate() {
 }
 
 async function clearLockDate() {
+  if (!canEdit("accounts")) { toast("Read-only access", "error"); return; }
   lockSaving.value = true;
   try {
     await apiPOST("zoho_books_clone.api.admin.set_books_lock_date", { lock_date: "" });

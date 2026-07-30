@@ -146,10 +146,10 @@ def get_invoice_email_defaults(invoice_name):
 def send_invoice_email(invoice_name, to, subject, body, cc=None):
     if not to:
         frappe.throw("Recipient email (To) is required.")
-    # Books Manager is a custom role — skip frappe.has_permission() to avoid
-    # false PermissionError; @frappe.whitelist(allow_guest=False) already blocks guests.
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import require_module
+    require_module("invoices")
 
     inv = frappe.get_doc("Sales Invoice", invoice_name)
     recipients = [e.strip() for e in to.split(",") if e.strip()]
@@ -247,6 +247,13 @@ def send_quote_email(quote_name, to, subject, body, cc=None):
         frappe.throw("Recipient email (To) is required.")
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+    from zoho_books_clone.utils.access import require_module, assert_company
+    require_module("invoices", write=True)
+    # This function only ever touches Quotation via raw frappe.db calls
+    # below, never frappe.get_doc -- so Frappe's has_permission hook never
+    # runs. Without this, any company member could email (and flip the
+    # status of) another company's Quotation just by naming it.
+    assert_company(frappe.db.get_value("Quotation", quote_name, "company"))
 
     recipients = [e.strip() for e in to.split(",") if e.strip()]
     cc_list = [e.strip() for e in (cc or "").split(",") if e.strip()]
@@ -2186,6 +2193,8 @@ def get_chart_of_accounts(company=None):
     """Return all non-disabled accounts.
     Dynamically checks which columns exist in tabAccount so it works
     on plain Frappe installations that may not have root_type / opening_balance etc."""
+    from zoho_books_clone.utils.access import require_module
+    require_module("accounts")
 
     # ── 1. Discover available columns via SHOW COLUMNS ──────────────────────
     try:
