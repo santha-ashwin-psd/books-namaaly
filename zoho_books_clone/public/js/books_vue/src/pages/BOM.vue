@@ -1088,6 +1088,15 @@ async function submitBom() {
   if (!bom.value.name) return;
   submitting.value = true;
   try {
+    // Persist any unsaved edits (e.g. scrap items changed after the version
+    // was created via amend) before submitting -- apiSubmit acts on the doc
+    // as currently stored in the DB, not on local form state.
+    bom.value.rm_cost = rm_cost.value;
+    bom.value.op_cost = op_cost.value;
+    bom.value.scrap_value = scrap_value.value;
+    bom.value.total_cost = total_cost.value;
+    const saved = await apiSave(bom.value);
+    bom.value = saved;
     const doc = await apiSubmit("BOM", bom.value.name);
     bom.value = doc;
     toast("BOM submitted — it's now the active revision");

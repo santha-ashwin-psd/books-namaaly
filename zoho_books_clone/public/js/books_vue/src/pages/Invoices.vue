@@ -1130,7 +1130,12 @@
                       <td class="mono-sm">{{ fmtDate(p.payment_date) }}</td>
                       <td>{{ p.mode_of_payment||'—' }}</td>
                       <td class="text-muted mono-sm">{{ p.reference_no||'—' }}</td>
-                      <td class="td-r" style="font-weight:600;color:#059669">{{ fmtAmt(p.paid_amount) }}</td>
+                      <td class="td-r">
+                        <div style="font-weight:600;color:#059669">{{ fmtAmt(p.paid_amount) }}</div>
+                        <div v-if="flt(p.bank_charges) > 0" style="font-size:10.5px;color:#dc2626;font-weight:500">
+                          − {{ fmtAmt(p.bank_charges) }} bank charges
+                        </div>
+                      </td>
                     </tr>
                   </tbody>
                 </table>

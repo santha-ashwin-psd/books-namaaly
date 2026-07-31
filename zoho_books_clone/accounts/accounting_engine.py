@@ -524,6 +524,42 @@ def _acct_by_type(company: str, account_type: str) -> str | None:
 
 # ─── Payment Entry ─────────────────────────────────────────────────────────────
 
+def _get_bank_charges_account(company: str) -> str | None:
+    """Expense account that absorbs bank-deducted charges on a Payment Entry
+    (e.g. NEFT/collection fees deducted before the money reaches the bank
+    ledger). Falls back to the same auto-create pattern as Round Off."""
+    acct = frappe.db.get_value(
+        "Account",
+        {"account_name": ["like", "%Bank Charges%"], "company": company, "is_group": 0},
+        "name",
+    )
+    if acct:
+        return acct
+
+    parent = (
+        frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Indirect Expense%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_type": "Expense"}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1, "account_name": ["like", "%Expense%"]}, "name")
+        or frappe.db.get_value("Account", {"company": company, "is_group": 1}, "name")
+    )
+    if not parent:
+        return None
+    try:
+        doc = frappe.get_doc({
+            "doctype": "Account",
+            "account_name": "Bank Charges",
+            "company": company,
+            "account_type": "Expense",
+            "parent_account": parent,
+            "is_group": 0,
+        })
+        doc.insert(ignore_permissions=True)
+        return doc.name
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Bank Charges account auto-create failed for {company}")
+        return None
+
+
 def post_payment_entry(doc) -> None:
     """
     Post GL entries for a Payment Entry.
@@ -533,11 +569,24 @@ def post_payment_entry(doc) -> None:
     _require(doc, "paid_from", "Paid From account")
     _require(doc, "paid_to",   "Paid To account")
 
+    bank_charges = flt(getattr(doc, "bank_charges", 0))
+    if bank_charges:
+        charges_account = getattr(doc, "bank_charges_account", None) or _get_bank_charges_account(doc.company)
+        if not charges_account:
+            frappe.throw(_("Please set up a Bank Charges account for {0} to submit this payment").format(doc.company))
+        if bank_charges > flt(doc.paid_amount):
+            frappe.throw(_("Bank Charges ({0}) cannot exceed the Paid Amount ({1})").format(bank_charges, doc.paid_amount))
+
     if doc.payment_type == "Receive":
+        # The customer's receivable is still cleared in full — bank_charges
+        # is a cost the company bears, not a discount to the customer — so
+        # only the Bank/Cash leg shrinks by the charge; a third line expenses
+        # the difference so debits still equal credits.
+        bank_side = flt(doc.paid_amount) - bank_charges
         gl_map = [
             {
-                "account":      doc.paid_to,       # Bank / Cash — increases
-                "debit":        flt(doc.paid_amount),
+                "account":      doc.paid_to,       # Bank / Cash — increases (net of charges)
+                "debit":        bank_side,
                 "credit":       0,
                 "voucher_type": doc.doctype,
                 "voucher_no":   doc.name,
@@ -546,7 +595,7 @@ def post_payment_entry(doc) -> None:
                 "remarks":      f"Payment received — {doc.name}",
             },
             {
-                "account":      doc.paid_from,     # Receivable — decreases
+                "account":      doc.paid_from,     # Receivable — decreases (full amount)
                 "debit":        0,
                 "credit":       flt(doc.paid_amount),
                 "voucher_type": doc.doctype,
@@ -558,7 +607,22 @@ def post_payment_entry(doc) -> None:
                 "remarks":      f"Received from {doc.party} — {doc.name}",
             },
         ]
+        if bank_charges:
+            gl_map.append({
+                "account":      charges_account,   # Bank Charges (Expense) — increases
+                "debit":        bank_charges,
+                "credit":       0,
+                "voucher_type": doc.doctype,
+                "voucher_no":   doc.name,
+                "posting_date": doc.payment_date,
+                "company":      doc.company,
+                "remarks":      f"Bank charges on receipt — {doc.name}",
+            })
     elif doc.payment_type == "Pay":
+        # Paying a supplier: bank_charges is an additional cost of making the
+        # payment, so it adds to what actually leaves the bank; the Payable
+        # is still cleared at the full paid_amount agreed with the supplier.
+        bank_side = flt(doc.paid_amount) + bank_charges
         gl_map = [
             {
                 "account":      doc.paid_to,       # Payable — decreases
@@ -573,9 +637,9 @@ def post_payment_entry(doc) -> None:
                 "remarks":      f"Payment to {doc.party} — {doc.name}",
             },
             {
-                "account":      doc.paid_from,     # Bank / Cash — decreases
+                "account":      doc.paid_from,     # Bank / Cash — decreases (incl. charges)
                 "debit":        0,
-                "credit":       flt(doc.paid_amount),
+                "credit":       bank_side,
                 "voucher_type": doc.doctype,
                 "voucher_no":   doc.name,
                 "posting_date": doc.payment_date,
@@ -583,6 +647,17 @@ def post_payment_entry(doc) -> None:
                 "remarks":      f"Payment made — {doc.name}",
             },
         ]
+        if bank_charges:
+            gl_map.append({
+                "account":      charges_account,   # Bank Charges (Expense) — increases
+                "debit":        bank_charges,
+                "credit":       0,
+                "voucher_type": doc.doctype,
+                "voucher_no":   doc.name,
+                "posting_date": doc.payment_date,
+                "company":      doc.company,
+                "remarks":      f"Bank charges on payment — {doc.name}",
+            })
     else:
         frappe.throw(_("Payment type '{0}' not supported").format(doc.payment_type))
 

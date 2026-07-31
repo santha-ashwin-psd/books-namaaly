@@ -369,3 +369,84 @@ def get_bulk_packing_reconciliation_report(filters=None):
     }
 
     return {"rows": rows, "summary": summary}
+
+
+# ─── 6. Scrap & Manufacturing Variance Report ────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_scrap_variance_report(filters=None):
+    """Return recovered scrap value and abnormal manufacturing variance loss
+    per Manufacture Stock Entry, so scrap recovery and abnormal write-offs
+    (see work_order_engine.complete_work_order's manufacturing_variance_loss)
+    are visible in aggregate/report form instead of only inline on each
+    Work Order's Cost Breakdown / Linked Stock Entries cards.
+
+    Columns: stock_entry, posting_date, work_order, production_item,
+             item_name, scrap_value, manufacturing_variance_loss.
+
+    Filters: from_date, to_date (Stock Entry posting_date range).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "read")
+
+    f = _parse_filters(filters)
+    from_date, to_date = _date_filters(f, date_field="posting_date")
+
+    # One query, with scrap value pre-summed across every is_scrap_item=1
+    # row on that entry via LEFT JOIN + GROUP BY -- avoids an N+1 query per
+    # Stock Entry for what would otherwise be a second child-table lookup
+    # per row.
+    rows = frappe.db.sql(
+        """
+        SELECT
+            se.name AS stock_entry,
+            se.posting_date,
+            se.work_order,
+            se.manufacturing_variance_loss,
+            COALESCE(SUM(sed.qty * sed.basic_rate), 0) AS scrap_value
+        FROM `tabStock Entry` se
+        LEFT JOIN `tabStock Entry Detail` sed
+            ON sed.parent = se.name AND sed.is_scrap_item = 1
+        WHERE se.docstatus = 1
+          AND se.stock_entry_type = 'Manufacture'
+          AND se.work_order IS NOT NULL AND se.work_order != ''
+          AND se.posting_date >= %s AND se.posting_date <= %s
+        GROUP BY se.name
+        HAVING scrap_value > 0 OR se.manufacturing_variance_loss > 0
+        ORDER BY se.posting_date DESC
+        LIMIT 500
+        """,
+        (from_date, to_date),
+        as_dict=True,
+    )
+
+    if not rows:
+        return {"rows": [], "summary": {}}
+
+    # Batch-fetch each row's Work Order -> production_item -> item_name,
+    # rather than a lookup per row.
+    wo_names = list({r.work_order for r in rows})
+    wo_items = {
+        w.name: w.production_item
+        for w in frappe.get_all("Work Order", filters=[["name", "in", wo_names]], fields=["name", "production_item"])
+    }
+    item_codes = list({v for v in wo_items.values() if v})
+    item_names = {
+        i.name: i.item_name
+        for i in frappe.get_all("Item", filters=[["name", "in", item_codes]], fields=["name", "item_name"])
+    }
+
+    for r in rows:
+        r["scrap_value"] = flt(r["scrap_value"])
+        r["manufacturing_variance_loss"] = flt(r["manufacturing_variance_loss"])
+        r["production_item"] = wo_items.get(r["work_order"]) or ""
+        r["item_name"] = item_names.get(r["production_item"]) or r["production_item"]
+
+    summary = {
+        "total_entries":       len(rows),
+        "total_scrap_value":   sum(r["scrap_value"] for r in rows),
+        "total_variance_loss": sum(r["manufacturing_variance_loss"] for r in rows),
+    }
+
+    return {"rows": rows, "summary": summary}

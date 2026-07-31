@@ -292,7 +292,7 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
                     # sub-sub-assemblies, so every operation under this branch
                     # reports back to the same top-level production figure.
                     branch_item = origin_item or sub_doc.item
-                    branch_qty = origin_qty if origin_qty is not None else flt(r.qty) * ratio
+                    branch_qty = origin_qty if origin_qty is not None else flt(flt(r.qty) * ratio, 4)
                     for op in (sub_doc.operations or []):
                         operations_acc.append({
                             "operation": op.operation,
@@ -491,6 +491,47 @@ def _consume_qty_for_row(row, wo, consumption_ratio, ms):
         return max(min(consume_qty, remaining_transferred), 0)
     return flt(row.required_qty) * consumption_ratio
 
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_job_card_scrap_items(work_order):
+    """Flatten every Scrap Item row logged on this Work Order's own Job
+    Cards (see JobCard._calc_scrap_items), across every operation, into a
+    single list the Complete Work Order dialog can use as its starting
+    rows -- what actually came off the floor per operation, rather than a
+    BOM-proportional guess. Cancelled Job Cards are excluded (their rows
+    never happened as far as production is concerned).
+
+    Each row is returned with its Job Card and Operation so the dialog can
+    show where it came from; the caller (complete_work_order) only reads
+    item_code/qty/rate/is_process_loss and ignores the rest, same as any
+    other scrap_items row.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+
+    job_cards = frappe.get_all(
+        "Job Card",
+        filters={"work_order": work_order, "status": ["!=", "Cancelled"]},
+        fields=["name", "operation"],
+    )
+    if not job_cards:
+        return []
+    jc_operation = {jc.name: jc.operation for jc in job_cards}
+
+    rows = frappe.get_all(
+        "Job Card Scrap Item",
+        filters={"parent": ["in", list(jc_operation.keys())]},
+        fields=["parent", "item_code", "item_name", "qty", "rate", "is_process_loss"],
+        order_by="parent asc, idx asc",
+    )
+    for r in rows:
+        r["job_card"] = r.pop("parent")
+        r["operation"] = jc_operation.get(r["job_card"], "")
+    return rows
+
+
 @frappe.whitelist(allow_guest=False)
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
@@ -554,6 +595,21 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     process_loss_qty = flt(process_loss_qty) + scrap_process_loss_qty
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
+
+    # Recoverable scrap rows need somewhere to land. complete_work_order
+    # falls back to fg_warehouse when scrap_warehouse isn't set (below), so
+    # only fail here if BOTH are empty -- catching it up front with a clear
+    # message instead of letting it surface deep inside Stock Entry
+    # validation once the recoverable rows are appended.
+    has_recoverable_scrap = any(
+        not s.get("is_process_loss") and flt(s.get("qty")) > 0 and s.get("item_code")
+        for s in scrap_items
+    )
+    if has_recoverable_scrap and not (wo.scrap_warehouse or wo.fg_warehouse):
+        frappe.throw(_(
+            "Work Order {0} has no Scrap Warehouse or Finished Goods Warehouse set. "
+            "Set one of these before recording scrap/by-product rows."
+        ).format(wo.name))
 
     # Lock the Work Order row for the rest of this transaction so two
     # concurrent completions against the same Work Order can't both read
@@ -866,9 +922,25 @@ def get_actual_absorbed_cost(work_order):
         as_dict=True,
     )
     actual_cost = sum(flt(r.amount) for r in rows)
+
+    # Abnormal process loss / scrap-shortfall write-offs (see
+    # complete_work_order's manufacturing_variance_loss) -- summed across
+    # every completion run so the Cost Breakdown panel can show the total
+    # that was expensed rather than capitalized into FG cost, instead of
+    # that figure sitting invisibly in the GL.
+    variance_loss = flt(frappe.db.sql(
+        """
+        SELECT SUM(manufacturing_variance_loss)
+        FROM `tabStock Entry`
+        WHERE work_order = %s AND docstatus = 1 AND stock_entry_type = 'Manufacture'
+        """,
+        (wo.name,),
+    )[0][0] or 0)
+
     return {
         "actual_cost": actual_cost,
         "produced_qty": flt(wo.produced_qty),
+        "manufacturing_variance_loss": variance_loss,
     }
 
 
@@ -1176,13 +1248,21 @@ def reverse_material_issue(work_order, stock_entry):
 def reverse_manufacture_entry(work_order, stock_entry):
     """Undo a completion recorded by complete_work_order(): cancels the
     Manufacture Stock Entry (reversing both the raw-material consumption
-    and the finished-goods/scrap receipt) and rolls back produced_qty and
-    each affected row's consumed_qty on the Work Order.
+    and the finished-goods/scrap receipt) and rolls back produced_qty,
+    each affected row's consumed_qty, and operating_cost_absorbed_total on
+    the Work Order.
 
     Only the most recent Manufacture Stock Entry for this Work Order can be
     reversed -- reversing an earlier one out of order would leave
     produced_qty/consumed_qty inconsistent with completions recorded after
     it. Reverse later completions first if there are any.
+
+    operating_cost_absorbed_total IS rolled back (by the reversed entry's
+    own operating_cost_absorbed) even though the GL reversal from se.cancel()
+    is already exact on its own -- this field feeds the final-run true-up in
+    complete_work_order (operating_cost_this_run = current_total_operating_cost
+    - current_operating_cost_absorbed_total), so leaving it stale would
+    under-absorb operating cost into whatever completion replaces this one.
 
     process_loss_qty is not rolled back: it never moved any stock (it's a
     reporting-only figure for material that was consumed but never became
@@ -1229,6 +1309,9 @@ def reverse_manufacture_entry(work_order, stock_entry):
         if r.item_code == wo.production_item and r.t_warehouse
     )
     consumption_rows = [r for r in se.items if r.s_warehouse]
+    # Captured before se.cancel() -- cancel() doesn't clear the Stock Entry's
+    # own fields, but read it now regardless so this doesn't depend on that.
+    operating_cost_absorbed_this_entry = flt(se.operating_cost_absorbed)
 
     se.flags.ignore_manufacturing_guard = True
     se.cancel()
@@ -1239,6 +1322,17 @@ def reverse_manufacture_entry(work_order, stock_entry):
 
     new_produced_qty = max(flt(wo.produced_qty) - qty_manufactured, 0)
     wo.db_set("produced_qty", new_produced_qty)
+
+    # Without this, the next completion's final-run true-up (complete_work_order:
+    # operating_cost_this_run = current_total_operating_cost -
+    # current_operating_cost_absorbed_total) reads a stale, too-high absorbed
+    # total left over from the reversed run and under-absorbs operating cost
+    # into the corrected completion -- silently misstating FG/WIP valuation
+    # even though the GL reversal itself (via se.cancel() above) is exact.
+    new_operating_cost_absorbed_total = max(
+        flt(wo.operating_cost_absorbed_total) - operating_cost_absorbed_this_entry, 0
+    )
+    wo.db_set("operating_cost_absorbed_total", new_operating_cost_absorbed_total)
 
     still_transferred = any(flt(r.transferred_qty) > 0 for r in wo.items)
     new_status = "In Process" if (new_produced_qty > 0 or still_transferred) else "Submitted"

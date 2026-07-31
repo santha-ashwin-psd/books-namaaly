@@ -368,6 +368,45 @@
             </div>
           </div>
         </div>
+
+        <!-- ── Scrap & Variance table ── -->
+        <div v-if="activeTab === 'scrap-variance'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No scrap or variance loss recorded for the selected filters.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>Stock Entry</th><th>Work Order</th><th>Item</th>
+                <th style="text-align:right;">Scrap Value</th>
+                <th style="text-align:right;">Variance Loss</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.stock_entry" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+                <td class="mrx-link" style="font-size:12px;">{{ r.stock_entry }}</td>
+                <td class="mrx-sub">{{ r.work_order }}</td>
+                <td>{{ r.item_name }}<div class="mrx-sub">{{ r.production_item }}</div></td>
+                <td style="text-align:right;color:var(--bx-green);">{{ fmt(r.scrap_value) }}</td>
+                <td style="text-align:right;" :style="r.manufacturing_variance_loss > 0 ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.manufacturing_variance_loss) }}</td>
+                <td class="mrx-sub">{{ r.posting_date }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.stock_entry" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link" style="font-size:12px;">{{ r.stock_entry }}</span>
+                <span class="mrx-sub">{{ r.posting_date }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.item_name }}</div>
+              <div class="mrx-sub">{{ r.work_order }}</div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Scrap Value</span><span style="color:var(--bx-green);">{{ fmt(r.scrap_value) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Variance Loss</span><span :style="r.manufacturing_variance_loss > 0 ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.manufacturing_variance_loss) }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
 
       <!-- Empty state before first run -->
@@ -398,6 +437,7 @@ const tabs = [
   { id: "bom-cost",    label: "BOM Cost Analysis",       icon: "💰", desc: "Cost breakdown of raw materials, operations, and scrap per BOM." },
   { id: "performance", label: "Production Performance",  icon: "⚙️", desc: "Yield, efficiency, and process loss across completed runs." },
   { id: "bulk-recon",  label: "Bulk → Packed Reconciliation", icon: "🔄", desc: "Bulk qty produced vs. consumed via Packing Slips vs. remaining in warehouse, across every bulk-producing Work Order." },
+  { id: "scrap-variance", label: "Scrap & Variance", icon: "🧪", desc: "Recovered scrap value and abnormal manufacturing variance loss per completion run." },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -420,6 +460,7 @@ const API_MAP = {
   "bom-cost":    "zoho_books_clone.manufacturing.reports.get_bom_cost_analysis",
   "performance": "zoho_books_clone.manufacturing.reports.get_production_performance_report",
   "bulk-recon":  "zoho_books_clone.manufacturing.reports.get_bulk_packing_reconciliation_report",
+  "scrap-variance": "zoho_books_clone.manufacturing.reports.get_scrap_variance_report",
 };
 
 async function runReport() {
@@ -475,6 +516,11 @@ const summaryKpis = computed(() => {
     { label: "Shortage", value: s.shortage, color: s.shortage > 0 ? "var(--bx-red)" : "var(--bx-muted)" },
     { label: "Overpack", value: s.overpack, color: s.overpack > 0 ? "var(--bx-amber)" : "var(--bx-muted)" },
     { label: "Reconciled", value: s.reconciled, color: "var(--bx-green)" },
+  ];
+  if (activeTab.value === "scrap-variance") return [
+    { label: "Entries", value: s.total_entries },
+    { label: "Total Scrap Value", value: fmt(s.total_scrap_value), color: "var(--bx-green)" },
+    { label: "Total Variance Loss", value: fmt(s.total_variance_loss), color: s.total_variance_loss > 0 ? "var(--bx-red)" : "var(--bx-muted)" },
   ];
   return [];
 });

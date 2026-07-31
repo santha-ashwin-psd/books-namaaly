@@ -504,14 +504,15 @@ def record_payment(
         "allocated_amount":   amount_received,
     })
 
-    # Bank charges: your Payment Entry doctype has no deductions child table,
-    # so we note the charge in remarks and reduce received_amount so the net
-    # deposit to the bank account is accurate.
+    # Bank charges are now posted as a proper GL line (see
+    # accounts/accounting_engine.py::post_payment_entry) — the Receivable is
+    # still cleared at the full invoice amount, only the Bank/Cash leg and a
+    # Bank Charges expense line are affected on submit.
     if bank_charges > 0:
-        net_received = amount_received - bank_charges
-        pe.received_amount = net_received if net_received > 0 else amount_received
-        charge_note = f" | Bank Charges: \u20b9{bank_charges:,.2f} (Net received: \u20b9{pe.received_amount:,.2f})"
-        pe.remarks = (pe.remarks or "") + charge_note
+        if bank_charges > amount_received:
+            frappe.throw("Bank Charges cannot exceed the amount received.")
+        pe.bank_charges = bank_charges
+        pe.remarks = (pe.remarks or "") + f" | Bank Charges: \u20b9{bank_charges:,.2f}"
 
     pe.insert(ignore_permissions=True)
     if not save_as_draft:
@@ -731,10 +732,10 @@ def record_payment_multi(
         })
 
     if bank_charges > 0:
-        net_received = amount_received - bank_charges
-        pe.received_amount = net_received if net_received > 0 else amount_received
-        charge_note = f" | Bank Charges: \u20b9{bank_charges:,.2f} (Net received: \u20b9{pe.received_amount:,.2f})"
-        pe.remarks = (pe.remarks or "") + charge_note
+        if bank_charges > amount_received:
+            frappe.throw("Bank Charges cannot exceed the amount received.")
+        pe.bank_charges = bank_charges
+        pe.remarks = (pe.remarks or "") + f" | Bank Charges: \u20b9{bank_charges:,.2f}"
 
     pe.insert(ignore_permissions=True)
     if not save_as_draft:
@@ -780,14 +781,14 @@ def _cash_account_balance(cash_account, company):
     Journal-Entry-tagged cash expenses) minus all-time already deposited.
     """
     total_in = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+        """SELECT SUM(paid_amount - IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
            WHERE docstatus = 1 AND payment_type = 'Receive'
              AND paid_to = %s AND LOWER(company) = LOWER(%s)""",
         (cash_account, company)
     )[0][0] or 0)
 
     total_out_pe = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+        """SELECT SUM(paid_amount + IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
            WHERE docstatus = 1 AND payment_type = 'Pay'
              AND paid_from = %s AND LOWER(company) = LOWER(%s)""",
         (cash_account, company)
@@ -911,14 +912,14 @@ def get_cash_summary(company=None):
         return {"cash_in": 0, "cash_out": 0, "transfers": 0, "net_cash": 0}
 
     cash_in = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+        """SELECT SUM(paid_amount - IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
            WHERE docstatus = 1 AND payment_type = 'Receive'
              AND paid_to IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
         {"accs": cash_accounts, "co": company}
     )[0][0] or 0)
 
     cash_out_pe = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount) FROM `tabPayment Entry`
+        """SELECT SUM(paid_amount + IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
            WHERE docstatus = 1 AND payment_type = 'Pay'
              AND paid_from IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
         {"accs": cash_accounts, "co": company}

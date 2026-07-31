@@ -294,5 +294,70 @@ class TestBOMCalcCostsOpAmount(unittest.TestCase):
         self.assertAlmostEqual(bom.op_cost, 90.0)
 
 
+# ---------------------------------------------------------------------------
+# WorkOrder.set_items_and_operations_from_bom -- process_loss_percent snapshot
+# ---------------------------------------------------------------------------
+
+class TestSetItemsAndOperationsFromBomProcessLoss(unittest.TestCase):
+    """set_items_and_operations_from_bom is the API safety-net path used when
+    a Work Order reaches validate() with a BOM set but no Raw Material rows
+    (e.g. created via the generic API without the client calling
+    get_bom_breakdown first). It must snapshot the BOM's expected process
+    loss % onto the Work Order the same way WorkOrder.vue does client-side
+    (wo.value.process_loss_percent = flt(r.process_loss)) -- otherwise
+    complete_work_order() treats ALL process loss on that Work Order as
+    abnormal (expected_loss_qty_this_run works out to 0) instead of
+    capitalizing the BOM's normal expected shrinkage into FG cost.
+    """
+
+    def _make_wo_self(self, qty=10.0, bom="BOM-001"):
+        wo = MagicMock()
+        wo.bom = bom
+        wo.qty = qty
+        wo.source_warehouse = "Stores - TC"
+        wo.append = MagicMock()
+        wo.set = MagicMock()
+        return wo
+
+    def test_process_loss_percent_snapshotted_from_breakdown(self):
+        from zoho_books_clone.manufacturing.doctype.work_order.work_order import WorkOrder
+
+        mock_bom = MagicMock()
+        mock_bom.docstatus = 1
+
+        breakdown = {"items": [], "operations": [], "process_loss": 3.5}
+
+        wo = self._make_wo_self()
+
+        with patch("frappe.get_doc", return_value=mock_bom), \
+             patch("zoho_books_clone.manufacturing.work_order_engine.get_bom_breakdown",
+                   return_value=breakdown):
+            WorkOrder.set_items_and_operations_from_bom(wo)
+
+        self.assertAlmostEqual(wo.process_loss_percent, 3.5)
+
+    def test_zero_process_loss_on_bom_still_overwrites_stale_value(self):
+        """A BOM with no expected shrinkage should snapshot 0, not leave
+        whatever process_loss_percent happened to be set from a prior
+        load/amend -- a stale nonzero value would let real process loss
+        that this BOM never accounted for pass as 'expected' at completion."""
+        from zoho_books_clone.manufacturing.doctype.work_order.work_order import WorkOrder
+
+        mock_bom = MagicMock()
+        mock_bom.docstatus = 1
+
+        breakdown = {"items": [], "operations": [], "process_loss": 0}
+
+        wo = self._make_wo_self()
+        wo.process_loss_percent = 99  # stale value from a prior load
+
+        with patch("frappe.get_doc", return_value=mock_bom), \
+             patch("zoho_books_clone.manufacturing.work_order_engine.get_bom_breakdown",
+                   return_value=breakdown):
+            WorkOrder.set_items_and_operations_from_bom(wo)
+
+        self.assertAlmostEqual(wo.process_loss_percent, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

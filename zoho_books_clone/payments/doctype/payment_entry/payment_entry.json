@@ -507,6 +507,24 @@
    "unique": 0
   },
   {
+   "fieldname": "bank_charges",
+   "fieldtype": "Currency",
+   "label": "Bank Charges",
+   "default": "0",
+   "insert_after": "reference_date",
+   "in_list_view": 0,
+   "description": "Amount deducted/charged by the bank for this transaction. Posted as a separate expense on submit."
+  },
+  {
+   "fieldname": "bank_charges_account",
+   "fieldtype": "Link",
+   "label": "Bank Charges Account",
+   "options": "Account",
+   "insert_after": "bank_charges",
+   "in_list_view": 0,
+   "description": "Expense account to post Bank Charges against. Auto-resolved to the company's 'Bank Charges' account if left blank."
+  },
+  {
    "fieldname": "company",
    "fieldtype": "Data",
    "label": "Company",

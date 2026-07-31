@@ -756,7 +756,12 @@
                         <td class="mono-sm">{{ fmtDate(p.payment_date) }}</td>
                         <td>{{ p.mode_of_payment || '—' }}</td>
                         <td class="mono-sm text-muted">{{ p.reference_no || '—' }}</td>
-                        <td class="td-r" style="font-weight:600;color:#059669">{{ fmtCur(p.paid_amount) }}</td>
+                        <td class="td-r">
+                          <div style="font-weight:600;color:#059669">{{ fmtCur(p.paid_amount) }}</div>
+                          <div v-if="flt(p.bank_charges) > 0" style="font-size:10.5px;color:#dc2626;font-weight:500">
+                            + {{ fmtCur(p.bank_charges) }} bank charges
+                          </div>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -770,6 +775,9 @@
                       <div class="bil-pay-mc-bottom">
                         <span class="bil-pay-mc-mode">{{ p.mode_of_payment || '—' }}</span>
                         <span class="bil-pay-mc-ref">{{ p.reference_no || '—' }}</span>
+                      </div>
+                      <div v-if="flt(p.bank_charges) > 0" style="font-size:10.5px;color:#dc2626;font-weight:500;margin-top:2px">
+                        + {{ fmtCur(p.bank_charges) }} bank charges
                       </div>
                     </div>
                   </div>

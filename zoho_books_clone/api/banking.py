@@ -425,8 +425,10 @@ def get_bank_accounts_with_balances(company: str = None) -> list:
 def bounce_cheque(payment_entry: str) -> dict:
     """
     Reverse GL entries when a cheque bounces.
-    The original Payment Entry GL (DR Bank / CR Payable or DR Receivable / CR Bank)
-    is unwound by creating reversing GL entries.
+    The original Payment Entry GL (DR Bank / CR Payable or DR Receivable / CR Bank,
+    plus a DR Bank Charges line if the payment had bank_charges) is unwound by
+    creating reversing GL entries — reverse_voucher() reverses whatever GL
+    lines exist for the voucher, so this isn't hardcoded to 2 lines.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("banking", write=True)

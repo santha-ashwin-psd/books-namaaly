@@ -69,7 +69,7 @@
                   No {{ isCashMode ? "Cash" : "Bank" }} account found for this company. Set one up under Accounts first.
                 </div>
               </div>
-              <div class="pmd-field" v-if="!state.multi">
+              <div class="pmd-field">
                 <label class="pmd-lbl">Bank Charges</label>
                 <input v-model.number="form.charges" type="number" min="0" step="0.01" class="pmd-input pmd-money" />
               </div>
@@ -346,6 +346,7 @@ async function onSave() {
         reference_no: form.ref || "",
         notes: form.notes || "",
         allocations: JSON.stringify(allocations),
+        bank_charges: form.charges || 0,
         save_as_draft: 0,
       };
       payload = state.direction === "pay"

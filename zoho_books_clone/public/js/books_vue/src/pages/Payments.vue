@@ -232,6 +232,10 @@
                   <option v-for="m in paymentModes" :key="m" :value="m">{{ m }}</option>
                 </select>
               </div>
+              <div>
+                <label class="inv-lbl">Bank Charges</label>
+                <input v-model.number="form.bank_charges" type="number" min="0" step="0.01" class="inv-fi" placeholder="0.00" />
+              </div>
             </div>
           </div>
         </div>
@@ -428,6 +432,18 @@
               <div>
                 <div class="pmt-vd-lbl">PAID TO</div>
                 <div class="pmt-vd-val">{{ paymentAccountLabel(viewPmt.paid_to) }}</div>
+              </div>
+              <div v-if="flt(viewPmt.bank_charges) > 0">
+                <div class="pmt-vd-lbl">BANK CHARGES</div>
+                <div class="pmt-vd-val" style="color:#dc2626">{{ fmtCur(viewPmt.bank_charges) }}</div>
+              </div>
+              <div v-if="flt(viewPmt.bank_charges) > 0">
+                <div class="pmt-vd-lbl">NET {{ viewPmt.payment_type==='Receive'?'DEPOSITED':'PAID FROM BANK' }}</div>
+                <div class="pmt-vd-val">
+                  {{ fmtCur(viewPmt.payment_type==='Receive'
+                      ? flt(viewPmt.paid_amount) - flt(viewPmt.bank_charges)
+                      : flt(viewPmt.paid_amount) + flt(viewPmt.bank_charges)) }}
+                </div>
               </div>
             </div>
           </div>
@@ -640,7 +656,7 @@ const blankForm = () => ({
   doctype: "Payment Entry",
   payment_type: defaultTab.value === "Receive" ? "Receive" : "Pay",
   party_type: defaultTab.value === "Receive" ? "Customer" : "Supplier",
-  party: "", mode_of_payment: "", paid_amount: "",
+  party: "", mode_of_payment: "", paid_amount: "", bank_charges: "",
   payment_date: new Date().toISOString().slice(0,10),
   reference_no: "", reference_date: "", paid_from: "", paid_to: "", remarks: "",
 });
@@ -687,7 +703,7 @@ async function load() {
   try {
     list.value = await apiList("Payment Entry", {
       fields: ["name","party","party_name","party_type","paid_amount","payment_type","payment_date",
-               "mode_of_payment","reference_no","reference_date","paid_from","paid_to","remarks","docstatus"],
+               "mode_of_payment","reference_no","reference_date","paid_from","paid_to","remarks","docstatus","bank_charges"],
       limit: 200, order: "payment_date desc, creation desc",
     });
   } catch (e) { toast.error(e.message || "Failed to load payments"); }
@@ -753,6 +769,7 @@ async function openEdit(p) {
     doctype: "Payment Entry", name: p.name, payment_type: p.payment_type,
     party_type: p.party_type, party: p.party||"", mode_of_payment: p.mode_of_payment||"",
     paid_amount: flt(p.paid_amount), payment_date: p.payment_date||new Date().toISOString().slice(0,10),
+    bank_charges: flt(p.bank_charges) || "",
     reference_no: p.reference_no||"", reference_date: p.reference_date||"",
     paid_from: p.paid_from||"", paid_to: p.paid_to||"", remarks: p.remarks||"",
   });
@@ -921,6 +938,7 @@ async function savePayment(submit) {
   if (!form.paid_amount || flt(form.paid_amount) <= 0) return toast.error("Amount must be greater than 0");
   if (flt(form.paid_amount) > 999999999) return toast.error("Amount cannot exceed 9 digits (max ₹999,999,999)");
   if (!form.payment_date) return toast.error("Payment date is required");
+  if (flt(form.bank_charges) > flt(form.paid_amount)) return toast.error("Bank Charges cannot exceed the Amount");
   _savingInFlight = true;
   drawerSaving.value = true;
   try {
@@ -941,6 +959,7 @@ async function savePayment(submit) {
       payment_type: form.payment_type, party_type: form.party_type, party: form.party, party_name: partyName,
       mode_of_payment: form.mode_of_payment || "Cash",
       paid_amount: flt(form.paid_amount), received_amount: flt(form.paid_amount),
+      bank_charges: flt(form.bank_charges) || 0,
       payment_date: form.payment_date,
       reference_no: form.reference_no || "", reference_date: form.reference_date || null,
       paid_from: form.paid_from || "", paid_to: form.paid_to || "",

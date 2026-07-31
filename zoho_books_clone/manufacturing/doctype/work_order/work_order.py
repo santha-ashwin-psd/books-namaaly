@@ -197,6 +197,17 @@ class WorkOrder(Document):
 
 		breakdown = get_bom_breakdown(self.bom, self.qty)
 
+		# Snapshot the BOM's expected process-loss % onto the Work Order, same
+		# as WorkOrder.vue does client-side (wo.value.process_loss_percent =
+		# flt(r.process_loss)) on the normal load-from-BOM flow. Without this,
+		# a Work Order created via this API safety net keeps
+		# process_loss_percent at its default of 0, so complete_work_order()'s
+		# expected_loss_qty_this_run works out to 0 and ALL process loss on
+		# that Work Order gets treated as abnormal (expensed to
+		# manufacturing_variance_loss) instead of the normal-shrinkage share
+		# being capitalized into FG cost as the BOM intends.
+		self.process_loss_percent = flt(breakdown.get("process_loss"))
+
 		self.set("items", [])
 		for row in breakdown["items"]:
 			self.append("items", {
@@ -246,7 +257,7 @@ class WorkOrder(Document):
 				"work_order":        self.name,
 				"operation":         op_row.operation,
 				"workstation":       op_row.workstation or "",
-				"for_quantity":      flt(op_row.sub_assembly_qty) if op_row.sub_assembly_item else flt(self.qty),
+				"for_quantity":      flt(op_row.sub_assembly_qty, 4) if op_row.sub_assembly_item else flt(self.qty),
 				"status":            "Open",
 				"wo_operation_name": op_row.name,
 				"sub_assembly_bom":  op_row.sub_assembly_bom or "",

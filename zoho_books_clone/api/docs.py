@@ -1054,7 +1054,7 @@ def get_invoice_payments(invoice_name):
     for pe_name in pe_names:
         pe = frappe.db.get_value(
             "Payment Entry", pe_name,
-            ["name", "payment_date", "paid_amount", "mode_of_payment", "reference_no", "docstatus"],
+            ["name", "payment_date", "paid_amount", "mode_of_payment", "reference_no", "docstatus", "bank_charges"],
             as_dict=True,
         )
         if pe:
@@ -1109,7 +1109,7 @@ def get_bill_payments(bill_name):
     for pe_name in pe_names:
         pe = frappe.db.get_value(
             "Payment Entry", pe_name,
-            ["name", "payment_date", "paid_amount", "mode_of_payment", "reference_no", "docstatus"],
+            ["name", "payment_date", "paid_amount", "mode_of_payment", "reference_no", "docstatus", "bank_charges"],
             as_dict=True,
         )
         if pe:
@@ -1290,7 +1290,8 @@ def record_vendor_payment(bill_name, amount_paid=None, payment_date=None,
         "posting_date": payment_date or today(),
         "payment_date": payment_date or today(),
         "mode_of_payment": payment_mode,
-        "remarks": notes or "",
+        "bank_charges": flt(bank_charges) or 0,
+        "remarks": (notes or "") + (f" | Bank Charges: \u20b9{flt(bank_charges):,.2f}" if flt(bank_charges) else ""),
         "references": [{
             "reference_doctype": "Purchase Invoice",
             "reference_name": bill.name,
@@ -1443,10 +1444,13 @@ def record_vendor_payment_multi(
         })
 
     if bank_charges > 0:
-        net_paid = amount - bank_charges
-        pe.paid_amount = net_paid if net_paid > 0 else amount
-        charge_note = f" | Bank Charges: \u20b9{bank_charges:,.2f} (Net paid: \u20b9{pe.paid_amount:,.2f})"
-        pe.remarks = (pe.remarks or "") + charge_note
+        # NOTE: paid_amount must stay at the full amount — it's what's
+        # allocated against the bill references above, and shrinking it here
+        # used to leave allocated_amount (full bill total) exceeding
+        # paid_amount, or silently under-clearing the bill. bank_charges is
+        # now posted as its own GL line (see accounting_engine.py) instead.
+        pe.bank_charges = bank_charges
+        pe.remarks = (pe.remarks or "") + f" | Bank Charges: \u20b9{bank_charges:,.2f}"
 
     pe.flags.ignore_permissions = True
     pe.flags.ignore_mandatory = True

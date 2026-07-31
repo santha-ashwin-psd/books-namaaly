@@ -65,7 +65,7 @@
           </div>
           <div class="bomx-jc-stat">
             <div class="bomx-jc-stat-lbl">For Quantity</div>
-            <div class="bomx-jc-stat-val mono">{{ row.for_quantity || '—' }}</div>
+            <div class="bomx-jc-stat-val mono">{{ row.for_quantity ? fmtQty(row.for_quantity) : '—' }}</div>
           </div>
           <div class="bomx-jc-stat" style="grid-column:1/-1">
             <div class="bomx-jc-stat-lbl">Total Time</div>
@@ -238,6 +238,55 @@
             </div>
             <div class="bomx-add-row" @click="addTimeLog">
               <span v-html="icon('plus',13)"></span> Add Time Log
+            </div>
+
+            <!-- Scrap / By-Products -->
+            <div class="bomx-section-lbl" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">
+              <span>Scrap / By-Products</span>
+            </div>
+            <div class="bomx-field-hint" style="margin-bottom:8px">Recoverable scrap/by-products (or pure process loss) from this operation. These rows are offered as defaults in the Work Order's Complete dialog.</div>
+            <div class="bomx-rm-cards" style="margin-bottom:8px">
+              <div v-if="!doc.scrap_items || !doc.scrap_items.length" class="bomx-tree-empty">No scrap items logged for this operation.</div>
+              <div v-for="(sc, idx) in doc.scrap_items" :key="sc._uid" class="bomx-rm-card">
+                <div class="bomx-rm-card-hdr">
+                  <span class="bomx-tree-icon">🗑️</span>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--bx-muted);cursor:pointer;flex:1">
+                    <input type="checkbox" v-model="sc.is_process_loss" @change="onToggleJcProcessLoss(sc)"/>
+                    Process loss (no item recovered)
+                  </label>
+                  <div class="bomx-rm-card-amt" v-if="!sc.is_process_loss">
+                    <span class="bomx-rm-card-amt-lbl">Amount</span>
+                    <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ fmtQty((sc.qty||0)*(sc.rate||0)) }}</span>
+                  </div>
+                  <button class="bomx-btn-icon danger" @click="removeScrapItem(idx)" title="Remove">
+                    <span v-html="icon('trash',13)"></span>
+                  </button>
+                </div>
+                <div class="bomx-rm-card-body" style="grid-template-columns:2fr 1fr 1fr">
+                  <div class="bomx-rm-field" v-if="!sc.is_process_loss">
+                    <label>Item</label>
+                    <select class="bomx-fi" v-model="sc.item_code">
+                      <option value="">— Select Item —</option>
+                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                    </select>
+                  </div>
+                  <div class="bomx-rm-field" v-else>
+                    <label>Item</label>
+                    <div class="bomx-rm-static" style="color:var(--bx-muted)">— Process loss, no item —</div>
+                  </div>
+                  <div class="bomx-rm-field">
+                    <label>Qty</label>
+                    <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="sc.qty" min="0" step="any"/>
+                  </div>
+                  <div class="bomx-rm-field" v-if="!sc.is_process_loss">
+                    <label>Rate (₹)</label>
+                    <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="sc.rate" min="0" step="any"/>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="bomx-add-row" @click="addScrapItem">
+              <span v-html="icon('plus',13)"></span> Add Scrap Item
             </div>
 
             <!-- Remarks -->
@@ -440,6 +489,7 @@ function emptyDoc() {
     actual_end_time: "",
     time_logs: [],
     total_time_in_mins: 0,
+    scrap_items: [],
     remarks: "",
   };
 }
@@ -462,6 +512,7 @@ watch(() => doc.value.sub_assembly_bom, (b) => { if (b) loadSubAssemblyBomNames(
 const workOrdersList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
+const stockItems = ref([]);
 
 // ── Work Order's own Operation rows (with sub-assembly tags), so a Job
 // Card can be tied to a *specific* row -- e.g. "Cutting" under sub-assembly
@@ -532,14 +583,16 @@ function ensureUids(rows) { (rows || []).forEach(r => { if (!r._uid) r._uid = ne
 
 async function loadDropdowns() {
   try {
-    const [wos, ops, wks] = await Promise.all([
+    const [wos, ops, wks, stk] = await Promise.all([
       apiList("Work Order", { fields: ["name"], filters: [["docstatus", "=", 1], ["status", "not in", ["Completed", "Stopped", "Cancelled"]]], limit: 2000, order: "name desc" }),
       apiList("Operation",  { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
       apiList("Workstation",{ fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
+      apiList("Item",       { fields: ["name", "item_name"], filters: [["is_stock_item", "=", 1]], limit: 5000, order: "name asc" }),
     ]);
     workOrdersList.value   = wos || [];
     operationsList.value   = ops || [];
     workstationsList.value = wks || [];
+    stockItems.value       = stk || [];
   } catch (e) {
     toast("Could not load reference data", "error");
   }
@@ -578,6 +631,8 @@ async function loadDoc() {
     const r = await apiGet("Job Card", route.params.name);
     if (!r.time_logs) r.time_logs = [];
     ensureUids(r.time_logs);
+    if (!r.scrap_items) r.scrap_items = [];
+    ensureUids(r.scrap_items);
     doc.value = r;
     if (r.work_order) await loadWorkOrderItemNames([r.work_order]);
     if (r.sub_assembly_bom) await loadSubAssemblyBomNames([r.sub_assembly_bom]);
@@ -638,6 +693,25 @@ function addTimeLog() {
   doc.value.time_logs.push({ _uid: nextUid(), from_time: "", to_time: "", time_in_mins: 0, employee: doc.value.employee || "" });
 }
 
+function addScrapItem() {
+  if (!doc.value.scrap_items) doc.value.scrap_items = [];
+  doc.value.scrap_items.push({ _uid: nextUid(), item_code: "", qty: 1, rate: 0, is_process_loss: false });
+}
+function removeScrapItem(idx) {
+  doc.value.scrap_items.splice(idx, 1);
+}
+// Clearing item_code when a row is switched to "process loss" avoids
+// silently saving a stale item selection the row no longer shows.
+function onToggleJcProcessLoss(row) {
+  if (row.is_process_loss) { row.item_code = ""; row.rate = 0; }
+}
+
+function fmtQty(q) {
+  // Round to 4dp and strip trailing zeros so a sub-assembly's fractional
+  // for_quantity (e.g. 0.5) never renders with floating-point noise
+  // (0.49999999999997) picked up from the ratio math upstream.
+  return (Math.round(Number(q) * 10000) / 10000).toString();
+}
 function fmtMins(m) {
   const h = Math.floor(m / 60), min = Math.round(m % 60);
   return h > 0 ? `${h}h ${min}m` : `${min}m`;
@@ -655,17 +729,23 @@ async function save() {
   if ((doc.value.time_logs || []).some(tl => tl._invalidRange)) {
     return toast("Fix the time log row where To Time is before From Time", "error");
   }
+  if ((doc.value.scrap_items || []).some(s => !s.is_process_loss && !s.item_code)) {
+    return toast("Each Scrap Item row needs an Item Code, or check Process Loss", "error");
+  }
 
   saving.value = true;
   try {
     const payload = {
       ...doc.value,
       time_logs: (doc.value.time_logs || []).map(({ _uid, _invalidRange, ...rest }) => rest),
+      scrap_items: (doc.value.scrap_items || []).map(({ _uid, ...rest }) => rest),
     };
     const r = await apiSave(payload);
     toast(isNew.value ? "Job Card created successfully" : "Saved successfully");
     if (!r.time_logs) r.time_logs = [];
     ensureUids(r.time_logs);
+    if (!r.scrap_items) r.scrap_items = [];
+    ensureUids(r.scrap_items);
     if (isNew.value) {
       router.replace(`/manufacturing/job-card/${r.name}`);
     } else {

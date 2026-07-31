@@ -12,6 +12,29 @@ class JobCard(Document):
 
     def validate(self):
         self._calc_total_time()
+        self._calc_scrap_items()
+
+    def _calc_scrap_items(self):
+        """Same split as BOM Scrap Item (see bom.py::validate_scrap_items):
+        a row is either recoverable scrap/by-product (needs an Item Code,
+        may carry a Rate) or process loss (no item, no recovery value --
+        rate forced to 0 so amount naturally comes out to 0). Captured here,
+        per operation, rather than only once at Work Order completion, so
+        the Complete Work Order dialog can default to what actually came
+        off the floor for this specific step instead of a BOM-proportional
+        guess. See work_order_engine.get_job_card_scrap_items, which reads
+        these rows back out across every Job Card on a Work Order.
+        """
+        for row in (self.scrap_items or []):
+            if row.is_process_loss:
+                row.rate = 0
+                row.item_code = ""
+            elif not row.item_code:
+                frappe.throw(_(
+                    "Row #{0} in Scrap Items: Item Code is required unless "
+                    "the row is marked as Process Loss."
+                ).format(row.idx))
+            row.amount = flt(row.qty) * flt(row.rate)
 
     def _calc_total_time(self):
         total = 0.0

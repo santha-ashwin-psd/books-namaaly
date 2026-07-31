@@ -703,6 +703,13 @@
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600">
+          <span>Mode of Payment</span>
+          <select v-model="payForm.mode_of_payment" style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+            <option value="">— Select —</option>
+            <option v-for="m in paymentModes" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:12.5px;color:#374151;font-weight:600">
           <span>Date</span>
           <input type="date" v-model="payForm.payment_date"
             style="border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit"/>
@@ -1547,7 +1554,8 @@ const vendorSummary      = ref({});       // {outstanding, dn_credit, open_bill_
 const obInfo         = ref({ has_opening_je: false });
 const showPayModal   = ref(false);
 const payLoading     = ref(false);
-const payForm        = reactive({ amount: 0, bank_cash_account: "", payment_date: new Date().toISOString().slice(0, 10) });
+const payForm        = reactive({ amount: 0, bank_cash_account: "", payment_date: new Date().toISOString().slice(0, 10), mode_of_payment: "" });
+const paymentModes   = ref(["Cash", "Bank Transfer", "Cheque", "Credit Card", "UPI", "NEFT", "RTGS"]);
 const vendorTxns         = ref([]);       // chronological transactions
 const vendorStatement    = ref({ rows: [], totals: {} });
 const balancesByVendor   = ref({});       // {vendor_name: outstanding} — for the list view
@@ -1653,6 +1661,7 @@ function openPayModal() {
   payForm.amount = obInfo.value.outstanding;
   payForm.bank_cash_account = obInfo.value.bank_cash_accounts?.[0]?.name || "";
   payForm.payment_date = new Date().toISOString().slice(0, 10);
+  payForm.mode_of_payment = "";
   showPayModal.value = true;
 }
 
@@ -1676,6 +1685,7 @@ async function submitPayment() {
       paid_amount: amount,
       received_amount: amount,
       payment_date: payForm.payment_date,
+      mode_of_payment: payForm.mode_of_payment || "",
       remarks: `Opening balance payment for ${selectedVendor.value.supplier_name || selectedVendor.value.name}`,
       references: [{
         reference_doctype: "Journal Entry",

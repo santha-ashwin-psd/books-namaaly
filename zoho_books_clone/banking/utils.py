@@ -92,15 +92,21 @@ def create_bank_transaction_row(
 def create_bank_transaction_from_payment_entry(pe):
     """Create a Bank Transaction row mirroring a submitted Payment Entry's
     bank leg. See create_bank_transaction_row for the full rationale.
+
+    Uses the net-of-bank-charges amount (what actually moved in/out of the
+    bank account), matching what post_payment_entry() posts to the Bank/Cash
+    GL leg — not the gross paid_amount — so this row reconciles cleanly
+    against the real bank statement.
     """
+    bank_charges = flt(getattr(pe, "bank_charges", 0))
     if pe.payment_type == "Receive":
         bank_account_name = pe.paid_to
-        deposit    = flt(pe.paid_amount)
+        deposit    = flt(pe.paid_amount) - bank_charges
         withdrawal = 0.0
     else:  # Pay
         bank_account_name = pe.paid_from
         deposit    = 0.0
-        withdrawal = flt(pe.paid_amount)
+        withdrawal = flt(pe.paid_amount) + bank_charges
 
     return create_bank_transaction_row(
         bank_account_gl=bank_account_name,
@@ -166,7 +172,10 @@ def _match_by_amount_and_date(txn: dict) -> str | None:
         return None
     result = frappe.db.sql("""
         SELECT name FROM `tabPayment Entry`
-        WHERE paid_amount = %s
+        WHERE (
+            (payment_type = 'Receive' AND paid_amount - IFNULL(bank_charges, 0) = %s)
+            OR (payment_type = 'Pay' AND paid_amount + IFNULL(bank_charges, 0) = %s)
+        )
           AND ABS(DATEDIFF(payment_date, %s)) <= 2
           AND docstatus = 1
           AND name NOT IN (
@@ -174,7 +183,7 @@ def _match_by_amount_and_date(txn: dict) -> str | None:
               WHERE payment_entry IS NOT NULL AND payment_entry != ''
           )
         LIMIT 1
-    """, (amount, txn["date"]), as_dict=True)
+    """, (amount, amount, txn["date"]), as_dict=True)
     return result[0].name if result else None
 
 
@@ -182,8 +191,19 @@ def _match_by_amount_and_date(txn: dict) -> str | None:
 def find_matching_payment(
     bank_account: str, amount: float, date: str, reference: str | None = None
 ) -> list[dict]:
-    """Return candidate Payment Entries for a bank transaction."""
-    conditions = ["docstatus = 1", "paid_amount = %(amount)s"]
+    """Return candidate Payment Entries for a bank transaction.
+
+    Matches on the *net* bank-side amount (paid_amount adjusted for
+    bank_charges) since that's what actually shows up on the bank statement,
+    while still matching plain gross amounts for entries with no charges.
+    """
+    conditions = [
+        "docstatus = 1",
+        "("
+        "  (payment_type = 'Receive' AND paid_amount - IFNULL(bank_charges, 0) = %(amount)s)"
+        "  OR (payment_type = 'Pay' AND paid_amount + IFNULL(bank_charges, 0) = %(amount)s)"
+        ")",
+    ]
     params = {"amount": flt(amount)}
 
     if reference:
@@ -193,7 +213,7 @@ def find_matching_payment(
 
     where = " AND ".join(conditions)
     return frappe.db.sql(f"""
-        SELECT name, payment_date, paid_amount, party, payment_type, mode_of_payment
+        SELECT name, payment_date, paid_amount, bank_charges, party, payment_type, mode_of_payment
         FROM `tabPayment Entry`
         WHERE {where}
           AND name NOT IN (

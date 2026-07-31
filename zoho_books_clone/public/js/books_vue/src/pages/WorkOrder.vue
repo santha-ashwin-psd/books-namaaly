@@ -148,7 +148,7 @@
                 <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
                   View Amended {{ amendedInto }}
                 </button>
-                <button v-if="!isNew && (wo.docstatus===0 || wo.docstatus===2)" class="bomx-btn bomx-btn-ghost-inv" style="color:#ffffff;border-color:rgba(201,42,42,.3);background-color: red;" @click="deleteWO" :disabled="submitting || !$canDelete('inventory')">
+                <button v-if="!isNew && (wo.docstatus===0 || wo.docstatus===2)" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteWO" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Deleting…' : 'Delete Work Order' }}
                 </button>
                 <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting || !$canDelete('inventory')">
@@ -602,7 +602,7 @@
                     <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="loadStockEntries" :disabled="seLoading">Refresh</button>
                   </div>
                   <div class="bomx-rm-cards" style="margin-top:10px" v-if="stockEntries.length">
-                    <div class="bomx-rm-card" v-for="se in stockEntries" :key="se.name" style="cursor:pointer" @click="router.push('/inventory/stock-entries')">
+                    <div class="bomx-rm-card" v-for="se in stockEntries" :key="se.name" style="cursor:pointer" @click="router.push('/inventory/stock-entries?open=' + se.name)">
                       <div class="bomx-rm-card-hdr">
                         <span class="bomx-tree-icon">📄</span>
                         <span class="bomx-rm-card-title mono" style="font-weight:600">{{ se.name }}</span>
@@ -612,6 +612,29 @@
                         <div class="bomx-rm-field"><label>Type</label><div class="bomx-rm-static">{{ se.stock_entry_type }}</div></div>
                         <div class="bomx-rm-field"><label>Date</label><div class="bomx-rm-static">{{ fmtDate(se.posting_date) }}</div></div>
                       </div>
+                      <div class="bomx-rm-field" v-if="(stockEntryScrap[se.name] || []).length" style="margin-top:8px">
+                        <label>Recoverable Scrap / By-Products</label>
+                        <div class="bomx-rm-static" style="line-height:1.6">
+                          <span v-for="(s, i) in stockEntryScrap[se.name]" :key="i" style="display:inline-block;margin-right:10px">
+                            {{ s.item_name }} — {{ fmtNum(s.qty) }}
+                          </span>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap" v-if="flt(se.operating_cost_absorbed) || flt(se.manufacturing_variance_loss)">
+                        <span class="bomx-badge badge-active" v-if="flt(se.operating_cost_absorbed)">Op. Cost Absorbed: ₹ {{ fmt(se.operating_cost_absorbed) }}</span>
+                        <span class="bomx-badge" style="background:var(--bx-redS);color:var(--bx-red)" v-if="flt(se.manufacturing_variance_loss)">Variance Loss: ₹ {{ fmt(se.manufacturing_variance_loss) }}</span>
+                      </div>
+                      <!-- Only the most recent submitted Manufacture entry is reversible
+                           (reverse_manufacture_entry enforces this server-side too, to keep
+                           produced_qty/consumed_qty consistent with completions recorded
+                           after it) -- so the button only ever appears on that one entry. -->
+                      <button
+                        v-if="se.name === latestReversibleSE"
+                        class="bomx-btn bomx-btn-sm bomx-btn-light"
+                        style="color:var(--bx-red);border:1px solid var(--bx-red);margin-top:8px"
+                        :disabled="reversingSE === se.name || !$canEdit('inventory')"
+                        @click.stop="reverseManufactureEntry(se)"
+                      >{{ reversingSE === se.name ? 'Reversing…' : 'Reverse This Completion' }}</button>
                     </div>
                   </div>
                   <div v-else class="bomx-tree-empty">No Stock Entries posted against this Work Order yet.</div>
@@ -650,6 +673,10 @@
                   <div class="bomx-cost-item bomx-cost-item--total" v-if="actualAbsorbedCost !== null" style="margin-top:6px">
                     <div class="bomx-cost-item-lbl" title="Actual cost posted into finished-good stock across every completion recorded so far, from the Manufacture Stock Entries (raw material + operating cost, net of scrap credit) -- not the BOM-load-time snapshot above.">Total Cost (Actual)</div>
                     <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(actualAbsorbedCost) }}</div>
+                  </div>
+                  <div class="bomx-cost-item bomx-cost-item--total" v-if="manufacturingVarianceLoss > 0" style="margin-top:6px">
+                    <div class="bomx-cost-item-lbl" style="color:var(--bx-red)" title="Abnormal process loss and/or scrap value exceeding the available cost pool -- written off as a loss instead of being capitalized into the finished good's cost. Posted to a variance/loss account in the GL.">Manufacturing Variance Loss</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total" style="color:var(--bx-red)">₹ {{ fmt(manufacturingVarianceLoss) }}</div>
                   </div>
                 </div>
               </div>
@@ -708,22 +735,38 @@
         </template>
 
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span class="bomx-hf-label" style="margin:0">Recoverable Scrap / By-Products</span>
+          <span class="bomx-hf-label" style="margin:0">Scrap / By-Products / Process Loss Rows</span>
           <button class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" @click="addCompleteScrap">+ Add</button>
         </div>
+        <div class="bomx-field-hint" style="margin-bottom:8px" v-if="jobCardScrapItems.length">Rows tagged with a Job Card are pre-filled from Scrap Items logged on this Work Order's Job Cards; any other BOM scrap item not yet logged is added as a proportional default — edit, add, or remove rows as needed before completing.</div>
         <div class="bomx-rm-cards" style="margin-bottom:8px" v-if="completeForm.scrap_items.length">
           <div class="bomx-rm-card" v-for="(s, idx) in completeForm.scrap_items" :key="idx">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--bx-muted);cursor:pointer">
+                <input type="checkbox" v-model="s.is_process_loss" @change="onToggleProcessLoss(s)"/>
+                Process loss (no item recovered — not added to stock)
+              </label>
+              <span v-if="s._jc_ref" class="bomx-badge badge-open" style="font-size:10px" :title="'From Job Card ' + s._jc_ref">{{ s._jc_ref }}</span>
+            </div>
             <div class="bomx-rm-card-body bomx-rm-card-body-2-1-auto">
-              <div class="bomx-rm-field">
+              <div class="bomx-rm-field" v-if="!s.is_process_loss">
                 <label>Item</label>
                 <select class="bomx-fi" v-model="s.item_code">
                   <option value="">— Select Item —</option>
                   <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                 </select>
               </div>
+              <div class="bomx-rm-field" v-else>
+                <label>Item</label>
+                <div class="bomx-rm-static" style="color:var(--bx-muted)">— Process loss, no item —</div>
+              </div>
               <div class="bomx-rm-field">
                 <label>Qty</label>
                 <input class="bomx-fi bomx-fi-mono" type="number" v-model="s.qty" min="0" step="any"/>
+              </div>
+              <div class="bomx-rm-field" v-if="!s.is_process_loss">
+                <label>Rate (₹)</label>
+                <input class="bomx-fi bomx-fi-mono" type="number" v-model="s.rate" min="0" step="any" placeholder="Valuation rate"/>
               </div>
               <button class="bomx-btn-icon danger" @click="completeForm.scrap_items.splice(idx,1)" title="Remove">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -731,6 +774,7 @@
             </div>
           </div>
         </div>
+        <div class="bomx-field-hint" style="margin-bottom:8px">Rows marked "Process loss" are folded into the Process Loss Qty above instead of creating a stock entry — use these for material that's simply lost (spillage, evaporation) rather than a recoverable by-product. Leave Rate blank to use the scrap warehouse's current valuation rate.</div>
       </div>
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeCompleteModal" :disabled="actionLoading">Cancel</button>
@@ -1009,6 +1053,16 @@ const rawMaterialItems = computed(() =>
 );
 const warehouseList = ref([]);
 const stockEntries = ref([]);
+const reversingSE = ref(""); // name of the Stock Entry currently being reversed, if any
+// The most recent submitted Manufacture entry -- stockEntries is loaded
+// "creation desc" (see loadStockEntries), so this is just the first match.
+// Mirrors the server-side "only the latest completion can be reversed" rule
+// in reverse_manufacture_entry() so the button is never shown somewhere the
+// call would just fail.
+const latestReversibleSE = computed(() => {
+  const se = stockEntries.value.find(s => s.stock_entry_type === "Manufacture" && s.docstatus === 1);
+  return se ? se.name : "";
+});
 const qcInspections = ref([]);
 const qcLoading = ref(false);
 const jobCards = ref([]);
@@ -1020,6 +1074,7 @@ const companiesList = ref([]);
 const salesOrdersList = ref([]);
 const bomScrapItems = ref([]);
 const bomProcessLoss = ref(0);
+const jobCardScrapItems = ref([]);
 const bomType = ref("");
 const sourcedPackingSlips = ref([]);
 const sourcedPsLoading = ref(false);
@@ -1185,9 +1240,11 @@ const totalWorkOrderCost = computed(() => rawMaterialCost.value + totalOperating
 // completion recorded so far -- so the panel can show "Planned" and
 // "Actual" side by side once the Work Order has at least one completion.
 const actualAbsorbedCost = ref(null);
+const manufacturingVarianceLoss = ref(null);
 async function loadActualAbsorbedCost() {
   if (isNew.value || !wo.value.name || !flt(wo.value.produced_qty)) {
     actualAbsorbedCost.value = null;
+    manufacturingVarianceLoss.value = null;
     return;
   }
   try {
@@ -1195,8 +1252,10 @@ async function loadActualAbsorbedCost() {
       work_order: wo.value.name,
     });
     actualAbsorbedCost.value = flt(r.actual_cost);
+    manufacturingVarianceLoss.value = flt(r.manufacturing_variance_loss);
   } catch (e) {
     actualAbsorbedCost.value = null;
+    manufacturingVarianceLoss.value = null;
   }
 }
 
@@ -1848,17 +1907,67 @@ function printWorkOrder() {
   win.focus();
 }
 
+const stockEntryScrap = ref({}); // { [se_name]: [{item_code, item_name, qty}] }
 async function loadStockEntries() {
   seLoading.value = true;
   try {
     stockEntries.value = await apiList("Stock Entry", {
-      fields: ["name", "stock_entry_type", "posting_date", "docstatus"],
+      fields: ["name", "stock_entry_type", "posting_date", "docstatus", "operating_cost_absorbed", "manufacturing_variance_loss"],
       filters: [["work_order", "=", wo.value.name]],
       limit: 100, order: "creation desc",
     }) || [];
+
+    // Recoverable scrap/by-product rows recorded on each Manufacture Stock
+    // Entry (see complete_work_order's is_scrap_item flag) -- fetched in one
+    // batch query and grouped locally so the card below can show exactly
+    // what was recovered on THAT specific completion run, not just the
+    // Work Order's cumulative totals.
+    stockEntryScrap.value = {};
+    const seNames = stockEntries.value.map(s => s.name);
+    if (seNames.length) {
+      const rows = await apiList("Stock Entry Detail", {
+        fields: ["parent", "item_code", "qty"],
+        filters: [["parent", "in", seNames], ["is_scrap_item", "=", 1]],
+        limit: 500,
+      }) || [];
+      const itemNames = {};
+      stockItems.value.forEach(i => { itemNames[i.name] = i.item_name || i.name; });
+      rows.forEach(r => {
+        if (!stockEntryScrap.value[r.parent]) stockEntryScrap.value[r.parent] = [];
+        stockEntryScrap.value[r.parent].push({ item_code: r.item_code, item_name: itemNames[r.item_code] || r.item_code, qty: flt(r.qty) });
+      });
+    }
   } catch (e) { /* non-fatal */ }
   seLoading.value = false;
   await loadQcInspections();
+}
+
+// Undoes a completion via work_order_engine.reverse_manufacture_entry: cancels
+// the Manufacture Stock Entry (reversing both raw-material consumption and
+// FG/scrap receipt) and rolls back produced_qty/consumed_qty on the Work
+// Order. Backend also enforces "latest completion only" and re-checks
+// permissions -- the confirm dialog + latestReversibleSE gating here are
+// just to keep the user from hitting that wall instead of preventing it.
+async function reverseManufactureEntry(se) {
+  if (!(await confirm({
+    title: "Reverse this completion?",
+    body: `This cancels ${se.name} — reversing the raw-material consumption and finished-goods/scrap receipt it recorded — and rolls back this Work Order's produced quantity accordingly. This can't be undone.`,
+    okLabel: "Reverse Completion",
+    okStyle: "danger",
+  }))) return;
+  reversingSE.value = se.name;
+  try {
+    await apiCall("zoho_books_clone.manufacturing.work_order_engine.reverse_manufacture_entry", {
+      work_order: wo.value.name,
+      stock_entry: se.name,
+    });
+    toast(`${se.name} reversed`);
+    await loadWO();
+    await loadStockEntries();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  reversingSE.value = "";
 }
 
 // QC Inspections for finished-good items get auto-created (In Process type)
@@ -1985,8 +2094,11 @@ const completeForm = ref({
 });
 
 // Derive the BOM-proportional process loss & scrap-item quantities for a
-// given Qty Manufactured. Shared by openCompleteModal (initial prefill) and
-// the qty_manufactured watcher below (keeps them in sync on edits).
+// given Qty Manufactured. This is only the FALLBACK now -- used when no
+// Job Card on this Work Order has any recorded scrap rows yet (see
+// loadJobCardScrapItems below). Shared by openCompleteModal (initial
+// prefill) and the qty_manufactured watcher below (keeps them in sync on
+// edits).
 function deriveScrapAndLoss(qtyMfg) {
   const ratio = qtyMfg / flt(wo.value.qty || 1);
   const derivedLoss = bomProcessLoss.value > 0
@@ -1998,24 +2110,69 @@ function deriveScrapAndLoss(qtyMfg) {
   return { derivedLoss, preScrap };
 }
 
-function openCompleteModal() {
+// Pull every Scrap Item row actually logged on this Work Order's Job Cards
+// (per-operation, real recorded amounts -- see JobCard's own Scrap /
+// By-Products section) rather than guessing proportionally from the BOM.
+// Non-fatal on failure: the modal still opens with the BOM-proportional
+// fallback if this call errors out.
+async function loadJobCardScrapItems() {
+  try {
+    jobCardScrapItems.value = await apiCall(
+      "zoho_books_clone.manufacturing.work_order_engine.get_job_card_scrap_items",
+      { work_order: wo.value.name }
+    ) || [];
+  } catch (e) {
+    jobCardScrapItems.value = [];
+  }
+}
+
+async function openCompleteModal() {
   // Prefer the plain remaining qty (the common case); once that's used up,
   // fall back to whatever the over-production allowance still permits so
   // the field isn't prefilled with 0 while completion is still possible.
   const qtyMfg = remainingQty.value > 0 ? remainingQty.value : maxCompletableQty.value;
+  await loadJobCardScrapItems();
+
   const { derivedLoss, preScrap } = deriveScrapAndLoss(qtyMfg);
+
+  // Job Card rows are real recorded amounts, so they take precedence over
+  // the BOM's proportional guess for the same item. Any BOM scrap item
+  // that no Job Card has logged yet still shows up as a starting default
+  // -- the two sources are merged, not either/or. _jc_ref keeps each
+  // job-card row's Job Card name around purely for display/traceability
+  // (see the modal template) -- it plays no role in the submit payload.
+  const jcRows = jobCardScrapItems.value.map(s => ({
+    item_code: s.is_process_loss ? "" : s.item_code,
+    qty: flt(s.qty),
+    rate: flt(s.rate) || 0,
+    is_process_loss: !!s.is_process_loss,
+    _from_job_card: true,
+    _jc_ref: s.job_card,
+  }));
+  const jcCodes = new Set(jcRows.filter(r => !r.is_process_loss).map(r => r.item_code));
+  const bomOnlyRows = preScrap.filter(p => !jcCodes.has(p.item_code));
+
   completeForm.value = {
     qty_manufactured: qtyMfg,
     process_loss_qty: derivedLoss,
     batch_no: "",
     manufacturing_date: new Date().toISOString().slice(0, 10),
     expiry_date: "",
-    scrap_items: preScrap,
+    scrap_items: [...jcRows, ...bomOnlyRows],
   };
   showCompleteModal.value = true;
 }
 function closeCompleteModal() { showCompleteModal.value = false; }
-function addCompleteScrap() { completeForm.value.scrap_items.push({ item_code: "", qty: 1 }); }
+function addCompleteScrap() { completeForm.value.scrap_items.push({ item_code: "", qty: 1, is_process_loss: false }); }
+
+// Clearing item_code when a row is switched to "process loss" avoids
+// silently submitting a stale item selection that the row no longer shows
+// (and would otherwise still pass the qty>0 && item_code filter below,
+// creating an unwanted recoverable-scrap stock line instead of a pure
+// process-loss entry).
+function onToggleProcessLoss(row) {
+  if (row.is_process_loss) row.item_code = "";
+}
 
 // Keep the BOM-derived process loss & scrap-item quantities in sync with
 // Qty Manufactured whenever the person edits it in the modal. Without this,
@@ -2029,9 +2186,13 @@ watch(() => completeForm.value.qty_manufactured, (newQty) => {
   completeForm.value.process_loss_qty = derivedLoss;
 
   // Only rescale rows that still match a BOM-derived scrap item (by
-  // item_code) so manually added/edited scrap rows aren't clobbered.
+  // item_code) so manually added/edited scrap rows aren't clobbered. Rows
+  // sourced from Job Cards are actual recorded amounts, not a proportional
+  // guess -- they never get auto-rescaled just because Qty Manufactured
+  // was edited (the person can still hand-edit any row's qty directly).
   const bomCodes = new Set(bomScrapItems.value.map(s => s.item_code));
   completeForm.value.scrap_items = completeForm.value.scrap_items.map(row => {
+    if (row._from_job_card) return row;
     if (!bomCodes.has(row.item_code)) return row;
     const match = preScrap.find(p => p.item_code === row.item_code);
     return match ? { ...row, qty: match.qty } : row;
@@ -2063,7 +2224,11 @@ async function submitComplete() {
 
   actionLoading.value = "complete";
   try {
-    const scrapItems = completeForm.value.scrap_items.filter(s => s.item_code && flt(s.qty) > 0);
+    const scrapItems = completeForm.value.scrap_items.filter(s =>
+      flt(s.qty) > 0 && (s.is_process_loss ? true : !!s.item_code)
+    ).map(s => s.is_process_loss
+      ? { qty: flt(s.qty), is_process_loss: 1 }
+      : { item_code: s.item_code, qty: flt(s.qty), rate: flt(s.rate) || undefined, batch_no: s.batch_no || undefined });
     await apiCall("zoho_books_clone.manufacturing.work_order_engine.complete_work_order", {
       work_order: wo.value.name,
       qty_manufactured: qty,
@@ -2287,7 +2452,7 @@ function icon(name, size) {
 .bomx-hf-cols-2-1 { grid-template-columns:2fr 1fr; }
 .bomx-hf-cols-1-1 { grid-template-columns:1fr 1fr; }
 .bomx-hf-cols-1 { grid-template-columns:1fr; }
-.bomx-rm-card-body-2-1-auto { grid-template-columns:2fr 1fr auto; align-items:end; }
+.bomx-rm-card-body-2-1-auto { grid-template-columns:2fr 1fr 1fr auto; align-items:end; }
 @media (max-width:640px) {
   .bomx-hf-cols-2-1, .bomx-hf-cols-1-1 { grid-template-columns:1fr; }
   .bomx-rm-card-body-2-1-auto { grid-template-columns:1fr; align-items:stretch; }
@@ -2416,11 +2581,11 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 .bomx-btn-icon.danger:hover { background:var(--bx-redS); border-color:var(--bx-red); }
 
 /* ── Modal ── */
-.bomx-modal-overlay { position:fixed; inset:0; background:rgba(17,24,39,.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
-.bomx-modal { background:#fff; border-radius:12px; padding:22px; max-width:94vw; box-shadow:0 20px 50px rgba(0,0,0,.25); }
-.bomx-modal-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:14px; }
-.bomx-modal-body { font-size:13.5px; color:var(--bx-text); line-height:1.5; }
-.bomx-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+.bomx-modal-overlay { position:fixed; inset:0; background:rgba(17,24,39,.5); display:flex; align-items:center; justify-content:center; z-index:1000; padding:24px; box-sizing:border-box; }
+.bomx-modal { background:#fff; border-radius:12px; padding:22px; max-width:94vw; max-height:90vh; box-shadow:0 20px 50px rgba(0,0,0,.25); display:flex; flex-direction:column; overflow:hidden; }
+.bomx-modal-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:14px; flex-shrink:0; }
+.bomx-modal-body { font-size:13.5px; color:var(--bx-text); line-height:1.5; overflow-y:auto; flex:1 1 auto; min-height:0; padding-right:4px; }
+.bomx-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; flex-shrink:0; }
 
 .shimmer { background:linear-gradient(90deg,#f1f3f5 25%,#e9ecef 37%,#f1f3f5 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; }
 @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
