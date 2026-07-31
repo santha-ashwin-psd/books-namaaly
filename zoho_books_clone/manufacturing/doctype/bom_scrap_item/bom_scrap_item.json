@@ -21,11 +21,22 @@
  "sort_order": "DESC",
  "fields": [
   {
+   "fieldname": "is_process_loss",
+   "fieldtype": "Check",
+   "label": "Process Loss (no stock movement)",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Material lost during the process (evaporation, trimming, spillage) rather than a recoverable scrap/by-product. No Stock Entry line is created for this row and it carries no recovery value -- Item Code and Rate are not applicable. Feeds the Work Order's process_loss_qty instead of scrap_value at completion."
+  },
+  {
    "fieldname": "item_code",
    "fieldtype": "Link",
    "label": "Item Code",
    "options": "Item",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "mandatory_depends_on": "eval:!doc.is_process_loss",
+   "depends_on": "eval:!doc.is_process_loss",
+   "description": "Required for recoverable scrap/by-product rows. Leave blank for Process Loss rows -- there's nothing to recover."
   },
   {
    "fieldname": "item_name",
@@ -33,7 +44,8 @@
    "label": "Item Name",
    "fetch_from": "item_code.item_name",
    "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "depends_on": "eval:!doc.is_process_loss"
   },
   {
    "fieldname": "qty",
@@ -46,7 +58,9 @@
    "fieldname": "rate",
    "fieldtype": "Currency",
    "label": "Rate",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "depends_on": "eval:!doc.is_process_loss",
+   "description": "Not applicable to Process Loss rows -- forced to 0 on save since lost material has no recovery value."
   },
   {
    "fieldname": "amount",

@@ -556,7 +556,7 @@
 
           <!-- Footer -->
           <div class="bomx-footer">
-            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" @click="deleteFromDetail" v-if="!isNew && bom.docstatus===0">Delete BOM</button>
+            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" @click="deleteFromDetail" v-if="!isNew && (bom.docstatus===0 || bom.docstatus===2)">Delete BOM</button>
             <div style="flex:1"></div>
             <button v-if="!readOnly" class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>

@@ -49,7 +49,7 @@
                   <option>IMPS</option>
                   <option>Credit Card</option>
                   <option>Debit Card</option>
-                  <option>DD</option>
+                  <option>Demand Draft</option>
                 </select>
               </div>
               <div class="pmd-field">

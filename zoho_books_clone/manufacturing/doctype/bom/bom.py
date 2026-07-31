@@ -15,6 +15,7 @@ class BOM(Document):
         else:
             self.validate_manufacturing_bom()
 
+        self.validate_scrap_items()
         self._calc_costs()
 
         # Carry the version number forward on amendment so it reads 2, 3, 4...
@@ -52,6 +53,28 @@ class BOM(Document):
             frappe.throw(_("Packing BOM should not have Raw Materials rows. Use the Packing Materials table instead."))
         if self.operations:
             frappe.throw(_("Packing BOM should not have Operations. Operations belong to the Manufacturing BOM."))
+
+    def validate_scrap_items(self):
+        """Phase 1a: BOM Scrap Item rows are either recoverable scrap/by-product
+        (needs an Item Code, may carry a Rate) or process loss (material that
+        never becomes stock -- evaporation, trimming, spillage -- so it has no
+        item and no recovery value).
+
+        Rather than teach _calc_costs() a new branch, a process-loss row's
+        Rate is forced to 0 here, before _calc_costs() runs -- amount = qty *
+        rate then naturally comes out to 0 and the existing scrap_value
+        summation already excludes it with no change to that loop. The
+        qty itself is left untouched; feeding it into process_loss_qty at
+        Work Order completion time is a later phase, not a BOM-level concern.
+        """
+        for row in (self.scrap_items or []):
+            if row.is_process_loss:
+                row.rate = 0
+            elif not row.item_code:
+                frappe.throw(_(
+                    "Row #{0} in Scrap Items: Item Code is required unless "
+                    "the row is marked as Process Loss."
+                ).format(row.idx))
 
     def _calc_costs(self):
         """Recompute all cost roll-up fields from child rows.
@@ -136,10 +159,29 @@ class BOM(Document):
         if self.amended_from:
             frappe.db.set_value("BOM", self.amended_from, "is_active", 0)
 
-    def on_cancel(self):
+    def before_cancel(self):
+        # Frappe's generic check_if_doc_is_linked() runs right after this
+        # hook and blocks cancel on ANY submitted (docstatus=1) linked Work
+        # Order — including ones whose status is "Completed", since
+        # completing a document never changes its docstatus back down.
+        # That made "+ New Version" (which cancels the old BOM under the
+        # hood) permanently impossible once a WO on that BOM finished,
+        # even though a finished WO is historically correct and shouldn't
+        # block revising the recipe for future production.
+        #
+        # Do our own smarter check here, then tell Frappe to skip its
+        # blind docstatus-only check.
+        self._block_if_active_work_order()
+        self.flags.ignore_links = True
+
+    def _block_if_active_work_order(self):
         linked = frappe.get_all(
             "Work Order",
-            filters={"bom": self.name, "docstatus": 1},
+            filters={
+                "bom": self.name,
+                "docstatus": 1,
+                "status": ["not in", ["Completed", "Cancelled"]],
+            },
             limit=1,
         )
         if linked:
@@ -147,5 +189,7 @@ class BOM(Document):
                 "Cannot cancel: submitted Work Order {0} still uses this BOM. "
                 "Cancel/complete that Work Order first if this was cancelled in error."
             ).format(linked[0].name))
+
+    def on_cancel(self):
         self.is_active = 0
         self.db_set("is_active", 0)

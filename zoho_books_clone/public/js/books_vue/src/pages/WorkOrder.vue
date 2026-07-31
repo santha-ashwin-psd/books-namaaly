@@ -148,6 +148,9 @@
                 <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
                   View Amended {{ amendedInto }}
                 </button>
+                <button v-if="!isNew && (wo.docstatus===0 || wo.docstatus===2)" class="bomx-btn bomx-btn-ghost-inv" style="color:#ffffff;border-color:rgba(201,42,42,.3);background-color: red;" @click="deleteWO" :disabled="submitting || !$canDelete('inventory')">
+                  {{ submitting ? 'Deleting…' : 'Delete Work Order' }}
+                </button>
                 <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Cancelling…' : 'Cancel Work Order' }}
                 </button>
@@ -302,7 +305,13 @@
               </div>
               <div class="bomx-rm-cards">
                 <div v-if="!wo.items || !wo.items.length" class="bomx-tree-empty">No raw materials yet. Select a BOM and click "Load / Refresh Materials from BOM".</div>
-                <div class="bomx-rm-card" v-for="(rm, idx) in wo.items" :key="idx">
+                <template v-for="grp in groupedWoItems" :key="grp.key">
+                  <div class="bomx-rm-group-hdr">
+                    <span v-if="grp.subAssembly" class="bomx-link" @click="router.push(`/manufacturing/bom/${grp.subAssembly}`)">🧩 {{ grp.label }}</span>
+                    <span v-else>{{ grp.label }}</span>
+                    <span class="bomx-count">({{ grp.rows.length }})</span>
+                  </div>
+                <div class="bomx-rm-card" v-for="{ rm, idx } in grp.rows" :key="idx">
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">📦</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ rm.item_code || 'New Row' }}</span>
@@ -342,6 +351,7 @@
                     </div>
                   </div>
                 </div>
+                </template>
               </div>
 
               <div class="bomx-section-lbl" style="display:flex;align-items:center;justify-content:space-between;margin-top:22px">
@@ -350,7 +360,13 @@
               </div>
               <div class="bomx-rm-cards">
                 <div v-if="!wo.operations || !wo.operations.length" class="bomx-tree-empty">No operations yet.</div>
-                <div class="bomx-rm-card" v-for="(op, idx) in wo.operations" :key="idx">
+                <template v-for="grp in groupedWoOperations" :key="grp.key">
+                  <div class="bomx-rm-group-hdr">
+                    <span v-if="grp.subAssembly" class="bomx-link" @click="router.push(`/manufacturing/bom/${grp.subAssembly}`)">🧩 {{ grp.label }}</span>
+                    <span v-else>{{ grp.label }}</span>
+                    <span class="bomx-count">({{ grp.rows.length }})</span>
+                  </div>
+                <div class="bomx-rm-card" v-for="{ op, idx } in grp.rows" :key="idx">
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">⚙️</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ op.operation || 'New Operation' }}</span>
@@ -398,6 +414,7 @@
                     </div>
                   </div>
                 </div>
+                </template>
               </div>
 
               <div class="bomx-section-lbl" style="margin-top:22px;display:flex;align-items:center;justify-content:space-between">
@@ -771,7 +788,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, apiCall, resolveCompany } from "../api/client.js";
+import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiDelete, apiAmend, apiCall, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 
@@ -966,8 +983,13 @@ const wo = ref(emptyWO());
 const bomList = ref([]);
 const selectedProductionItem = ref("");
 const filteredBomList = computed(() => {
-  if (!selectedProductionItem.value) return bomList.value;
-  return bomList.value.filter(b => b.item === selectedProductionItem.value);
+  // Only Manufacturing and Packing BOMs are valid as a Work Order's own
+  // top-level BOM. Sub-Assembly BOMs get pulled in automatically (exploded
+  // into materials/operations) whenever a Manufacturing/Packing BOM
+  // references them -- they're never meant to be selected here directly.
+  const base = bomList.value.filter(b => b.bom_type !== "Sub-Assembly");
+  if (!selectedProductionItem.value) return base;
+  return base.filter(b => b.item === selectedProductionItem.value);
 });
 const stockItems = ref([]);
 // Production Item picker: only items that are actually manufactured (Finished Good / WIP).
@@ -1005,7 +1027,7 @@ const reconciliation = ref(null);
 const reconLoading = ref(false);
 
 const EMPTY_MATERIAL = () => ({ item_code: "", required_qty: 1, transferred_qty: 0, consumed_qty: 0, source_warehouse: "" });
-const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 0, actual_time_in_mins: 0, status: "Pending" });
+const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 0, actual_time_in_mins: 0, status: "Pending", sub_assembly_bom: "", sub_assembly_item: "", sub_assembly_qty: 0 });
 
 // docstatus: 0 = Draft, 1 = Submitted, 2 = Cancelled. Once submitted, the
 // plan (materials/operations/warehouses) is locked — progress from here on
@@ -1288,6 +1310,35 @@ async function loadWO() {
   if (!wo.value.operations) wo.value.operations = [];
   const linkedBom = bomList.value.find(b => b.name === wo.value.bom);
   bomType.value = linkedBom ? (linkedBom.bom_type || "Manufacturing") : "";
+
+  // The BOM select's options only come from submitted (docstatus=1) BOMs.
+  // A Work Order can be linked to a BOM that was submitted at the time and
+  // has since been cancelled (e.g. via "+ New Version" on the BOM) — that
+  // BOM name is missing from bomList, so the <select> (bound to wo.bom by
+  // value) has no matching <option> and silently renders blank even though
+  // wo.bom itself still holds the correct name. This used to only run once
+  // on page mount, so switching between Work Orders in the list (no full
+  // reload) still showed a blank BOM field for any WO on a since-cancelled
+  // BOM. Run it here, on every load, so it actually covers that case.
+  if (wo.value.bom && !bomList.value.some(b => b.name === wo.value.bom)) {
+    try {
+      const missingBom = await apiGet("BOM", wo.value.bom);
+      if (missingBom) {
+        bomList.value.push({
+          name: missingBom.name,
+          item: missingBom.item,
+          quantity: missingBom.quantity,
+          docstatus: missingBom.docstatus,
+          bom_version: missingBom.bom_version,
+          is_default: missingBom.is_default,
+          bom_type: missingBom.bom_type,
+          item_name: missingBom.item,
+        });
+        bomType.value = missingBom.bom_type || "Manufacturing";
+      }
+    } catch (e) { /* non-fatal — field just stays as the raw name if this fails */ }
+  }
+
   if (wo.value.docstatus === 1) {
     await loadStockEntries(); await loadJobCards();
     loadSourcedPackingSlips();
@@ -1308,7 +1359,7 @@ async function loadWO() {
   // or cancelled), auto-switch a still-editable draft to the latest active
   // version for the same production item so Submit doesn't fail.
   if (!readOnly.value && wo.value.bom) {
-    const stillActive = bomList.value.some(b => b.name === wo.value.bom);
+    const stillActive = bomList.value.some(b => b.name === wo.value.bom && b.docstatus === 1);
     if (!stillActive) {
       let itemCode = wo.value.production_item;
       if (!itemCode) {
@@ -1317,7 +1368,7 @@ async function loadWO() {
           itemCode = staleBom ? staleBom.item : null;
         } catch (e) { /* stale BOM may itself be inaccessible — fall through */ }
       }
-      const candidates = bomList.value.filter(b => b.item === itemCode);
+      const candidates = bomList.value.filter(b => b.item === itemCode && b.bom_type !== "Sub-Assembly");
       candidates.sort((a, b) => (Number(b.bom_version) || 0) - (Number(a.bom_version) || 0));
       const replacement = candidates.find(c => c.is_default) || candidates[0] || null;
       if (replacement) {
@@ -1378,6 +1429,10 @@ async function loadFromBom() {
     wo.value.items = (r.items || []).map(i => ({
       ...EMPTY_MATERIAL(),
       ...i,
+      // Small Text field on Work Order Item can only hold a plain string —
+      // the API returns an array, so join it here. Parsed back into an
+      // array by groupedWoItems() below wherever it's read for display.
+      sub_assembly_boms: (i.sub_assembly_boms || []).join(","),
       // use per-row source_warehouse from BOM Item if set, else fall back to
       // the default source warehouse coming from Manufacturing Settings
       source_warehouse: i.source_warehouse || r.default_source_warehouse || "",
@@ -1425,6 +1480,76 @@ const materialsStale = computed(() => {
   if (!wo.value.items_loaded_for_qty || !wo.value.items || !wo.value.items.length) return false;
   const tolerance = Math.max(flt(wo.value.qty) * 0.001, 0.0001);
   return Math.abs(flt(wo.value.qty) - flt(wo.value.items_loaded_for_qty)) > tolerance;
+});
+
+// Groups the (already merged, still consumption-correct) Work Order raw
+// materials by which sub-assembly BOM they were exploded from, mirroring
+// the same grouping added to BOM.vue's Components tab. Backend tags each
+// merged row with sub_assembly_boms: [] (direct on the BOM), [oneBom]
+// (came only from that sub-assembly), or multiple entries if the same
+// item+warehouse combo was pulled in from more than one sub-assembly (or
+// both a sub-assembly and the top BOM directly) — those go in a "Shared /
+// Multiple Sub-Assemblies" group since they can't be attributed to just one.
+const groupedWoItems = computed(() => {
+  const items = wo.value.items || [];
+  const direct = [];
+  const shared = [];
+  const bySub = new Map();
+  items.forEach((rm, idx) => {
+    const raw = rm.sub_assembly_boms;
+    const origins = Array.isArray(raw) ? raw : (raw ? String(raw).split(",").filter(Boolean) : []);
+    if (origins.length === 0) {
+      direct.push({ rm, idx });
+    } else if (origins.length > 1) {
+      shared.push({ rm, idx });
+    } else {
+      const sub = origins[0];
+      if (!bySub.has(sub)) bySub.set(sub, []);
+      bySub.get(sub).push({ rm, idx });
+    }
+  });
+  const groups = [];
+  if (direct.length) groups.push({ key: "__direct__", label: "Direct Raw Materials", subAssembly: null, rows: direct });
+  [...bySub.keys()].sort().forEach((sub) => {
+    const bomMeta = bomList.value.find(b => b.name === sub);
+    groups.push({ key: sub, label: bomMeta ? `${sub} — ${bomMeta.item_name}` : sub, subAssembly: sub, rows: bySub.get(sub) });
+  });
+  if (shared.length) groups.push({ key: "__shared__", label: "Shared / Multiple Sub-Assemblies", subAssembly: null, rows: shared });
+  // If nothing has origin info at all (e.g. an older WO saved before this
+  // tagging existed), just fall back to one flat, unlabeled group so nothing
+  // regresses for pre-existing data.
+  if (!groups.length && items.length) {
+    groups.push({ key: "__all__", label: "Raw Materials", subAssembly: null, rows: items.map((rm, idx) => ({ rm, idx })) });
+  }
+  return groups;
+});
+
+const groupedWoOperations = computed(() => {
+  const ops = wo.value.operations || [];
+  const direct = [];
+  const bySub = new Map();
+  ops.forEach((op, idx) => {
+    const sub = op.sub_assembly_bom || "";
+    if (!sub) {
+      direct.push({ op, idx });
+    } else {
+      if (!bySub.has(sub)) bySub.set(sub, []);
+      bySub.get(sub).push({ op, idx });
+    }
+  });
+  const groups = [];
+  [...bySub.keys()].sort().forEach((sub) => {
+    const bomMeta = bomList.value.find(b => b.name === sub);
+    groups.push({ key: sub, label: bomMeta ? `${sub} — ${bomMeta.item_name}` : sub, subAssembly: sub, rows: bySub.get(sub) });
+  });
+  // Final-assembly / top-level BOM operations shown last, after the
+  // sub-assembly process groups they feed into.
+  if (direct.length) groups.push({ key: "__direct__", label: "Final Assembly", subAssembly: null, rows: direct });
+  // Older WOs saved before this tagging existed have no sub_assembly_bom on
+  // any row -- everything lands in "Final Assembly" above already, so no
+  // separate fallback is needed here (unlike groupedWoItems, which can have
+  // a genuinely empty groups list when items exist but all lack tagging).
+  return groups;
 });
 
 function addMaterial() { wo.value.items.push(EMPTY_MATERIAL()); }
@@ -1507,6 +1632,29 @@ async function cancelWO() {
     const doc = await apiCancel("Work Order", wo.value.name);
     wo.value = doc;
     toast("Work Order cancelled");
+    loadList();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  submitting.value = false;
+}
+
+async function deleteWO() {
+  if (!wo.value.name) return;
+  // Backend on_trash() cascades this delete to every Job Card linked to
+  // this Work Order, so the confirmation dialog says so up front rather
+  // than surprising the user with vanished Job Cards afterward.
+  if (!(await confirm({
+    title: "Delete Work Order",
+    body: `Delete Work Order ${wo.value.name}? This will also delete all of its Job Cards. This cannot be undone.`,
+    okLabel: "Delete",
+    okStyle: "danger",
+  }))) return;
+  submitting.value = true;
+  try {
+    await apiDelete("Work Order", wo.value.name);
+    toast("Work Order deleted");
+    goBackToList();
     loadList();
   } catch (e) {
     toast(e.message, "error");
@@ -1623,15 +1771,18 @@ function itemLabel(code) {
 }
 
 function printWorkOrder() {
-  const rows = wo.value.items || [];
-  const rowsHtml = rows.length
-    ? rows.map(rm => `
+  const groups = groupedWoItems.value;
+  const groupHtml = (grp) => `
+        <tr><td colspan="4" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
+        ${grp.rows.map(({ rm }) => `
         <tr>
           <td>${esc(rm.item_code)}</td>
           <td>${esc(itemLabel(rm.item_code))}</td>
           <td style="text-align:right">${esc(fmt(rm.required_qty))}</td>
           <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
-        </tr>`).join("")
+        </tr>`).join("")}`;
+  const rowsHtml = groups.length
+    ? groups.map(groupHtml).join("")
     : `<tr><td colspan="4" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
 
   const html = `
@@ -1799,7 +1950,13 @@ function createJobCardFor(op) {
       operation: op.operation,
       wo_operation_name: op.name,
       workstation: op.workstation || "",
-      for_quantity: wo.value.qty || 1,
+      // A sub-assembly's card should default to how much of ITS OWN item
+      // this Work Order needs (e.g. 40 units of the sub-assembly), not the
+      // Work Order's total finished-goods qty -- those can differ once a
+      // BOM's own quantity/ratio is involved.
+      for_quantity: (op.sub_assembly_bom && op.sub_assembly_qty) ? op.sub_assembly_qty : (wo.value.qty || 1),
+      sub_assembly_bom: op.sub_assembly_bom || "",
+      sub_assembly_item: op.sub_assembly_item || "",
     },
   });
 }
@@ -2156,6 +2313,8 @@ function icon(name, size) {
 
 /* ── Child-row cards ── */
 .bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
+.bomx-rm-group-hdr { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--bx-blue); margin:14px 0 2px; padding-top:10px; border-top:1px dashed var(--bx-border, #e2e2e2); }
+.bomx-rm-group-hdr:first-child { margin-top:0; padding-top:0; border-top:none; }
 .bomx-rm-card { background:#fff; border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; box-shadow:0 1px 3px rgba(16,24,40,.04); }
 .bomx-rm-card-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bx-mfgS); border-bottom:1px solid var(--bx-border); }
 .bomx-rm-card-title { flex:1; min-width:0; font-weight:600; }

@@ -117,7 +117,74 @@ class TestOverProductionAllowance(unittest.TestCase):
 # Default warehouse injection tests
 # ---------------------------------------------------------------------------
 
-class TestDefaultWarehouseInjection(unittest.TestCase):
+# ---------------------------------------------------------------------------
+# Phase 1b: is_process_loss scrap rows folding into process_loss_qty
+# ---------------------------------------------------------------------------
+
+class TestScrapItemsProcessLossSplit(unittest.TestCase):
+    """Replicates the scrap_items handling from complete_work_order (the
+    up-front scrap_process_loss_qty sum, and the loop that builds
+    scrap_rows_to_append) the same way TestOverProductionAllowance replicates
+    the allowance arithmetic above -- complete_work_order itself needs a live
+    site (DB locking, Stock Entry submission) so isn't unit-tested directly.
+    """
+
+    def _scrap_process_loss_qty(self, scrap_items):
+        return sum(
+            flt(s.get("qty")) for s in scrap_items
+            if s.get("is_process_loss") and flt(s.get("qty")) > 0
+        )
+
+    def _scrap_rows_to_append(self, scrap_items):
+        rows = []
+        for s in scrap_items:
+            if s.get("is_process_loss"):
+                continue
+            s_qty = flt(s.get("qty"))
+            if s_qty <= 0 or not s.get("item_code"):
+                continue
+            rows.append(s)
+        return rows
+
+    def test_process_loss_row_without_item_code_is_not_dropped(self):
+        """A row with is_process_loss=1 and no item_code should still count
+        toward the process-loss total -- it must not be silently discarded
+        the way the old `not s.get("item_code")` skip would have done."""
+        scrap_items = [{"qty": 4, "is_process_loss": 1}]
+        self.assertAlmostEqual(self._scrap_process_loss_qty(scrap_items), 4.0)
+
+    def test_recoverable_row_still_requires_item_code(self):
+        scrap_items = [{"qty": 4}]  # no is_process_loss, no item_code
+        self.assertEqual(self._scrap_rows_to_append(scrap_items), [])
+
+    def test_manual_and_row_level_process_loss_are_additive(self):
+        """process_loss_qty (manual arg) and is_process_loss rows should sum,
+        not override one another."""
+        manual_process_loss_qty = 2.0
+        scrap_items = [
+            {"qty": 3, "is_process_loss": 1},
+            {"item_code": "BY-001", "qty": 5, "rate": 10},  # recoverable, untouched
+        ]
+        total = flt(manual_process_loss_qty) + self._scrap_process_loss_qty(scrap_items)
+        self.assertAlmostEqual(total, 5.0)  # 2 (manual) + 3 (row)
+
+    def test_process_loss_rows_excluded_from_stock_rows(self):
+        """Process-loss rows must never reach scrap_rows_to_append -- that's
+        what keeps them out of the Stock Entry (no stock movement)."""
+        scrap_items = [
+            {"qty": 3, "is_process_loss": 1},
+            {"item_code": "BY-001", "qty": 5, "rate": 10, "is_process_loss": 0},
+        ]
+        rows = self._scrap_rows_to_append(scrap_items)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["item_code"], "BY-001")
+
+    def test_zero_qty_process_loss_row_ignored(self):
+        scrap_items = [{"qty": 0, "is_process_loss": 1}]
+        self.assertAlmostEqual(self._scrap_process_loss_qty(scrap_items), 0.0)
+
+
+
     """
     Verify that get_bom_breakdown passes default warehouse values from
     Manufacturing Settings into its return dict.

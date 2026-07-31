@@ -54,6 +54,7 @@
             <div class="bomx-jc-id mono">{{ row.name }}</div>
             <div class="bomx-jc-op">{{ row.operation || '—' }}</div>
             <div class="bomx-jc-wo">{{ row.work_order }}<span v-if="row.workstation"> • {{ row.workstation }}</span></div>
+            <div class="bomx-jc-sub" v-if="row.sub_assembly_bom">🧩 {{ subAssemblyBomLabel(row.sub_assembly_bom) }}</div>
           </div>
           <span class="bomx-badge" :class="statusClass(row)" style="flex-shrink:0">{{ statusLabel(row) }}</span>
         </div>
@@ -70,9 +71,9 @@
             <div class="bomx-jc-stat-lbl">Total Time</div>
             <div class="bomx-jc-stat-val mono">{{ row.total_time_in_mins ? fmtMins(row.total_time_in_mins) : '—' }}</div>
           </div>
-          <div class="bomx-jc-stat" style="grid-column:1/-1" v-if="itemNameFor(row.work_order)">
+          <div class="bomx-jc-stat" style="grid-column:1/-1" v-if="jcItemName(row)">
             <div class="bomx-jc-stat-lbl">Item</div>
-            <div class="bomx-jc-stat-val bomx-jc-stat-val-wrap">{{ itemNameFor(row.work_order) }}</div>
+            <div class="bomx-jc-stat-val bomx-jc-stat-val-wrap">{{ jcItemName(row) }}</div>
           </div>
         </div>
         <div class="bomx-jc-foot">
@@ -120,13 +121,23 @@
                   <option v-for="w in workOrdersList" :key="w.name" :value="w.name">{{ w.name }}</option>
                 </select>
                 <div class="bomx-field-hint" v-if="jobCardItemName">Manufactures: <strong>{{ jobCardItemName }}</strong></div>
+                <div class="bomx-field-hint" v-if="doc.sub_assembly_bom">🧩 Sub-assembly: <strong>{{ subAssemblyBomLabel(doc.sub_assembly_bom) }}</strong></div>
               </div>
               <div>
                 <div class="bomx-hf-label">Operation <span style="color:var(--bx-red)">*</span></div>
-                <select class="bomx-fi" v-model="doc.operation" style="width:100%" :title="doc.operation">
+                <select v-if="groupedJcOperationRows.length" class="bomx-fi" v-model="selectedWoOpRow" style="width:100%">
+                  <option value="">— Select Operation —</option>
+                  <optgroup v-for="grp in groupedJcOperationRows" :key="grp.key" :label="grp.label">
+                    <option v-for="row in grp.rows" :key="row.name" :value="row.name">
+                      {{ row.operation }}{{ jcExistsForWoOpRow(row.name) ? ' (already has a Job Card)' : '' }}
+                    </option>
+                  </optgroup>
+                </select>
+                <select v-else class="bomx-fi" v-model="doc.operation" style="width:100%" :title="doc.operation">
                   <option value="">— Select Operation —</option>
                   <option v-for="o in operationsList" :key="o.name" :value="o.name">{{ o.name }}</option>
                 </select>
+                <div class="bomx-field-hint" v-if="groupedJcOperationRows.length">Pick the specific sub-assembly (or Final Assembly) step this card is for.</div>
               </div>
               <div>
                 <div class="bomx-hf-label">Workstation</div>
@@ -275,10 +286,12 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "work_order", "operation", "workstation", "status", "employee", "for_quantity", "total_time_in_mins", "modified"];
+    const fields = ["name", "work_order", "operation", "workstation", "status", "employee", "for_quantity", "total_time_in_mins", "modified", "sub_assembly_bom", "sub_assembly_item"];
     const r = await apiList("Job Card", { fields, limit: 2000, order: "modified desc" });
     list.value = r || [];
     await loadWorkOrderItemNames(list.value.map(i => i.work_order));
+    await loadSubAssemblyBomNames(list.value.map(i => i.sub_assembly_bom));
+    await loadItemNames(list.value.map(i => i.sub_assembly_item));
   } catch (e) {
     toast("Could not load Job Cards", "error");
   }
@@ -302,6 +315,53 @@ async function loadWorkOrderItemNames(names) {
   } catch (e) {
     // Non-critical — cards just fall back to showing the Work Order id.
   }
+}
+
+// ── Generic Item code → Item Name cache, shared by the Sub-Assembly BOM
+// label lookup below and by Job Cards' own sub_assembly_item field ─────────
+const itemNameMap = ref({});
+async function loadItemNames(codes) {
+  const unique = [...new Set((codes || []).filter(Boolean))].filter(c => !itemNameMap.value[c]);
+  if (!unique.length) return;
+  try {
+    const rows = await apiList("Item", { fields: ["name", "item_name"], filters: [["name", "in", unique]], limit: unique.length });
+    (rows || []).forEach(r => { itemNameMap.value[r.name] = r.item_name || r.name; });
+  } catch (e) {
+    // Non-critical — falls back to showing the raw item code.
+  }
+}
+
+// ── Sub-Assembly BOM → Production Item lookup, so the badge can read
+// "BOM-code — Item Name" the same way the Work Order's Components/
+// Operations tabs label their sub-assembly groups. BOM itself has no
+// item_name field -- only `item` (a Link) -- so the name comes from the
+// Item cache above. ─────────────────────────────────────────────────────
+const subAssemblyBomNameMap = ref({});
+function subAssemblyBomLabel(bomName) {
+  if (!bomName) return "";
+  const b = subAssemblyBomNameMap.value[bomName];
+  const name = b && itemNameMap.value[b.item];
+  return name ? `${bomName} — ${name}` : bomName;
+}
+async function loadSubAssemblyBomNames(names) {
+  const unique = [...new Set((names || []).filter(Boolean))].filter(n => !subAssemblyBomNameMap.value[n]);
+  if (!unique.length) return;
+  try {
+    const rows = await apiList("BOM", { fields: ["name", "item"], filters: [["name", "in", unique]], limit: unique.length });
+    (rows || []).forEach(r => { subAssemblyBomNameMap.value[r.name] = r; });
+    await loadItemNames(rows.map(r => r.item));
+  } catch (e) {
+    // Non-critical — badge just falls back to showing the raw BOM code.
+  }
+}
+
+// A card tied to a sub-assembly should show what THAT sub-assembly
+// produces, not the Work Order's (unrelated) finished item -- e.g. a card
+// for "BOM-2026-00004" should show its own item, not the final product the
+// whole Work Order eventually makes.
+function jcItemName(row) {
+  if (row.sub_assembly_item) return itemNameMap.value[row.sub_assembly_item] || row.sub_assembly_item;
+  return itemNameFor(row.work_order);
 }
 
 const sorted = computed(() => {
@@ -368,6 +428,8 @@ function emptyDoc() {
     work_order: "",
     operation: "",
     wo_operation_name: "",
+    sub_assembly_bom: "",
+    sub_assembly_item: "",
     workstation: "",
     status: "Open",
     for_quantity: 1,
@@ -382,20 +444,87 @@ function emptyDoc() {
   };
 }
 const doc = ref(emptyDoc());
-const jobCardItemName = computed(() => itemNameFor(doc.value.work_order));
+const jobCardItemName = computed(() => {
+  if (doc.value.sub_assembly_item) return itemNameMap.value[doc.value.sub_assembly_item] || doc.value.sub_assembly_item;
+  return itemNameFor(doc.value.work_order);
+});
 const drawerSubtitle = computed(() => {
   const parts = [];
   if (!isNew.value) parts.push(doc.value.name);
   if (doc.value.work_order) parts.push(doc.value.work_order);
   if (doc.value.operation) parts.push(doc.value.operation);
   if (doc.value.workstation) parts.push(doc.value.workstation);
+  if (doc.value.sub_assembly_bom) parts.push(`🧩 ${subAssemblyBomLabel(doc.value.sub_assembly_bom)}`);
   return parts.join(" · ");
 });
-watch(() => doc.value.work_order, (wo) => { if (wo) loadWorkOrderItemNames([wo]); });
+watch(() => doc.value.sub_assembly_bom, (b) => { if (b) loadSubAssemblyBomNames([b]); });
 
 const workOrdersList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
+
+// ── Work Order's own Operation rows (with sub-assembly tags), so a Job
+// Card can be tied to a *specific* row -- e.g. "Cutting" under sub-assembly
+// BOM-2026-00004 vs the same "Cutting" operation name under BOM-2026-00008
+// -- rather than just the generic Operation master, which has no notion of
+// which sub-assembly's process it's for. ─────────────────────────────────
+const workOrderOperations = ref([]);
+async function loadWorkOrderOperations(woName) {
+  workOrderOperations.value = [];
+  if (!woName) return;
+  try {
+    const r = await apiGet("Work Order", woName);
+    workOrderOperations.value = r.operations || [];
+    const subs = workOrderOperations.value.map(o => o.sub_assembly_bom).filter(Boolean);
+    if (subs.length) await loadSubAssemblyBomNames(subs);
+  } catch (e) {
+    // Non-critical -- falls back to the plain Operation dropdown below.
+  }
+}
+watch(() => doc.value.work_order, (wo) => {
+  if (wo) { loadWorkOrderItemNames([wo]); loadWorkOrderOperations(wo); }
+  else { workOrderOperations.value = []; }
+});
+
+const groupedJcOperationRows = computed(() => {
+  const ops = workOrderOperations.value || [];
+  const direct = [];
+  const bySub = new Map();
+  ops.forEach((op) => {
+    const sub = op.sub_assembly_bom || "";
+    if (!sub) direct.push(op);
+    else { if (!bySub.has(sub)) bySub.set(sub, []); bySub.get(sub).push(op); }
+  });
+  const groups = [];
+  [...bySub.keys()].sort().forEach((sub) => {
+    groups.push({ key: sub, label: subAssemblyBomLabel(sub), rows: bySub.get(sub) });
+  });
+  if (direct.length) groups.push({ key: "__direct__", label: "Final Assembly", rows: direct });
+  return groups;
+});
+
+// A row already used by another (non-cancelled) Job Card is marked, not
+// hidden -- someone may legitimately need a second card for a re-worked
+// operation, but shouldn't pick it by accident thinking it's untouched.
+function jcExistsForWoOpRow(rowName) {
+  return (list.value || []).some(jc => jc.wo_operation_name === rowName && jc.name !== doc.value.name && jc.status !== "Cancelled");
+}
+
+// v-model bridge: selecting a specific Work Order Operation row fills in
+// operation / workstation / sub_assembly_bom together, so they can't get
+// out of sync with each other.
+const selectedWoOpRow = computed({
+  get: () => doc.value.wo_operation_name || "",
+  set: (val) => {
+    doc.value.wo_operation_name = val;
+    const row = workOrderOperations.value.find(r => r.name === val);
+    if (row) {
+      doc.value.operation = row.operation || "";
+      doc.value.workstation = row.workstation || "";
+      doc.value.sub_assembly_bom = row.sub_assembly_bom || "";
+    }
+  },
+});
 
 let _uid = 0;
 function nextUid() { return ++_uid; }
@@ -439,6 +568,7 @@ async function loadDoc() {
     if (route.query.wo_operation_name) doc.value.wo_operation_name = route.query.wo_operation_name;
     if (route.query.workstation) doc.value.workstation = route.query.workstation;
     if (route.query.for_quantity) doc.value.for_quantity = Number(route.query.for_quantity) || 1;
+    if (route.query.sub_assembly_bom) doc.value.sub_assembly_bom = route.query.sub_assembly_bom;
     if (route.query.work_order && !workOrdersList.value.some(w => w.name === route.query.work_order))
       workOrdersList.value = [{ name: route.query.work_order }, ...workOrdersList.value];
     return;
@@ -450,6 +580,7 @@ async function loadDoc() {
     ensureUids(r.time_logs);
     doc.value = r;
     if (r.work_order) await loadWorkOrderItemNames([r.work_order]);
+    if (r.sub_assembly_bom) await loadSubAssemblyBomNames([r.sub_assembly_bom]);
     // keep stale refs selectable
     if (r.work_order && !workOrdersList.value.some(w => w.name === r.work_order))
       workOrdersList.value = [{ name: r.work_order }, ...workOrdersList.value];
@@ -609,6 +740,7 @@ function icon(name, size) {
 .bomx-jc-id { font-size:11px; font-weight:700; color:var(--bx-mfgB); }
 .bomx-jc-op { font-size:14px; font-weight:700; color:var(--bx-text); margin:2px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .bomx-jc-wo { font-size:11.5px; color:var(--bx-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bomx-jc-sub { font-size:11px; color:var(--bx-mfgB); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
 .bomx-jc-body { padding:10px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .bomx-jc-stat { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .bomx-jc-stat-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); }

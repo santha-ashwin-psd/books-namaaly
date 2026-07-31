@@ -37,6 +37,16 @@ class WorkOrder(Document):
 			row.actual_time_in_mins = 0
 
 	def validate(self):
+		if self.bom:
+			bom_type = frappe.db.get_value("BOM", self.bom, "bom_type")
+			if bom_type == "Sub-Assembly":
+				frappe.throw(_(
+					"{0} is a Sub-Assembly BOM and can't be used directly on a Work Order. "
+					"Sub-Assembly BOMs are meant to be consumed inside a Manufacturing or "
+					"Packing BOM -- their materials and operations are pulled in "
+					"automatically wherever that BOM references them."
+				).format(self.bom))
+
 		if flt(self.qty) <= 0:
 			frappe.throw(_("Qty to Manufacture must be greater than zero."))
 
@@ -169,14 +179,15 @@ class WorkOrder(Document):
 		"""Safety net used only when a Work Order reaches validate() with a BOM
 		set but no Raw Material rows (e.g. created via the generic API without
 		the client calling get_bom_breakdown first). Delegates to
-		manufacturing.work_order_engine.get_bom_breakdown so Manufacturing,
-		Sub-Assembly, and Packing BOMs — including sub-assembly/phantom
-		explosion and duplicate-row merging — are all handled the same way
-		here as in the normal client-driven flow. A Packing BOM has no rows
-		in its own `items` table by design (its materials live in
-		`packing_items` + the bulk item), so reading bom.items directly here
-		would always come back empty and fail the "must have at least one Raw
-		Material row" check below.
+		manufacturing.work_order_engine.get_bom_breakdown so Manufacturing
+		and Packing BOMs -- including sub-assembly/phantom explosion and
+		duplicate-row merging -- are all handled the same way here as in
+		the normal client-driven flow. (Sub-Assembly BOMs are rejected
+		earlier in validate() and never reach this point.) A Packing BOM
+		has no rows in its own `items` table by design (its materials live
+		in `packing_items` + the bulk item), so reading bom.items directly
+		here would always come back empty and fail the "must have at least
+		one Raw Material row" check below.
 		"""
 		from zoho_books_clone.manufacturing.work_order_engine import get_bom_breakdown
 
@@ -235,9 +246,11 @@ class WorkOrder(Document):
 				"work_order":        self.name,
 				"operation":         op_row.operation,
 				"workstation":       op_row.workstation or "",
-				"for_quantity":      flt(self.qty),
+				"for_quantity":      flt(op_row.sub_assembly_qty) if op_row.sub_assembly_item else flt(self.qty),
 				"status":            "Open",
 				"wo_operation_name": op_row.name,
+				"sub_assembly_bom":  op_row.sub_assembly_bom or "",
+				"sub_assembly_item": op_row.sub_assembly_item or "",
 			})
 			jc.insert(ignore_permissions=True)
 
@@ -275,3 +288,17 @@ class WorkOrder(Document):
 			   WHERE work_order = %s AND status NOT IN ('Completed', 'Cancelled')""",
 			(self.name,),
 		)
+
+	def on_trash(self):
+		"""Job Cards have no independent existence once their Work Order is
+		gone -- they only ever record progress against this WO's own
+		operations -- so deleting the Work Order deletes its Job Cards too,
+		rather than leaving them behind pointing at a name that no longer
+		exists. Frappe only reaches on_trash for a Draft (docstatus=0) or
+		already-Cancelled (docstatus=2) Work Order (submitted docs must be
+		cancelled first), so there's no risk of this firing on an in-progress
+		WO with real production recorded against its cards.
+		"""
+		job_cards = frappe.get_all("Job Card", filters={"work_order": self.name}, pluck="name")
+		for jc in job_cards:
+			frappe.delete_doc("Job Card", jc, ignore_permissions=True, force=True)

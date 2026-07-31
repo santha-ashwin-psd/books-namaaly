@@ -794,18 +794,17 @@ async function fetchBatches(line, q = "") {
   if (!line.item_code) { line.batchOptions = []; return; }
   const forItem = line.item_code;
   try {
-    const filters = [["item", "=", forItem], ["disabled", "=", 0]];
-    if (q) filters.push(["name", "like", `%${q}%`]);
-    const r = await apiList("Batch", {
-      fields: ["name", "manufacturing_date", "expiry_date", "batch_qty"],
-      filters, limit: 20,
-    });
+    // NOTE: Batch.batch_qty is only an incrementally-adjusted cache and can
+    // drift/double-count (e.g. same batch present in multiple warehouses).
+    // Use the live SLE-aggregated qty, same as Bills/Invoices/PurchaseOrders,
+    // instead of querying the raw Batch doctype.
+    const r = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: forItem, search: q || "" }) || [];
     // Item may have changed while this request was in flight — don't let a
     // stale response overwrite the options for whatever item is selected now.
     if (line.item_code !== forItem) return;
     line.batchOptions = r.map(b => ({
-      value: b.name,
-      label: (b.batch_qty !== undefined && b.batch_qty !== null) ? `${b.name} (Qty: ${b.batch_qty})` : b.name,
+      value: b.batch_no,
+      label: (b.qty !== undefined && b.qty !== null) ? `${b.batch_no} (Qty: ${b.qty})` : b.batch_no,
       manufacturing_date: b.manufacturing_date || "",
       expiry_date: b.expiry_date || "",
     }));
@@ -890,16 +889,18 @@ async function openEdit(e, { force = false } = {}) {
         if (line.has_batch_no && line.batch_no) {
           try {
             const b = await apiList("Batch", {
-              fields: ["name", "manufacturing_date", "expiry_date", "batch_qty"],
+              fields: ["name", "manufacturing_date", "expiry_date"],
               filters: [["name", "=", line.batch_no]], limit: 1,
             });
             const bd = b && b[0];
             if (bd) {
               line.manufacturing_date = bd.manufacturing_date || "";
               line.expiry_date = bd.expiry_date || "";
+              // Just this one batch is already selected on the saved doc — no
+              // need for a (possibly stale/global) qty label here.
               line.batchOptions = [{
                 value: bd.name,
-                label: (bd.batch_qty !== undefined && bd.batch_qty !== null) ? `${bd.name} (Qty: ${bd.batch_qty})` : bd.name,
+                label: bd.name,
                 manufacturing_date: bd.manufacturing_date || "", expiry_date: bd.expiry_date || "",
               }];
             }

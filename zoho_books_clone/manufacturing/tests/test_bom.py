@@ -36,12 +36,14 @@ def _make_op_row(operation, time_in_mins, hour_rate):
     return row
 
 
-def _make_scrap_row(item_code, qty, rate):
+def _make_scrap_row(item_code, qty, rate, is_process_loss=False):
     row = MagicMock()
     row.item_code = item_code
     row.qty = qty
     row.rate = rate
     row.amount = 0.0
+    row.is_process_loss = is_process_loss
+    row.idx = 1
     return row
 
 
@@ -137,6 +139,62 @@ class TestBOMCostCalc(unittest.TestCase):
         bom   = _make_bom(items=items, scrap_items=scrap)
         self._run_calc_costs(bom)
         self.assertAlmostEqual(bom.total_cost, 10 - 100)  # = -90
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for validate_scrap_items (Phase 1a: is_process_loss)
+# ---------------------------------------------------------------------------
+
+class TestValidateScrapItems(unittest.TestCase):
+
+    def _run_validate_scrap_items(self, bom):
+        from zoho_books_clone.manufacturing.doctype.bom.bom import BOM
+        BOM.validate_scrap_items(bom)
+
+    def test_process_loss_row_without_item_code_is_allowed(self):
+        """A process-loss row has no item to recover -- item_code may be blank."""
+        scrap = [_make_scrap_row(item_code=None, qty=5, rate=0, is_process_loss=True)]
+        bom = _make_bom(scrap_items=scrap)
+        # Should not raise
+        self._run_validate_scrap_items(bom)
+
+    def test_process_loss_row_rate_forced_to_zero(self):
+        """Even if a rate was typed in before the row was flagged as process loss,
+        validate_scrap_items() zeroes it out so it can never carry recovery value."""
+        scrap = [_make_scrap_row(item_code=None, qty=5, rate=25, is_process_loss=True)]
+        bom = _make_bom(scrap_items=scrap)
+        self._run_validate_scrap_items(bom)
+        self.assertAlmostEqual(scrap[0].rate, 0)
+
+    def test_recoverable_row_without_item_code_throws(self):
+        """A non-process-loss (recoverable) row still requires an item_code."""
+        scrap = [_make_scrap_row(item_code=None, qty=5, rate=10, is_process_loss=False)]
+        bom = _make_bom(scrap_items=scrap)
+        with self.assertRaises(Exception):
+            self._run_validate_scrap_items(bom)
+
+    def test_recoverable_row_with_item_code_passes(self):
+        scrap = [_make_scrap_row(item_code="BY-001", qty=5, rate=10, is_process_loss=False)]
+        bom = _make_bom(scrap_items=scrap)
+        self._run_validate_scrap_items(bom)  # should not raise
+        self.assertAlmostEqual(scrap[0].rate, 10)  # untouched for recoverable rows
+
+    def test_scrap_value_excludes_process_loss_after_validate_then_calc(self):
+        """End-to-end: validate_scrap_items() zeroes the process-loss rate, then
+        _calc_costs() naturally excludes it from scrap_value with no special-casing."""
+        from zoho_books_clone.manufacturing.doctype.bom.bom import BOM
+        items = [_make_item_row("RM-A", qty=10, rate=100)]
+        scrap = [
+            _make_scrap_row("BY-001", qty=2, rate=15, is_process_loss=False),   # recoverable: 30
+            _make_scrap_row(None,     qty=3, rate=999, is_process_loss=True),  # process loss: forced to 0
+        ]
+        bom = _make_bom(items=items, scrap_items=scrap)
+        BOM.validate_scrap_items(bom)
+        BOM._calc_costs(bom)
+        # scrap_value should only reflect the recoverable row (2×15=30), not the
+        # process-loss row (whose rate was zeroed before _calc_costs ran)
+        self.assertAlmostEqual(bom.scrap_value, 30.0)
+        self.assertAlmostEqual(bom.total_cost, 1000 - 30)
 
 
 # ---------------------------------------------------------------------------

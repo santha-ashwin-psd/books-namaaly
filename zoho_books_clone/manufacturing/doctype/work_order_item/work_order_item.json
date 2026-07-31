@@ -91,6 +91,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "sub_assembly_boms",
+   "fieldtype": "Small Text",
+   "label": "Sub-Assembly BOM(s)",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "Comma-separated list of the sub-assembly BOM(s) this row's material was exploded from, if any. Set automatically when loading materials from a BOM; used to group the raw materials list by sub-assembly on screen and in print. Hidden -- not meant for manual editing."
+  },
+  {
    "fieldname": "sec_substitution",
    "fieldtype": "Section Break",
    "label": "Substitution"

@@ -925,13 +925,14 @@ async function fetchBatches(line, q = "") {
   if (!line.item_code) { line.batchOptions = []; return; }
   const itemCode = line.item_code;
   try {
-    const filters = [["item", "=", itemCode], ["disabled", "=", 0]];
-    if (q) filters.push(["name", "like", `%${q}%`]);
-    const rows = await apiList("Batch", { fields: ["name", "manufacturing_date", "expiry_date", "batch_qty"], filters, limit: 20 });
+    // Batch.batch_qty is only a cache and can drift/double-count across
+    // warehouses — use the live SLE-aggregated qty instead (same source as
+    // Bills/Invoices/PurchaseOrders/StockEntries).
+    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: itemCode, search: q || "" }) || [];
     if (line.item_code !== itemCode) return; // item changed while awaiting
     line.batchOptions = rows.map(b => ({
-      value: b.name,
-      label: (b.batch_qty !== undefined && b.batch_qty !== null) ? `${b.name} (Qty: ${b.batch_qty})` : b.name,
+      value: b.batch_no,
+      label: (b.qty !== undefined && b.qty !== null) ? `${b.batch_no} (Qty: ${b.qty})` : b.batch_no,
       manufacturing_date: b.manufacturing_date || "",
       expiry_date: b.expiry_date || "",
     }));

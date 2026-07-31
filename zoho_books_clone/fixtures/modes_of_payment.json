@@ -54,5 +54,19 @@
     "type": "Bank",
     "enabled": 1,
     "name": "Debit Card"
+  },
+  {
+    "doctype": "Books Payment Mode",
+    "mode_of_payment": "IMPS",
+    "type": "Bank",
+    "enabled": 1,
+    "name": "IMPS"
+  },
+  {
+    "doctype": "Books Payment Mode",
+    "mode_of_payment": "Demand Draft",
+    "type": "Bank",
+    "enabled": 1,
+    "name": "Demand Draft"
   }
 ]

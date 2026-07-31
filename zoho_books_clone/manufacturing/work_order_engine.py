@@ -68,12 +68,20 @@ def get_default_bom_for_item(item_code):
 
     Resolution order:
       1. Item.default_bom, if set and it still qualifies (submitted, active,
-         and actually built against this item — guards against a stale
-         link left over from a re-typed item or a cancelled/deactivated BOM).
-      2. Otherwise, the most recently modified submitted+active BOM for this
-         item (preferring one flagged is_default), matching the same lookup
-         InventoryItems.vue uses to populate its own BOM picker.
+         actually built against this item, and not a Sub-Assembly BOM --
+         guards against a stale link left over from a re-typed item, a
+         cancelled/deactivated BOM, or a sub-assembly mistakenly set as an
+         item's default).
+      2. Otherwise, the most recently modified submitted+active
+         Manufacturing/Packing BOM for this item (preferring one flagged
+         is_default), matching the same lookup InventoryItems.vue uses to
+         populate its own BOM picker.
       3. None, if the item has no usable BOM yet.
+
+    Sub-Assembly BOMs are deliberately never suggested here -- they're meant
+    to be consumed *inside* another BOM (via sub_assembly_bom linkage or
+    auto-detected phantom), exploded automatically into the Work Order's
+    materials/operations, not selected as a Work Order's own top-level BOM.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -84,14 +92,25 @@ def get_default_bom_for_item(item_code):
     default_bom = frappe.db.get_value("Item", item_code, "default_bom")
     if default_bom and frappe.db.exists("BOM", default_bom):
         bom_row = frappe.db.get_value(
-            "BOM", default_bom, ["item", "docstatus", "is_active"], as_dict=True
+            "BOM", default_bom, ["item", "docstatus", "is_active", "bom_type"], as_dict=True
         )
-        if bom_row and bom_row.item == item_code and bom_row.docstatus == 1 and bom_row.is_active:
+        if (
+            bom_row
+            and bom_row.item == item_code
+            and bom_row.docstatus == 1
+            and bom_row.is_active
+            and bom_row.bom_type != "Sub-Assembly"
+        ):
             return {"bom": default_bom, "source": "item_default"}
 
     fallback = frappe.get_all(
         "BOM",
-        filters={"item": item_code, "docstatus": 1, "is_active": 1},
+        filters={
+            "item": item_code,
+            "docstatus": 1,
+            "is_active": 1,
+            "bom_type": ["!=", "Sub-Assembly"],
+        },
         fields=["name"],
         order_by="is_default desc, modified desc",
         limit=1,
@@ -161,13 +180,23 @@ def get_bom_breakdown(bom, qty, work_order=None):
     # silently missing from both Operating Cost and FG stock valuation for
     # every product that uses a sub-assembly/phantom BOM with its own
     # Operations table.
-    operations = [{
+    # Sub-assembly operations are listed BEFORE the top-level BOM's own
+    # operations. Job Cards are created in this same order (see Work
+    # Order._create_job_cards), and a sub-assembly's process (e.g. "Mixing"
+    # for an oil that later gets bottled) has to happen before the final
+    # assembly/packing step (e.g. "Assembler") that consumes it -- so its
+    # Job Card should exist, and appear in the list, first.
+    top_level_operations = [{
         "operation": r.operation,
         "workstation": r.workstation,
         "planned_time_in_mins": flt(r.time_in_mins) * ratio,
         "hour_rate": flt(r.hour_rate),
         "cost": flt(r.cost) * ratio,
-    } for r in bom_doc.operations] + exploded_operations
+        "sub_assembly_bom": "",
+        "sub_assembly_item": "",
+        "sub_assembly_qty": 0,
+    } for r in bom_doc.operations]
+    operations = exploded_operations + top_level_operations
 
     scrap_items = [{
         "item_code": r.item_code,
@@ -193,7 +222,7 @@ def get_bom_breakdown(bom, qty, work_order=None):
 
 
 
-def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=None):
+def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=None, origin=None, origin_item=None, origin_qty=None):
     """Recursively flatten BOM Item rows up to MAX_DEPTH levels deep.
 
     Rows are exploded (replaced by their own sub-components) when either:
@@ -203,6 +232,23 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
        intermediate item.
 
     All other rows pass through as-is (leaf raw materials).
+
+    origin: the top-level sub_assembly_bom this branch descended from (set
+    once at depth 0 and carried through deeper recursion unchanged), so a
+    leaf material several levels deep from a sub-assembly still reports
+    which top-level sub-assembly it belongs to. None for materials used
+    directly on the parent BOM. Purely informational — used by the Work
+    Order UI to group the (still-merged, still-correct) consumption rows by
+    sub-assembly; it never affects qty/warehouse merge logic below.
+
+    origin_item / origin_qty: the top-level sub-assembly's own production
+    item and the quantity of it actually required for this Work Order (set
+    together with ``origin`` at the same depth-0-to-1 descent and carried
+    unchanged through deeper nesting, exactly like ``origin`` is). Tagged
+    onto that branch's exploded operations so a Job Card created for a
+    sub-assembly's process can show what it's actually producing and how
+    much, instead of just the Work Order's own (unrelated) finished item
+    and total qty.
 
     operations_acc: an optional list that any exploded sub-BOM's own
     Operations get appended to (scaled by that sub-BOM's ratio, same as its
@@ -233,6 +279,20 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
                 if sub_doc.docstatus == 1:
                     sub_ratio = flt(r.qty) * ratio / flt(sub_doc.quantity or 1)
                     _seen_boms.add(target_bom)
+                    # Origin is fixed the moment we first descend into a
+                    # sub-assembly (depth 0 -> 1) and carried unchanged
+                    # through any further nested sub-assemblies below it, so
+                    # everything under this branch reports back to the same
+                    # top-level sub-assembly.
+                    branch_origin = origin or target_bom
+                    # Same fix-once-at-first-descent treatment as branch_origin:
+                    # the sub-assembly's own item and how much of it this Work
+                    # Order actually needs (r.qty * ratio == sub_ratio *
+                    # sub_doc.quantity) — not recomputed for deeper nested
+                    # sub-sub-assemblies, so every operation under this branch
+                    # reports back to the same top-level production figure.
+                    branch_item = origin_item or sub_doc.item
+                    branch_qty = origin_qty if origin_qty is not None else flt(r.qty) * ratio
                     for op in (sub_doc.operations or []):
                         operations_acc.append({
                             "operation": op.operation,
@@ -240,9 +300,17 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
                             "planned_time_in_mins": flt(op.time_in_mins) * sub_ratio,
                             "hour_rate": flt(op.hour_rate),
                             "cost": flt(op.cost) * sub_ratio,
+                            # Same origin used to tag this branch's material rows
+                            # below -- lets the Work Order UI group/label this
+                            # operation (and the Job Card created from it) by
+                            # which sub-assembly it belongs to.
+                            "sub_assembly_bom": branch_origin,
+                            "sub_assembly_item": branch_item,
+                            "sub_assembly_qty": branch_qty,
                         })
                     sub_items = _explode_bom_items(
-                        sub_doc.items, sub_ratio, depth + 1, _seen_boms, operations_acc
+                        sub_doc.items, sub_ratio, depth + 1, _seen_boms, operations_acc,
+                        branch_origin, branch_item, branch_qty,
                     )
                     result.extend(sub_items)
                     continue
@@ -259,6 +327,7 @@ def _explode_bom_items(rows, ratio, depth=0, _seen_boms=None, operations_acc=Non
             "rate": flt(r.rate) / conv if conv else flt(r.rate),
             "amount": flt(r.rate) * flt(r.qty) * ratio,
             "source_warehouse": r.source_warehouse or "",
+            "sub_assembly_bom": origin or "",
         })
     return result
 
@@ -274,14 +343,22 @@ def _merge_duplicate_rows(rows):
     the same item. Stock Entry's negative-stock guard checks each row against
     the warehouse's Bin qty independently and doesn't decrement for earlier
     rows in the same document, so split rows can jointly overconsume qty that
-    a single merged row would correctly have blocked.
+    a single merged row would correctly have blocked. The merge key (item +
+    warehouse) must NOT be widened to include sub_assembly_bom, or that bug
+    comes back — instead, distinct origins are collected onto the merged row
+    as `sub_assembly_boms` purely for the Work Order UI to group/label rows
+    by sub-assembly (a row touched by more than one sub-assembly, or by both
+    a sub-assembly and the top BOM directly, just lists all of them there).
     """
     merged = {}
     order = []
     for r in rows:
         key = (r["item_code"], r.get("source_warehouse") or "")
+        origin = r.get("sub_assembly_bom") or ""
         if key not in merged:
-            merged[key] = dict(r)
+            m = dict(r)
+            m["sub_assembly_boms"] = [origin] if origin else []
+            merged[key] = m
             order.append(key)
         else:
             m = merged[key]
@@ -291,6 +368,10 @@ def _merge_duplicate_rows(rows):
             # rate keeps the first occurrence's value while amount reflects
             # both, so rate * required_qty != amount for merged rows.
             m["rate"] = m["amount"] / m["required_qty"] if m["required_qty"] else 0.0
+            if origin and origin not in m["sub_assembly_boms"]:
+                m["sub_assembly_boms"].append(origin)
+    for k in order:
+        merged[k].pop("sub_assembly_bom", None)
     return [merged[k] for k in order]
 
 
@@ -419,12 +500,25 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     completions until produced_qty reaches the planned qty.
 
     qty_manufactured  -- finished-good qty actually produced this run
-    process_loss_qty  -- material that never became stock (evaporation,
-                         trimming, spillage etc.) — logged for yield
-                         reporting only, no stock movement
-    scrap_items       -- optional list of {item_code, qty} recoverable
-                         by-products that DO get a stock movement into
-                         scrap_warehouse
+    process_loss_qty  -- manual/legacy process-loss qty for this run
+                         (material that never became stock — evaporation,
+                         trimming, spillage etc. — logged for yield
+                         reporting only, no stock movement). Kept as a
+                         standalone override for callers who haven't moved
+                         to per-row process loss yet; see is_process_loss
+                         below for the row-level equivalent, which is
+                         summed INTO this rather than replacing it.
+    scrap_items       -- optional list of row dicts, each either:
+                           - recoverable: {item_code, qty, rate?, batch_no?}
+                             -- gets a real Stock Entry line into
+                             scrap_warehouse, exactly as before.
+                           - process loss: {qty, is_process_loss: 1} --
+                             item_code is not required (there's nothing to
+                             recover). No stock line is created; qty is
+                             instead added to process_loss_qty above before
+                             any of the consumption/costing math below runs,
+                             so it's indistinguishable downstream from a
+                             qty passed via the manual process_loss_qty arg.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -433,6 +527,16 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     if isinstance(scrap_items, str):
         scrap_items = frappe.parse_json(scrap_items)
     scrap_items = scrap_items or []
+
+    # Row-level process loss (is_process_loss=1 scrap rows) is folded into
+    # process_loss_qty up front, before consumption_ratio and everything
+    # downstream of it is computed -- this is what makes the two mechanisms
+    # (manual param vs. per-row flag) additive and interchangeable rather
+    # than needing two separate code paths through the rest of the function.
+    scrap_process_loss_qty = sum(
+        flt(s.get("qty")) for s in scrap_items
+        if s.get("is_process_loss") and flt(s.get("qty")) > 0
+    )
 
     wo = _get_work_order(work_order)
     assert_doc_in_user_company(wo)
@@ -447,7 +551,7 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         ).format(wo.name))
 
     qty_manufactured = flt(qty_manufactured)
-    process_loss_qty = flt(process_loss_qty)
+    process_loss_qty = flt(process_loss_qty) + scrap_process_loss_qty
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
 
@@ -543,6 +647,10 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     total_scrap_value = 0.0
     scrap_rows_to_append = []
     for s in scrap_items:
+        if s.get("is_process_loss"):
+            # Already folded into process_loss_qty above -- no stock line,
+            # no item required, no value recovered.
+            continue
         s_qty = flt(s.get("qty"))
         if s_qty <= 0 or not s.get("item_code"):
             continue

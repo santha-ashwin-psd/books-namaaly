@@ -74,6 +74,23 @@
    "description": "Internal: the child row name in Work Order Operation table, used to sync status back."
   },
   {
+   "fieldname": "sub_assembly_bom",
+   "fieldtype": "Link",
+   "options": "BOM",
+   "label": "Sub-Assembly BOM",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Carried over from the Work Order Operation row this Job Card was created for. Blank if this card is for an operation on the Work Order's own top-level BOM (final assembly) rather than a sub-assembly's process."
+  },
+  {
+   "fieldname": "sub_assembly_item",
+   "fieldtype": "Link",
+   "options": "Item",
+   "label": "Sub-Assembly Production Item",
+   "read_only": 1,
+   "description": "The item this card's sub-assembly process actually produces, if any. Carried over from the Work Order Operation row. Blank for a card on the Work Order's own top-level/final-assembly operation, in which case the Work Order's own finished item applies instead."
+  },
+  {
    "fieldname": "sec_jc_schedule",
    "fieldtype": "Section Break",
    "label": "Schedule"

@@ -70,6 +70,32 @@
    "fieldtype": "Currency",
    "label": "Cost",
    "read_only": 1
+  },
+  {
+   "fieldname": "sub_assembly_bom",
+   "fieldtype": "Link",
+   "options": "BOM",
+   "label": "Sub-Assembly BOM",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "The sub-assembly BOM this operation's labor/overhead was pulled in from, if any. Set automatically when loading operations from a BOM; used to group the Operations list (and the Job Cards created from it) by sub-assembly on screen. Blank for operations defined directly on the Work Order's own top-level BOM. Hidden -- not meant for manual editing."
+  },
+  {
+   "fieldname": "sub_assembly_item",
+   "fieldtype": "Link",
+   "options": "Item",
+   "label": "Sub-Assembly Production Item",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "The item this operation's sub-assembly actually produces, if any (blank for the Work Order's own top-level/final-assembly operations). Set automatically alongside Sub-Assembly BOM. Used so a Job Card for this row can show what it's producing instead of the Work Order's unrelated finished item."
+  },
+  {
+   "fieldname": "sub_assembly_qty",
+   "fieldtype": "Float",
+   "label": "Sub-Assembly Production Qty",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "How much of Sub-Assembly Production Item this Work Order actually requires (0 for the Work Order's own top-level/final-assembly operations). Set automatically alongside Sub-Assembly BOM. Used to default a Job Card's For Quantity to the sub-assembly's own production qty rather than the Work Order's total."
   }
  ],
  "permissions": []
