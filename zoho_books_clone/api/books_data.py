@@ -1947,9 +1947,10 @@ def _run_pro_action(action, data, company):
             pe.paid_amount      = amount
             pe.received_amount  = amount
             pe.paid_to = (
-                frappe.db.get_value("Company", inv.company, "default_bank_account") or
-                frappe.db.get_value("Account", {"account_type": "Cash", "company": inv.company}, "name") or ""
-            )
+                frappe.db.get_value("Account", {"account_type": "Cash", "company": inv.company}, "name")
+                if mode == "Cash" else
+                frappe.db.get_value("Company", inv.company, "default_bank_account")
+            ) or ""
             pe.append("references", {
                 "reference_doctype":   "Sales Invoice",
                 "reference_name":      inv_name,

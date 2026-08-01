@@ -300,8 +300,14 @@ watch(() => state.open, async (open) => {
           typeof a === "string" ? { name: a, account_type: "Bank" } : a
         );
       }
-      if (d?.payment_modes && d.payment_modes[0]) form.mode = d.payment_modes[0];
-      // Select the account matching the (possibly just-set) mode, not just index 0.
+      // NOTE: intentionally NOT overriding form.mode with d.payment_modes[0] here.
+      // That list is alphabetically ordered by the backend ("Bank Transfer" sorts
+      // before "Cash"), so doing so silently flipped the correct "Cash" default
+      // set above to "Bank Transfer" on every open — mis-booking cash receipts
+      // to a Bank account and making them vanish from the Bank & Cash undeposited
+      // total. The mode dropdown's options are hardcoded in the template anyway,
+      // so this list isn't needed to drive the selection.
+      // Select the account matching the current mode, not just index 0.
       const bucket = isCashMode.value ? "Cash" : "Bank";
       form.bank = allAccounts.value.find(a => a.account_type === bucket)?.name || "";
     } catch (e) {
