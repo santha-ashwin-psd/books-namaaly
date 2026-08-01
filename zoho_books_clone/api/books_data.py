@@ -899,11 +899,16 @@ def get_cash_summary(company=None):
     questions; two different numbers, both individually correct.
 
     cash_out covers every voucher type known to credit a Cash account:
-    Payment Entry (Pay), tagged cash-expense Journal Entries, and
+    Payment Entry (Pay), tagged cash-expense Journal Entries, the
+    standalone Expense doctype (paid_through = a Cash account), and
     Asset Repair (Asset Repair.credit_account may be a Cash account —
-    see assets/asset_repair_gl.py). If a new doctype is ever wired to
-    post to a Cash account, add its bucket here — the canary check below
-    will flag the drift in logs if someone forgets.
+    see assets/asset_repair_gl.py). Transfers is the NET amount moved out
+    of the pooled Cash accounts (credit legs minus debit legs within the
+    pool) — see the comment above the transfers query for why gross
+    credit alone overstates this when there's more than one Cash account.
+    If a new doctype is ever wired to post to a Cash account, add its
+    bucket here — the canary check below will flag the drift in logs if
+    someone forgets.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("banking")
@@ -960,8 +965,34 @@ def get_cash_summary(company=None):
         {"accs": cash_accounts, "co": company}
     )[0][0] or 0)
 
+    # The standalone Expense doctype (invoicing/doctype/expense) — used for
+    # cash/petty-cash spend recorded directly, separate from this page's
+    # "New Cash Entry -> Pay" tagged-JE flow — can pay through a Cash
+    # account (Expense.paid_through). It posts real GL credits to the Cash
+    # account but was previously invisible to this summary entirely.
+    cash_out_expense = flt(frappe.db.sql(
+        """SELECT SUM(credit) FROM `tabGeneral Ledger Entry`
+           WHERE voucher_type = 'Expense' AND IFNULL(is_cancelled,0) = 0
+             AND account IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "co": company}
+    )[0][0] or 0)
+
+    # Transfers = NET movement out of the pooled Cash accounts via the
+    # Deposit flow (deposit_cash_to_bank), not gross credits. When there is
+    # more than one Cash account (e.g. Cash + Petty Cash), a "top up Petty
+    # Cash from Cash" transfer debits one cash_account and credits another
+    # — both legs land inside the same pool, so gross credit alone
+    # overstates money that actually left the combined pool. Netting
+    # credit - debit here means:
+    #   - Cash -> Bank (destination outside cash_accounts): full amount
+    #     counted, since only the credit leg touches a cash_account.
+    #   - Cash -> Petty Cash (destination inside cash_accounts): nets to
+    #     zero here — it's still sitting in the pool, just in a different
+    #     account, so it correctly does NOT reduce Net Cash. It remains
+    #     fully visible on each account's own ledger (Account Ledger view),
+    #     just not double-subtracted from the pooled reconciliation total.
     transfers = flt(frappe.db.sql(
-        """SELECT SUM(jea.credit)
+        """SELECT SUM(jea.credit) - SUM(jea.debit)
            FROM `tabJournal Entry Account` jea
            INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
            WHERE je.docstatus = 1 AND je.voucher_type = 'Contra Entry'
@@ -970,7 +1001,7 @@ def get_cash_summary(company=None):
         {"accs": cash_accounts, "marker": _CASH_DEPOSIT_REMARK_PREFIX + "%", "co": company}
     )[0][0] or 0)
 
-    cash_out = cash_out_pe + cash_out_je + cash_out_asset_repair
+    cash_out = cash_out_pe + cash_out_je + cash_out_asset_repair + cash_out_expense
     net_cash = sum(_cash_account_balance(acc, company) for acc in cash_accounts)
 
     # Canary: if this ever drifts, a new voucher type is posting to a Cash
