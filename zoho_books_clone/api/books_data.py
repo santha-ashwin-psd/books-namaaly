@@ -775,6 +775,23 @@ def record_payment_multi(
 _CASH_DEPOSIT_REMARK_PREFIX = "Cash deposited to bank:"
 
 
+def _cash_account_opening(cash_account):
+    """Opening balance contribution for one Cash account, isolated so
+    callers (get_cash_summary) can report it as its own reconciliation
+    line instead of it being buried inside a combined balance figure.
+
+    Returns 0 if the account has a GL-posted opening entry (voucher_type
+    'Bank Account') — that entry is already picked up by the GL movement
+    sum, so counting the static field too would double it.
+    """
+    has_bank_opening_entry = frappe.db.exists(
+        "General Ledger Entry", {"account": cash_account, "voucher_type": "Bank Account"}
+    )
+    return 0.0 if has_bank_opening_entry else flt(
+        frappe.db.get_value("Account", cash_account, "opening_balance") or 0
+    )
+
+
 def _cash_account_balance(cash_account, company):
     """True all-time balance for one Cash account, computed straight from
     the General Ledger — the same source of truth the Account Ledger view
@@ -790,12 +807,7 @@ def _cash_account_balance(cash_account, company):
     Deposits are still accounted for automatically here: a deposit posts a
     credit to this account in the GL, which the sum below already picks up.
     """
-    has_bank_opening_entry = frappe.db.exists(
-        "General Ledger Entry", {"account": cash_account, "voucher_type": "Bank Account"}
-    )
-    opening = 0.0 if has_bank_opening_entry else flt(
-        frappe.db.get_value("Account", cash_account, "opening_balance") or 0
-    )
+    opening = _cash_account_opening(cash_account)
     movement = flt(frappe.db.sql(
         """SELECT SUM(debit) - SUM(credit) FROM `tabGeneral Ledger Entry`
            WHERE IFNULL(is_cancelled,0) = 0 AND account = %s AND LOWER(company) = LOWER(%s)""",
@@ -871,11 +883,27 @@ def get_cash_summary(company=None):
     Bank & Cash page's summary strip.
 
     Unlike the page's transaction list (capped at 200 rows per bucket for
-    display performance), these are exact all-time SQL sums, and Net Cash is
-    sourced from the same ledger-truth calculation as get_undeposited_cash
-    (the Deposit button's figure) — so on the summary strip:
-        Net Cash == Cash In - Cash Out - Transfers   (always, by construction)
-        Net Cash == the amount the Deposit button can move
+    display performance), these are exact all-time SQL sums.
+
+    Identity this endpoint guarantees:
+        Net Cash == Opening Balance + Cash In - Cash Out - Transfers
+
+    Net Cash here is the TRUE unclamped balance across all Cash accounts
+    for this company (can go negative if a Cash account is genuinely
+    overdrawn). This is deliberately NOT the same number as
+    get_undeposited_cash()'s total_undeposited, which clamps each
+    account's balance at 0 before summing (a negative account can't
+    contribute "depositable" cash from elsewhere) — that clamped figure
+    is correct for gating the Deposit button, but wrong for reconciling
+    against Cash In/Cash Out/Transfers on this strip. Two different
+    questions; two different numbers, both individually correct.
+
+    cash_out covers every voucher type known to credit a Cash account:
+    Payment Entry (Pay), tagged cash-expense Journal Entries, and
+    Asset Repair (Asset Repair.credit_account may be a Cash account —
+    see assets/asset_repair_gl.py). If a new doctype is ever wired to
+    post to a Cash account, add its bucket here — the canary check below
+    will flag the drift in logs if someone forgets.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("banking")
@@ -893,7 +921,9 @@ def get_cash_summary(company=None):
         )
     ]
     if not cash_accounts:
-        return {"cash_in": 0, "cash_out": 0, "transfers": 0, "net_cash": 0}
+        return {"cash_in": 0, "cash_out": 0, "transfers": 0, "opening_balance": 0, "net_cash": 0}
+
+    opening_balance = sum(_cash_account_opening(acc) for acc in cash_accounts)
 
     cash_in = flt(frappe.db.sql(
         """SELECT SUM(paid_amount - IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
@@ -918,6 +948,18 @@ def get_cash_summary(company=None):
         {"accs": cash_accounts, "co": company}
     )[0][0] or 0)
 
+    # Asset Repair can credit a Cash account directly (credit_account may be
+    # Payable/Bank/Cash — assets/asset_repair_gl.py). Queried straight off
+    # the GL (is_cancelled=0) rather than joined to Asset Repair.docstatus,
+    # since is_cancelled is the authoritative reversal flag the ledger
+    # itself uses (see general_ledger_entry.py).
+    cash_out_asset_repair = flt(frappe.db.sql(
+        """SELECT SUM(credit) FROM `tabGeneral Ledger Entry`
+           WHERE voucher_type = 'Asset Repair' AND IFNULL(is_cancelled,0) = 0
+             AND account IN %(accs)s AND LOWER(company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "co": company}
+    )[0][0] or 0)
+
     transfers = flt(frappe.db.sql(
         """SELECT SUM(jea.credit)
            FROM `tabJournal Entry Account` jea
@@ -927,10 +969,30 @@ def get_cash_summary(company=None):
         {"accs": cash_accounts, "marker": _CASH_DEPOSIT_REMARK_PREFIX + "%"}
     )[0][0] or 0)
 
-    cash_out = cash_out_pe + cash_out_je
-    net_cash = flt(get_undeposited_cash(company=company)["total_undeposited"])
+    cash_out = cash_out_pe + cash_out_je + cash_out_asset_repair
+    net_cash = sum(_cash_account_balance(acc, company) for acc in cash_accounts)
 
-    return {"cash_in": cash_in, "cash_out": cash_out, "transfers": transfers, "net_cash": net_cash}
+    # Canary: if this ever drifts, a new voucher type is posting to a Cash
+    # account that isn't captured above — log it instead of silently
+    # letting the strip lie again.
+    expected = opening_balance + cash_in - cash_out - transfers
+    if abs(expected - net_cash) > 0.01:
+        frappe.log_error(
+            title="Cash summary reconciliation drift",
+            message=(
+                f"company={company} opening={opening_balance} cash_in={cash_in} "
+                f"cash_out={cash_out} transfers={transfers} expected={expected} "
+                f"actual_net_cash={net_cash} diff={net_cash - expected}"
+            ),
+        )
+
+    return {
+        "cash_in": cash_in,
+        "cash_out": cash_out,
+        "transfers": transfers,
+        "opening_balance": opening_balance,
+        "net_cash": net_cash,
+    }
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
