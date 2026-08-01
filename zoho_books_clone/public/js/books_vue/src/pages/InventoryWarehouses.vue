@@ -294,21 +294,21 @@
             <span class="wh-stat-chip-icon">📋</span>
               <div>
               <div class="wh-stat-chip-lbl">Ordered Qty</div>
-              <div class="wh-stat-chip-val">{{ whStats.ordered.toFixed(2) }}</div>
+              <div class="wh-stat-chip-val">{{ whStats.ordered.toFixed(4) }}</div>
             </div>
           </div>
           <div class="wh-stat-chip wh-stat-chip--orange">
             <span class="wh-stat-chip-icon">🔒</span>
             <div>
               <div class="wh-stat-chip-lbl">Reserved Qty</div>
-              <div class="wh-stat-chip-val">{{ whStats.reserved.toFixed(2) }}</div>
+              <div class="wh-stat-chip-val">{{ whStats.reserved.toFixed(4) }}</div>
             </div>
           </div>
           <div class="wh-stat-chip wh-stat-chip--indigo">
             <span class="wh-stat-chip-icon">📊</span>
             <div>
               <div class="wh-stat-chip-lbl">Projected Qty</div>
-              <div class="wh-stat-chip-val">{{ whStats.projected.toFixed(2) }}</div>
+              <div class="wh-stat-chip-val">{{ whStats.projected.toFixed(4) }}</div>
             </div>
           </div>
         </div>
@@ -392,15 +392,15 @@
             <div class="wh-smc-grid">
               <div class="wh-smc-cell">
                 <div class="wh-smc-lbl">Actual Qty</div>
-                <div class="wh-smc-val wh-smc-qty">{{ flt(r.actual_qty).toFixed(2) }}</div>
+                <div class="wh-smc-val wh-smc-qty">{{ flt(r.actual_qty).toFixed(4) }}</div>
               </div>
               <div class="wh-smc-cell">
                 <div class="wh-smc-lbl">Reserved</div>
-                <div class="wh-smc-val wh-smc-reserved">{{ flt(r.reserved_qty).toFixed(2) }}</div>
+                <div class="wh-smc-val wh-smc-reserved">{{ flt(r.reserved_qty).toFixed(4) }}</div>
               </div>
               <div class="wh-smc-cell">
                 <div class="wh-smc-lbl">Ordered</div>
-                <div class="wh-smc-val wh-smc-ordered">{{ flt(r.ordered_qty).toFixed(2) }}</div>
+                <div class="wh-smc-val wh-smc-ordered">{{ flt(r.ordered_qty).toFixed(4) }}</div>
               </div>
               <div class="wh-smc-cell">
                 <div class="wh-smc-lbl">Val. Rate</div>
@@ -429,7 +429,7 @@
                   <div class="wh-batch-date" style="margin-top:2px">{{ fmtBatchDate(b.manufacturing_date) }} → {{ fmtBatchDate(b.expiry_date) }}</div>
                 </div>
                 <div style="text-align:right">
-                  <div class="wh-batch-qty">{{ flt(b.qty).toFixed(2) }}</div>
+                  <div class="wh-batch-qty">{{ flt(b.qty).toFixed(4) }}</div>
                   <span v-if="b.is_expired" class="wh-batch-flag wh-batch-flag--expired">Expired</span>
                   <span v-else-if="b.expires_soon" class="wh-batch-flag wh-batch-flag--soon">Soon</span>
                   <button v-if="adjustTargetWH" class="wh-adj-btn wh-smc-adj" style="margin-top:6px" @click.stop="openBatchAdjustment(r, b)">
@@ -473,9 +473,9 @@
                 </td>
                 <td class="wh-td wh-td-muted wh-th-hide-sm">{{ r.item_group || '—' }}</td>
                 <td class="wh-td wh-td-muted wh-th-hide-sm">{{ r.uom || 'Nos' }}</td>
-                <td class="wh-td wh-td-r wh-td-qty">{{ flt(r.actual_qty).toFixed(2) }}</td>
-                <td class="wh-td wh-td-r wh-td-reserved wh-th-hide-md">{{ flt(r.reserved_qty).toFixed(2) }}</td>
-                <td class="wh-td wh-td-r wh-td-ordered wh-th-hide-md">{{ flt(r.ordered_qty).toFixed(2) }}</td>
+                <td class="wh-td wh-td-r wh-td-qty">{{ flt(r.actual_qty).toFixed(4) }}</td>
+                <td class="wh-td wh-td-r wh-td-reserved wh-th-hide-md">{{ flt(r.reserved_qty).toFixed(4) }}</td>
+                <td class="wh-td wh-td-r wh-td-ordered wh-th-hide-md">{{ flt(r.ordered_qty).toFixed(4) }}</td>
                 <td class="wh-td wh-td-r wh-th-hide-md">{{ fmt(r.valuation_rate) }}</td>
                 <td class="wh-td wh-td-r wh-td-value">{{ fmt(r.stock_value) }}</td>
                 <td class="wh-td wh-td-c">
@@ -502,7 +502,7 @@
                           <td class="wh-batch-no">{{ b.batch_no }}</td>
                           <td class="wh-batch-date">{{ fmtBatchDate(b.manufacturing_date) }}</td>
                           <td class="wh-batch-date">{{ fmtBatchDate(b.expiry_date) }}</td>
-                          <td class="wh-batch-qty">{{ flt(b.qty).toFixed(2) }}</td>
+                          <td class="wh-batch-qty">{{ flt(b.qty).toFixed(4) }}</td>
                           <td>
                             <span v-if="b.is_expired" class="wh-batch-flag wh-batch-flag--expired">Expired</span>
                             <span v-else-if="b.expires_soon" class="wh-batch-flag wh-batch-flag--soon">Expires soon</span>
@@ -567,7 +567,7 @@
           </div>
           <div v-if="adjDrawer.batch_no" style="background:#faf5ff;border:1px solid #ede9fe;border-radius:8px;padding:10px 14px;font-size:12px;color:#6b21a8;display:flex;justify-content:space-between;align-items:center">
             <span>Item total in this warehouse</span>
-            <span style="font-weight:700">{{ flt(adjDrawer.item_total_qty).toFixed(2) }}</span>
+            <span style="font-weight:700">{{ flt(adjDrawer.item_total_qty).toFixed(4) }}</span>
           </div>
           <div>
             <label class="nim-label">New Quantity <span style="color:#dc2626">*</span></label>
@@ -992,14 +992,14 @@ function exportStockExcel() {
   for (const r of rows) {
     const baseVals = [
       r.item_code, r.item_name, r.item_group || "", r.uom || "Nos",
-      flt(r.actual_qty).toFixed(2), flt(r.reserved_qty).toFixed(2), flt(r.ordered_qty).toFixed(2),
+      flt(r.actual_qty).toFixed(4), flt(r.reserved_qty).toFixed(4), flt(r.ordered_qty).toFixed(4),
       flt(r.valuation_rate).toFixed(2), flt(r.stock_value).toFixed(2),
       r.below_reorder ? "Low" : "OK",
     ];
     const batches = r.has_batch_no ? batchesFor(r.item_code) : [];
     if (batches.length) {
       for (const b of batches) {
-        lines.push([...baseVals, b.batch_no || "", flt(b.qty).toFixed(2),
+        lines.push([...baseVals, b.batch_no || "", flt(b.qty).toFixed(4),
           fmtBatchDate(b.manufacturing_date), fmtBatchDate(b.expiry_date)].map(esc).join(","));
       }
     } else {
@@ -1038,15 +1038,15 @@ function printStockPdf() {
   const rowsHtml = rows.map(r => {
     const batches = r.has_batch_no ? batchesFor(r.item_code) : [];
     const batchNote = batches.length
-      ? batches.map(b => `${esc(b.batch_no || "—")} (${esc(flt(b.qty).toFixed(2))})`).join(", ")
+      ? batches.map(b => `${esc(b.batch_no || "—")} (${esc(flt(b.qty).toFixed(4))})`).join(", ")
       : "—";
     return `
       <tr>
         <td>${esc(r.item_code)}</td>
         <td>${esc(r.item_name)}</td>
         <td>${esc(r.item_group || "—")}</td>
-        <td style="text-align:right">${esc(flt(r.actual_qty).toFixed(2))} ${esc(r.uom || "Nos")}</td>
-        <td style="text-align:right">${esc(flt(r.reserved_qty).toFixed(2))}</td>
+        <td style="text-align:right">${esc(flt(r.actual_qty).toFixed(4))} ${esc(r.uom || "Nos")}</td>
+        <td style="text-align:right">${esc(flt(r.reserved_qty).toFixed(4))}</td>
         <td style="text-align:right">${esc(flt(r.valuation_rate).toFixed(2))}</td>
         <td style="text-align:right">${esc(flt(r.stock_value).toFixed(2))}</td>
         <td>${r.below_reorder ? '<span style="color:#e03131;font-weight:700">Low</span>' : '<span style="color:#2f9e44;font-weight:700">OK</span>'}</td>

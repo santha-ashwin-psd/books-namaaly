@@ -32,7 +32,7 @@ from frappe.utils import flt, nowdate
 
 from zoho_books_clone.utils.access import assert_can
 from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
-from zoho_books_clone.inventory.utils import get_valuation_rate, get_conversion_factor
+from zoho_books_clone.inventory.utils import get_valuation_rate, get_conversion_factor, get_stock_balance_bulk
 
 
 def _get_work_order(work_order):
@@ -420,7 +420,15 @@ def issue_materials(work_order):
     """Material Transfer of all still-pending raw materials into the Work
     Order's WIP warehouse. Only meaningful if a WIP warehouse is set —
     otherwise Complete Work Order consumes straight from Source Warehouse
-    and this step can be skipped entirely."""
+    and this step can be skipped entirely.
+
+    Items that don't have enough stock on hand yet (e.g. an ingredient
+    that's only needed by a later day's Job Card and hasn't been
+    purchased/received yet) are silently skipped rather than blocking the
+    whole transfer — whatever IS available gets moved to WIP now, and the
+    skipped item(s) stay pending. Once stock for a skipped item is
+    received, calling Issue Materials again will pick up just that
+    remaining item."""
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     assert_can("Stock Entry", "write")
@@ -435,6 +443,23 @@ def issue_materials(work_order):
             "materials as a separate step, or skip straight to Complete Work Order."
         ))
 
+    pending_rows = []
+    for row in wo.items:
+        pending = flt(row.required_qty) - flt(row.transferred_qty)
+        if pending > 0:
+            pending_rows.append((row, row.source_warehouse or wo.source_warehouse, pending))
+
+    if not pending_rows:
+        frappe.throw(_("All raw materials have already been issued for this Work Order."))
+
+    by_warehouse = {}
+    for row, wh, pending in pending_rows:
+        by_warehouse.setdefault(wh, []).append(row.item_code)
+
+    balances = {}
+    for wh, item_codes in by_warehouse.items():
+        balances[wh] = get_stock_balance_bulk(item_codes, wh)
+
     se = frappe.new_doc("Stock Entry")
     se.company = wo.company
     se.stock_entry_type = "Material Transfer"
@@ -442,29 +467,48 @@ def issue_materials(work_order):
     se.work_order = wo.name
     se.remarks = f"Material issue for Work Order {wo.name}"
 
-    for row in wo.items:
-        pending = flt(row.required_qty) - flt(row.transferred_qty)
-        if pending <= 0:
+    issued_rows = []
+    skipped = []
+
+    for row, wh, pending in pending_rows:
+        available = flt(balances.get(wh, {}).get(row.item_code))
+        if available <= 0:
+            skipped.append(row.item_code)
             continue
+
+        qty_to_issue = pending if available >= pending else available
+        if qty_to_issue < pending:
+            skipped.append(f"{row.item_code} (only {qty_to_issue} of {pending} available)")
+
         se.append("items", {
             "item_code": row.item_code,
-            "qty": pending,
-            "s_warehouse": row.source_warehouse or wo.source_warehouse,
+            "qty": qty_to_issue,
+            "s_warehouse": wh,
             "t_warehouse": wo.wip_warehouse,
         })
+        issued_rows.append((row, qty_to_issue))
 
     if not se.items:
-        frappe.throw(_("All raw materials have already been issued for this Work Order."))
+        frappe.throw(_(
+            "None of the pending raw materials are currently in stock at their "
+            "source warehouse(s), so nothing could be issued. Skipped: {0}"
+        ).format(", ".join(skipped)))
 
     se.insert(ignore_permissions=True)
     se.submit()
 
-    for row in wo.items:
-        row.db_set("transferred_qty", flt(row.required_qty), update_modified=False)
+    for row, qty_to_issue in issued_rows:
+        row.db_set("transferred_qty", flt(row.transferred_qty) + qty_to_issue, update_modified=False)
     if wo.status == "Submitted":
         wo.db_set("status", "In Process")
     _set_operations_status(wo, "In Process", skip_statuses={"Completed"})
     frappe.db.commit()
+
+    if skipped:
+        frappe.msgprint(_(
+            "Materials issued via {0}. The following item(s) were skipped due to "
+            "insufficient stock and remain pending: {1}"
+        ).format(se.name, ", ".join(skipped)), indicator="orange", alert=True)
 
     return se.name
 

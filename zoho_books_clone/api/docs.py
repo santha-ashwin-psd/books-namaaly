@@ -5130,8 +5130,9 @@ def confirm_bank_statement_import(bank_account, rows):
     """))
 
     created, reconciled, mapped_to_suspense, errors = [], 0, 0, []
-    for row in rows or []:
+    for idx, row in enumerate(rows or []):
         action = row.get("action")
+        bt = None
         try:
             if action == "reconcile":
                 if row.get("match_type") == "bank_transaction":
@@ -5168,7 +5169,23 @@ def confirm_bank_statement_import(bank_account, rows):
                     mapped_to_suspense += 1
         except Exception as e:
             frappe.log_error(f"Bank statement row import failed: {e}", "confirm_bank_statement_import")
-            errors.append(row.get("description") or row.get("date") or "row")
+            # bt.insert() may have succeeded even though bt.submit() failed
+            # (e.g. no Categorize To account and no fallback Suspense
+            # account) — that leaves an orphaned draft Bank Transaction
+            # behind. Clean it up so retrying this row doesn't collide with
+            # a stray draft, and so it doesn't quietly show up elsewhere.
+            if bt is not None and getattr(bt, "name", None) and frappe.db.exists("Bank Transaction", bt.name):
+                try:
+                    if frappe.db.get_value("Bank Transaction", bt.name, "docstatus") == 0:
+                        frappe.delete_doc("Bank Transaction", bt.name, ignore_permissions=True, force=True)
+                except Exception:
+                    pass
+            errors.append({
+                "index": idx,
+                "date": row.get("date"),
+                "description": row.get("description"),
+                "message": str(e),
+            })
 
     frappe.db.commit()
     return {

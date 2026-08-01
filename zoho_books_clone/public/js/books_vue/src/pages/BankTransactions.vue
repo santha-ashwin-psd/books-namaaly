@@ -290,6 +290,10 @@
         <div class="bt-dh-sub">{{ mappingRows.length }} row(s) parsed — {{ mappingToReconcile.length }} auto-matched, {{ mappingToMap.length }} need an account, {{ mappingSkipped.length }} skipped</div>
       </div>
       <div class="bt-map-body">
+        <div v-if="mappingFailedRows.length" class="bt-map-warn bt-map-warn--err">
+          {{ mappingFailedRows.length }} row(s) failed to import — see the highlighted row(s) below for details.
+          <button class="bt-btn-ghost" style="margin-left:10px;padding:2px 8px;font-size:11.5px" @click="scrollToFirstError">Jump to first</button>
+        </div>
         <div v-if="mappingUnaccounted" class="bt-map-warn">
           {{ mappingUnaccounted }} row(s) have no account picked — these will post to the company's Suspense account on confirm, still fully balanced (Dr Bank / Cr Suspense or reverse), just uncategorized until you fix them later.
         </div>
@@ -299,18 +303,23 @@
           <table class="bt-map-table">
             <thead><tr><th>Date</th><th>Description</th><th class="ta-r">Amount</th><th>Categorize To</th><th></th></tr></thead>
             <tbody>
-              <tr v-for="row in mappingToMap" :key="row.description+row.date+row.debit+row.credit">
-                <td class="mono-sm">{{ fmtDate(row.date) }}</td>
-                <td>{{ row.description || '—' }}</td>
-                <td class="mono-sm ta-r" :class="row.credit>0?'green':'red'">{{ row.credit>0?'+':'-' }}{{ fmtCur(row.credit>0?row.credit:row.debit) }}</td>
-                <td>
-                  <select v-model="row.mapped_account" class="bt-select" style="min-width:200px">
-                    <option value="">— Suspense (uncategorized) —</option>
-                    <option v-for="a in mappingAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
-                  </select>
-                </td>
-                <td><button class="bt-btn-ghost" style="padding:4px 8px;font-size:11.5px" @click="applyAccountToSimilar(row)" :disabled="!row.mapped_account" title="Apply this account to other unmapped rows with a similar description">Apply to similar</button></td>
-              </tr>
+              <template v-for="row in mappingToMap" :key="row.description+row.date+row.debit+row.credit">
+                <tr :ref="el => setRowRef(row, el)" :class="{ 'bt-row-err': row._importError }">
+                  <td class="mono-sm">{{ fmtDate(row.date) }}</td>
+                  <td>{{ row.description || '—' }}</td>
+                  <td class="mono-sm ta-r" :class="row.credit>0?'green':'red'">{{ row.credit>0?'+':'-' }}{{ fmtCur(row.credit>0?row.credit:row.debit) }}</td>
+                  <td>
+                    <select v-model="row.mapped_account" class="bt-select" style="min-width:200px">
+                      <option value="">— Suspense (uncategorized) —</option>
+                      <option v-for="a in mappingAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
+                    </select>
+                  </td>
+                  <td><button class="bt-btn-ghost" style="padding:4px 8px;font-size:11.5px" @click="applyAccountToSimilar(row)" :disabled="!row.mapped_account" title="Apply this account to other unmapped rows with a similar description">Apply to similar</button></td>
+                </tr>
+                <tr v-if="row._importError" class="bt-row-err-detail">
+                  <td colspan="5">✗ {{ row._importError }}</td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </template>
@@ -345,7 +354,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, nextTick } from "vue";
 import { apiList, apiPOST, resolveCompany } from "../api/client.js";
 
 // Import format guide + sample templates
@@ -533,6 +542,17 @@ async function loadMappingAccounts() {
 const mappingToReconcile = computed(() => mappingRows.value.filter(r => r.action === "reconcile"));
 const mappingToMap = computed(() => mappingRows.value.filter(r => r.action === "map"));
 const mappingSkipped = computed(() => mappingRows.value.filter(r => r.action === "skip"));
+const mappingFailedRows = computed(() => mappingRows.value.filter(r => r._importError));
+const mappingRowEls = new Map();
+function setRowRef(row, el) {
+  if (el) mappingRowEls.set(row, el);
+  else mappingRowEls.delete(row);
+}
+function scrollToFirstError() {
+  const first = mappingFailedRows.value[0];
+  const el = first && mappingRowEls.get(first);
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
 const mappingUnaccounted = computed(() => mappingToMap.value.filter(r => !r.mapped_account).length);
 
 function applyAccountToSimilar(row) {
@@ -546,24 +566,48 @@ function applyAccountToSimilar(row) {
 
 async function confirmMappingImport() {
   confirming.value = true;
+  // Clear any previous failure marks before retrying.
+  mappingRows.value.forEach(r => { r._importError = null; });
+  const submittedRows = mappingRows.value.filter(r => r.action !== "skip");
   try {
     const r = await apiPOST("zoho_books_clone.api.docs.confirm_bank_statement_import", {
       bank_account: selectedAccount.value,
-      rows: mappingRows.value.filter(r => r.action !== "skip"),
+      rows: submittedRows,
     }, { module: "banking", action: "create" });
+
+    const failed = r?.errors || [];
+    failed.forEach(err => {
+      const row = submittedRows[err.index];
+      if (row) row._importError = err.message || "Import failed for this row";
+    });
+
+    if (failed.length) {
+      // Keep the panel open so the person can fix the flagged row(s)
+      // right where they are, instead of a generic page-level error with
+      // no way to tell which row it was about.
+      toast.error(`${failed.length} row(s) failed to import — see highlighted row(s) below.`);
+      await nextTick();
+      scrollToFirstError();
+    } else {
+      mappingOpen.value = false;
+    }
+
     importResult.value = {
-      ok: true,
+      ok: !failed.length,
       count: r?.count || 0,
       skipped: mappingSkipped.value.length,
       autoReconciled: r?.reconciled || 0,
       mappedToSuspense: r?.mapped_to_suspense || 0,
+      error: failed.length ? `${failed.length} row(s) failed — see Review Import panel` : undefined,
     };
     if (r?.mapped_to_suspense) {
       toast.info(`${r.mapped_to_suspense} row(s) posted to Suspense — categorize them later on the transaction.`);
     }
-    mappingOpen.value = false;
     await load();
   } catch (err) {
+    // A hard failure of the whole request (network, permission, etc.) —
+    // not a per-row issue — still shown at page level since there's no
+    // specific row to point at.
     importResult.value = { ok: false, error: err.message || "Import failed" };
   } finally {
     confirming.value = false;
@@ -730,6 +774,10 @@ onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.a
 .bt-map-drawer.open{right:0;}
 .bt-map-body{flex:1;overflow-y:auto;padding:16px 20px;}
 .bt-map-warn{background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:12.5px;padding:10px 12px;border-radius:8px;margin-bottom:14px;}
+.bt-map-warn--err{background:#fef2f2;border-color:#fca5a5;color:#b91c1c;display:flex;align-items:center;flex-wrap:wrap;}
+.bt-row-err{background:#fef2f2 !important;}
+.bt-row-err td{border-bottom-color:#fecaca !important;}
+.bt-row-err-detail td{background:#fef2f2;color:#b91c1c;font-size:11.5px;padding:2px 8px 8px 8px;border-bottom:1px solid #fecaca;}
 .bt-map-table{width:100%;border-collapse:collapse;font-size:12.5px;}
 .bt-map-table th{text-align:left;color:#6b7280;font-weight:600;font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid #e5e7eb;}
 .bt-map-table td{padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:middle;}

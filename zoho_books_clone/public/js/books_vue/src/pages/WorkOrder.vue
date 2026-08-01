@@ -343,11 +343,11 @@
                     </div>
                     <div class="bomx-rm-field">
                       <label>Transferred</label>
-                      <div class="bomx-rm-static">{{ fmt(rm.transferred_qty) }}</div>
+                      <div class="bomx-rm-static">{{ fmtQty(rm.transferred_qty) }}</div>
                     </div>
                     <div class="bomx-rm-field">
                       <label>Consumed</label>
-                      <div class="bomx-rm-static">{{ fmt(rm.consumed_qty) }}</div>
+                      <div class="bomx-rm-static">{{ fmtQty(rm.consumed_qty) }}</div>
                     </div>
                   </div>
                 </div>
@@ -1843,7 +1843,7 @@ function printWorkOrder() {
         <tr>
           <td>${esc(rm.item_code)}</td>
           <td>${esc(itemLabel(rm.item_code))}</td>
-          <td style="text-align:right">${esc(fmt(rm.required_qty))}</td>
+          <td style="text-align:right">${esc(fmtQty(rm.required_qty))}</td>
           <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
         </tr>`).join("")}`;
   const rowsHtml = groups.length
@@ -2326,6 +2326,10 @@ function flt(n) { const v = parseFloat(n); return isNaN(v) ? 0 : v; }
 function fmt(n) {
   if (isNaN(n) || n == null) return "0.00";
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtQty(n) {
+  if (isNaN(n) || n == null) return "0.0000";
+  return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 // ── UTIL ─────────────────────────────────────────────────────
 const ICONS = {

@@ -90,35 +90,61 @@ def create_bank_transaction_row(
 
 
 def create_bank_transaction_from_payment_entry(pe):
-    """Create a Bank Transaction row mirroring a submitted Payment Entry's
+    """Create Bank Transaction row(s) mirroring a submitted Payment Entry's
     bank leg. See create_bank_transaction_row for the full rationale.
 
-    Uses the net-of-bank-charges amount (what actually moved in/out of the
-    bank account), matching what post_payment_entry() posts to the Bank/Cash
-    GL leg — not the gross paid_amount — so this row reconciles cleanly
-    against the real bank statement.
+    When bank_charges is set, this creates TWO separate Bank Transaction
+    rows instead of one netted row — matching how the actual bank
+    statement records it (the payment and the bank's charge show up as
+    two distinct line items, not combined into one). The main row carries
+    the full paid_amount; the charge row carries just the bank_charges
+    amount as its own withdrawal, tagged with a distinct reference number
+    so it doesn't collide with the main row during reconciliation/import
+    matching. Together the two rows net out to the same real cash
+    movement that post_payment_entry() posts to the Bank/Cash GL leg.
+
+    Returns a list of the created Bank Transaction name(s) — one entry
+    normally, two when bank_charges > 0.
     """
     bank_charges = flt(getattr(pe, "bank_charges", 0))
+    ref = pe.reference_no or pe.name
+    date = pe.payment_date or pe.posting_date
+
     if pe.payment_type == "Receive":
         bank_account_name = pe.paid_to
-        deposit    = flt(pe.paid_amount) - bank_charges
-        withdrawal = 0.0
+        main_deposit,    main_withdrawal    = flt(pe.paid_amount), 0.0
+        charge_deposit,  charge_withdrawal  = 0.0, bank_charges
     else:  # Pay
         bank_account_name = pe.paid_from
-        deposit    = 0.0
-        withdrawal = flt(pe.paid_amount) + bank_charges
+        main_deposit,    main_withdrawal    = 0.0, flt(pe.paid_amount)
+        charge_deposit,  charge_withdrawal  = 0.0, bank_charges
 
-    return create_bank_transaction_row(
+    names = [create_bank_transaction_row(
         bank_account_gl=bank_account_name,
-        date=pe.payment_date or pe.posting_date,
-        credit=deposit,
-        debit=withdrawal,
+        date=date,
+        credit=main_deposit,
+        debit=main_withdrawal,
         company=pe.company,
         currency=pe.currency or "INR",
         description=pe.remarks or f"Payment Entry {pe.name}",
-        reference_number=pe.reference_no or pe.name,
+        reference_number=ref,
         payment_entry=pe.name,
-    )
+    )]
+
+    if bank_charges:
+        names.append(create_bank_transaction_row(
+            bank_account_gl=bank_account_name,
+            date=date,
+            credit=charge_deposit,
+            debit=charge_withdrawal,
+            company=pe.company,
+            currency=pe.currency or "INR",
+            description=f"Bank charges — {pe.name}",
+            reference_number=f"{ref}-CHG",
+            payment_entry=pe.name,
+        ))
+
+    return [n for n in names if n]
 
 
 def auto_match_bank_transactions():
