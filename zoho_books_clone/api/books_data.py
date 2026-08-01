@@ -965,8 +965,9 @@ def get_cash_summary(company=None):
            FROM `tabJournal Entry Account` jea
            INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
            WHERE je.docstatus = 1 AND je.voucher_type = 'Contra Entry'
-             AND jea.account IN %(accs)s AND je.remark LIKE %(marker)s""",
-        {"accs": cash_accounts, "marker": _CASH_DEPOSIT_REMARK_PREFIX + "%"}
+             AND jea.account IN %(accs)s AND je.remark LIKE %(marker)s
+             AND LOWER(je.company) = LOWER(%(co)s)""",
+        {"accs": cash_accounts, "marker": _CASH_DEPOSIT_REMARK_PREFIX + "%", "co": company}
     )[0][0] or 0)
 
     cash_out = cash_out_pe + cash_out_je + cash_out_asset_repair
