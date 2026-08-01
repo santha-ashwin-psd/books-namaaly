@@ -316,7 +316,7 @@
         <template v-else-if="ledgerData">
           <div class="cash-ledger-summary">
             <div class="cash-ledger-sum-item">
-              <div class="cash-ledger-sum-lbl">Opening Balance</div>
+              <div class="cash-ledger-sum-lbl">{{ ledgerFrom ? `Balance as of ${fmtDate(ledgerFrom)}` : 'Opening Balance' }}</div>
               <div class="cash-ledger-sum-val" :class="{neg: ledgerData.opening_balance<0}">{{ fmtCur(ledgerData.opening_balance) }}</div>
             </div>
             <div class="cash-ledger-sum-div"></div>
