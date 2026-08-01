@@ -334,19 +334,17 @@ def get_account_ledger(account: str, from_date: str = None, to_date: str = None)
         if row.voucher_type in ("Payment Entry", "Journal Entry"):
             row["direction"] = "in" if flt(row.debit) > 0 else "out"
 
-    # Header display value: the account's true opening balance. This is
-    # informational only — it must NOT feed into `opening`/`balance` above,
-    # since that GL entry is already what makes up the running balance /
-    # closing balance (see the double-counting note above). For a plain
-    # account (no linked Bank Account), the static field is the only
-    # source of truth and already equals `opening` when there's no
-    # from_date filter.
-    if has_bank_opening_entry:
-        display_opening = flt(frappe.db.get_value(
-            "Bank Account", {"gl_account": account}, "opening_balance"
-        ) or 0)
-    else:
-        display_opening = opening
+    # Header display value: the account's opening balance as of the day
+    # before `from_date`. `opening` already handles this correctly for both
+    # cases — for a plain account it starts from the static Account field
+    # and adds movement before from_date; for a Bank Account-linked account
+    # it starts from 0 and picks up the Bank Account's own opening GL entry
+    # via that same date-filtered query (avoiding the double-count noted
+    # above). Previously this branch ignored `from_date` entirely for
+    # Bank Account-linked accounts and just returned the account's original
+    # static opening_balance, so the header stopped updating when the date
+    # filter changed even though the running balance below (correctly) did.
+    display_opening = opening
 
     return {
         "account": account,

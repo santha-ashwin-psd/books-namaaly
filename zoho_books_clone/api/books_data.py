@@ -776,48 +776,32 @@ _CASH_DEPOSIT_REMARK_PREFIX = "Cash deposited to bank:"
 
 
 def _cash_account_balance(cash_account, company):
-    """Pooled 'yet to deposit' balance for one Cash account: all-time cash
-    received minus all-time cash paid out (both Payment Entries AND
-    Journal-Entry-tagged cash expenses) minus all-time already deposited.
+    """True all-time balance for one Cash account, computed straight from
+    the General Ledger — the same source of truth the Account Ledger view
+    uses — so this can never drift from what that ledger shows.
+
+    Previously this was reconstructed from a curated subset of voucher
+    types (Payment Entry Receive/Pay, tagged cash-expense Journal Entries,
+    tagged deposit Contra Entries). Any other transaction that legitimately
+    posts to this account — an untagged Journal Entry, a cash withdrawal
+    from bank, the account's own opening balance, etc. — fed the real GL
+    balance but was invisible to that formula, so Net Cash/undeposited
+    could silently drift away from the actual ledger closing balance.
+    Deposits are still accounted for automatically here: a deposit posts a
+    credit to this account in the GL, which the sum below already picks up.
     """
-    total_in = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount - IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
-           WHERE docstatus = 1 AND payment_type = 'Receive'
-             AND paid_to = %s AND LOWER(company) = LOWER(%s)""",
+    has_bank_opening_entry = frappe.db.exists(
+        "General Ledger Entry", {"account": cash_account, "voucher_type": "Bank Account"}
+    )
+    opening = 0.0 if has_bank_opening_entry else flt(
+        frappe.db.get_value("Account", cash_account, "opening_balance") or 0
+    )
+    movement = flt(frappe.db.sql(
+        """SELECT SUM(debit) - SUM(credit) FROM `tabGeneral Ledger Entry`
+           WHERE IFNULL(is_cancelled,0) = 0 AND account = %s AND LOWER(company) = LOWER(%s)""",
         (cash_account, company)
     )[0][0] or 0)
-
-    total_out_pe = flt(frappe.db.sql(
-        """SELECT SUM(paid_amount + IFNULL(bank_charges, 0)) FROM `tabPayment Entry`
-           WHERE docstatus = 1 AND payment_type = 'Pay'
-             AND paid_from = %s AND LOWER(company) = LOWER(%s)""",
-        (cash_account, company)
-    )[0][0] or 0)
-
-    # Cash expenses booked with no vendor bill (Dr Expense / Cr Cash-in-Hand),
-    # tagged by the Bank & Cash page's "New Cash Entry → Pay" flow. These
-    # were previously omitted here, which overstated the undeposited pool by
-    # exactly the amount of every such expense.
-    total_out_je = flt(frappe.db.sql(
-        """SELECT SUM(jea.credit)
-           FROM `tabJournal Entry Account` jea
-           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
-           WHERE je.docstatus = 1 AND je.custom_cash_out_entry = 1
-             AND jea.account = %s AND LOWER(je.company) = LOWER(%s)""",
-        (cash_account, company)
-    )[0][0] or 0)
-
-    total_deposited = flt(frappe.db.sql(
-        """SELECT SUM(jea.credit)
-           FROM `tabJournal Entry Account` jea
-           INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
-           WHERE je.docstatus = 1 AND je.voucher_type = 'Contra Entry'
-             AND jea.account = %s
-             AND je.remark LIKE %s""",
-        (cash_account, _CASH_DEPOSIT_REMARK_PREFIX + "%")
-    )[0][0] or 0)
-
-    return total_in - total_out_pe - total_out_je - total_deposited
+    return opening + movement
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET"])
@@ -1121,7 +1105,7 @@ DATA QUERY intents — FINANCE (backend fetches real numbers — write a 1-line 
 - "business_summary" — overall business health report (revenue, outstanding, overdue, inventory)
 
 DATA QUERY intents — INVENTORY (backend fetches real numbers):
-- "inventory_items"     — item count summary, optionally filtered. Add: "item_group": "...", "item_type": "Product|Service|Raw Material|Finished Good"
+- "inventory_items"     — item count summary, optionally filtered. Add: "item_group": "...", "item_type": "Product|Service|Raw Material|Finished Good|Work In Progress|Packing Material|Scrap Item"
 - "low_stock"           — items at or below their reorder level
 - "top_selling_items"   — top items by quantity sold. Add: "period": "this_month|last_month|this_quarter|this_year", "limit": 5
 - "item_groups_summary" — count of item groups and how many items each has
@@ -1452,7 +1436,7 @@ After the user confirms (clicks the button or says yes/confirm/ok/proceed), use 
 PRO CONFIRM intents (show preview card — never skip this step):
 - "create_customer_confirm"   → Add: "customer_name":"...", "email":"...", "mobile_no":"..."
 - "create_supplier_confirm"   → Add: "supplier_name":"...", "email":"...", "mobile_no":"..."
-- "create_item_confirm"       → Add: "item_name":"...", "item_type":"Product|Service|Raw Material|Finished Good", "item_group":"...", "rate":N, "uom":"Nos"
+- "create_item_confirm"       → Add: "item_name":"...", "item_type":"Product|Service|Raw Material|Finished Good|Work In Progress|Packing Material|Scrap Item", "item_group":"...", "rate":N, "uom":"Nos"
 - "create_quotation_confirm"  → Add: "customer":"...", "items":[{"item_name":"..","qty":N,"rate":N}]
 - "create_payment_confirm"    → Add: "invoice":"INV-...", "amount":N, "mode":"Cash|Bank|Cheque", "customer":"..."
 - "cancel_invoice_confirm"    → Add: "invoice":"INV-...", "customer":"...", "amount":N

@@ -2957,20 +2957,49 @@ def convert_quote_to_sales_order(quotation_name, delivery_date=""):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def convert_quote_to_invoice(quotation_name, due_date=""):
-    """Create a Sales Invoice directly from a Quotation."""
+def convert_quote_to_invoice(quotation_name, due_date="", warehouse="", batch_nos=None):
+    """Create a Sales Invoice directly from a Quotation.
+
+    batch_nos: optional {quotation_item_name: batch_no} map for batch-tracked
+    items — required per-line since this invoice is the doc that deducts stock
+    (a Quotation has no prior Delivery Note)."""
     from zoho_books_clone.utils.access import require_module
     require_module("invoices", write=True)
     if frappe.session.user == "Guest":
         frappe.throw("Not permitted", frappe.PermissionError)
+    if isinstance(batch_nos, str):
+        try:
+            batch_nos = json.loads(batch_nos) if batch_nos else None
+        except json.JSONDecodeError:
+            batch_nos = None
+    batch_nos = {str(k): v for k, v in (batch_nos or {}).items()}
+
     qd = frappe.get_doc("Quotation", quotation_name)
     ar = frappe.db.get_value(
         "Account", {"account_type": "Receivable", "company": qd.company, "is_group": 0}, "name"
     )
     inc = _default_income_account(qd.company)
+
+    item_codes = list({it.item_code for it in (qd.items or []) if it.item_code})
+    batch_flags = {}
+    if item_codes:
+        batch_flags = {
+            x["name"]: x["has_batch_no"]
+            for x in frappe.get_all("Item", filters={"name": ["in", item_codes]},
+                                    fields=["name", "has_batch_no"])
+        }
+
     items = _quote_items_to_doc_items(qd, "Sales Invoice Item")
-    for it in items:
+    for it, qi in zip(items, qd.items or []):
         it["income_account"] = it.get("income_account") or inc
+        if batch_flags.get(qi.item_code):
+            batch_no = (batch_nos.get(str(qi.name)) or "").strip()
+            if not batch_no:
+                frappe.throw(_(
+                    "Row #{0}: {1} is a batch-tracked item — select a Batch No before converting"
+                ).format(qi.idx, qi.item_name or qi.item_code))
+            it["batch_no"] = batch_no
+
     si = frappe.get_doc({
         "doctype":               "Sales Invoice",
         "company":               qd.company,
@@ -2980,6 +3009,8 @@ def convert_quote_to_invoice(quotation_name, due_date=""):
         "debit_to":              ar,
         "income_account":        inc,
         "notes":                 f"From Quotation {qd.name}",
+        "update_stock":          1,
+        "set_warehouse":         warehouse or "",
         "billing_address":       getattr(qd, "billing_address", "") or "",
         "billing_address_name":  getattr(qd, "billing_address_name", "") or "",
         "shipping_address":      getattr(qd, "shipping_address", "") or "",

@@ -106,11 +106,18 @@
       <span class="bk-mat-label">📦 Packing Materials</span>
       <span class="bk-mat-count" style="color:#6d28d9">{{ counts.pm }}</span>
     </div>
+    <div class="bk-mat-sep">|</div>
+    <div class="bk-mat-item clickable" @click="filterTab='scrap'">
+      <span class="bk-mat-dot" style="background:#b45309"></span>
+      <span class="bk-mat-label">♻️ Scrap Items</span>
+      <span class="bk-mat-count" style="color:#b45309">{{ counts.scrap }}</span>
+    </div>
     <div class="bk-mat-actions">
       <button class="bk-mat-add-btn" @click="openAdd('Raw Material')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ RM</button>
       <button class="bk-mat-add-btn bk-mat-add-wip" @click="openAdd('Work In Progress')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ WIP</button>
       <button class="bk-mat-add-btn bk-mat-add-fg" @click="openAdd('Finished Good')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ FG</button>
       <button class="bk-mat-add-btn bk-mat-add-pm" @click="openAdd('Packing Material')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ PM</button>
+      <button class="bk-mat-add-btn bk-mat-add-scrap" @click="openAdd('Scrap Item')" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''">+ Scrap</button>
     </div>
   </div>
 
@@ -297,6 +304,7 @@ const ITEM_TYPE_ICONS = {
   "Work In Progress": "⚙️",
   "Finished Good":    "✅",
   "Packing Material": "📦",
+  "Scrap Item":       "♻️",
   "Product":          "🛒",
   "Service":          "🛠️",
 };
@@ -305,6 +313,7 @@ const ITEM_TYPE_COLOR = {
   "Work In Progress": { bg: "#fef9c3", text: "#a16207" },
   "Finished Good":    { bg: "#dbeafe", text: "#1d4ed8" },
   "Packing Material": { bg: "#ede9fe", text: "#6d28d9" },
+  "Scrap Item":       { bg: "#fef3c7", text: "#b45309" },
   "Product":          { bg: "#f1f5f9", text: "#475569" },
   "Service":          { bg: "#fee2e2", text: "#b91c1c" },
 };
@@ -354,6 +363,7 @@ const filtered = computed(() => {
   if (filterTab.value === "wip")      r = r.filter((i) => i.item_type === "Work In Progress");
   if (filterTab.value === "fg")       r = r.filter((i) => i.item_type === "Finished Good");
   if (filterTab.value === "pm")       r = r.filter((i) => i.item_type === "Packing Material");
+  if (filterTab.value === "scrap")    r = r.filter((i) => i.item_type === "Scrap Item");
   if (filterGroup.value) r = r.filter((i) => i.item_group === filterGroup.value);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter((i) => ((i.item_name || "") + (i.item_code || "") + (i.item_group || "") + (i.item_type || "")).toLowerCase().includes(q));
@@ -370,6 +380,7 @@ const counts = computed(() => ({
   wip:      list.value.filter(i => i.item_type === "Work In Progress").length,
   fg:       list.value.filter(i => i.item_type === "Finished Good").length,
   pm:       list.value.filter(i => i.item_type === "Packing Material").length,
+  scrap:    list.value.filter(i => i.item_type === "Scrap Item").length,
 }));
 
 // ── Secondary stats ──
@@ -903,6 +914,7 @@ onUnmounted(() => { window.removeEventListener("hashchange", onHashChange); });
 .bk-mat-add-wip  { background: #fef9c3; color: #a16207; }
 .bk-mat-add-fg   { background: #dbeafe; color: #1d4ed8; }
 .bk-mat-add-pm   { background: #ede9fe; color: #6d28d9; }
+.bk-mat-add-scrap { background: #fef3c7; color: #b45309; }
 
 .it-tpl-badge { margin-left:7px; padding:1px 7px; border-radius:11px; font-size:10px; font-weight:700; background:#eef2ff; color:#4f46e5; vertical-align:middle; }
 .it-tpl-badge--link { cursor:pointer; }

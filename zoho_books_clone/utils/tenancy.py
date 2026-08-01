@@ -293,3 +293,57 @@ hp_asset = _make_hp("Asset")
 
 qc_asset_category = lambda user=None: _qc_books_company(user)  # noqa: E731
 hp_asset_category  = lambda doc, ptype="read", user=None: _hp_books_company(doc, ptype, user)  # noqa: E731
+
+# ── Asset sub-doctypes with their own `company` field ────────────────────────
+# Depreciation Schedule is a child table (istable=1) of Asset — no independent
+# list/get access, so it inherits isolation from its parent and needs no entry here.
+
+qc_asset_disposal         = _make_qc("Asset Disposal")
+qc_asset_repair           = _make_qc("Asset Repair")
+qc_asset_movement         = _make_qc("Asset Movement")
+qc_asset_value_adjustment = _make_qc("Asset Value Adjustment")
+
+hp_asset_disposal         = _make_hp("Asset Disposal")
+hp_asset_repair           = _make_hp("Asset Repair")
+hp_asset_movement         = _make_hp("Asset Movement")
+hp_asset_value_adjustment = _make_hp("Asset Value Adjustment")
+
+
+# ── Maintenance Log: no `company` field, only an `asset` Link ───────────────
+# Filtered via subquery against Asset.company instead of a direct column match.
+
+def qc_maintenance_log(user: str | None = None) -> str:
+    user = user or frappe.session.user
+    if _is_bypass(user):
+        return ""
+    company = get_user_company(user)
+    if not company:
+        return "1=0"
+    safe_company = frappe.db.escape(company)
+    return (
+        "`asset` in (select `name` from `tabAsset` "
+        f"where `company` = {safe_company})"
+    )
+
+
+def hp_maintenance_log(doc, ptype: str = "read", user: str | None = None) -> bool | None:
+    user = user or frappe.session.user
+    if _is_bypass(user):
+        return None
+    if ptype in ("write", "create", "delete", "submit", "cancel"):
+        try:
+            from zoho_books_clone.utils.access import is_readonly
+            if is_readonly(user):
+                return False
+        except Exception:
+            pass
+    company = get_user_company(user)
+    if not company:
+        return False
+    asset = getattr(doc, "asset", None)
+    if not asset:
+        return None  # no opinion — let central_validator catch missing asset on save
+    asset_company = frappe.db.get_value("Asset", asset, "company")
+    if not asset_company:
+        return None
+    return asset_company == company

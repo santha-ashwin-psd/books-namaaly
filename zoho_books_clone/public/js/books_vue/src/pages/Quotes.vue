@@ -601,10 +601,10 @@
                 <svg class="add-btn-more-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               <div v-if="moreActionsOpen" class="add-more-menu" v-click-outside="()=>moreActionsOpen=false">
-                <button class="add-more-menu-item" @click="saveQT('Sent');moreActionsOpen=false">
+                <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveQT('Sent');moreActionsOpen=false">
                   <span v-html="icon('check',13)"></span> Submit Quote
                 </button>
-                <button class="add-more-menu-item" @click="saveQT('Draft', true);moreActionsOpen=false">
+                <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveQT('Draft', true);moreActionsOpen=false">
                   Save &amp; New
                 </button>
                 <button class="add-more-menu-item" @click="printQuote(previewData);moreActionsOpen=false">
@@ -1040,10 +1040,38 @@
             <label class="inv-lbl">Due Date</label>
             <input v-model="convertModal.dueDate" type="date" class="inv-fi" />
           </div>
+          <div v-if="convertModal.target==='Invoice'" style="margin-top:14px">
+            <label class="inv-lbl">Dispatch Warehouse</label>
+            <SearchableSelect v-model="convertModal.warehouse" :options="warehouses"
+              placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
+          </div>
+          <div v-if="convertModal.target==='Invoice' && convertModal.needsBatch" style="margin-top:14px">
+            <div style="font-size:12.5px;color:#374151;margin-bottom:8px">Select a batch for each batch-tracked item:</div>
+            <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden">
+              <div class="inv-ci-grid inv-ci-header inv-ci-grid-batch">
+                <span>Item Code</span><span>Item Name</span><span class="ta-r">Qty</span><span>Batch No</span>
+              </div>
+              <template v-for="l in convertModal.lines" :key="l.name">
+                <div class="inv-ci-grid inv-ci-row inv-ci-grid-batch">
+                  <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
+                  <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                  <span class="ta-r mono-sm">{{ l.qty }}</span>
+                  <SearchableSelect v-if="l.has_batch_no" v-model="l.batch_no"
+                    :options="l.batchOptions" placeholder="Select batch"
+                    @update:modelValue="onConvertBatchSelect(l, $event)"
+                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                  <span v-else></span>
+                </div>
+                <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
+                  <span v-html="icon('alert-circle',12)"></span> {{ l.item_name || l.item_code }} is batch-tracked — select a Batch No
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
         <div class="rp-footer">
           <button class="rp-btn rp-btn-outline" @click="convertModal.open=false" :disabled="convertModal.saving">Cancel</button>
-          <button class="rp-btn" :disabled="convertModal.saving||!convertModal.target" @click="submitConvert">
+          <button class="rp-btn" :disabled="convertModal.saving||!convertModal.target||!convertReady" @click="submitConvert">
             {{ convertModal.saving ? 'Converting…' : (convertModal.target ? `Convert to ${convertModal.target==='SO' ? 'Sales Order' : 'Invoice'}` : 'Choose target') }}
           </button>
         </div>
@@ -1164,6 +1192,8 @@ const addressLoading = ref(false);
 const conv        = reactive({ sales_orders: [], sales_invoices: [] });
 const customers   = ref([]);
 const items       = ref([]);
+const warehouses  = ref([]);
+async function fetchWarehouses(q=""){try{const co=await resolveCompany();const r=await apiList("Warehouse",{fields:["name","parent_warehouse"],filters:[["company","=",co],["is_group","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30});warehouses.value=r.map(x=>({label:x.parent_warehouse?`${x.parent_warehouse} / ${x.name}`:x.name,value:x.name}));}catch{warehouses.value=[];}}
 const lines       = ref([]);
 const taxTemplates   = ref([]);
 const uomList        = ref([]);
@@ -1175,6 +1205,7 @@ const filterCustomer = ref("");
 const convertModal = reactive({
   open: false, saving: false, qtName: "",
   target: "", deliveryDate: "", dueDate: "",
+  warehouse: "", lines: [], needsBatch: false,
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -1900,6 +1931,11 @@ async function saveQT(newStatus, andNew = false) {
     };
     if (editingName.value) doc.name = editingName.value;
     const saved = await apiSave(doc);
+    // Lock onto the saved docname immediately — otherwise a stray second
+    // saveQT() call (double-click, race) would still see no docname and
+    // insert a duplicate Quotation. See Invoices.vue saveInvoice() for the
+    // same fix applied there.
+    if (saved?.name) editingName.value = saved.name;
 
     // Now that we have a docname, upload the pending logo and link it to the doc
     if (pendingDataUrl && saved?.name) {
@@ -1986,11 +2022,45 @@ async function markStatus(q, status) {
   } catch (e) { toast.error(e.message || "Update failed"); }
 }
 
-function openConvertModal(q) {
+async function fetchConvertLineBatches(line) {
+  if (!line.item_code) { line.batchOptions = []; return; }
+  try {
+    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: line.item_code }) || [];
+    line.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
+  } catch { line.batchOptions = []; }
+}
+function onConvertBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+}
+const convertReady = computed(() => {
+  if (convertModal.target !== "Invoice") return true;
+  if (convertModal.needsBatch && !convertModal.warehouse) return false;
+  return !convertModal.lines.some(l => l.has_batch_no && !l.batch_no);
+});
+
+async function openConvertModal(q) {
   Object.assign(convertModal, {
     open: true, saving: false, qtName: q.name,
     target: "", deliveryDate: q.valid_till || todayStr(), dueDate: todayStr(),
+    warehouse: "", lines: [], needsBatch: false,
   });
+  fetchWarehouses("");
+  try {
+    const doc = await apiGet("Quotation", q.name);
+    const itemCodes = [...new Set((doc.items || []).map(it => it.item_code).filter(Boolean))];
+    const flagRows = itemCodes.length
+      ? await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "in", itemCodes]], limit: itemCodes.length })
+      : [];
+    const flagMap = Object.fromEntries((flagRows || []).map(r => [r.name, !!r.has_batch_no]));
+    const lines = (doc.items || []).map(it => ({
+      name: it.name, item_code: it.item_code, item_name: it.item_name,
+      qty: flt(it.qty), has_batch_no: !!flagMap[it.item_code],
+      batch_no: "", batchOptions: [],
+    }));
+    convertModal.lines = lines;
+    convertModal.needsBatch = lines.some(l => l.has_batch_no);
+    await Promise.all(lines.filter(l => l.has_batch_no).map(l => fetchConvertLineBatches(l)));
+  } catch (e) { toast.error(e.message || "Failed to load quotation items"); }
 }
 async function submitConvert() {
   if (!canCreate("invoices")) { toast.error("Read-only access"); return; }
@@ -2002,7 +2072,15 @@ async function submitConvert() {
       : "zoho_books_clone.api.docs.convert_quote_to_invoice";
     const payload = { quotation_name: convertModal.qtName };
     if (convertModal.target === "SO" && convertModal.deliveryDate) payload.delivery_date = convertModal.deliveryDate;
-    if (convertModal.target === "Invoice" && convertModal.dueDate) payload.due_date = convertModal.dueDate;
+    if (convertModal.target === "Invoice") {
+      if (convertModal.dueDate) payload.due_date = convertModal.dueDate;
+      payload.warehouse = convertModal.warehouse || "";
+      const batchMap = {};
+      for (const l of convertModal.lines) {
+        if (l.has_batch_no && l.batch_no) batchMap[l.name] = l.batch_no;
+      }
+      payload.batch_nos = JSON.stringify(batchMap);
+    }
     const r = await apiPOST(ep, payload);
     const created = r?.sales_order || r?.sales_invoice;
     toast.success(`Converted → ${convertModal.target === "SO" ? "Sales Order" : "Invoice"}: ${created}`);
@@ -2370,6 +2448,30 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
 .qt-mobile-cards { display: none; }
 .qt-desktop-table { display: table; }
 
+/* ── Convert-to-Invoice: batch selection grid (missing from this page before) ── */
+.inv-ci-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 100px 110px;
+  gap: 10px;
+  padding: 8px 14px;
+  align-items: center;
+}
+.inv-ci-grid-batch {
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 90px 100px 150px;
+}
+.inv-ci-header {
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e8ecf0;
+}
+.inv-ci-row {
+  border-top: 1px solid #f3f4f6;
+  font-size: 12.5px;
+}
 @media (max-width: 768px) {
   .qt-desktop-table { display: none !important; }
   .qt-mobile-cards { display: flex; flex-direction: column; gap: 0; background: #f8fafc; }

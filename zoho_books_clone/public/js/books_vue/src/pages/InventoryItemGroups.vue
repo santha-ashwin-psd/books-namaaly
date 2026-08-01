@@ -474,7 +474,7 @@ function childCount(name)  { return allGroups.value.filter((g) => g.parent_item_
 function itemCountFor(name) { return (itemsByGroup.value[name] || []).length; }
 
 function itemTypeIcon(type) {
-  return { Product: "📦", Service: "🛠️", "Raw Material": "⚙️", "Finished Good": "✅" }[type] || "📦";
+  return { Product: "📦", Service: "🛠️", "Raw Material": "⚙️", "Finished Good": "✅", "Scrap Item": "♻️" }[type] || "📦";
 }
 
 function toggleExpand(name) {
@@ -990,6 +990,7 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 .ig-type--service      { background: #f3e8ff; color: #7c3aed; }
 .ig-type--rawmaterial  { background: #fef3c7; color: #92400e; }
 .ig-type--finishedgood { background: #dcfce7; color: #15803d; }
+.ig-type--scrapitem    { background: #fef3c7; color: #b45309; }
 .ig-item-inactive-badge {
   font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px;
   background: #fee2e2; color: #b91c1c;

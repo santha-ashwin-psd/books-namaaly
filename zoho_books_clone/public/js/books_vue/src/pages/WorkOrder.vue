@@ -753,7 +753,7 @@
                 <label>Item</label>
                 <select class="bomx-fi" v-model="s.item_code">
                   <option value="">— Select Item —</option>
-                  <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                  <option v-for="i in scrapPickerItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                 </select>
               </div>
               <div class="bomx-rm-field" v-else>
@@ -1036,6 +1036,12 @@ const filteredBomList = computed(() => {
   return base.filter(b => b.item === selectedProductionItem.value);
 });
 const stockItems = ref([]);
+// Scrap row picker: restricted to the Scrap Item item type (mirrors BOM.vue's
+// scrapPickerItems) so Work Order completion scrap/by-product rows post
+// against dedicated Scrap Item records instead of a Raw Material/WIP/Finished Good code.
+const scrapPickerItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Scrap Item")
+);
 // Production Item picker: only items that are actually manufactured (Finished Good / WIP).
 const manufacturedItems = computed(() =>
   stockItems.value.filter(i => i.item_type === "Finished Good" || i.item_type === "Work In Progress")

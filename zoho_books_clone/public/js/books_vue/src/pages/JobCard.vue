@@ -267,7 +267,7 @@
                     <label>Item</label>
                     <select class="bomx-fi" v-model="sc.item_code">
                       <option value="">— Select Item —</option>
-                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                      <option v-for="i in scrapPickerItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                     </select>
                   </div>
                   <div class="bomx-rm-field" v-else>
@@ -513,6 +513,12 @@ const workOrdersList = ref([]);
 const operationsList = ref([]);
 const workstationsList = ref([]);
 const stockItems = ref([]);
+// Scrap row picker: restricted to the Scrap Item item type (mirrors BOM.vue's
+// scrapPickerItems) so operation-level scrap/by-product rows post against
+// dedicated Scrap Item records instead of a Raw Material/WIP/Finished Good code.
+const scrapPickerItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Scrap Item")
+);
 
 // ── Work Order's own Operation rows (with sub-assembly tags), so a Job
 // Card can be tied to a *specific* row -- e.g. "Cutting" under sub-assembly

@@ -197,7 +197,7 @@
    "fieldname": "item_type",
    "fieldtype": "Select",
    "label": "Item Type",
-   "options": "Product\nService\nRaw Material\nFinished Good\nWork In Progress\nPacking Material",
+   "options": "Product\nService\nRaw Material\nFinished Good\nWork In Progress\nPacking Material\nScrap Item",
    "default": "Service"
   },
   {

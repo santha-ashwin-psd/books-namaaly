@@ -147,7 +147,7 @@
               <div v-else-if="!inlineLedger[selectedAccount.name] || !inlineLedger[selectedAccount.name].rows.length" style="padding:22px;text-align:center;color:#9ca3af;font-size:12.5px">No transactions yet.</div>
               <template v-else>
                 <div class="coa-txn-tbl-head">
-                  <span>Date</span><span>Transaction Details</span><span>Type</span><span class="ta-r">Debit</span><span class="ta-r">Credit</span>
+                  <span>Date</span><span>Transaction Details</span><span>Type</span><span class="ta-r">Debit</span><span class="ta-r">Credit</span><span class="ta-r">Balance</span>
                 </div>
                 <div v-for="r in inlineLedger[selectedAccount.name].rows.slice(0, inlineLedger[selectedAccount.name].visible)"
                   :key="(r.voucher_no||'')+'-'+r.posting_date+'-'+r.balance" class="coa-txn-row">
@@ -157,6 +157,7 @@
                   <span class="coa-txn-type">{{ r.voucher_type }}</span>
                   <span class="ta-r coa-txn-dr">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
                   <span class="ta-r coa-txn-cr">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
+                  <span class="ta-r coa-txn-bal" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
                 </div>
                 <div class="coa-detail-loadmore">
                   <span>Showing {{ Math.min(inlineLedger[selectedAccount.name].visible, inlineLedger[selectedAccount.name].rows.length) }} of {{ inlineLedger[selectedAccount.name].rows.length }}</span>
@@ -1129,7 +1130,7 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 }
 .coa-detail-txns { border: 1px solid #e5e7eb;overflow: hidden; }
 .coa-txn-tbl-head, .coa-txn-row {
-  display: grid; grid-template-columns: 100px 1.6fr 110px 100px 100px; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 100px 1.6fr 110px 100px 100px 110px; gap: 8px; align-items: center;
 }
 .coa-txn-tbl-head {
   padding: 8px 14px; background: #f9fafb; font-size: 10.5px; font-weight: 700;
@@ -1142,13 +1143,14 @@ onUnmounted(() => window.removeEventListener("resize", onResize));
 .coa-txn-type { color: #6b7280; }
 .coa-txn-dr { color: #16a34a; font-weight: 600; }
 .coa-txn-cr { color: #dc2626; font-weight: 600; }
+.coa-txn-bal { font-weight: 700; }
 .coa-detail-loadmore {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 14px; background: #f9fafb; font-size: 11.5px; color: #868e96;
 }
 @media (max-width: 900px) {
   .coa-split-list { width: 240px; }
-  .coa-txn-tbl-head, .coa-txn-row { grid-template-columns: 80px 1.4fr 90px 80px 80px; font-size: 11.5px; }
+  .coa-txn-tbl-head, .coa-txn-row { grid-template-columns: 80px 1.4fr 90px 80px 80px 90px; font-size: 11.5px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════

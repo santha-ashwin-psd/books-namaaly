@@ -195,6 +195,12 @@ permission_query_conditions = {
     "Packing Slip":      f"{_TN}.qc_packing_slip",
     # Assets — scoped by the `company` field
     "Asset":             f"{_TN}.qc_asset",
+    "Asset Disposal":         f"{_TN}.qc_asset_disposal",
+    "Asset Repair":           f"{_TN}.qc_asset_repair",
+    "Asset Movement":         f"{_TN}.qc_asset_movement",
+    "Asset Value Adjustment": f"{_TN}.qc_asset_value_adjustment",
+    # Maintenance Log — no `company` field, scoped via subquery on its `asset` link
+    "Maintenance Log":        f"{_TN}.qc_maintenance_log",
     # Asset Category — master record, scoped by `books_company` like Customer/Item
     "Asset Category":    f"{_TN}.qc_asset_category",
 }
@@ -230,6 +236,12 @@ has_permission = {
     "Packing Slip":      f"{_TN}.hp_packing_slip",
     # Assets — scoped by the `company` field
     "Asset":             f"{_TN}.hp_asset",
+    "Asset Disposal":         f"{_TN}.hp_asset_disposal",
+    "Asset Repair":           f"{_TN}.hp_asset_repair",
+    "Asset Movement":         f"{_TN}.hp_asset_movement",
+    "Asset Value Adjustment": f"{_TN}.hp_asset_value_adjustment",
+    # Maintenance Log — no `company` field, scoped via has_permission on its `asset` link
+    "Maintenance Log":        f"{_TN}.hp_maintenance_log",
     # Asset Category — master record, scoped by `books_company` like Customer/Item
     "Asset Category":    f"{_TN}.hp_asset_category",
 }

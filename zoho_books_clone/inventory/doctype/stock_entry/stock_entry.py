@@ -228,18 +228,41 @@ class StockEntry(Document):
 
             # Audit-1: Block negative stock — check available qty before outgoing
             # movements, unless Manufacturing Settings > Allow Negative Stock is on.
+            #
+            # Bugfix: when the row already carries a Batch No (manual entry, or
+            # any integration that pre-fills batch_no and so skips
+            # _auto_assign_outgoing_batches above), we must check that BATCH's
+            # own batch_qty — not just the item+warehouse Bin.actual_qty total.
+            # Checking only the Bin total let a row draw more from one batch
+            # than that batch actually had, as long as *some other* batch in
+            # the same warehouse had enough spare qty to cover the shortfall
+            # on paper. That produced exactly the bug seen in the Warehouses
+            # report: the item's total for the warehouse still nets out to a
+            # plausible positive number (and shows "OK"), while individual
+            # batch rows go negative underneath it.
             if direction.get("s") and row.s_warehouse and not _allow_negative_stock():
-                available = flt(frappe.db.get_value(
-                    "Bin",
-                    {"item_code": row.item_code, "warehouse": row.s_warehouse},
-                    "actual_qty",
-                ) or 0)
-                if available < stock_qty:
-                    frappe.throw(_(
-                        "Row {0}: Insufficient stock for item <b>{1}</b> in warehouse <b>{2}</b>. "
-                        "Available: {3}, Required: {4}."
-                    ).format(i, row.item_code, row.s_warehouse,
-                             frappe.bold(available), frappe.bold(stock_qty)))
+                if row.batch_no:
+                    available = flt(frappe.db.get_value(
+                        "Batch", row.batch_no, "batch_qty"
+                    ) or 0)
+                    if available < stock_qty:
+                        frappe.throw(_(
+                            "Row {0}: Insufficient stock for item <b>{1}</b> in batch <b>{2}</b> "
+                            "(warehouse <b>{3}</b>). Available: {4}, Required: {5}."
+                        ).format(i, row.item_code, row.batch_no, row.s_warehouse,
+                                 frappe.bold(available), frappe.bold(stock_qty)))
+                else:
+                    available = flt(frappe.db.get_value(
+                        "Bin",
+                        {"item_code": row.item_code, "warehouse": row.s_warehouse},
+                        "actual_qty",
+                    ) or 0)
+                    if available < stock_qty:
+                        frappe.throw(_(
+                            "Row {0}: Insufficient stock for item <b>{1}</b> in warehouse <b>{2}</b>. "
+                            "Available: {3}, Required: {4}."
+                        ).format(i, row.item_code, row.s_warehouse,
+                                 frappe.bold(available), frappe.bold(stock_qty)))
 
             # Batch validation: items flagged Has Batch No must carry a Batch No
             # on every line, and the batch itself must actually exist (it should

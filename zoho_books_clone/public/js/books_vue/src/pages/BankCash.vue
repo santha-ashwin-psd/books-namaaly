@@ -368,6 +368,14 @@
                   <td class="ta-r mono-sm cash-ledger-balance" :class="{neg: e.balance<0}">{{ fmtCur(e.balance) }}</td>
                 </tr>
               </tbody>
+              <tfoot v-if="ledgerFilteredEntries.length">
+                <tr class="cash-ledger-total-row">
+                  <td colspan="3" class="ta-r">Total ({{ ledgerFilteredEntries.length }} {{ ledgerFilteredEntries.length===1?'entry':'entries' }})</td>
+                  <td class="ta-r mono-sm">{{ fmtCur(ledgerFilteredTotals.debit) }}</td>
+                  <td class="ta-r mono-sm">{{ fmtCur(ledgerFilteredTotals.credit) }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           <div class="cash-ledger-loadmore-wrap" v-if="ledgerVisible < ledgerFilteredEntries.length">
@@ -435,6 +443,11 @@ const ledgerFilteredEntries=computed(()=>{
   return rows;
 });
 const ledgerVisibleEntries=computed(()=>ledgerFilteredEntries.value.slice(0,ledgerVisible.value));
+const ledgerFilteredTotals=computed(()=>{
+  let debit=0,credit=0;
+  for(const e of ledgerFilteredEntries.value){debit+=Number(e.debit)||0;credit+=Number(e.credit)||0;}
+  return{debit,credit};
+});
 watch([ledgerSearch,ledgerTypeFilter],()=>{ledgerVisible.value=ledgerPageSize;});
 function loadMoreLedger(){ledgerVisible.value+=ledgerPageSize;}
 const depositOpen=ref(false),depositLoading=ref(false),depositSaving=ref(false);
@@ -848,6 +861,9 @@ textarea.cash-input{resize:vertical;}
 .cash-ledger-credit{color:#dc2626;font-weight:600;}
 .cash-ledger-balance{font-weight:700;color:#0f172a;}
 .cash-ledger-balance.neg{color:#dc2626;}
+.cash-ledger-total-row td{padding:12px;background:#f8fafc;border-top:2px solid #e5e7eb;font-weight:700;font-size:13px;color:#0f172a;}
+.cash-ledger-total-row td:nth-child(4){color:#16a34a;}
+.cash-ledger-total-row td:nth-child(5){color:#dc2626;}
 .cash-ledger-voucher-chip{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;background:#eef2f7;color:#475569;margin-right:6px;}
 .cash-ledger-voucher-chip.vt-journalentry{background:#eef2ff;color:#4338ca;}
 .cash-ledger-voucher-chip.vt-paymententry{background:#eff6ff;color:#1d4ed8;}

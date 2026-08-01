@@ -406,7 +406,7 @@
                     <span class="bomx-tree-icon">🗑️</span>
                     <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="sc.item_code" :disabled="readOnly" :title="itemNameFor(sc.item_code) || sc.item_code">
                       <option value="">— Select item —</option>
-                      <option v-for="i in stockItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                      <option v-for="i in scrapPickerItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                     </select>
                     <div class="bomx-rm-card-amt">
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
@@ -432,6 +432,7 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Scrap Item
               </div>
+              <div v-if="!readOnly && !scrapPickerItems.length" class="bomx-field-hint" style="margin-top:6px">No items of type "Scrap Item" exist yet — create one from Inventory → Items to select it here.</div>
             </div>
 
             <!-- ── More Info tab ── -->
@@ -764,6 +765,13 @@ const rawMaterialItems = computed(() =>
 // material or finished good can't be picked into a packing line by mistake.
 const packingMaterialItems = computed(() =>
   stockItems.value.filter(i => i.item_type === "Packing Material")
+);
+// Scrap row picker: restricted to the Scrap Item item type — same rationale
+// as Packing Materials above — so leftover BOM by-products post against
+// dedicated Scrap Item records instead of accidentally consuming/crediting
+// a Raw Material, WIP, or Finished Good code.
+const scrapPickerItems = computed(() =>
+  stockItems.value.filter(i => i.item_type === "Scrap Item")
 );
 // Bulk Item picker (Packing BOMs only): the loose/bulk output being packed —
 // same pool as the Production Item picker (Finished Good / WIP), since a

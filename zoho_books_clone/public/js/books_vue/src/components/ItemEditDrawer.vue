@@ -68,6 +68,7 @@
               <span v-else-if="form.item_type==='Work In Progress'">⚙️ Intermediate semi-finished goods in the production pipeline</span>
               <span v-else-if="form.item_type==='Finished Good'">✅ Final products ready for sale — capsules, tablets, oils, churnam, etc.</span>
               <span v-else-if="form.item_type==='Packing Material'">📦 Bottles, labels, cartons, foil, and other packaging components</span>
+              <span v-else-if="form.item_type==='Scrap Item'">♻️ Leftover/byproduct material recovered from production — usually low-value, sellable</span>
               <span v-else-if="form.item_type==='Service'">🛠️ Non-stock service — no inventory tracked</span>
               <span v-else>🛒 General sellable product</span>
             </div>
@@ -522,12 +523,13 @@ async function openVariantManager() {
   finally { openingVariants.value = false; }
 }
 
-const ITEM_TYPES      = ["Raw Material", "Work In Progress", "Finished Good", "Packing Material", "Product", "Service"];
+const ITEM_TYPES      = ["Raw Material", "Work In Progress", "Finished Good", "Packing Material", "Scrap Item", "Product", "Service"];
 const ITEM_TYPE_ICONS = {
   "Raw Material":     "🌿",
   "Work In Progress": "⚙️",
   "Finished Good":    "✅",
   "Packing Material": "📦",
+  "Scrap Item":       "♻️",
   "Product":          "🛒",
   "Service":          "🛠️",
 };
@@ -536,6 +538,7 @@ const ITEM_TYPE_LABEL = {
   "Work In Progress": "WIP",
   "Finished Good":    "Finished Good",
   "Packing Material": "Packing Material",
+  "Scrap Item":       "Scrap Item",
   "Product":          "Product",
   "Service":          "Service",
 };
@@ -545,6 +548,7 @@ const ITEM_TYPE_COLOR = {
   "Work In Progress": { bg: "#fef9c3", text: "#a16207" },
   "Finished Good":    { bg: "#dbeafe", text: "#1d4ed8" },
   "Packing Material": { bg: "#ede9fe", text: "#6d28d9" },
+  "Scrap Item":       { bg: "#fef3c7", text: "#b45309" },
   "Product":          { bg: "#f1f5f9", text: "#475569" },
   "Service":          { bg: "#fee2e2", text: "#b91c1c" },
 };
@@ -554,6 +558,7 @@ const ITEM_TYPE_DEFAULTS = {
   "Work In Progress": { warehouse_type: "WIP",                valuation: "Moving Average", is_stock: 1, is_sales: 0, is_purchase: 0 },
   "Finished Good":    { warehouse_type: "Finished Goods",     valuation: "FIFO",           is_stock: 1, is_sales: 1, is_purchase: 0 },
   "Packing Material": { warehouse_type: "Raw Material Store", valuation: "FIFO",           is_stock: 1, is_sales: 0, is_purchase: 1 },
+  "Scrap Item":       { warehouse_type: "Scrap",              valuation: "Moving Average", is_stock: 1, is_sales: 1, is_purchase: 0 },
   "Product":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 1, is_sales: 1, is_purchase: 1 },
   "Service":          { warehouse_type: "",                   valuation: "FIFO",           is_stock: 0, is_sales: 1, is_purchase: 1 },
 };
@@ -584,7 +589,7 @@ async function loadDrawerReferenceData() {
     itemGroupsFull.value = groupsRes.value || [];
     itemGroups.value = (groupsRes.value || []).map((r) => r.name);
   } else {
-    itemGroups.value = ["Raw Materials", "Herbs & Botanicals", "Minerals & Bhasmas", "Oils & Fats", "WIP - Semi Finished", "Finished Goods - Capsules", "Finished Goods - Tablets", "Finished Goods - Oils", "Finished Goods - Churnam", "Finished Goods - Kashayam", "Finished Goods - Lehyam", "Packing Materials - Primary", "Packing Materials - Secondary", "Services"];
+    itemGroups.value = ["Raw Materials", "Herbs & Botanicals", "Minerals & Bhasmas", "Oils & Fats", "WIP - Semi Finished", "Finished Goods - Capsules", "Finished Goods - Tablets", "Finished Goods - Oils", "Finished Goods - Churnam", "Finished Goods - Kashayam", "Finished Goods - Lehyam", "Packing Materials - Primary", "Packing Materials - Secondary", "Scrap Materials", "Services"];
   }
 
   if (whRes.status === "fulfilled") {

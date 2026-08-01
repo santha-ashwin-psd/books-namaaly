@@ -34,6 +34,7 @@
             <th style="width:32px"><input type="checkbox" @change="toggleAll" :checked="allChecked" /></th>
             <th @click="sort('name')" class="sortable">Expense # <span v-html="sortArrow('name')"></span></th>
             <th @click="sort('expense_type')" class="sortable">Category <span v-html="sortArrow('expense_type')"></span></th>
+            <th>Description</th>
             <th @click="sort('posting_date')" class="sortable">Date <span v-html="sortArrow('posting_date')"></span></th>
             <th>Status</th>
             <th>Paid Type</th>
@@ -43,13 +44,14 @@
         </thead>
         <tbody>
           <template v-if="loading">
-            <tr v-for="n in 8" :key="n"><td colspan="8"><div class="shimmer"></div></td></tr>
+            <tr v-for="n in 8" :key="n"><td colspan="9"><div class="shimmer"></div></td></tr>
           </template>
           <template v-else>
             <tr v-for="e in paged" :key="e.name" class="inv-row" :class="{selected:selected.has(e.name)}">
               <td><input type="checkbox" :checked="selected.has(e.name)" @change="toggle(e.name)" /></td>
               <td @click="openView(e)"><DocLink doctype="Expense" :name="e.name" /></td>
               <td @click="openView(e)">{{ categoryLabel(e.expense_type)||'—' }}</td>
+              <td @click="openView(e)" class="exp-desc-cell" :title="e.description||e.remark||''">{{ e.description||e.remark||'—' }}</td>
               <td @click="openView(e)">{{ fmtDate(e.posting_date) }}</td>
               <td @click="openView(e)"><span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span></td>
               <td @click="openView(e)">
@@ -62,7 +64,7 @@
                 <button v-if="e.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
               </td>
             </tr>
-            <tr v-if="!sorted.length"><td colspan="8" class="exp-empty">No expenses found</td></tr>
+            <tr v-if="!sorted.length"><td colspan="9" class="exp-empty">No expenses found</td></tr>
           </template>
         </tbody>
       </table>
@@ -87,6 +89,7 @@
               <span class="inv-status-badge" :class="statusClass(e)">{{ statusLabel(e) }}</span>
             </div>
             <div class="exp-mc-mid">{{ categoryLabel(e.expense_type) || '—' }}</div>
+            <div class="exp-desc-cell" style="max-width:100%;font-size:12px;color:#6b7280;margin-bottom:4px">{{ e.description||e.remark||'—' }}</div>
             <div class="exp-mc-meta">
               <span>{{ fmtDate(e.posting_date) }}</span>
               <span v-if="paidTypeLabel(e.paid_through)" class="exp-paid-type-badge" :class="'exp-paid-type-'+paidTypeLabel(e.paid_through).toLowerCase()">{{ paidTypeLabel(e.paid_through) }}</span>
@@ -728,6 +731,7 @@ watch(() => route.query.open, (n) => { if (n) _openFromQuery(); });
 .ta-r { text-align:right!important; }
 .text-muted { color:#6b7280; }
 .mono-sm { font-size:13px; }
+.exp-desc-cell { max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .badge-blue { background-color:#e0f2fe;color:#0369a1; }
 .badge-green { background-color:#d1fae5;color:#065f46; }
 .badge-orange { background-color:#fff7ed;color:#c2410c; }
