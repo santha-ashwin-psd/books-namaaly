@@ -694,10 +694,10 @@
                 <svg class="add-btn-more-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               <div v-if="moreActionsOpen" class="add-more-menu" v-click-outside="()=>moreActionsOpen=false">
-                <button class="add-more-menu-item" @click="saveInvoice(1);moreActionsOpen=false">
+                <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveInvoice(1);moreActionsOpen=false">
                   <span v-html="icon('check',13)"></span> Submit Invoice
                 </button>
-                <button class="add-more-menu-item" @click="saveInvoice(0, true);moreActionsOpen=false">
+                <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveInvoice(0, true);moreActionsOpen=false">
                   Save &amp; New
                 </button>
                 <button class="add-more-menu-item" @click="printInvoice(previewData);moreActionsOpen=false">
@@ -2601,6 +2601,11 @@ async function saveInvoice(docstatus, andNew = false) {
     const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
+    // Lock onto the saved docname right away — if a stray second saveInvoice()
+    // call slips in before this function returns (e.g. a fast double-click),
+    // it must see this as an update to the same invoice, not build another
+    // nameless doc and insert a duplicate Sales Invoice.
+    if (saved?.name) editingName.value = saved.name;
 
     // Now we have a docname — upload the pending logo and link it to the doc.
     if (pendingDataUrl && saved?.name) {
