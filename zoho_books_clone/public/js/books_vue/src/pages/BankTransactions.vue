@@ -282,7 +282,7 @@
     </div>
 
     <!-- Mapping panel: review every parsed row before anything is posted -->
-    <div v-if="mappingOpen" class="bt-map-overlay" @click.self="!confirming && (mappingOpen=false)"></div>
+    <div v-if="mappingOpen" class="bt-map-overlay"></div>
     <div class="bt-map-drawer" :class="{open:mappingOpen}">
       <div class="bt-dheader">
         <button class="bt-dclose" @click="mappingOpen=false" :disabled="confirming"><span v-html="icon('x',16)"></span></button>
@@ -294,8 +294,8 @@
           {{ mappingFailedRows.length }} row(s) failed to import — see the highlighted row(s) below for details.
           <button class="bt-btn-ghost" style="margin-left:10px;padding:2px 8px;font-size:11.5px" @click="scrollToFirstError">Jump to first</button>
         </div>
-        <div v-if="mappingUnaccounted" class="bt-map-warn">
-          {{ mappingUnaccounted }} row(s) have no account picked — these will post to the company's Suspense account on confirm, still fully balanced (Dr Bank / Cr Suspense or reverse), just uncategorized until you fix them later.
+        <div v-if="mappingUnaccounted" class="bt-map-warn bt-map-warn--err">
+          {{ mappingUnaccounted }} row(s) still need an account — pick an account for every row below before you can confirm the import.
         </div>
 
         <template v-if="mappingToMap.length">
@@ -309,8 +309,8 @@
                   <td>{{ row.description || '—' }}</td>
                   <td class="mono-sm ta-r" :class="row.credit>0?'green':'red'">{{ row.credit>0?'+':'-' }}{{ fmtCur(row.credit>0?row.credit:row.debit) }}</td>
                   <td>
-                    <select v-model="row.mapped_account" class="bt-select" style="min-width:200px">
-                      <option value="">— Suspense (uncategorized) —</option>
+                    <select v-model="row.mapped_account" class="bt-select" :class="{ 'bt-select-required': !row.mapped_account }" style="min-width:200px" required>
+                      <option value="" disabled>Select an account…</option>
                       <option v-for="a in mappingAccounts" :key="a.name" :value="a.name">{{ a.account_name||a.name }}</option>
                     </select>
                   </td>
@@ -345,7 +345,8 @@
       </div>
       <div class="bt-dfooter">
         <button class="bt-btn-ghost" @click="mappingOpen=false" :disabled="confirming">Cancel</button>
-        <button class="bt-btn-primary" :disabled="confirming" @click="confirmMappingImport">
+        <span v-if="mappingUnaccounted" class="bt-map-footer-hint">Pick an account for all rows to continue</span>
+        <button class="bt-btn-primary" :disabled="confirming || mappingUnaccounted>0" :title="mappingUnaccounted ? 'Select an account for every row before confirming' : ''" @click="confirmMappingImport">
           {{ confirming ? 'Importing…' : `Confirm Import (${mappingRows.length - mappingSkipped.length})` }}
         </button>
       </div>
@@ -565,6 +566,10 @@ function applyAccountToSimilar(row) {
 }
 
 async function confirmMappingImport() {
+  if (mappingUnaccounted.value > 0) {
+    toast.error("Pick an account for every row before confirming.");
+    return;
+  }
   confirming.value = true;
   // Clear any previous failure marks before retrying.
   mappingRows.value.forEach(r => { r._importError = null; });
@@ -736,6 +741,8 @@ onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.a
 .bt-pill{padding:6px 14px;border-radius:20px;font-size:12.5px;font-weight:600;border:1px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;}
 .bt-pill.active{background:#eff6ff;border-color:#2563eb;color:#2563eb;}
 .bt-select{border:1px solid #e5e7eb;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;background:#fff;color:#111827;cursor:pointer;}
+.bt-select-required{border-color:#fca5a5;background:#fef2f2;}
+.bt-map-footer-hint{font-size:12px;color:#b91c1c;margin-right:auto;padding-left:12px;}
 .bt-btn-ghost{display:inline-flex;align-items:center;gap:6px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font-size:13px;color:#374151;cursor:pointer;}
 .bt-btn-ghost:hover{background:#f9fafb;}
 .bt-btn-primary{display:inline-flex;align-items:center;gap:6px;background:#2563eb;border:1px solid #2563eb;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;}
