@@ -439,16 +439,15 @@ class StockEntry(Document):
             self._adjust_batch_qty(batch_no, actual_qty)
             if actual_qty > 0:
                 # This leg received the batch into `warehouse` — that's where it
-                # physically sits now. Batch.warehouse is a single-location field
-                # (the model assumes one batch lives in one warehouse at a time,
-                # same assumption get_batches_for_outgoing() and
-                # assert_batch_deletable() already make), so keep it pointed at
-                # wherever the batch was most recently received. Without this,
-                # a batch created via Opening Stock in Warehouse A and later
-                # moved by a Material Transfer to Warehouse B would still show
-                # warehouse=A forever — get_batches_for_outgoing() filters by
-                # warehouse, so it would silently stop finding that batch for
-                # any future outgoing movement out of B.
+                # physically sits now. Still worth keeping Batch.warehouse
+                # pointed at the most recent receiving warehouse (used for
+                # display, and as a fallback elsewhere) even though
+                # get_batches_for_outgoing() no longer depends on it directly
+                # -- that function now reads live per-warehouse balances off
+                # the Stock Ledger Entry instead, specifically because this
+                # single-location field could go stale for batches whose
+                # stock arrived via a path other than a Stock Entry receiving
+                # leg (Opening Stock import, Purchase Invoice-driven receipt).
                 # Outgoing legs (actual_qty < 0) don't touch this: the batch is
                 # leaving that warehouse, not settling there.
                 frappe.db.set_value("Batch", batch_no, "warehouse", warehouse)

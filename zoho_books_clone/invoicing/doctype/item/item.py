@@ -149,6 +149,26 @@ class Item(Document):
                 alert=True,
             )
 
+    def on_trash(self):
+        """Prevent deletion of items that still have stock or stock history."""
+        if not self.is_stock_item:
+            return
+
+        stock_qty = flt(frappe.db.sql("""
+            SELECT SUM(actual_qty) FROM `tabBin` WHERE item_code = %s
+        """, self.name)[0][0] or 0)
+
+        if stock_qty:
+            frappe.throw(_(
+                "Cannot delete Item {0} — it still has {1} {2} in stock. "
+                "Clear the stock (e.g. via a Stock Entry) before deleting."
+            ).format(frappe.bold(self.name), stock_qty, self.stock_uom or ""))
+
+        if frappe.db.exists("Stock Ledger Entry", {"item_code": self.name}):
+            frappe.throw(_(
+                "Cannot delete Item {0} — it has stock ledger transactions recorded against it."
+            ).format(frappe.bold(self.name)))
+
     def on_update(self):
         """Sync reorder settings to Bin records when item is updated."""
         if not self.is_stock_item:

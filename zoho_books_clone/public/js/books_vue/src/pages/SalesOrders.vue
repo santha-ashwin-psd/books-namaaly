@@ -431,7 +431,7 @@
                       <span class="po-item-card-title">{{ line.item_code || 'Line Item' }}</span>
                       <div class="po-item-card-subtotal">
                         <span class="po-item-card-subtotal-label">SUBTOTAL</span>
-                        <span class="po-item-card-amount">{{ fmtCur(line.amount) }}</span>
+                        <span class="po-item-card-amount">{{ fmtCur(lineAmount(line)) }}</span>
                       </div>
                       <span class="po-item-card-chevron" :class="{collapsed:line.collapsed}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -730,6 +730,7 @@
                           <th>Item &amp; Description</th>
                           <th class="th-r">Qty</th>
                           <th class="th-r">Rate</th>
+                          <th class="th-r">Discount</th>
                           <th class="th-r">Amount</th>
                         </tr>
                       </thead>
@@ -742,6 +743,7 @@
                           </td>
                           <td class="td-r">{{ flt(it.qty) }}</td>
                           <td class="td-r">{{ fmtAmt(it.rate, viewDoc.currency) }}</td>
+                          <td class="td-r inv-dash">{{ flt(it.discount_percentage) ? flt(it.discount_percentage) + '%' : '—' }}</td>
                           <td class="td-r" style="font-weight:600">{{ fmtAmt(it.amount, viewDoc.currency) }}</td>
                         </tr>
                       </tbody>
@@ -750,6 +752,20 @@
                     <!-- Totals section -->
                     <div class="inv-totals-section">
                       <div class="inv-totals-inner">
+                        <div v-if="viewSubtotal" class="inv-total-line">
+                          <span class="t-lbl">Subtotal</span>
+                          <span class="t-amt">{{ fmtAmt(viewSubtotal, viewDoc.currency) }}</span>
+                        </div>
+                        <div v-if="viewDiscountTotal" class="inv-total-line">
+                          <span class="t-lbl">Discount</span>
+                          <span class="t-amt">-{{ fmtAmt(viewDiscountTotal, viewDoc.currency) }}</span>
+                        </div>
+                        <template v-if="viewDoc.taxes && viewDoc.taxes.length">
+                          <div v-for="(tx,i) in viewDoc.taxes" :key="i" class="inv-total-line">
+                            <span class="t-lbl">{{ tx.description || tx.account_head }}</span>
+                            <span class="t-amt">{{ fmtAmt(tx.tax_amount || 0, viewDoc.currency) }}</span>
+                          </div>
+                        </template>
                         <div class="inv-grand-total-line">
                           <span class="inv-grand-lbl">Grand Total</span>
                           <span class="inv-grand-amt">{{ fmtAmt(viewDoc.grand_total, viewDoc.currency) }}</span>
@@ -1188,6 +1204,11 @@ const viewMode = ref("table"); // "table" | "grid"
 const drawerOpen = ref(false), drawerSaving = ref(false), editingName = ref("");
 const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const viewLoading = ref(false), viewItems = ref([]);
+// Sum of per-line discounts and the pre-discount subtotal for the SO being
+// viewed — item.amount from the backend is already post-discount, so the
+// "Subtotal" line must add the discount back to show the correct gross figure.
+const viewDiscountTotal = computed(() => Math.round(viewItems.value.reduce((s, it) => s + flt(it.discount_amount), 0) * 100) / 100);
+const viewSubtotal = computed(() => Math.round(viewItems.value.reduce((s, it) => s + flt(it.amount), 0) * 100) / 100 + viewDiscountTotal.value);
 const fulfill = reactive({ lines: [], computed_status: "" });
 const links = reactive({ sales_invoices: [], delivery_challans: [] });
 const customers = ref([]), items = ref([]), lines = ref([]), taxAccountHead = ref(""), taxTemplates = ref([]);
@@ -1394,7 +1415,7 @@ const allChecked = computed(() => sorted.value.length > 0 && sorted.value.every(
 function toggle(n) { const s = new Set(selected.value); s.has(n) ? s.delete(n) : s.add(n); selected.value = s; }
 function toggleAll(e) { selected.value = e.target.checked ? new Set(sorted.value.map(o => o.name)) : new Set(); }
 
-const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 0));
+const subtotal = computed(() => lines.value.reduce((s, l) => s + lineAmount(l), 0));
 
 const taxLines = computed(() => {
   const map = {};
@@ -1672,6 +1693,16 @@ function calcLine(l) {
   l.discount_amount = disc;
   l.amount = Math.round((base - disc) * 100) / 100;
 }
+// Pure, side-effect-free version of the same math, used directly in the
+// template/totals so displayed figures are always derived live from the
+// current qty/rate/discount_percentage on every render — they never depend
+// on calcLine() having already run for the exact keystroke that changed them.
+function lineAmount(l) {
+  const base = flt(l.qty) * flt(l.rate);
+  const pct = Math.min(100, Math.max(0, flt(l.discount_percentage)));
+  const disc = Math.round(base * pct / 100 * 100) / 100;
+  return Math.round((base - disc) * 100) / 100;
+}
 
 async function fetchStockForLine(line) {
   if (!line.item_code || !form.set_warehouse) { line.available_stock = null; return; }
@@ -1727,7 +1758,7 @@ async function saveSO(newStatus) {
       terms: form.terms || "",
       currency: form.currency || "INR",
       exchange_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
-      items: lines.value.filter(l => l.item_code).map(l => ({
+      items: lines.value.filter(l => l.item_code).map(l => { calcLine(l); return {
         doctype: "Sales Order Item", item_code: l.item_code,
         description: l.description || l.item_code,
         qty: flt(l.qty) || 1, rate: flt(l.rate), amount: flt(l.amount),
@@ -1735,7 +1766,7 @@ async function saveSO(newStatus) {
         discount_percentage: flt(l.discount_percentage) || 0,
         discount_amount: flt(l.discount_amount) || 0,
         tax_code: l.tax_code || "",
-      })),
+      }; }),
       taxes,
     };
     if (editingName.value) doc.name = editingName.value;

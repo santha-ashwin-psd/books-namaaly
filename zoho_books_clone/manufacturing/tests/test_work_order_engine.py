@@ -359,5 +359,128 @@ class TestSetItemsAndOperationsFromBomProcessLoss(unittest.TestCase):
         self.assertAlmostEqual(wo.process_loss_percent, 0.0)
 
 
+# ---------------------------------------------------------------------------
+# Phase 5: close_on_loss_reconciliation -- is_final / over-consumption checks
+# ---------------------------------------------------------------------------
+
+class TestLossReconciliation(unittest.TestCase):
+    """Replicates the loss-reconciliation arithmetic from complete_work_order
+    the same way TestOverProductionAllowance replicates the allowance
+    arithmetic above -- complete_work_order itself needs a live site (DB
+    locking, Stock Entry submission) so isn't unit-tested directly.
+
+    Mirrors, line for line, the logic added in work_order_engine.py:
+      - the over-consumption block (produced+loss > wo.qty -> throw)
+      - the is_final OR-clause (base rule OR, when the flag is set,
+        produced+loss reaching wo.qty)
+    """
+
+    def _is_final(self, planned, current_produced, current_loss,
+                   this_produced, this_loss, close_on_loss_reconciliation):
+        new_total = flt(current_produced) + flt(this_produced)
+        is_final = new_total >= flt(planned) - 0.0001
+        if close_on_loss_reconciliation:
+            cumulative_produced_and_loss = (
+                flt(current_produced) + flt(this_produced) +
+                flt(current_loss) + flt(this_loss)
+            )
+            is_final = is_final or (cumulative_produced_and_loss >= flt(planned) - 0.0001)
+        return is_final
+
+    def _exceeds_when_reconciling(self, planned, current_produced, current_loss,
+                                    this_produced, this_loss, close_on_loss_reconciliation):
+        if not close_on_loss_reconciliation:
+            return False
+        new_total_with_loss = (
+            flt(current_produced) + flt(this_produced) +
+            flt(current_loss) + flt(this_loss)
+        )
+        return new_total_with_loss > flt(planned) + 0.0001
+
+    # Checkbox off -- behavior must be completely unchanged from before the
+    # flag existed: process loss never counts toward completion, and the
+    # over-consumption block never fires.
+    def test_checkbox_off_loss_never_completes_wo(self):
+        # 8kg produced + 2kg loss out of 10kg planned, but flag is off.
+        self.assertFalse(self._is_final(10, 0, 0, 8, 2, False))
+
+    def test_checkbox_off_never_blocks_on_loss(self):
+        self.assertFalse(self._exceeds_when_reconciling(10, 0, 0, 8, 5, False))
+
+    # Under case (checkbox on, produced+loss < wo.qty) -- stays In Process.
+    def test_under_case_stays_open(self):
+        # 6kg produced + 2kg loss = 8kg of 10kg planned -- not yet final.
+        self.assertFalse(self._is_final(10, 0, 0, 6, 2, True))
+
+    def test_under_case_not_blocked(self):
+        self.assertFalse(self._exceeds_when_reconciling(10, 0, 0, 6, 2, True))
+
+    # Exact case (produced+loss == wo.qty) -- Completed.
+    def test_exact_match_completes(self):
+        # 8kg produced + 2kg loss = 10kg planned exactly.
+        self.assertTrue(self._is_final(10, 0, 0, 8, 2, True))
+
+    def test_exact_match_not_blocked(self):
+        self.assertFalse(self._exceeds_when_reconciling(10, 0, 0, 8, 2, True))
+
+    # Over case (produced+loss > wo.qty) with checkbox on -- blocked.
+    def test_over_case_blocked(self):
+        # 8kg produced + 3kg loss = 11kg > 10kg planned.
+        self.assertTrue(self._exceeds_when_reconciling(10, 0, 0, 8, 3, True))
+
+    # Multi-partial-completion cases (checkbox toggled differently each run).
+    def test_multi_partial_first_run_under_second_run_completes(self):
+        # Run 1: 5 produced, 0 loss, checkbox off -- stays open.
+        self.assertFalse(self._is_final(10, 0, 0, 5, 0, False))
+        # Run 2: cumulative produced=5, this run adds 2 produced + 3 loss,
+        # checkbox now on -- 5+2 produced + 0+3 loss = 10 = planned -> final.
+        self.assertTrue(self._is_final(10, 5, 0, 2, 3, True))
+
+    def test_multi_partial_checkbox_on_then_off_still_needs_produced_qty(self):
+        # Run 1 with checkbox on leaves loss recorded but doesn't complete.
+        self.assertFalse(self._is_final(10, 0, 0, 4, 2, True))
+        # Run 2 with checkbox off: cumulative produced 4+4=8 still < 10 --
+        # loss recorded in run 1 (2) never counts once the flag is off again.
+        self.assertFalse(self._is_final(10, 4, 2, 4, 0, False))
+
+    # Base produced-qty-only completion must still work standalone with the
+    # flag on -- the OR-clause must never make it harder to complete via the
+    # original rule.
+    def test_produced_qty_alone_still_completes_with_flag_on(self):
+        self.assertTrue(self._is_final(10, 0, 0, 10, 0, True))
+
+    # reverse_manufacture_entry's process_loss_qty rollback -- must mirror
+    # operating_cost_absorbed_total's max(current - this_entry, 0) pattern
+    # exactly, so a reversed run's loss stops counting against future
+    # close_on_loss_reconciliation completions (and never goes negative).
+    def _rolled_back_process_loss_qty(self, current_process_loss_qty, this_entry_process_loss_qty):
+        return max(flt(current_process_loss_qty) - flt(this_entry_process_loss_qty), 0)
+
+    def test_reversal_rolls_back_this_entrys_loss(self):
+        self.assertAlmostEqual(self._rolled_back_process_loss_qty(2, 2), 0)
+
+    def test_reversal_leaves_other_entries_loss_intact(self):
+        # Two completions each contributed 2 loss (cumulative 4); reversing
+        # only one must leave the other's contribution untouched.
+        self.assertAlmostEqual(self._rolled_back_process_loss_qty(4, 2), 2)
+
+    def test_reversal_never_goes_negative(self):
+        self.assertAlmostEqual(self._rolled_back_process_loss_qty(1, 2), 0)
+
+    def test_after_reversal_fresh_full_completion_no_longer_blocked(self):
+        # Reproduces the bug: 8 produced + 2 loss (checkbox on) completes a
+        # qty=10 WO, then that completion is reversed. Before the fix,
+        # process_loss_qty stayed at 2, so retrying with 10 produced + 0
+        # loss would wrongly compute 0+10+2+0=12 > 10 and block. After the
+        # fix, process_loss_qty rolls back to 0 and the retry is clean.
+        current_loss_after_reversal = self._rolled_back_process_loss_qty(2, 2)
+        self.assertFalse(self._exceeds_when_reconciling(
+            10, 0, current_loss_after_reversal, 10, 0, True
+        ))
+        self.assertTrue(self._is_final(
+            10, 0, current_loss_after_reversal, 10, 0, True
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()

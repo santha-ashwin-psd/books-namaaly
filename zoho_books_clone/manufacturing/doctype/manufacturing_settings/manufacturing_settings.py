@@ -30,6 +30,7 @@ def get_manufacturing_defaults():
         "default_scrap_warehouse": "",
         "auto_create_job_cards": 1,
         "over_production_allowance_pct": 0,
+        "default_close_on_loss_reconciliation": 0,
         "allow_negative_stock": 0,
         "backflush_raw_materials_based_on": "BOM",
         "default_bom_type": "Manufacturing",

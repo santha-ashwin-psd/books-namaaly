@@ -7,7 +7,7 @@
   >
     <div v-if="state.body" class="bv-confirm-body" v-html="state.body"></div>
     <template #footer>
-      <button class="nim-btn" @click="_cancel">{{ state.cancelLabel }}</button>
+      <button v-if="!state.hideCancel" class="nim-btn" @click="_cancel">{{ state.cancelLabel }}</button>
       <button
         class="nim-btn"
         :class="state.okStyle === 'danger' ? 'nim-btn-danger' : 'nim-btn-primary'"

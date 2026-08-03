@@ -579,7 +579,8 @@ def get_job_card_scrap_items(work_order):
 @frappe.whitelist(allow_guest=False)
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
-                         manufacturing_date=None, expiry_date=None):
+                         manufacturing_date=None, expiry_date=None,
+                         close_on_loss_reconciliation=0):
     """Create & submit the Manufacture Stock Entry for a batch of production
     against this Work Order. Can be called multiple times for partial
     completions until produced_qty reaches the planned qty.
@@ -604,6 +605,30 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                              any of the consumption/costing math below runs,
                              so it's indistinguishable downstream from a
                              qty passed via the manual process_loss_qty arg.
+    close_on_loss_reconciliation -- if truthy, a Work Order can also be
+                         marked Completed once cumulative produced_qty +
+                         process_loss_qty (not produced_qty alone) reaches
+                         wo.qty -- i.e. the planned qty is treated as raw
+                         material *input* that's now fully accounted for
+                         between finished goods and process loss (e.g. an
+                         Ayurvedic decoction: 8kg produced + 2kg loss fully
+                         reconciles a 10kg planned batch). When falsy
+                         (default), behavior is unchanged from before this
+                         flag existed: only produced_qty counts toward
+                         completion. This is a pure per-call flag -- the
+                         engine does not read Manufacturing Settings for it;
+                         the caller (API layer) is responsible for resolving
+                         any UI default before calling in.
+
+                         If this run would push (cumulative produced_qty +
+                         cumulative process_loss_qty) beyond wo.qty while
+                         this flag is set, the call is blocked with an
+                         error -- more raw material cannot be consumed than
+                         was ever issued for the batch. This check is
+                         independent of the existing Over-Production
+                         Allowance % path below, which continues to govern
+                         produced_qty vs wo.qty exactly as before regardless
+                         of this flag.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -683,14 +708,45 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         else:
             frappe.throw(_(
                 "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1}). "
-                "Increase Over-Production Allowance % in Manufacturing Settings to allow this."
+                "If this run is finishing the batch and the shortfall is genuine process loss "
+                "(e.g. evaporation/trimming/spillage), check \"this completes the batch\" and "
+                "enter the loss in Process Loss / Wastage Qty instead. Otherwise, increase "
+                "Over-Production Allowance % in Manufacturing Settings to allow this."
             ).format(qty_manufactured, flt(wo.qty) - current_produced_qty))
+
+    close_on_loss_reconciliation = bool(frappe.utils.cint(close_on_loss_reconciliation))
+
+    # When loss-reconciliation is requested, produced+loss can never be
+    # allowed to exceed the planned qty -- that would mean consuming more
+    # raw material than was ever issued for this batch. This is separate
+    # from (and checked in addition to) the Over-Production Allowance %
+    # guard above, which only ever looks at produced_qty.
+    if close_on_loss_reconciliation:
+        new_total_with_loss = current_produced_qty + qty_manufactured + current_process_loss_qty + process_loss_qty
+        if new_total_with_loss > flt(wo.qty) + 0.0001:
+            frappe.throw(_(
+                "Produced qty plus process loss ({0}) would exceed the planned qty ({1}). "
+                "Cannot consume more raw material than was issued for this batch."
+            ).format(new_total_with_loss, wo.qty))
 
     # Whether this run brings the Work Order to full completion -- computed
     # up front (rather than re-derived after the Stock Entry is posted) so
     # both the operating-cost true-up and the process-loss split below can
     # use it while building this run's Stock Entry.
+    #
+    # Base rule (always applies): produced_qty alone reaching wo.qty.
+    # Loss-reconciliation rule (only when the flag is set): produced_qty +
+    # process_loss_qty together reaching wo.qty also counts as final --
+    # this lets a batch close when the shortfall from planned qty is fully
+    # explained by process loss rather than sitting open forever. When the
+    # flag is off, this OR clause is simply never true and behavior is
+    # unchanged from before it existed.
     is_final = new_total >= flt(wo.qty) - 0.0001
+    if close_on_loss_reconciliation:
+        cumulative_produced_and_loss = (
+            current_produced_qty + qty_manufactured + current_process_loss_qty + process_loss_qty
+        )
+        is_final = is_final or (cumulative_produced_and_loss >= flt(wo.qty) - 0.0001)
 
 
     # Raw materials are consumed for the FULL quantity that left the
@@ -839,6 +895,7 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         se.remarks += f" (abnormal process loss expensed: {abnormal_loss_value:.2f})"
     se.operating_cost_absorbed = operating_cost_this_run
     se.manufacturing_variance_loss = manufacturing_variance_loss
+    se.process_loss_qty = process_loss_qty
 
     # Receive the finished good. If it's batch-tracked, pre-create the Batch
     # record first (same pattern the transaction pages use) so Stock Entry's
@@ -1308,10 +1365,14 @@ def reverse_manufacture_entry(work_order, stock_entry):
     - current_operating_cost_absorbed_total), so leaving it stale would
     under-absorb operating cost into whatever completion replaces this one.
 
-    process_loss_qty is not rolled back: it never moved any stock (it's a
-    reporting-only figure for material that was consumed but never became
-    stock), so leaving it as-is doesn't desync anything against the stock
-    ledger.
+    process_loss_qty IS rolled back (by the reversed entry's own
+    process_loss_qty, stored on the Stock Entry for exactly this purpose).
+    It never moved any stock on its own, so the stock ledger was never at
+    risk either way -- but close_on_loss_reconciliation completions
+    (complete_work_order) read cumulative process_loss_qty to decide both
+    the over-consumption block and the is_final OR-clause, so leaving it
+    stale here would let a reversed run's loss keep counting against future
+    completions.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -1356,6 +1417,7 @@ def reverse_manufacture_entry(work_order, stock_entry):
     # Captured before se.cancel() -- cancel() doesn't clear the Stock Entry's
     # own fields, but read it now regardless so this doesn't depend on that.
     operating_cost_absorbed_this_entry = flt(se.operating_cost_absorbed)
+    process_loss_qty_this_entry = flt(se.process_loss_qty)
 
     se.flags.ignore_manufacturing_guard = True
     se.cancel()
@@ -1366,6 +1428,43 @@ def reverse_manufacture_entry(work_order, stock_entry):
 
     new_produced_qty = max(flt(wo.produced_qty) - qty_manufactured, 0)
     wo.db_set("produced_qty", new_produced_qty)
+
+    # Roll back this run's contribution to process_loss_qty too. This never
+    # moved any stock on its own, but close_on_loss_reconciliation completions
+    # (complete_work_order) now read cumulative process_loss_qty to decide
+    # both the over-consumption block and the is_final OR-clause -- leaving
+    # it stale here would let a reversed run's loss keep counting against
+    # future completions, wrongly blocking a fresh attempt at the full
+    # planned qty or marking the Work Order reconciled too early.
+    new_process_loss_qty = max(flt(wo.process_loss_qty) - process_loss_qty_this_entry, 0)
+    wo.db_set("process_loss_qty", new_process_loss_qty)
+
+    # Defensive check for pre-migration data the v1_11 backfill couldn't
+    # fully resolve: if this reversal leaves process_loss_qty > 0 on the
+    # Work Order but there are no OTHER submitted Manufacture entries left
+    # to account for it (i.e. this really did look like the entry that
+    # should have carried all of it, yet a remainder persists), the stored
+    # figure is unreliable rather than wrong-but-explainable. Flag it for
+    # manual review instead of letting it silently keep influencing future
+    # over-consumption / is_final checks in complete_work_order.
+    if new_process_loss_qty > 0.0001:
+        remaining_entries = frappe.get_all(
+            "Stock Entry",
+            filters={
+                "work_order": wo.name,
+                "stock_entry_type": "Manufacture",
+                "docstatus": 1,
+                "name": ["!=", se.name],
+            },
+            limit=1,
+        )
+        if not remaining_entries:
+            frappe.msgprint(_(
+                "Work Order {0} still shows {1} of process loss after this reversal, "
+                "but no other completion remains to account for it. This likely predates "
+                "per-entry process-loss tracking and could not be fully attributed by the "
+                "v1_11 backfill -- please review process_loss_qty on this Work Order manually."
+            ).format(wo.name, new_process_loss_qty), indicator="orange", alert=True)
 
     # Without this, the next completion's final-run true-up (complete_work_order:
     # operating_cost_this_run = current_total_operating_cost -

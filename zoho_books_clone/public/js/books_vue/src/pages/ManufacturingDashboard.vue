@@ -83,7 +83,10 @@
                 <span class="mdx-prog-txt">{{ fmtNum(wo.produced_qty) }}/{{ fmtNum(wo.qty) }}</span>
               </div>
             </td>
-            <td><span class="mdx-badge" :class="statusClass(wo.status)">{{ wo.status }}</span></td>
+            <td>
+              <span class="mdx-badge" :class="statusClass(wo.status)">{{ wo.status }}</span>
+              <span v-if="isLossReconciled(wo)" class="mdx-badge" style="background:var(--bx-amberS,#fef3c7);color:var(--bx-amber,#b45309);margin-left:4px" title="Completed with the shortfall reconciled as process loss">Loss-Reconciled</span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -181,6 +184,16 @@ function progressPct(wo) {
 function fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
+// A Completed WO with produced_qty short of qty and process_loss_qty
+// covering the difference was finished via loss reconciliation rather
+// than fully produced -- flag it distinctly rather than letting it look
+// identical to a plain 100%-produced completion everywhere but its own
+// detail page.
+function isLossReconciled(wo) {
+  if (wo.status !== "Completed") return false;
+  const shortfall = (parseFloat(wo.qty) || 0) - (parseFloat(wo.produced_qty) || 0);
+  return shortfall > 0.0001 && (parseFloat(wo.process_loss_qty) || 0) > 0.0001;
+}
 function statusClass(status) {
   const map = {
     "Completed":   "mdx-badge-green",
@@ -212,7 +225,7 @@ async function loadAll() {
       apiList("QC Inspection", { fields: ["name", "status", "docstatus", "item", "item_name"], filters: [["docstatus", "!=", 2]], limit: 1000 }).catch(() => []),
       apiList("Material Request", { fields: ["name"], filters: [["status", "in", ["Draft", "Submitted"]]], limit: 1000 }).catch(() => []),
       apiList("Work Order", { fields: ["name", "item_name", "production_item"], filters: [["status", "=", "Stopped"]], limit: 100 }).catch(() => []),
-      apiList("Work Order", { fields: ["name", "item_name", "production_item", "status", "qty", "produced_qty", "modified"], limit: 8, order: "modified desc" }).catch(() => []),
+      apiList("Work Order", { fields: ["name", "item_name", "production_item", "status", "qty", "produced_qty", "process_loss_qty", "modified"], limit: 8, order: "modified desc" }).catch(() => []),
     ]);
 
     const pending = (qcRows || []).filter(q => q.status === "Pending" || q.docstatus === 0);

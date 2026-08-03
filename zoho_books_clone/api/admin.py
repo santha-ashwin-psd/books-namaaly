@@ -180,8 +180,31 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
     company = _require_company_admin()
     email = email.strip().lower()
 
-    if frappe.db.exists("User", email):
-        frappe.throw(_("User {0} already exists").format(email))
+    existing_user = frappe.db.exists("User", email)
+    reactivating = False
+    if existing_user:
+        existing_member = frappe.db.get_value(
+            "Books Company Member", {"user": email}, ["name", "company"], as_dict=True
+        )
+        if existing_member and existing_member.company == company:
+            frappe.throw(_("{0} is already a member of this company.").format(email))
+        if existing_member:
+            # Active member of a DIFFERENT company -- this system assumes one
+            # active company membership per user (see _resolve_company_for),
+            # so re-linking them here would leave two Books Company Member
+            # rows fighting over which company they resolve to. Genuine
+            # conflict, not the "previously removed" case below.
+            frappe.throw(_(
+                "{0} already exists and belongs to another company. They "
+                "cannot be added to more than one company."
+            ).format(email))
+        # User exists but has no Books Company Member row anywhere -- this is
+        # exactly what remove_user_from_company() leaves behind (it disables
+        # the User and deletes only the membership row, deliberately not the
+        # User itself, since User is a shared/global doctype other records
+        # may still reference). Nothing is actually blocking re-adding them;
+        # reactivate the existing account instead of failing.
+        reactivating = True
 
     if role not in BOOKS_ROLES:
         frappe.throw(_("Invalid role: {0}").format(role))
@@ -196,17 +219,31 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
 
     temp_password = _gen_temp_password()
 
-    # ── Create User
-    user = frappe.new_doc("User")
-    user.email = email
-    user.first_name = (first_name or "").strip() or email.split("@")[0]
-    user.last_name = (last_name or "").strip()
-    user.user_type = "System User"
-    user.send_welcome_email = 0  # we send our own via system SMTP
-    user.enabled = 1
-    user.new_password = temp_password
-    user.append("roles", {"role": role})
-    user.insert(ignore_permissions=True)
+    if reactivating:
+        # ── Reactivate the existing (previously removed) User
+        user = frappe.get_doc("User", email)
+        user.first_name = (first_name or "").strip() or user.first_name or email.split("@")[0]
+        user.last_name = (last_name or "").strip()
+        user.enabled = 1
+        user.new_password = temp_password
+        # Reset roles to just the newly-assigned one rather than layering on
+        # top of whatever roles the account had from its previous company
+        # membership -- those no longer apply here.
+        user.roles = []
+        user.append("roles", {"role": role})
+        user.save(ignore_permissions=True)
+    else:
+        # ── Create User
+        user = frappe.new_doc("User")
+        user.email = email
+        user.first_name = (first_name or "").strip() or email.split("@")[0]
+        user.last_name = (last_name or "").strip()
+        user.user_type = "System User"
+        user.send_welcome_email = 0  # we send our own via system SMTP
+        user.enabled = 1
+        user.new_password = temp_password
+        user.append("roles", {"role": role})
+        user.insert(ignore_permissions=True)
 
     # ── Link to company
     member = frappe.new_doc("Books Company Member")
@@ -239,7 +276,7 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
     # ── Send invite email via system SMTP
     _send_invite_email(email, user.first_name, company, temp_password, role)
 
-    return {"success": True, "user": email, "company": company, "role": role}
+    return {"success": True, "user": email, "company": company, "role": role, "reactivated": reactivating}
 
 
 def _send_invite_email(email: str, first_name: str, company: str, temp_password: str, role: str):

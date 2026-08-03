@@ -84,7 +84,7 @@ function _indicatorToToastType(msg) {
   return "info";
 }
 
-function _parseResponse(json, status) {
+function _parseResponse(json, status, opts) {
   if (status === 401) {
     const dest = window.location.pathname + window.location.hash;
     window.location.href = "/login?redirect-to=" + encodeURIComponent(dest || "/books");
@@ -124,6 +124,16 @@ function _parseResponse(json, status) {
     try {
       const msgs = JSON.parse(json._server_messages);
       const list = Array.isArray(msgs) ? msgs : [msgs];
+      if (opts && opts.suppressMessages) {
+        // Caller wants to handle these itself (e.g. show them in a
+        // must-read confirm dialog instead of a toast that can time out
+        // before it's read) -- skip the auto-toast and hand back the
+        // parsed text/type pairs alongside the usual return value.
+        const parsed = list
+          .map(m => ({ text: _parseServerMessage(m), type: _indicatorToToastType(m) }))
+          .filter(m => m.text);
+        return { message: json.message, serverMessages: parsed };
+      }
       for (const m of list) {
         const text = _parseServerMessage(m);
         if (text) useToast().toast(text, _indicatorToToastType(m), 6000);
@@ -190,7 +200,7 @@ export async function refreshCsrfToken() {
   return "";
 }
 
-export async function apiPOST(method, args, hint) {
+export async function apiPOST(method, args, hint, opts) {
   _assertWritable(method, hint);
   const csrfToken = await refreshCsrfToken();
   const body = new URLSearchParams();
@@ -215,7 +225,7 @@ export async function apiPOST(method, args, hint) {
   let json;
   try { json = await r.json(); }
   catch { throw new Error("Non-JSON response (" + r.status + ")"); }
-  return _parseResponse(json, r.status);
+  return _parseResponse(json, r.status, opts);
 }
 
 export async function apiGet(doctype, name) {
@@ -329,8 +339,11 @@ export async function api(method, args) { return await apiGET(method, args); }
 // Universal method caller — used by the Quality module and other API endpoints
 // that accept both GET and POST. Sends as POST so CSRF is included.
 // `hint` (optional): { module, action } — see _assertWritable() above.
-export async function apiCall(method, args = {}, hint) {
-  return await apiPOST(method, args, hint);
+// `opts` (optional): { suppressMessages: true } — see _parseResponse() above;
+// when set, the return value becomes { message, serverMessages } instead of
+// just `message`, and server_messages are not auto-toasted.
+export async function apiCall(method, args = {}, hint, opts) {
+  return await apiPOST(method, args, hint, opts);
 }
 
 

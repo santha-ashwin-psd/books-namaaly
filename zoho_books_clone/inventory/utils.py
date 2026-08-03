@@ -62,12 +62,13 @@ def get_batches_for_outgoing(item_code: str, warehouse: str, qty: float,
                          down older stock first reduces the chance of batches
                          expiring unused on the shelf.
 
-    Only batches with batch_qty > 0 are considered. Batches are consumed in
-    order until `qty` is satisfied; a single call may return several batches
-    if no one batch can cover the full requested qty. Raises if the combined
-    available batch_qty across all batches is insufficient — callers should
-    catch and surface this as a user-facing error rather than silently
-    under-allocating stock.
+    Only batches with a positive live balance in `warehouse` (computed from
+    the Stock Ledger Entry, not the Batch.batch_qty/Batch.warehouse cache)
+    are considered. Batches are consumed in order until `qty` is satisfied;
+    a single call may return several batches if no one batch can cover the
+    full requested qty. Raises if the combined available qty across all
+    batches is insufficient — callers should catch and surface this as a
+    user-facing error rather than silently under-allocating stock.
     """
     qty = flt(qty)
     if qty <= 0:
@@ -81,13 +82,32 @@ def get_batches_for_outgoing(item_code: str, warehouse: str, qty: float,
     # Ties on manufacturing_date are left to natural row order (not disambiguated
     # further per product decision).
 
+    # Live per-batch balance in this warehouse, aggregated straight from the
+    # Stock Ledger Entry -- deliberately NOT Batch.warehouse/batch_qty.
+    # Those are only a single-location cache (see stock_entry.py's
+    # _adjust_batch_qty / the receiving-leg set_value("Batch", ..., "warehouse", ...)),
+    # kept in sync solely by Stock Entry's own receiving legs. Any stock that
+    # reached this batch through a different path -- an Opening Stock or
+    # Purchase Invoice import, a manual ledger correction, or simply a batch
+    # whose stock is genuinely split across more than one warehouse (which a
+    # single warehouse field can never represent) -- leaves that cache stale
+    # or plain wrong. This function then silently reported "0.0 available"
+    # for a batch the ledger (and the Stock Items report, which already
+    # aggregates the ledger directly) shows very much in stock. Reading the
+    # ledger here too makes both agree and removes the staleness risk
+    # entirely, at the cost of one extra join versus the cached fields.
     batches = frappe.db.sql(f"""
-        SELECT name AS batch_no, batch_qty
-        FROM `tabBatch`
-        WHERE item = %(item_code)s
-          AND warehouse = %(warehouse)s
-          AND batch_qty > 0
-          AND (disabled IS NULL OR disabled = 0)
+        SELECT sle.batch_no AS batch_no, SUM(sle.actual_qty) AS batch_qty,
+               b.manufacturing_date AS manufacturing_date, b.creation AS creation
+        FROM `tabStock Ledger Entry` sle
+        INNER JOIN `tabBatch` b ON b.name = sle.batch_no
+        WHERE sle.item_code = %(item_code)s
+          AND sle.warehouse = %(warehouse)s
+          AND sle.batch_no IS NOT NULL AND sle.batch_no != ''
+          AND sle.is_cancelled = 0
+          AND (b.disabled IS NULL OR b.disabled = 0)
+        GROUP BY sle.batch_no
+        HAVING batch_qty > 0.0001
         ORDER BY manufacturing_date {order}, creation {order}
     """, {"item_code": item_code, "warehouse": warehouse}, as_dict=True)
 
@@ -124,10 +144,13 @@ def assert_batch_deletable(batch_no: str) -> None:
       1. Leave existing Stock Ledger Entries pointing at a `batch_no` Link
          whose target no longer exists (orphaned reference).
       2. Make that quantity permanently unpickable by
-         get_batches_for_outgoing() above, since it only ever looks at rows
-         in `tabBatch` — so Bin still reports the stock as available, but no
-         future Stock Entry could ever actually issue it. That mismatch is a
-         silent, hard-to-diagnose stock discrepancy.
+         get_batches_for_outgoing() above -- it now reads live balances from
+         the Stock Ledger Entry, but still INNER JOINs to `tabBatch` for
+         manufacturing_date/disabled, so a missing Batch row still drops
+         that quantity out of consideration entirely. Bin would still report
+         the stock as available, but no future Stock Entry could ever
+         actually issue it. That mismatch is a silent, hard-to-diagnose
+         stock discrepancy.
 
     Callers should disable the batch instead (`disabled = 1`) once its stock
     is fully consumed, or issue a Stock Entry to zero it out first.

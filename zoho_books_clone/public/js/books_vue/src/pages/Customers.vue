@@ -503,6 +503,14 @@
               </div>
             </div>
 
+            <div v-if="selectedCustomer.notes" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
+              <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" :style="!custSectionCollapsed.notes?'border-bottom:1px solid #F3F4F6':''" @click="custSectionCollapsed.notes=!custSectionCollapsed.notes">
+                <span style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px">INTERNAL NOTES</span>
+                <svg :style="{transition:'transform 0.2s',transform:custSectionCollapsed.notes?'rotate(-90deg)':'rotate(0deg)'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+              </div>
+              <div v-show="!custSectionCollapsed.notes" style="padding:14px 16px;font-size:12.5px;color:#374151;white-space:pre-wrap;line-height:1.6;overflow-wrap: break-word;">{{selectedCustomer.notes}}</div>
+            </div>
+
             <div style="padding:4px 0">
               <button @click="confirmDelete(selectedCustomer)" :disabled="!$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : ''" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:12.5px;display:flex;align-items:center;gap:6px">
                 <span v-html="icon('trash',13)"></span> Delete Customer
@@ -1925,6 +1933,10 @@ async function saveCustomer() {
     toast(drawerMode.value === "edit" ? "Customer updated!" : "Customer created!");
     showDrawer.value = false;
     await load();
+    if (savedName) {
+      const refreshed = list.value.find(c => c.name === savedName) || { name: savedName };
+      await selectCustomer(refreshed);
+    }
   } catch (e) {
     toast(e.message || "Could not save customer", "error");
   } finally { saving.value = false; }
@@ -1963,7 +1975,7 @@ const custTxnsLoading = ref(false);
 const custTxnsLoaded  = ref(false);          // ← lazy flag
 const txnPage = ref(1);                       // ← load-more page
 const TXN_PAGE_SIZE = 10;
-const custSectionCollapsed = reactive({ address: false, otherDetails: false });
+const custSectionCollapsed = reactive({ address: false, otherDetails: false, notes: false });
 const obInfo = ref({ has_opening_je: false });
 const showPayModal = ref(false);
 const payLoading = ref(false);
@@ -2076,7 +2088,7 @@ async function selectCustomer(c) {
   custTxns.value    = [];
   custTxnsLoaded.value = false;
   txnPage.value     = 1;
-  Object.assign(custSectionCollapsed, { address: false, otherDetails: false });
+  Object.assign(custSectionCollapsed, { address: false, otherDetails: false, notes: false });
   obInfo.value = { has_opening_je: false };
   loadOpeningBalance();
   // Only load the full customer doc (lightweight) — tabs load on demand

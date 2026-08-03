@@ -55,3 +55,12 @@ zoho_books_clone.patches.v1_9.seed_fixed_asset_accounts
 # books_role/is_company_admin/mod_<module> fields. New columns, so must
 # run after schema sync (post_model_sync).
 zoho_books_clone.patches.v1_10.backfill_permission_levels
+
+# Back-fills Stock Entry.process_loss_qty on the final Manufacture entry of
+# every Work Order whose historical process_loss_qty was recorded before
+# that per-entry field existed, so reverse_manufacture_entry() can roll it
+# back correctly instead of silently subtracting 0. Best-effort (see
+# docstring for the exact heuristic and its limits) -- reads/writes existing
+# columns only, safe in either sync phase, kept in post_model_sync for
+# consistency with the rest of this rework's patches.
+zoho_books_clone.patches.v1_11.backfill_historical_process_loss_qty

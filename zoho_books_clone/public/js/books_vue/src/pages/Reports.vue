@@ -48,6 +48,11 @@
         @click="exportProfitCSV">
         Export CSV
       </button>
+      <button v-if="activeReport === 'invoice_profit' && invoiceProfit.length"
+        class="books-btn" style="background:#EBFBEE;color:#2F9E44;border:1px solid #8CE99A"
+        @click="exportInvoiceProfitCSV">
+        Export CSV
+      </button>
     </div>
 
     <!-- P&L -->
@@ -491,6 +496,119 @@
       <div v-else class="empty-msg">{{profitRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
     </div>
 
+    <!-- Invoice-wise Profit (single + multi-select) -->
+    <div v-if="activeReport === 'invoice_profit'" class="books-card report-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div class="books-card-title" style="margin:0">Invoice Profitability</div>
+        <div v-if="invoiceProfit.length" style="font-size:12.5px;color:#868E96">
+          Total Profit ({{ invoiceProfit.length }} invoices): <span style="font-weight:700" :class="invoiceProfitTotals.profit>=0?'green':'red'">{{ fmtAmt(invoiceProfitTotals.profit) }}</span>
+        </div>
+      </div>
+      <div v-if="invoiceProfit.length" style="font-size:11.5px;color:#94a3b8;margin-bottom:12px">
+        Cost is estimated from current average valuation rate per item (excluding WIP warehouses); margins are indicative, not historical FIFO cost. Tick rows to see profit for a single invoice or any combination of selected invoices.
+      </div>
+      <template v-if="invoiceProfitLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
+      <template v-else-if="invoiceProfit.length">
+        <div v-if="selectedInvoices.size" class="books-card" style="background:#F8F9FF;border:1px solid #D0D9FF;padding:10px 14px;margin-bottom:12px;display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px">
+          <span><strong>{{ invoiceProfitSelectedTotals.count }}</strong> selected</span>
+          <span>Revenue: <span class="mono fw-700">{{ fmtAmt(invoiceProfitSelectedTotals.revenue) }}</span></span>
+          <span>Est. Cost: <span class="mono fw-700 red">{{ fmtAmt(invoiceProfitSelectedTotals.total_cost) }}</span></span>
+          <span>Profit: <span class="mono fw-700" :class="invoiceProfitSelectedTotals.profit>=0?'green':'red'">{{ fmtAmt(invoiceProfitSelectedTotals.profit) }}</span></span>
+        </div>
+        <table class="books-table aging-table" style="width:100%">
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" :checked="invoiceProfitAllSelected" @change="toggleAllInvoiceSelection" /></th>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th class="ta-r">Revenue</th>
+              <th class="ta-r">Est. Cost</th>
+              <th class="ta-r">Profit</th>
+              <th class="ta-r">Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in invoiceProfit" :key="row.invoice" :class="{ 'row-selected': selectedInvoices.has(row.invoice) }">
+              <td><input type="checkbox" :checked="selectedInvoices.has(row.invoice)" @change="toggleInvoiceSelection(row.invoice)" /></td>
+              <td class="mono-sm">
+                <a href="#" class="inv-detail-link" @click.prevent="openInvoiceDetail(row.invoice)">{{ row.invoice }}</a>
+                <span v-if="row.no_cost_lines" class="badge badge-muted" style="margin-left:6px;font-size:10px" title="One or more items on this invoice have no valuation or standard buying rate — cost/margin is understated">partial cost data</span>
+              </td>
+              <td class="mono-sm">{{ row.posting_date }}</td>
+              <td>{{ row.customer_name || row.customer }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.revenue) }}</td>
+              <td class="ta-r mono-sm red">{{ fmtAmt(row.total_cost) }}</td>
+              <td class="ta-r mono-sm fw-700" :class="row.profit>=0?'green':'red'">{{ fmtAmt(row.profit) }}</td>
+              <td class="ta-r mono-sm" :class="row.margin_pct>=0?'green':'red'">{{ Number(row.margin_pct||0).toFixed(1) }}%</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="aging-totals-row">
+              <td colspan="4" class="fw-700">TOTAL</td>
+              <td class="ta-r fw-700">{{ fmtAmt(invoiceProfitTotals.revenue) }}</td>
+              <td class="ta-r fw-700 red">{{ fmtAmt(invoiceProfitTotals.total_cost) }}</td>
+              <td class="ta-r fw-700" :class="invoiceProfitTotals.profit>=0?'green':'red'">{{ fmtAmt(invoiceProfitTotals.profit) }}</td>
+              <td class="ta-r fw-700" :class="invoiceProfitTotals.profit>=0?'green':'red'">{{ invoiceProfitTotals.revenue ? (invoiceProfitTotals.profit/invoiceProfitTotals.revenue*100).toFixed(1) : '0.0' }}%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </template>
+      <div v-else class="empty-msg">{{invoiceProfitRan ? 'No sales in this period.' : 'Run the report to see results.'}}</div>
+    </div>
+
+    <!-- Single-invoice item-level P&L drill-down -->
+    <Modal :show="invoiceDetailOpen" width="720px" :title="invoiceDetail ? `Profit & Loss — ${invoiceDetail.invoice.name}` : 'Profit & Loss'" @close="invoiceDetailOpen=false">
+      <template v-if="invoiceDetailLoading"><div class="loading-shimmer" style="height:180px;border-radius:8px"></div></template>
+      <template v-else-if="invoiceDetail">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:#868E96;margin-bottom:14px">
+          <span>Date: <strong style="color:#212529">{{ invoiceDetail.invoice.posting_date }}</strong></span>
+          <span>Customer: <strong style="color:#212529">{{ invoiceDetail.invoice.customer_name || invoiceDetail.invoice.customer }}</strong></span>
+          <span>Status: <strong style="color:#212529">{{ invoiceDetail.invoice.status }}</strong></span>
+        </div>
+        <div v-if="invoiceDetail.totals.no_cost_lines" style="font-size:11.5px;color:#94a3b8;margin-bottom:12px">
+          {{ invoiceDetail.totals.no_cost_lines }} item{{invoiceDetail.totals.no_cost_lines>1?'s':''}} below have no valuation or standard buying rate — their cost is shown as "—" and excluded from the totals.
+        </div>
+        <table class="books-table aging-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="ta-r">Qty</th>
+              <th class="ta-r">Rate</th>
+              <th class="ta-r">Revenue</th>
+              <th class="ta-r">Cost Rate</th>
+              <th class="ta-r">Total Cost</th>
+              <th class="ta-r">Profit</th>
+              <th class="ta-r">Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in invoiceDetail.items" :key="row.item_code">
+              <td>{{ row.item_name || row.item_code }}</td>
+              <td class="ta-r mono-sm">{{ fmtN(row.qty) }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.rate) }}</td>
+              <td class="ta-r mono-sm">{{ fmtAmt(row.revenue) }}</td>
+              <td class="ta-r mono-sm">{{ row.cost_rate ? fmtAmt(row.cost_rate) : '—' }}</td>
+              <td class="ta-r mono-sm red">{{ row.cost_rate ? fmtAmt(row.total_cost) : '—' }}</td>
+              <td class="ta-r mono-sm fw-700" :class="row.profit>=0?'green':'red'">{{ row.cost_rate ? fmtAmt(row.profit) : '—' }}</td>
+              <td class="ta-r mono-sm" :class="row.margin_pct>=0?'green':'red'">{{ row.cost_rate ? Number(row.margin_pct||0).toFixed(1)+'%' : '—' }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="aging-totals-row">
+              <td colspan="3" class="fw-700">TOTAL</td>
+              <td class="ta-r fw-700">{{ fmtAmt(invoiceDetail.totals.revenue) }}</td>
+              <td></td>
+              <td class="ta-r fw-700 red">{{ fmtAmt(invoiceDetail.totals.total_cost) }}</td>
+              <td class="ta-r fw-700" :class="invoiceDetail.totals.profit>=0?'green':'red'">{{ fmtAmt(invoiceDetail.totals.profit) }}</td>
+              <td class="ta-r fw-700" :class="invoiceDetail.totals.profit>=0?'green':'red'">{{ Number(invoiceDetail.totals.margin_pct||0).toFixed(1) }}%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </template>
+      <div v-else class="empty-msg">Couldn't load this invoice.</div>
+    </Modal>
+
     <!-- Trial Balance -->
     <div v-if="activeReport === 'tb'" class="books-card report-card">
       <div class="books-card-title">Trial Balance</div>
@@ -604,6 +722,7 @@
 import { ref, computed } from "vue";
 import { useFrappeCall, formatCurrency } from "../composables/useFrappe.js";
 import { apiGET, resolveCompany } from "../api/client.js";
+import Modal from "../components/Modal.vue";
 
 const fmt    = formatCurrency;
 const fmtAmt = (v) => v != null ? "₹" + Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -640,6 +759,26 @@ const profitReport   = ref([]);
 const profitLoading  = ref(false);
 const profitRan      = ref(false);
 
+const invoiceProfit        = ref([]);
+const invoiceProfitLoading = ref(false);
+const invoiceProfitRan     = ref(false);
+const selectedInvoices     = ref(new Set());
+
+const invoiceDetailOpen    = ref(false);
+const invoiceDetailLoading = ref(false);
+const invoiceDetail        = ref(null);
+async function openInvoiceDetail(invoiceName) {
+  invoiceDetailOpen.value = true;
+  invoiceDetailLoading.value = true;
+  invoiceDetail.value = null;
+  try {
+    invoiceDetail.value = await apiGET("zoho_books_clone.db.queries.get_invoice_profit_detail", { invoice: invoiceName });
+  } catch {
+    invoiceDetail.value = null;
+  }
+  invoiceDetailLoading.value = false;
+}
+
 const stockGl        = ref(null);
 const stockGlLoading = ref(false);
 const stockGlRan     = ref(false);
@@ -662,6 +801,35 @@ const profitMarginTotal = computed(() => {
   return revenue !== 0 ? (profit / revenue) * 100 : 0;
 });
 const noCostDataCount = computed(() => profitReport.value.filter(r => !r.cost_rate).length);
+
+const invoiceProfitSelectedRows = computed(() =>
+  invoiceProfit.value.filter(r => selectedInvoices.value.has(r.invoice))
+);
+const invoiceProfitAllSelected = computed(() =>
+  invoiceProfit.value.length > 0 && selectedInvoices.value.size === invoiceProfit.value.length
+);
+function toggleInvoiceSelection(invoice) {
+  const s = new Set(selectedInvoices.value);
+  if (s.has(invoice)) s.delete(invoice); else s.add(invoice);
+  selectedInvoices.value = s;
+}
+function toggleAllInvoiceSelection() {
+  selectedInvoices.value = invoiceProfitAllSelected.value
+    ? new Set()
+    : new Set(invoiceProfit.value.map(r => r.invoice));
+}
+function sumField(rows, field) { return rows.reduce((s, r) => s + Number(r[field] || 0), 0); }
+const invoiceProfitTotals = computed(() => ({
+  revenue: sumField(invoiceProfit.value, "revenue"),
+  total_cost: sumField(invoiceProfit.value, "total_cost"),
+  profit: sumField(invoiceProfit.value, "profit"),
+}));
+const invoiceProfitSelectedTotals = computed(() => ({
+  count: invoiceProfitSelectedRows.value.length,
+  revenue: sumField(invoiceProfitSelectedRows.value, "revenue"),
+  total_cost: sumField(invoiceProfitSelectedRows.value, "total_cost"),
+  profit: sumField(invoiceProfitSelectedRows.value, "profit"),
+}));
 
 async function runReport() {
   const company = await resolveCompany();
@@ -705,6 +873,13 @@ async function runReport() {
     try { profitReport.value = await apiGET("zoho_books_clone.db.queries.get_profit_wise_report", args) || []; }
     catch { profitReport.value = []; }
     profitLoading.value = false;
+  }
+  if (activeReport.value === "invoice_profit") {
+    invoiceProfitLoading.value = true; invoiceProfitRan.value = true;
+    selectedInvoices.value = new Set();
+    try { invoiceProfit.value = await apiGET("zoho_books_clone.db.queries.get_invoice_wise_profit", args) || []; }
+    catch { invoiceProfit.value = []; }
+    invoiceProfitLoading.value = false;
   }
   if (activeReport.value === "stockgl") {
     stockGlLoading.value = true; stockGlRan.value = true;
@@ -759,6 +934,22 @@ function exportProfitCSV() {
   URL.revokeObjectURL(url);
 }
 
+function exportInvoiceProfitCSV() {
+  const header = ["Invoice","Date","Customer","Revenue","Est. Cost","Profit","Margin %"].join(",");
+  const rows = invoiceProfitSelectedRows.value.length ? invoiceProfitSelectedRows.value : invoiceProfit.value;
+  const lines = rows.map(r =>
+    [r.invoice, r.posting_date, r.customer_name || r.customer, r.revenue, r.total_cost, r.profit, Number(r.margin_pct||0).toFixed(1)].join(",")
+  );
+  const csv = [header, ...lines].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "invoice_profitability_" + fromDate.value + "_to_" + toDate.value + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function exportAgingCSV() {
   const isAR = activeReport.value === "ar";
   const rows = isAR ? arAging.value : apAging.value;
@@ -787,6 +978,7 @@ const reports = [
   { key: "items", label: "Item-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>` },
   { key: "customers", label: "Customer-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
   { key: "profit", label: "Profit-wise", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>` },
+  { key: "invoice_profit", label: "Invoice Profitability", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="17" x2="15" y2="17"/><line x1="9" y1="13" x2="12" y2="13"/></svg>` },
   { key: "ar",  label: "AR Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
   { key: "ap",  label: "AP Aging",       icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>` },
   { key: "tb",  label: "Trial Balance",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },
@@ -795,6 +987,9 @@ const reports = [
 </script>
 
 <style scoped>
+.row-selected { background: #F8F9FF; }
+.inv-detail-link { color: var(--accent, #4C6EF5); text-decoration: none; font-weight: 600; }
+.inv-detail-link:hover { text-decoration: underline; }
 .page-reports { display: flex; flex-direction: column; gap: 16px; padding: 24px; }
 .report-tabs  { display: flex; gap: 8px; flex-wrap: wrap; }
 .report-tab {

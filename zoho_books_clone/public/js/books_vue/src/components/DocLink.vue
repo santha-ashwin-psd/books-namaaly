@@ -1,5 +1,5 @@
 <template>
-  <router-link v-if="to" :to="to" class="doc-link" :class="{ mono: monoStyle }" @click.stop>
+  <router-link v-if="to" :to="to" target="_blank" class="doc-link" :class="{ mono: monoStyle }" @click.stop>
     <slot>{{ name }}</slot>
   </router-link>
   <span v-else class="doc-link-disabled" :class="{ mono: monoStyle }">

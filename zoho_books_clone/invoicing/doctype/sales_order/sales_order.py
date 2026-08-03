@@ -20,7 +20,13 @@ class SalesOrder(Document):
 
     def _calculate_totals(self):
         for item in (self.items or []):
-            item.amount = round(flt(item.qty) * flt(item.rate), 2)
+            base = round(flt(item.qty) * flt(item.rate), 2)
+            item.discount_percentage = flt(item.discount_percentage)
+            if item.discount_percentage:
+                item.discount_amount = round(base * item.discount_percentage / 100, 2)
+            else:
+                item.discount_amount = flt(item.discount_amount)
+            item.amount = round(base - item.discount_amount, 2)
         net = sum(flt(i.amount) for i in (self.items or []))
         for tax in (self.taxes or []):
             if flt(tax.rate) and not flt(tax.tax_amount):

@@ -110,7 +110,10 @@
           <td style="white-space:nowrap">
             <span :style="isOverdue(row) ? 'color:var(--bx-red);font-weight:700' : 'color:var(--bx-muted)'" style="font-size:12.5px">{{ fmtDate(row.planned_end_date) }}<span v-if="isOverdue(row)"> ▲</span></span>
           </td>
-          <td><span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span></td>
+          <td>
+            <span class="bomx-badge" :class="statusClass(row)">{{ row.status }}</span>
+            <span v-if="isLossReconciledRow(row)" class="bomx-badge" style="background:var(--bx-amberS);color:var(--bx-amber);margin-left:4px" title="Completed with the shortfall reconciled as process loss">Loss-Reconciled</span>
+          </td>
           <td>
             <div style="display:flex;align-items:center;gap:8px">
               <div class="bomx-prog-bar"><div class="bomx-prog-fill" :style="{width: progressPctnew(row)+'%', background: progressColor(row)}"></div></div>
@@ -138,6 +141,7 @@
                   <span class="mono" v-if="!isNew">{{ wo.name }}</span>
                   <span v-if="!isNew">•</span>
                   <span class="bomx-badge" :class="statusClass(wo)" style="font-size:11px" v-if="!isNew">{{ wo.status }}</span>
+                  <span v-if="!isNew && isLossReconciledRow(wo)" class="bomx-badge" style="font-size:11px;background:var(--bx-amberS);color:var(--bx-amber)" title="Completed with the shortfall reconciled as process loss">Loss-Reconciled</span>
                 </div>
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -148,7 +152,7 @@
                 <button v-if="!isNew && wo.docstatus===2 && amendedInto" class="bomx-btn bomx-btn-light" @click="router.push('/manufacturing/work-order/' + amendedInto)">
                   View Amended {{ amendedInto }}
                 </button>
-                <button v-if="!isNew && (wo.docstatus===0 || wo.docstatus===2)" class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" @click="deleteWO" :disabled="submitting || !$canDelete('inventory')">
+                <button v-if="!isNew && (wo.docstatus===0 || wo.docstatus===2)" class="bomx-btn bomx-btn-ghost-inv" style="color:#ffffff;background-color:red; border-color:rgba(201,42,42,.3)" @click="deleteWO" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Deleting…' : 'Delete Work Order' }}
                 </button>
                 <button v-if="!isNew && wo.docstatus===1 && flt(wo.produced_qty)===0" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelWO" :disabled="submitting || !$canDelete('inventory')">
@@ -474,12 +478,15 @@
                     <div :style="{width: progressPct+'%'}" style="height:100%;background:linear-gradient(135deg,var(--bx-mfgL),var(--bx-mfg))"></div>
                   </div>
                   <div style="display:flex;gap:24px;margin-top:16px">
-                    <div><div style="font-size:11px;color:var(--bx-muted);text-transform:uppercase;font-weight:600">Remaining</div><div style="font-size:16px;font-weight:700">{{ fmt(remainingQty) }}</div></div>
+                    <div><div style="font-size:11px;color:var(--bx-muted);text-transform:uppercase;font-weight:600">{{ remainingCardLabel }}</div><div style="font-size:16px;font-weight:700">{{ remainingCardValue }}</div></div>
                     <div><div style="font-size:11px;color:var(--bx-red);text-transform:uppercase;font-weight:600">Process Loss</div><div style="font-size:16px;font-weight:700;color:var(--bx-red)">{{ fmt(wo.process_loss_qty) }}</div></div>
+                  </div>
+                  <div class="bomx-field-hint" style="margin-top:10px" v-if="wo.status==='In Process' && defaultCloseOnLossReconciliation && canCompleteMore">
+                    Manufacturing Settings default new completions to closing this batch via loss reconciliation — the next completion recorded here will pre-check that option.
                   </div>
                 </div>
 
-                <div class="bomx-prod-card" v-if="wo.docstatus===1">
+                <div class="bomx-prod-card" v-if="wo.docstatus===1 && wo.status!=='Completed'">
                   <div class="bomx-section-lbl">Actions</div>
                   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
                     <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped' || !$canEdit('inventory')">
@@ -716,6 +723,17 @@
             <input class="bomx-fi" type="number" v-model="completeForm.process_loss_qty" min="0" step="any" style="width:100%"/>
           </div>
         </div>
+        <div style="margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="checkbox" v-model="completeForm.close_on_loss_reconciliation"/>
+            This completes the batch — allow the shortfall to be covered by Process Loss above
+          </label>
+          <div class="bomx-field-hint" v-if="completeForm.close_on_loss_reconciliation" :style="lossReconciliationExceeds ? 'color:var(--bx-red)' : ''">
+            Produced + Process Loss so far: {{ fmt(lossReconciliationTotal) }} of {{ fmt(wo.qty) }} planned
+            <span v-if="lossReconciliationExceeds"> — exceeds planned qty; reduce Qty Manufactured or Process Loss before completing.</span>
+            <span v-else> — Process Loss above has been pre-filled with the remaining shortfall; edit it if the actual loss was different.</span>
+          </div>
+        </div>
         <template v-if="productionItemHasBatch">
           <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:14px">
             <div>
@@ -778,7 +796,7 @@
       </div>
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeCompleteModal" :disabled="actionLoading">Cancel</button>
-        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading || !!qtyManufacturedError || !$canEdit('inventory')">
+        <button class="bomx-btn bomx-btn-mfg" @click="submitComplete" :disabled="actionLoading || !!qtyManufacturedError || lossReconciliationExceeds || !$canEdit('inventory')">
           {{ actionLoading==='complete' ? 'Completing…' : 'Complete' }}
         </button>
       </div>
@@ -854,7 +872,7 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   try {
     const fields = ["name", "production_item", "item_name", "bom", "qty", "stock_uom",
-                     "produced_qty", "status", "docstatus", "modified",
+                     "produced_qty", "process_loss_qty", "status", "docstatus", "modified",
                      "planned_start_date", "planned_end_date"];
     const r = await apiList("Work Order", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
@@ -881,6 +899,17 @@ function statusClass(row) {
   return "badge-inprocess";
 }
 
+// A Completed row whose produced_qty falls short of qty, with
+// process_loss_qty covering that gap, was finished via loss reconciliation
+// rather than fully produced. Everywhere this row is listed (main table,
+// dashboard) it otherwise looks identical to a plain 100%-produced
+// completion -- only the detail page's own stat card told the two apart.
+function isLossReconciledRow(row) {
+  if (row.status !== "Completed") return false;
+  const shortfall = (Number(row.qty) || 0) - (Number(row.produced_qty) || 0);
+  return shortfall > 0.0001 && (Number(row.process_loss_qty) || 0) > 0.0001;
+}
+
 function fmtNum(n) {
   if (n === undefined || n === null) return "0";
   return Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
@@ -898,6 +927,7 @@ function isOverdue(row) {
   return new Date(row.planned_end_date) < new Date(new Date().toDateString());
 }
 function progressPctnew(row) {
+  if (row.status === "Completed") return 100;
   const qty = Number(row.qty) || 0;
   if (!qty) return 0;
   return Math.min(100, Math.round((Number(row.produced_qty) || 0) / qty * 100));
@@ -1186,6 +1216,7 @@ const warnBomNotDefault = ref(true);
 const warnOnMissingJobCards = ref(true);
 const jobCardHoursPerDay = ref(8);
 const capacityPlanningForDays = ref(30);
+const defaultCloseOnLossReconciliation = ref(false);
 async function fetchManufacturingDefaults() {
   try {
     manufacturingDefaults = await apiCall(
@@ -1197,6 +1228,7 @@ async function fetchManufacturingDefaults() {
       warnOnMissingJobCards.value = !!manufacturingDefaults.warn_on_missing_job_cards;
       jobCardHoursPerDay.value = flt(manufacturingDefaults.job_card_hours_per_day) || 8;
       capacityPlanningForDays.value = flt(manufacturingDefaults.capacity_planning_for_days) || 30;
+      defaultCloseOnLossReconciliation.value = !!manufacturingDefaults.default_close_on_loss_reconciliation;
     }
   } catch (e) {
     // non-fatal — settings may not be configured yet
@@ -1777,6 +1809,21 @@ async function resumeWO() {
 }
 
 const remainingQty = computed(() => flt(wo.value.qty) - flt(wo.value.produced_qty));
+// The Production Progress stat card used to always label this figure
+// "Remaining" and print remainingQty as-is. That reads fine while
+// remainingQty >= 0, but a Work Order completed via the Over-Production
+// Allowance % ends up with produced_qty > qty, so remainingQty goes
+// negative -- the card then showed "REMAINING" with a value like "-2.00",
+// which looks like a bug rather than a completed over-run. Split the
+// label and the displayed (always non-negative) value into their own
+// computeds so the three real states -- over-produced, reconciled-as-loss,
+// still-remaining -- each get an accurate label.
+const remainingCardLabel = computed(() => {
+  if (remainingQty.value < -0.0001) return "Over-Produced";
+  if (wo.value.status === "Completed" && remainingQty.value > 0.0001) return "Reconciled as Loss";
+  return "Remaining";
+});
+const remainingCardValue = computed(() => fmt(Math.abs(remainingQty.value)));
 // Manufacturing Settings' Over-Production Allowance % lets complete_work_order
 // (server-side) accept qty_manufactured beyond the planned qty. The Complete
 // modal used to hard-cap at remainingQty regardless of this setting, which
@@ -1802,7 +1849,14 @@ const canCompleteMore = computed(() => maxCompletableQty.value > 0.0001);
 const qtyManufacturedError = computed(() => {
   const qty = flt(completeForm.value.qty_manufactured);
   if (qty > maxCompletableQty.value + 0.0001) {
-    return `Cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value > 0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}`;
+    if (overProductionAllowancePct.value > 0) {
+      return `Cannot exceed ${fmt(maxCompletableQty.value)} (planned qty + ${overProductionAllowancePct.value}% over-production allowance)`;
+    }
+    // No over-production allowance configured -- if this shortfall is
+    // actually process loss (e.g. a decoction/extraction batch), the way
+    // out is the checkbox below, not a higher Qty Manufactured. Point at
+    // it here instead of leaving the person to discover it on their own.
+    return `Cannot exceed ${fmt(maxCompletableQty.value)}. If the difference is process loss, check "completes the batch" below instead of increasing this.`;
   }
   return "";
 });
@@ -1817,11 +1871,44 @@ const productionItemHasBatch = computed(() => {
 async function issueMaterials() {
   actionLoading.value = "issue";
   try {
-    const seName = await apiCall("zoho_books_clone.manufacturing.work_order_engine.issue_materials", { work_order: wo.value.name });
-    toast(`Materials issued via ${seName}`);
+    // suppressMessages: true -- the backend's partial-issue notice
+    // (frappe.msgprint(..., alert=True) when some raw materials had to be
+    // skipped for insufficient stock) would otherwise auto-toast for a
+    // fixed 6s and could time out before someone's read the full list of
+    // skipped items. Route it through the confirm dialog instead, which
+    // stays open until acknowledged.
+    const result = await apiCall(
+      "zoho_books_clone.manufacturing.work_order_engine.issue_materials",
+      { work_order: wo.value.name },
+      undefined,
+      { suppressMessages: true }
+    );
+    const seName = result?.message;
+    const partial = (result?.serverMessages || [])[0];
+    if (partial) {
+      await confirm({
+        title: "Materials Partially Issued",
+        body: `Materials issued via ${esc(seName)}.<br><br>${esc(partial.text)}`,
+        okLabel: "OK",
+        okStyle: "primary",
+        hideCancel: true,
+      });
+    } else {
+      toast(`Materials issued via ${seName}`);
+    }
     await loadWO();
   } catch (e) {
-    toast(e.message, "error");
+    // "Nothing could be issued" (e.g. every pending raw material is out of
+    // stock at its source warehouse) is a longer, multi-item message that
+    // was disappearing in the default error toast before it could be fully
+    // read -- same fix as the partial-issue case above.
+    await confirm({
+      title: "Could Not Issue Materials",
+      body: esc(e.message),
+      okLabel: "OK",
+      okStyle: "primary",
+      hideCancel: true,
+    });
   }
   actionLoading.value = false;
 }
@@ -2069,7 +2156,16 @@ function createJobCardFor(op) {
       // this Work Order needs (e.g. 40 units of the sub-assembly), not the
       // Work Order's total finished-goods qty -- those can differ once a
       // BOM's own quantity/ratio is involved.
-      for_quantity: (op.sub_assembly_bom && op.sub_assembly_qty) ? op.sub_assembly_qty : (wo.value.qty || 1),
+      //
+      // For a non-sub-assembly operation, default to what's actually left
+      // to produce (remainingQty), not the Work Order's full planned qty --
+      // opening this for a later operation on an already-partially-
+      // completed WO (say 8/10 produced) should default to "for 2", not
+      // "for 10". Falls back to the full qty only if there's nothing left
+      // (e.g. a card opened after the WO is fully produced).
+      for_quantity: (op.sub_assembly_bom && op.sub_assembly_qty)
+        ? op.sub_assembly_qty
+        : (remainingQty.value > 0.0001 ? remainingQty.value : (wo.value.qty || 1)),
       sub_assembly_bom: op.sub_assembly_bom || "",
       sub_assembly_item: op.sub_assembly_item || "",
     },
@@ -2097,7 +2193,32 @@ const completeForm = ref({
   manufacturing_date: "",
   expiry_date: "",
   scrap_items: [],
+  close_on_loss_reconciliation: false,
 });
+
+// Total process loss this run: the manual/BOM-derived field plus any scrap
+// rows tagged "process loss" -- mirrors how the server folds row-level
+// process loss into process_loss_qty before doing any completion math (see
+// complete_work_order's scrap_process_loss_qty), so this stays consistent
+// with what the server will actually check.
+const totalProcessLossThisRun = computed(() => {
+  const rowLoss = (completeForm.value.scrap_items || [])
+    .filter(s => s.is_process_loss)
+    .reduce((sum, s) => sum + flt(s.qty), 0);
+  return flt(completeForm.value.process_loss_qty) + rowLoss;
+});
+
+// Live "produced + loss vs planned" total for the loss-reconciliation
+// checkbox -- cumulative produced_qty and process_loss_qty already on the
+// Work Order, plus this run's qty_manufactured and total process loss.
+const lossReconciliationTotal = computed(() =>
+  flt(wo.value.produced_qty) + flt(completeForm.value.qty_manufactured) +
+  flt(wo.value.process_loss_qty) + totalProcessLossThisRun.value
+);
+const lossReconciliationExceeds = computed(() =>
+  completeForm.value.close_on_loss_reconciliation &&
+  lossReconciliationTotal.value > flt(wo.value.qty) + 0.0001
+);
 
 // Derive the BOM-proportional process loss & scrap-item quantities for a
 // given Qty Manufactured. This is only the FALLBACK now -- used when no
@@ -2165,6 +2286,7 @@ async function openCompleteModal() {
     manufacturing_date: new Date().toISOString().slice(0, 10),
     expiry_date: "",
     scrap_items: [...jcRows, ...bomOnlyRows],
+    close_on_loss_reconciliation: defaultCloseOnLossReconciliation.value,
   };
   showCompleteModal.value = true;
 }
@@ -2185,6 +2307,22 @@ function onToggleProcessLoss(row) {
 // a partial completion (qty edited down from the prefilled full remaining
 // qty) would silently submit scrap/process-loss figures sized for the
 // original, larger qty.
+// The checkbox's label previously implied it would auto-fill the shortfall
+// into Process Loss, but it only ever changed what counted toward
+// completion server-side -- the person still had to type the exact loss
+// qty by hand. Pre-fill Process Loss with the remaining shortfall the
+// moment the box is checked (still a plain editable number afterward, not
+// bound/locked to this value) so the checkbox visibly does what its label
+// now says. Only fires on the transition to checked, so it never clobbers
+// a value the person already typed in and then happens to re-check.
+watch(() => completeForm.value.close_on_loss_reconciliation, (checked) => {
+  if (!checked || !showCompleteModal.value) return;
+  const shortfall = remainingQty.value - flt(completeForm.value.qty_manufactured);
+  if (shortfall > 0.0001) {
+    completeForm.value.process_loss_qty = flt(shortfall.toFixed(4));
+  }
+});
+
 watch(() => completeForm.value.qty_manufactured, (newQty) => {
   if (!showCompleteModal.value) return;
   const qtyMfg = flt(newQty);
@@ -2208,13 +2346,37 @@ watch(() => completeForm.value.qty_manufactured, (newQty) => {
 async function submitComplete() {
   const qty = flt(completeForm.value.qty_manufactured);
   if (qty <= 0) return toast("Qty Manufactured must be greater than zero", "error");
-  if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value>0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}`, "error");
+
+  // Re-sync produced_qty/process_loss_qty from the server right before
+  // validating, instead of trusting whatever was loaded when the modal
+  // opened. This is a narrowing, not a fix -- the backend's row lock in
+  // complete_work_order() remains the real guard -- but it closes most of
+  // the everyday window where a teammate completed the same Work Order
+  // moments ago and the modal is still showing stale numbers. Deliberately
+  // NOT calling loadWO() here: that resets Job Cards/Stock Entries/Packing
+  // Slips/reconciliation state, which would be disruptive mid-modal for no
+  // benefit (this action only needs the two qty fields refreshed).
+  try {
+    const fresh = await apiCall("frappe.client.get_value", {
+      doctype: "Work Order",
+      filters: wo.value.name,
+      fieldname: ["produced_qty", "process_loss_qty", "qty", "docstatus"],
+    });
+    if (fresh) Object.assign(wo.value, fresh);
+  } catch (e) {
+    // Non-fatal: fall through and let the backend's own lock-guarded check
+    // be the final word, same as before this refresh existed.
+  }
+
+  if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value>0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}. This Work Order's numbers were just refreshed -- someone may have recorded another completion.`, "error");
+  if (lossReconciliationExceeds.value) return toast(`Produced qty plus process loss (${fmt(lossReconciliationTotal.value)}) would exceed the planned qty (${fmt(wo.value.qty)}). Cannot consume more raw material than was issued for this batch.`, "error");
 
   // Warn on Incomplete Job Cards (Manufacturing Settings): if this completion
   // would finish the Work Order but one or more Job Cards are still open,
   // give the user a chance to back out and close them first — otherwise
   // they're silently force-completed by the backend once the WO is done.
-  const willFinish = (wo.value.produced_qty || 0) + qty >= flt(wo.value.qty) - 0.0001;
+  const willFinish = ((wo.value.produced_qty || 0) + qty >= flt(wo.value.qty) - 0.0001) ||
+    (completeForm.value.close_on_loss_reconciliation && lossReconciliationTotal.value >= flt(wo.value.qty) - 0.0001);
   if (warnOnMissingJobCards.value && willFinish) {
     const incomplete = (jobCards.value || []).filter(jc => jc.status !== "Completed" && jc.status !== "Cancelled");
     if (incomplete.length) {
@@ -2243,13 +2405,20 @@ async function submitComplete() {
       batch_no: completeForm.value.batch_no || undefined,
       manufacturing_date: completeForm.value.manufacturing_date || undefined,
       expiry_date: completeForm.value.expiry_date || undefined,
+      close_on_loss_reconciliation: completeForm.value.close_on_loss_reconciliation ? 1 : 0,
     });
     toast("Work Order completion recorded");
     showCompleteModal.value = false;
     await loadWO();
     loadList();
   } catch (e) {
-    toast(e.message, "error");
+    const raceGuardHit = /exceeds the remaining planned qty|exceed the planned qty/i.test(e.message || "");
+    if (raceGuardHit) {
+      toast(`${e.message} Someone else may have just recorded a completion on this Work Order -- refreshing the current numbers.`, "error");
+      await loadWO();
+    } else {
+      toast(e.message, "error");
+    }
   }
   actionLoading.value = false;
 }

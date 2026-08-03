@@ -510,6 +510,13 @@
                 </div>
               </div>
             </div>
+            <div v-if="selectedVendor.notes" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
+              <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" :style="!collapsed.notes?'border-bottom:1px solid #F3F4F6':''" @click="collapsed.notes=!collapsed.notes">
+                <span style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:0.8px">INTERNAL NOTES</span>
+                <svg :style="{transition:'transform 0.2s',transform:collapsed.notes?'rotate(-90deg)':'rotate(0deg)'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+              </div>
+              <div v-show="!collapsed.notes" style="padding:14px 16px;font-size:12.5px;color:#374151;white-space:pre-wrap;line-height:1.6;overflow-wrap: break-word;">{{selectedVendor.notes}}</div>
+            </div>
             <div style="padding:4px 0">
               <button @click="confirmDelete(selectedVendor)" :disabled="!$canDelete('customers')" :title="!$canDelete('customers') ? 'Not permitted' : ''" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:12.5px;display:flex;align-items:center;gap:6px">
                 <span v-html="icon('trash',13)"></span> Delete Vendor
@@ -750,7 +757,7 @@
         </div>
 
         <div class="inv-view-tabs">
-          <button v-for="t in [{k:'overview',l:'Overview'},{k:'address',l:'Address'},{k:'other',l:'Other Details'}]"
+          <button v-for="t in [{k:'overview',l:'Overview'},{k:'address',l:'Address'},{k:'other',l:'Other Details'},{k:'remarks',l:'Remarks'}]"
             :key="t.k" @click="drawerTab=t.k"
             class="inv-vtab" :class="{active: drawerTab===t.k}">
             {{t.l}}
@@ -1004,6 +1011,12 @@
 
           </template>
 
+          <!-- Remarks Tab -->
+          <template v-else-if="drawerTab==='remarks'">
+            <div class="inv-sec-lbl" style="margin-top:0">Internal Notes</div>
+            <textarea v-model="form.notes" class="inv-fi" rows="14" style="resize:vertical;line-height:1.6;min-height:280px" placeholder="Add any internal notes about this vendor — payment behaviour, communication preferences, account history…"></textarea>
+          </template>
+
         </div>
 
         <div class="inv-dfooter" style="border-top:1px solid #e8ecf0;padding:14px 24px;background:#fafbfd">
@@ -1177,7 +1190,7 @@ const deleting      = ref(false);
 const accounts      = ref([]);
 const pendingAddresses = ref([]);
 
-const collapsed = reactive({ address: false, otherDetails: false });
+const collapsed = reactive({ address: false, otherDetails: false, notes: false });
 
 const SUPPLIER_TYPES = ["Company", "Individual", "Dealer", "Distributor"];
 
@@ -1216,7 +1229,7 @@ const form = reactive({
   ship_address_line1: "", ship_address_line2: "",
   ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
   default_payable_account: "", disabled: 0,
-  tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0,
+  tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0, notes: "",
 });
 
 const formErrors = reactive({});
@@ -1301,7 +1314,7 @@ function resetForm() {
     ship_address_line1: "", ship_address_line2: "",
     ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
     default_payable_account: "", disabled: 0,
-    tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0,
+    tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0, notes: "",
   });
   Object.keys(formErrors).forEach(k => delete formErrors[k]);
 }
@@ -1371,6 +1384,7 @@ async function openEdit(name) {
       tds_section: doc.tds_section || "",
       pan: doc.pan || "",
       opening_balance: doc.opening_balance || 0,
+      notes: doc.notes || "",
     });
   } catch (e) {
     toast("Could not load vendor: " + (e.message || e), "error");
@@ -1470,6 +1484,7 @@ async function saveVendor() {
       tds_section: form.tds_section,
       pan: form.pan.trim(),
       opening_balance: parseFloat(form.opening_balance) || 0,
+      notes: form.notes.trim(),
     };
     let doc_to_save = doc;
     if (drawerMode.value === "edit") {
@@ -1514,6 +1529,10 @@ async function saveVendor() {
     toast(drawerMode.value === "edit" ? "Vendor updated!" : "Vendor created!");
     showDrawer.value = false;
     await load();
+    if (savedName) {
+      const refreshed = list.value.find(v => v.name === savedName) || { name: savedName };
+      await selectVendor(refreshed);
+    }
   } catch (e) {
     toast(e.message || "Could not save vendor", "error");
   } finally { saving.value = false; }

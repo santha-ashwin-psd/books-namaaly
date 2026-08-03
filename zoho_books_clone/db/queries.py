@@ -521,6 +521,153 @@ def get_customer_wise_sales(company: str, from_date: str, to_date: str) -> list[
 
 
 @frappe.whitelist()
+def get_invoice_wise_profit(company: str, from_date: str, to_date: str) -> list[dict]:
+    """
+    Invoice-wise gross profit for a period: revenue vs. estimated cost and
+    margin % per Sales Invoice, so profit can be reviewed for a single
+    invoice or summed across any set of selected invoices on the client.
+
+    Same cost basis as get_profit_wise_report(): current average valuation
+    rate per item (Bin table, sellable warehouses only), falling back to
+    the item's standard_buying_rate. Not a historical/FIFO cost at time of
+    sale, since Sales Invoice Item does not itself store a cost field.
+    """
+    wip_warehouses = set(
+        frappe.get_all(
+            "Work Order",
+            filters={"wip_warehouse": ["is", "set"]},
+            pluck="wip_warehouse",
+        )
+    )
+    default_wip = frappe.db.get_single_value("Manufacturing Settings", "default_wip_warehouse")
+    if default_wip:
+        wip_warehouses.add(default_wip)
+
+    wip_cond = ""
+    params = {"company": company, "from_date": from_date, "to_date": to_date}
+    if wip_warehouses:
+        wip_cond = "AND b.warehouse NOT IN %(wip_warehouses)s"
+        params["wip_warehouses"] = tuple(wip_warehouses)
+
+    return frappe.db.sql(f"""
+        SELECT
+            si.name                              AS invoice,
+            si.posting_date                      AS posting_date,
+            si.customer                          AS customer,
+            si.customer_name                     AS customer_name,
+            si.status                            AS status,
+            si.grand_total                       AS grand_total,
+            SUM(sii.amount)                      AS revenue,
+            SUM(sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0)) AS total_cost,
+            SUM(sii.amount) - SUM(sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0)) AS profit,
+            CASE WHEN SUM(sii.amount) != 0
+                 THEN (SUM(sii.amount) - SUM(sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0)))
+                      / SUM(sii.amount) * 100
+                 ELSE 0 END                      AS margin_pct,
+            SUM(CASE WHEN ic.avg_valuation_rate IS NULL AND i.standard_buying_rate = 0 THEN 1 ELSE 0 END) AS no_cost_lines
+        FROM `tabSales Invoice Item` sii
+        JOIN `tabSales Invoice` si ON si.name = sii.parent AND sii.parenttype = 'Sales Invoice'
+        JOIN `tabItem` i ON i.name = sii.item_code
+        LEFT JOIN (
+            SELECT b.item_code,
+                   CASE WHEN SUM(b.actual_qty) > 0
+                        THEN SUM(b.stock_value) / SUM(b.actual_qty)
+                        ELSE 0 END AS avg_valuation_rate
+            FROM `tabBin` b
+            WHERE 1 = 1 {wip_cond}
+            GROUP BY b.item_code
+        ) ic ON ic.item_code = sii.item_code
+        WHERE si.company      = %(company)s
+          AND si.docstatus    = 1
+          AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+        GROUP BY si.name, si.posting_date, si.customer, si.customer_name, si.status, si.grand_total
+        ORDER BY si.posting_date DESC, si.name DESC
+    """, params, as_dict=True)
+
+
+@frappe.whitelist()
+def get_invoice_profit_detail(invoice: str) -> dict:
+    """
+    Item-level profit/loss breakdown for a single Sales Invoice: every line
+    item with qty, rate, revenue, estimated cost and profit, plus an
+    invoice-level total. Same cost basis (current avg valuation rate,
+    WIP warehouses excluded, standard_buying_rate fallback) as
+    get_invoice_wise_profit()/get_profit_wise_report(), so figures line up
+    with the summary report.
+    """
+    si = frappe.db.get_value(
+        "Sales Invoice", invoice,
+        ["name", "posting_date", "customer", "customer_name", "status", "company", "grand_total"],
+        as_dict=True,
+    )
+    if not si:
+        frappe.throw(frappe._("Sales Invoice {0} not found").format(invoice))
+
+    wip_warehouses = set(
+        frappe.get_all(
+            "Work Order",
+            filters={"wip_warehouse": ["is", "set"]},
+            pluck="wip_warehouse",
+        )
+    )
+    default_wip = frappe.db.get_single_value("Manufacturing Settings", "default_wip_warehouse")
+    if default_wip:
+        wip_warehouses.add(default_wip)
+
+    wip_cond = ""
+    params = {"invoice": invoice}
+    if wip_warehouses:
+        wip_cond = "AND b.warehouse NOT IN %(wip_warehouses)s"
+        params["wip_warehouses"] = tuple(wip_warehouses)
+
+    items = frappe.db.sql(f"""
+        SELECT
+            sii.item_code                        AS item_code,
+            sii.item_name                        AS item_name,
+            sii.uom                              AS uom,
+            sii.qty                              AS qty,
+            sii.rate                              AS rate,
+            sii.amount                           AS revenue,
+            COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS cost_rate,
+            sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS total_cost,
+            sii.amount - sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0) AS profit,
+            CASE WHEN sii.amount != 0
+                 THEN (sii.amount - sii.qty * COALESCE(ic.avg_valuation_rate, i.standard_buying_rate, 0))
+                      / sii.amount * 100
+                 ELSE 0 END                      AS margin_pct
+        FROM `tabSales Invoice Item` sii
+        JOIN `tabItem` i ON i.name = sii.item_code
+        LEFT JOIN (
+            SELECT b.item_code,
+                   CASE WHEN SUM(b.actual_qty) > 0
+                        THEN SUM(b.stock_value) / SUM(b.actual_qty)
+                        ELSE 0 END AS avg_valuation_rate
+            FROM `tabBin` b
+            WHERE 1 = 1 {wip_cond}
+            GROUP BY b.item_code
+        ) ic ON ic.item_code = sii.item_code
+        WHERE sii.parent = %(invoice)s AND sii.parenttype = 'Sales Invoice'
+        ORDER BY sii.idx
+    """, params, as_dict=True)
+
+    revenue    = sum(flt(r.revenue) for r in items)
+    total_cost = sum(flt(r.total_cost) for r in items)
+    profit     = revenue - total_cost
+
+    return {
+        "invoice": si,
+        "items": items,
+        "totals": {
+            "revenue": revenue,
+            "total_cost": total_cost,
+            "profit": profit,
+            "margin_pct": (profit / revenue * 100) if revenue else 0,
+            "no_cost_lines": sum(1 for r in items if not r.cost_rate),
+        },
+    }
+
+
+@frappe.whitelist()
 def get_profit_wise_report(company: str, from_date: str, to_date: str) -> list[dict]:
     """
     Item-wise gross profit for a period: revenue vs. estimated cost and margin %.

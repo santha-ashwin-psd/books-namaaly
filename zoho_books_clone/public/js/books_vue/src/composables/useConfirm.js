@@ -10,17 +10,19 @@ const state = reactive({
   okLabel:     "Confirm",
   cancelLabel: "Cancel",
   okStyle:     "danger",     // "danger" | "primary"
+  hideCancel:  false,        // true -> single-button "OK" alert dialog
   resolve:     null,
 });
 
 export function useConfirm() {
-  function confirm({ title = "Are you sure?", body = "", okLabel = "Confirm", cancelLabel = "Cancel", okStyle = "danger" } = {}) {
+  function confirm({ title = "Are you sure?", body = "", okLabel = "Confirm", cancelLabel = "Cancel", okStyle = "danger", hideCancel = false } = {}) {
     return new Promise((resolve) => {
       state.title       = title;
       state.body        = body;
       state.okLabel     = okLabel;
       state.cancelLabel = cancelLabel;
       state.okStyle     = okStyle;
+      state.hideCancel  = hideCancel;
       state.resolve     = resolve;
       state.open        = true;
     });

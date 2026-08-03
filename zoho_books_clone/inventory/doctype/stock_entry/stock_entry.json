@@ -27,6 +27,7 @@
   "value_difference",
   "operating_cost_absorbed",
   "manufacturing_variance_loss",
+  "process_loss_qty",
   "sec_misc",
   "remarks",
   "col4",
@@ -153,6 +154,15 @@
    "no_copy": 1,
    "default": "0",
    "description": "Set automatically by complete_work_order() when recoverable scrap value exceeds the raw material + operating cost pool for this run, so the finished good's rate would otherwise be clamped below zero. This is the shortfall that could not be absorbed into FG valuation -- it is written off to a loss/variance account instead of being left as a stranded balance in Work In Progress."
+  },
+  {
+   "fieldname": "process_loss_qty",
+   "fieldtype": "Float",
+   "label": "Process Loss Qty",
+   "read_only": 1,
+   "no_copy": 1,
+   "default": "0",
+   "description": "The process_loss_qty this specific Manufacture entry contributed to its Work Order (manual/legacy arg plus any is_process_loss scrap rows, set by complete_work_order()). Never moves stock on its own -- stored here purely so reverse_manufacture_entry() can roll back exactly this run's contribution from the Work Order's cumulative process_loss_qty instead of leaving it stale after a reversal."
   },
   {
    "fieldname": "sec_misc",

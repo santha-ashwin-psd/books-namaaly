@@ -96,6 +96,13 @@
    "description": "BOM: consume qty proportional to the BOM at completion time. 'Material Transferred': consume exactly what was issued to WIP."
   },
   {
+   "fieldname": "default_close_on_loss_reconciliation",
+   "fieldtype": "Check",
+   "label": "Default: Close on Loss Reconciliation",
+   "default": "0",
+   "description": "Pre-fills the 'This completes the batch \u2014 treat remaining planned qty as process loss' checkbox in the Complete Work Order popup. Users can still override it per completion."
+  },
+  {
    "fieldname": "sb_bom_defaults",
    "fieldtype": "Section Break",
    "label": "BOM Defaults"
