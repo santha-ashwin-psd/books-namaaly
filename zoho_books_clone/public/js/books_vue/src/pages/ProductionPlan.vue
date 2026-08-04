@@ -106,7 +106,7 @@
               <div style="min-width:0">
                 <div class="bomx-detail-title">{{ isNew ? 'New Production Plan' : pp.name }}</div>
                 <div class="bomx-detail-meta">
-                  <span v-if="!isNew">{{ fmtDate(pp.posting_date) }}</span>
+                  <span v-if="!isNew">{{ fmtDate(pp.posting_date) }}<template v-if="pp.posting_time"> {{ pp.posting_time }}</template></span>
                   <span v-if="!isNew">•</span>
                   <span class="bomx-badge" :class="statusClass(pp)" style="font-size:11px" v-if="!isNew">{{ pp.status }}</span>
                 </div>

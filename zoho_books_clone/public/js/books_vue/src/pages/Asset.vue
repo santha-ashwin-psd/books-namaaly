@@ -18,7 +18,7 @@
     <div class="sales-actions">
       <select class="sales-select" v-model="filterGroup" title="Filter by asset category">
         <option value="">All Categories</option>
-        <option v-for="g in assetCategories" :key="g.name" :value="g.name">{{ g.name }}</option>
+        <option v-for="g in assetCategories" :key="g.name" :value="g.name">{{ g.category_name || g.name }}</option>
       </select>
       <button class="sales-btn-ghost view-toggle-btn" @click="viewMode=viewMode==='table'?'grid':'table'" :title="viewMode==='table'?'Grid View':'List View'"><span v-html="icon(viewMode==='table'?'grid':'file',14)"></span></button>
       <button class="sales-btn-ghost" @click="load" title="Refresh" :disabled="loading"><span v-html="icon('refresh',14)"></span></button>
@@ -158,7 +158,7 @@
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
           <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
           <td @click="openView(row)" data-label="Asset Name"><span class="inv-link">{{row.asset_name || row.name}}</span><div class="asset-code">{{ row.name }}</div></td>
-          <td @click="openView(row)" data-label="Asset Category"><span v-if="row.asset_category" class="it-group-badge">{{row.asset_category}}</span><span v-else class="text-muted">-</span></td>
+          <td @click="openView(row)" data-label="Asset Category"><span v-if="row.asset_category" class="it-group-badge">{{categoryLabel(row.asset_category)}}</span><span v-else class="text-muted">-</span></td>
           <td @click="openView(row)" class="mono-sm text-muted" data-label="Purchase Date">{{ fmtDate(row.purchase_date) }}</td>
           <td @click="openView(row)" class="ta-r mono-sm fw-600" data-label="Purchase Cost">{{ fmt(row.purchase_cost || 0) }}</td>
           <td @click="openView(row)" data-label="Status"><span class="inv-status-badge" :class="statusClass(row.status)">{{row.status || 'Draft'}}</span></td>
@@ -184,7 +184,7 @@
           </div>
           <div class="ii-mob-card-meta">
             <span class="inv-link" style="font-size:11.5px">{{ row.name }}</span>
-            <span v-if="row.asset_category" class="it-group-badge" style="font-size:10.5px">{{ row.asset_category }}</span>
+            <span v-if="row.asset_category" class="it-group-badge" style="font-size:10.5px">{{ categoryLabel(row.asset_category) }}</span>
           </div>
         </div>
         <div class="ii-mob-card-right">
@@ -214,7 +214,7 @@
         <div class="fw-700" style="font-size:14px;margin-bottom:3px;line-height:1.3">{{row.asset_name || row.name}}</div>
         <div class="text-muted" style="font-size:11px;margin-bottom:8px">{{row.name}}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <span v-if="row.asset_category" class="it-group-badge" style="font-size:11px">{{row.asset_category}}</span>
+          <span v-if="row.asset_category" class="it-group-badge" style="font-size:11px">{{categoryLabel(row.asset_category)}}</span>
           <span v-else class="text-muted" style="font-size:12px">-</span>
           <span class="fw-700" style="font-size:13px;color:#2F9E44">{{fmt(row.purchase_cost || 0)}}</span>
         </div>
@@ -247,6 +247,16 @@ const toast = useToast();
 const loading = ref(true);
 const list = ref([]);
 const assetCategories = ref([]);
+const categoryLabelMap = computed(() => {
+  const map = {};
+  for (const c of assetCategories.value) {
+    map[c.name] = c.category_name || c.name;
+  }
+  return map;
+});
+function categoryLabel(id) {
+  return categoryLabelMap.value[id] || id;
+}
 const search = ref('');
 const filterTab = ref('all');
 const filterGroup = ref('');
@@ -372,19 +382,22 @@ function statusClass(status) {
 async function load() {
   loading.value = true;
   try {
-    const assets = await apiList('Asset', {
-      fields: [
-        'name', 'asset_name', 'status', 'asset_category', 'purchase_date', 
-        'purchase_cost', 'supplier', 'location', 'department',
-        'depreciation_method', 'useful_life', 'salvage_value', 
-        'last_maintenance_date', 'next_maintenance_date', 'maintenance_frequency_days',
-        'description', 'is_active'
-      ],
-      order: 'asset_name asc',
-      limit: 500,
-    });
+    const [assets, categoryRows] = await Promise.all([
+      apiList('Asset', {
+        fields: [
+          'name', 'asset_name', 'status', 'asset_category', 'purchase_date', 
+          'purchase_cost', 'supplier', 'location', 'department',
+          'depreciation_method', 'useful_life', 'salvage_value', 
+          'last_maintenance_date', 'next_maintenance_date', 'maintenance_frequency_days',
+          'description', 'is_active'
+        ],
+        order: 'asset_name asc',
+        limit: 500,
+      }),
+      apiList('Asset Category', { fields: ['name', 'category_name'], order: 'category_name asc', limit: 500 }),
+    ]);
     list.value = assets;
-    assetCategories.value = Array.from(new Set(assets.map(a => a.asset_category).filter(Boolean))).map(name => ({ name }));
+    assetCategories.value = categoryRows || [];
   } catch (e) {
     toast.error('Failed to load assets: ' + e.message);
     list.value = [];

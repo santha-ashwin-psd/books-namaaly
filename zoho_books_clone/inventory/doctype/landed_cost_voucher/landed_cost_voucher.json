@@ -10,6 +10,8 @@
  "field_order": [
   "naming_series",
   "posting_date",
+  "set_posting_time",
+  "posting_time",
   "col1",
   "company",
   "distribution_method",
@@ -46,6 +48,21 @@
    "in_list_view": 1,
    "label": "Posting Date",
    "reqd": 1
+  },
+  {
+   "fieldname": "set_posting_time",
+   "fieldtype": "Check",
+   "label": "Edit Posting Date and Time",
+   "print_hide": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "posting_time",
+   "fieldtype": "Time",
+   "label": "Posting Time",
+   "depends_on": "eval:doc.set_posting_time",
+   "print_hide": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "col1",

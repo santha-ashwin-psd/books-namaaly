@@ -49,7 +49,9 @@
               <div v-for="(line, i) in lines" :key="i" class="rnd-tr">
                 <div>
                   <div class="rnd-item">{{ line.item_name || line.item_code }}</div>
-                  <div class="rnd-max-hint">max {{ line.maxQty }}</div>
+                  <div class="rnd-max-hint">
+                    max {{ line.maxQty }}<span v-if="line.batch_no"> · Batch {{ line.batch_no }}</span>
+                  </div>
                 </div>
                 <div>
                   <input
@@ -134,8 +136,25 @@ const headerBg = computed(() =>
     : "linear-gradient(135deg,#7f1d1d,#dc2626)"
 );
 const grandTotal = computed(() => lines.value.reduce((s, l) => s + Number(l.amount || 0), 0));
-const maxInvoiceAmt = computed(() => Number(state.maxInvoiceAmt || 0));
-const exceedsInvoice = computed(() => maxInvoiceAmt.value > 0 && grandTotal.value > maxInvoiceAmt.value + 0.005);
+// Cap against remaining claimable value — grand_total of the parent invoice/
+// bill minus what's already been claimed by prior submitted CN/DN against it
+// — mirroring the backend guard in sales_invoice.py / purchase_invoice.py
+// on_submit(). Deliberately NOT based on outstanding_amount: outstanding
+// tracks payment status, which is unrelated to how much of the original
+// sale can still be returned/adjusted. Capping on outstanding_amount would
+// wrongly block a legitimate CN/DN on a partially- or fully-paid invoice
+// whose return value exceeds what's still owed but not the original total.
+const alreadyClaimed = computed(() =>
+  existing.value
+    .filter((n) => n.docstatus === 1)
+    .reduce((s, n) => s + Math.abs(Number(n.grand_total || 0)), 0)
+);
+const maxInvoiceAmt = computed(() => Math.max(0, Number(state.invoiceTotal || 0) - alreadyClaimed.value));
+// No ">0" guard here: maxInvoiceAmt is always >=0 now (clamped above), and a
+// value of exactly 0 (fully claimed) must still block further submission —
+// the old check (`maxInvoiceAmt.value > 0 && ...`) short-circuited to false
+// in that case and would have let an over-claim through.
+const exceedsInvoice = computed(() => grandTotal.value > maxInvoiceAmt.value + 0.005);
 
 function fmt(v) {
   return "₹" + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -157,6 +176,9 @@ watch(() => state.open, async (open) => {
     item_code: it.item_code || "",
     item_name: it.item_name || it.item_code || "",
     description: it.description || "",
+    uom: it.uom || "",
+    batch_no: it.batch_no || "",
+    batch_expiry_date: it.batch_expiry_date || "",
     maxQty: Number(it.qty || 0),
     qty: Number(it.qty || 0),
     rate: Number(it.rate || 0),
@@ -183,6 +205,9 @@ async function onSave() {
       item_code: l.item_code,
       item_name: l.item_name,
       description: l.description,
+      uom: l.uom || "",
+      batch_no: l.batch_no || "",
+      batch_expiry_date: l.batch_expiry_date || "",
       qty: Number(l.qty),
       rate: Number(l.rate),
       amount: Number(l.amount),

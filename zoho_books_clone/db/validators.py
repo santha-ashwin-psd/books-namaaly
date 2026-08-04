@@ -4,7 +4,30 @@ Called from DocType controllers before saving/submitting.
 """
 import frappe
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils import getdate, nowtime
+
+
+def set_posting_time(doc) -> None:
+    """
+    ERPNext-style posting_time auto-stamping (Phase 2 of the posting_time
+    rollout — see the posting_date/posting_time field pair added in Phase 1).
+
+    Call this at the top of validate() for any doctype carrying the
+    set_posting_time / posting_time field pair.
+
+    - set_posting_time unchecked (default): posting_time is force-stamped
+      with the current time on every save, so it always reflects when the
+      document was actually saved and can't be hand-edited while the
+      checkbox is off.
+    - set_posting_time checked: the user-entered posting_time is left as-is,
+      allowing backdated entries with a specific time. If left blank while
+      checked, falls back to the current time so a blank value never reaches
+      GL Entry / Stock Ledger Entry ordering.
+    """
+    if not doc.get("set_posting_time"):
+        doc.posting_time = nowtime()
+    elif not doc.posting_time:
+        doc.posting_time = nowtime()
 
 
 def validate_fiscal_year(posting_date: str, company: str) -> str:

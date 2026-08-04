@@ -92,7 +92,8 @@
                 <div class="se-source-cell">
                   <span class="se-source-dot" :style="'background:'+sourceInfo(e).color"></span>
                   <span style="font-size:12px;font-weight:600;color:#374151">{{ sourceInfo(e).label }}</span>
-                  <span v-if="e.reference_name" class="se-source-ref" @click.stop="() => {}">{{ e.reference_name }}</span>
+                  <DocLink v-if="e.work_order" doctype="Work Order" :name="e.work_order" class="se-source-ref" />
+                  <DocLink v-else-if="e.reference_name" :doctype="e.reference_doctype" :name="e.reference_name" class="se-source-ref" />
                 </div>
               </td>
               <td>
@@ -340,7 +341,7 @@
             <div class="se-dh-ico" style="background:rgba(255,255,255,.2)"><span v-html="icon('stack',20)" style="color:#fff"></span></div>
             <div>
               <div class="se-dh-title" style="color:#fff">{{ viewDoc.name }}</div>
-              <div class="se-dh-sub" style="color:rgba(255,255,255,.8)">{{ viewDoc.stock_entry_type }} · {{ fmtDate(viewDoc.posting_date) }}</div>
+              <div class="se-dh-sub" style="color:rgba(255,255,255,.8)">{{ viewDoc.stock_entry_type }} · {{ fmtDate(viewDoc.posting_date) }}<template v-if="viewDoc.posting_time"> {{ viewDoc.posting_time }}</template></div>
             </div>
             <span class="se-badge" :class="statusClass(viewDoc)" style="margin-left:auto;flex-shrink:0">{{ statusLabel(viewDoc) }}</span>
           </div>
@@ -353,9 +354,13 @@
             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:6px">Origin / Source</div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <span class="se-source-label" :style="'background:'+sourceInfo(viewDoc).color+'22;color:'+sourceInfo(viewDoc).color">{{ sourceInfo(viewDoc).label }}</span>
-              <template v-if="viewDoc.reference_doctype && viewDoc.reference_name">
+              <template v-if="viewDoc.work_order">
+                <span style="font-size:12px;color:#6b7280">Work Order:</span>
+                <DocLink doctype="Work Order" :name="viewDoc.work_order" :mono-style="false" style="font-size:13px;font-weight:700;color:#2563eb;" />
+              </template>
+              <template v-else-if="viewDoc.reference_doctype && viewDoc.reference_name">
                 <span style="font-size:12px;color:#6b7280">{{ viewDoc.reference_doctype }}:</span>
-                <span style="font-size:13px;font-weight:700;color:#2563eb;">{{ viewDoc.reference_name }}</span>
+                <DocLink :doctype="viewDoc.reference_doctype" :name="viewDoc.reference_name" :mono-style="false" style="font-size:13px;font-weight:700;color:#2563eb;" />
               </template>
               <template v-else-if="viewDoc.adjustment_reason">
                 <span style="font-size:13px;color:#374151">{{ viewDoc.adjustment_reason }}</span>
@@ -539,6 +544,7 @@ import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 import JournalTab from "../components/JournalTab.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const { confirm } = useConfirm();
@@ -700,7 +706,8 @@ const filtered = computed(() => {
       (e.from_warehouse || "").toLowerCase().includes(q) ||
       (e.to_warehouse || "").toLowerCase().includes(q) ||
       (e.remarks || "").toLowerCase().includes(q) ||
-      (e.reference_name || "").toLowerCase().includes(q)
+      (e.reference_name || "").toLowerCase().includes(q) ||
+      (e.work_order || "").toLowerCase().includes(q)
     );
   }
   return r;
@@ -739,7 +746,7 @@ async function load() {
     const rows = await apiList("Stock Entry", {
       fields: ["name", "stock_entry_type", "posting_date", "from_warehouse", "to_warehouse",
                "value_difference", "total_incoming_value", "total_outgoing_value",
-               "docstatus", "remarks", "reference_doctype", "reference_name",
+               "docstatus", "remarks", "reference_doctype", "reference_name", "work_order",
                "adjustment_reason", "company", "owner", "creation"],
       filters: [["company", "=", co]],
       limit: 100000, order: "posting_date desc, creation desc",

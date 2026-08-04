@@ -118,7 +118,7 @@
         </div></td></tr>
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row">
           <td @click="openEditDepartmentForm(row)" data-label="Department Name"><span class="inv-link">{{ row.department_name || row.name }}</span><div class="dept-code">{{ row.name }}</div></td>
-          <td @click="openEditDepartmentForm(row)" data-label="Description"><span v-if="row.description" class="text-muted">{{ row.description }}</span><span v-else class="text-muted">—</span></td>
+          <td @click="openEditDepartmentForm(row)" data-label="Description" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="row.description || ''"><span v-if="row.description" class="text-muted">{{ row.description }}</span><span v-else class="text-muted">—</span></td>
           <td @click="openEditDepartmentForm(row)" data-label="Status"><span class="inv-status-badge" :class="statusClass(row)">{{ row.description ? 'Documented' : 'Missing Details' }}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
             <button class="inv-act-btn" @click="openEditDepartmentForm(row)" :disabled="!$canEdit('inventory')" title="Edit"><span v-html="icon('edit',13)"></span></button>

@@ -337,7 +337,7 @@
               </thead>
               <tbody>
                 <tr v-for="r in result.rows" :key="r.work_order" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
-                  <td class="mrx-link">{{ r.work_order }}</td>
+                  <td class="mrx-link"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></td>
                   <td>{{ r.bulk_item_name }}<div class="mrx-sub">{{ r.bulk_item }}</div></td>
                   <td class="mrx-sub">{{ r.fg_warehouse || '—' }}</td>
                   <td style="text-align:right;">{{ fmt(r.bulk_qty_produced) }}</td>
@@ -353,7 +353,7 @@
           <div v-if="result.rows.length" class="mrx-cards-wrap">
             <div v-for="r in result.rows" :key="r.work_order" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
               <div class="mrx-rcard-top">
-                <span class="mrx-link">{{ r.work_order }}</span>
+                <span class="mrx-link"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></span>
                 <span class="mrx-badge" :style="reconStatusStyle(r.status)">{{ reconStatusLabel(r.status) }}</span>
               </div>
               <div class="mrx-rcard-title">{{ r.bulk_item_name }}</div>
@@ -383,8 +383,8 @@
             </thead>
             <tbody>
               <tr v-for="r in result.rows" :key="r.stock_entry" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
-                <td class="mrx-link" style="font-size:12px;">{{ r.stock_entry }}</td>
-                <td class="mrx-sub">{{ r.work_order }}</td>
+                <td class="mrx-link" style="font-size:12px;"><DocLink doctype="Stock Entry" :name="r.stock_entry" :mono-style="false" /></td>
+                <td class="mrx-sub"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></td>
                 <td>{{ r.item_name }}<div class="mrx-sub">{{ r.production_item }}</div></td>
                 <td style="text-align:right;color:var(--bx-green);">{{ fmt(r.scrap_value) }}</td>
                 <td style="text-align:right;" :style="r.manufacturing_variance_loss > 0 ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.manufacturing_variance_loss) }}</td>
@@ -395,11 +395,11 @@
           <div v-if="result.rows.length" class="mrx-cards-wrap">
             <div v-for="r in result.rows" :key="r.stock_entry" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
               <div class="mrx-rcard-top">
-                <span class="mrx-link" style="font-size:12px;">{{ r.stock_entry }}</span>
+                <span class="mrx-link" style="font-size:12px;"><DocLink doctype="Stock Entry" :name="r.stock_entry" :mono-style="false" /></span>
                 <span class="mrx-sub">{{ r.posting_date }}</span>
               </div>
               <div class="mrx-rcard-title">{{ r.item_name }}</div>
-              <div class="mrx-sub">{{ r.work_order }}</div>
+              <div class="mrx-sub"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></div>
               <div class="mrx-rcard-meta">
                 <div><span class="mrx-rcard-mlbl">Scrap Value</span><span style="color:var(--bx-green);">{{ fmt(r.scrap_value) }}</span></div>
                 <div><span class="mrx-rcard-mlbl">Variance Loss</span><span :style="r.manufacturing_variance_loss > 0 ? 'color:var(--bx-red);font-weight:700;' : ''">{{ fmt(r.manufacturing_variance_loss) }}</span></div>
@@ -425,6 +425,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { apiCall } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
 
 const router = useRouter();

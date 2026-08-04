@@ -7,12 +7,14 @@ from zoho_books_clone.accounts.accounting_engine import (
 )
 from zoho_books_clone.db.validators import (
     validate_fiscal_year, validate_account_company, validate_account_type,
+    set_posting_time,
 )
 
 
 class SalesInvoice(Document):
 
     def validate(self):
+        set_posting_time(self)
         self.validate_items()
         self.validate_batches()
         self.calculate_totals()
@@ -209,15 +211,54 @@ class SalesInvoice(Document):
             self.due_date = self.posting_date
 
     def on_submit(self):
-        new_outstanding = flt(self.grand_total)
-        self.outstanding_amount = new_outstanding
-        self.status = "Submitted"
-        self.db_set("outstanding_amount", new_outstanding, update_modified=False)
-        self.db_set("status", "Submitted", update_modified=False)
-        post_sales_invoice(self)
-        if getattr(self, "update_stock", 0) and getattr(self, "sales_order", None):
-            self._release_reserved_qty(direction=-1)
-        self._maybe_auto_send_email()
+        if getattr(self, "is_return", 0):
+            cn_amount = abs(flt(self.grand_total))
+
+            # Guard: check that the source invoice still has enough unclaimed
+            # value. Capped against grand_total minus what prior credit notes
+            # have already claimed against it — mirrors the analogous debit
+            # note guard in purchase_invoice.py::on_submit(). Without this,
+            # credit notes could be submitted with no ceiling at all, and
+            # _sync_parent_invoice_after_cn_submit() would silently clamp the
+            # parent's outstanding_amount to 0 rather than reject the
+            # over-claim, masking data-entry mistakes (e.g. issuing several
+            # credit notes that together exceed the original invoice value).
+            if getattr(self, "return_against", None):
+                src_grand_total = abs(flt(frappe.db.get_value(
+                    "Sales Invoice", self.return_against, "grand_total"
+                ) or 0))
+                already_claimed = abs(flt(frappe.db.sql("""
+                    SELECT COALESCE(SUM(grand_total), 0)
+                    FROM `tabSales Invoice`
+                    WHERE return_against = %s AND is_return = 1
+                      AND docstatus = 1 AND name != %s
+                """, (self.return_against, self.name))[0][0]))
+                remaining_claimable = src_grand_total - already_claimed
+                if remaining_claimable < cn_amount - 0.01:
+                    frappe.throw(_(
+                        "Cannot submit Credit Note {0}: the Sales Invoice {1} "
+                        "already has its claimable value fully used "
+                        "(remaining: ₹{2:,.2f}, this note: ₹{3:,.2f})."
+                    ).format(
+                        self.name,
+                        self.return_against,
+                        remaining_claimable,
+                        cn_amount,
+                    ))
+
+            self.db_set("status", "Submitted", update_modified=False)
+            self.status = "Submitted"
+            post_sales_invoice(self)
+        else:
+            new_outstanding = flt(self.grand_total)
+            self.outstanding_amount = new_outstanding
+            self.status = "Submitted"
+            self.db_set("outstanding_amount", new_outstanding, update_modified=False)
+            self.db_set("status", "Submitted", update_modified=False)
+            post_sales_invoice(self)
+            if getattr(self, "update_stock", 0) and getattr(self, "sales_order", None):
+                self._release_reserved_qty(direction=-1)
+            self._maybe_auto_send_email()
 
     def _maybe_auto_send_email(self):
         """Send invoice email automatically if the per-company flag is on."""

@@ -50,6 +50,14 @@ const DOCTYPE_ROUTE = {
   "Expense":           "list:/expenses",
   "Landed Cost Voucher": "path:/purchasing/landed-cost-vouchers",
   "Stock Entry":       "list:/inventory/stock-entries",
+  "BOM":               "path:/manufacturing/bom",
+  "Work Order":        "path:/manufacturing/work-order",
+  "Job Card":          "path:/manufacturing/job-card",
+  "Packing Slip":      "path:/manufacturing/packing-slip",
+  "Production Plan":   "path:/manufacturing/production-plan",
+  "Material Request":  "path:/manufacturing/material-request",
+  "Routing":           "path:/manufacturing/routing",
+  "Workstation":       "path:/manufacturing/workstation",
 };
 
 const to = computed(() => {

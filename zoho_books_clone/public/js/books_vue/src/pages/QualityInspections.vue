@@ -291,11 +291,11 @@
           <div class="qc-summary-bar">
             <div class="qc-sumbar-item">
               <span class="qc-sumbar-lbl">Reference</span>
-              <span class="qc-sumbar-val" style="color:#2563eb">{{ viewDoc.reference_type }} / {{ viewDoc.reference_name }}</span>
+              <span class="qc-sumbar-val" style="color:#2563eb">{{ viewDoc.reference_type }} / <DocLink :doctype="viewDoc.reference_type" :name="viewDoc.reference_name" :mono-style="false" style="color:#2563eb" /></span>
             </div>
             <div class="qc-sumbar-item" v-if="viewDoc.work_order">
               <span class="qc-sumbar-lbl">Work Order</span>
-              <span class="qc-sumbar-val" style="color:#2563eb;cursor:pointer" @click="router.push('/manufacturing/work-order/' + viewDoc.work_order)">{{ viewDoc.work_order }}</span>
+              <span class="qc-sumbar-val"><DocLink doctype="Work Order" :name="viewDoc.work_order" :mono-style="false" style="color:#2563eb" /></span>
             </div>
             <div class="qc-sumbar-item">
               <span class="qc-sumbar-lbl">Item</span>
@@ -579,6 +579,7 @@ import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import DocLink from "../components/DocLink.vue";
 
 const { toast } = useToast();
 const route = useRoute();

@@ -6,13 +6,15 @@ from zoho_books_clone.accounts.accounting_engine import (
     post_purchase_invoice, reverse_voucher,
 )
 from zoho_books_clone.db.validators import (
-    validate_fiscal_year, validate_account_company, validate_account_type
+    validate_fiscal_year, validate_account_company, validate_account_type,
+    set_posting_time,
 )
 
 
 class PurchaseInvoice(Document):
 
     def validate(self):
+        set_posting_time(self)
         if not self.items:
             frappe.throw(_("Please add at least one item"))
         for item in self.items:
@@ -100,20 +102,33 @@ class PurchaseInvoice(Document):
             from zoho_books_clone.accounts.accounting_engine import post_debit_note
             dn_amount = abs(flt(self.grand_total))
 
-            # Guard: check that the source bill still has enough outstanding
+            # Guard: check that this bill still has enough unclaimed value.
+            # Capped against grand_total minus what prior debit notes have
+            # already claimed — NOT against outstanding_amount (money still
+            # owed), which is unrelated: a fully paid bill has outstanding=0,
+            # and capping against that would make it impossible to ever
+            # submit a debit note against a paid bill, even though that's a
+            # completely normal case (overcharge/return found after payment).
             if getattr(self, "return_against", None):
-                src_outstanding = flt(frappe.db.get_value(
-                    "Purchase Invoice", self.return_against, "outstanding_amount"
-                ) or 0)
-                if src_outstanding < dn_amount - 0.01:
+                src_grand_total = abs(flt(frappe.db.get_value(
+                    "Purchase Invoice", self.return_against, "grand_total"
+                ) or 0))
+                already_claimed = abs(flt(frappe.db.sql("""
+                    SELECT COALESCE(SUM(grand_total), 0)
+                    FROM `tabPurchase Invoice`
+                    WHERE return_against = %s AND is_return = 1
+                      AND docstatus = 1 AND name != %s
+                """, (self.return_against, self.name))[0][0]))
+                remaining_claimable = src_grand_total - already_claimed
+                if remaining_claimable < dn_amount - 0.01:
                     frappe.throw(_(
                         "Cannot submit Debit Note {0}: the Purchase Invoice {1} "
-                        "already has its balance fully claimed "
+                        "already has its claimable value fully used "
                         "(remaining: ₹{2:,.2f}, this note: ₹{3:,.2f})."
                     ).format(
                         self.name,
                         self.return_against,
-                        src_outstanding,
+                        remaining_claimable,
                         dn_amount,
                     ))
 

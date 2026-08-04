@@ -19,6 +19,7 @@
   "is_existing_asset",
   "credit_account",
   "capitalization_posted",
+  "cwip_transferred",
   "location_section",
   "department",
   "location",
@@ -130,6 +131,16 @@
    "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "cwip_transferred",
+   "fieldtype": "Check",
+   "label": "CWIP Transferred",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "description": "Set once the Capital Work-in-Progress balance for this asset has been transferred to the Fixed Asset account. See assets/asset_gl.py."
   },
   {
    "fieldname": "location_section",

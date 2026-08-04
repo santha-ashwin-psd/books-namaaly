@@ -3,12 +3,13 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 from frappe.model.document import Document
-from zoho_books_clone.db.validators import validate_fiscal_year
+from zoho_books_clone.db.validators import validate_fiscal_year, set_posting_time
 
 
 class PurchaseReceipt(Document):
 
     def validate(self):
+        set_posting_time(self)
         # Purchase Receipt is not wired to central_validator, so fiscal year
         # validation must run here.  Block saves into closed or missing periods
         # before any inventory or fulfilment logic runs.

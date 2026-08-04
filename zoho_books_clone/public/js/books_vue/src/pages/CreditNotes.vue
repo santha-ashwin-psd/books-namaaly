@@ -75,7 +75,8 @@
               <td @click="openView(c)"><span class="inv-status-badge" :class="statusCls(c)">{{ statusLabel(c) }}</span></td>
               <td @click="openView(c)" class="ta-r mono-sm" style="color:#7f1d1d">{{ fmtCur(Math.abs(c.grand_total||0)) }}</td>
               <td @click="openView(c)" class="ta-r mono-sm">
-                <span v-if="c.docstatus===1" :class="balanceFor(c.name)>0?'text-danger':'text-success'">{{ fmtCur(balanceFor(c.name)) }}</span>
+                <span v-if="c.docstatus===1 && balanceFor(c.name)===null" class="text-muted" title="Couldn't load balance — refresh to retry">Unknown</span>
+                <span v-else-if="c.docstatus===1" :class="balanceFor(c.name)>0?'text-danger':'text-success'">{{ fmtCur(balanceFor(c.name)) }}</span>
                 <span v-else class="text-muted">—</span>
               </td>
               <td class="cn-act-cell">
@@ -316,6 +317,16 @@
                         <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)" />
                       </div>
                     </div>
+                    <div class="cn-item-num-row" v-if="line.batch_no">
+                      <div class="cn-item-field">
+                        <label>Batch No</label>
+                        <input :value="line.batch_no" class="inv-fi" disabled />
+                      </div>
+                      <div class="cn-item-field" v-if="line.batch_expiry_date">
+                        <label>Batch Expiry</label>
+                        <input :value="line.batch_expiry_date" class="inv-fi" disabled />
+                      </div>
+                    </div>
                     <div class="cn-item-num-row">
                       <div class="cn-item-field">
                         <label>Discount %</label>
@@ -451,9 +462,10 @@
               <div class="inv-sec-lbl">Line Items</div>
               <!-- Desktop table -->
               <div class="cn-view-items cn-view-items--desktop">
-                <div class="cn-view-items-head"><span>Item</span><span class="ta-r">Qty</span><span class="ta-r">Rate</span><span class="ta-r">Amount</span></div>
+                <div class="cn-view-items-head"><span>Item</span><span>Batch No</span><span class="ta-r">Qty</span><span class="ta-r">Rate</span><span class="ta-r">Amount</span></div>
                 <div v-for="it in viewItems" :key="it.name" class="cn-view-items-row">
                   <span>{{ it.item_name||it.item_code }}</span>
+                  <span class="mono-sm text-muted">{{ it.batch_no || '—' }}</span>
                   <span class="ta-r mono-sm">{{ Math.abs(it.qty||0) }}</span>
                   <span class="ta-r mono-sm">{{ fmtCur(it.rate) }}</span>
                   <span class="ta-r mono-sm" style="font-weight:600">{{ fmtCur(Math.abs(it.amount||0)) }}</span>
@@ -468,6 +480,10 @@
                     <span class="cn-vi-card-amount">{{ fmtCur(Math.abs(it.amount||0)) }}</span>
                   </div>
                   <div class="cn-vi-card-meta">
+                    <div class="cn-vi-meta-item" v-if="it.batch_no">
+                      <span class="cn-vi-meta-lbl">Batch No</span>
+                      <span class="cn-vi-meta-val">{{ it.batch_no }}</span>
+                    </div>
                     <div class="cn-vi-meta-item">
                       <span class="cn-vi-meta-lbl">Qty</span>
                       <span class="cn-vi-meta-val">{{ Math.abs(it.qty||0) }}</span>
@@ -745,17 +761,18 @@ const { openEmail } = useEmailDialog();
 function cnStatus(c) {
   if (c.docstatus === 2) return "cancelled";
   if (c.docstatus === 0) return "draft";
+  const bal = balanceFor(c.name);
+  if (bal === null) return "unknown";
   const total = Math.abs(flt(c.grand_total || 0));
-  const avail = flt(_balances.value[c.name] || 0);
-  if (avail <= 0.005)           return "applied";
-  if (avail < total - 0.005)    return "partial";
+  if (bal <= 0.005)        return "applied";
+  if (bal < total - 0.005) return "partial";
   return "issued";
 }
 function statusLabel(c) {
-  return { draft: "Draft", issued: "Issued", partial: "Partially Applied", applied: "Applied", cancelled: "Cancelled" }[cnStatus(c)] || "—";
+  return { draft: "Draft", issued: "Issued", partial: "Partially Applied", applied: "Applied", cancelled: "Cancelled", unknown: "Balance Unknown" }[cnStatus(c)] || "—";
 }
 function statusCls(c) {
-  return { draft: "cn-st-draft", issued: "cn-st-issued", partial: "cn-st-partial", applied: "cn-st-applied", cancelled: "cn-st-cancelled" }[cnStatus(c)] || "";
+  return { draft: "cn-st-draft", issued: "cn-st-issued", partial: "cn-st-partial", applied: "cn-st-applied", cancelled: "cn-st-cancelled", unknown: "cn-st-draft" }[cnStatus(c)] || "";
 }
 
 const activeTab = ref("all");
@@ -779,10 +796,18 @@ const customers = ref([]), items = ref([]), invoices = ref([]), lines = ref([]);
 const uomList = ref(["Nos", "Kg", "Ltr", "Hrs", "Pcs", "Box", "Mtr", "Set"]);
 const sortCol = ref("posting_date"), sortDir = ref("desc");
 const _balances = ref({});
-function balanceFor(name) { return flt(_balances.value[name] || 0); }
+// Returns null when the balance couldn't be fetched (e.g. transient network
+// failure during load()) — distinct from a legitimate 0 (fully applied).
+// Callers must not treat null as 0: doing so silently makes a CN whose
+// balance we simply failed to fetch look "fully applied" in the list,
+// hiding a real available balance from the user.
+function balanceFor(name) {
+  const v = _balances.value[name];
+  return v == null ? null : flt(v);
+}
 
 let _id = 1;
-const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", collapsed: false });
+const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", collapsed: false, batch_no: "", batch_expiry_date: "" });
 const costCenters = ref([]);
 const form = reactive({ customer: "", posting_date: todayStr(), return_against: "", reason: "Price Adjustment", notes: "", cost_center: "" });
 const invoiceSummary = reactive({ data: null, loading: false });
@@ -972,6 +997,7 @@ async function openEdit(c) {
         uom: i.uom || "Nos", discount_percentage: Math.abs(i.discount_percentage || 0),
         discount_amount: Math.abs(i.discount_amount || 0),
         amount: Math.abs(i.amount || 0), tax_code: i.tax_code || i.item_tax_template || "", collapsed: true,
+        batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "",
       }));
     }
     // Restore taxes from the saved CN
@@ -1030,11 +1056,23 @@ async function fetchItems(q = "") {
 }
 async function fetchInvoices(q = "") {
   try {
-    const f = [["is_return", "=", 0], ["docstatus", "=", 1], ["outstanding_amount", ">", 0]];
+    // Deliberately NOT filtered on outstanding_amount > 0: a Credit Note
+    // undoes/adjusts the original sale (return, overcharge, price
+    // correction), which is independent of whether the invoice is still
+    // owed money — a fully paid invoice is just as valid a CN target as an
+    // unpaid one. Filtering on outstanding_amount here would make it
+    // structurally impossible to ever issue a CN against a paid invoice.
+    const f = [["is_return", "=", 0], ["docstatus", "=", 1]];
     if (form.customer) f.push(["customer", "=", form.customer]);
     if (q) f.push(["name", "like", "%" + q + "%"]);
-    const r = await apiList("Sales Invoice", { fields: ["name", "customer", "customer_name", "outstanding_amount"], filters: f, limit: 30 });
-    invoices.value = r.map(x => ({ ...x, label: `${x.name} · ₹${Number(x.outstanding_amount||0).toLocaleString("en-IN",{minimumFractionDigits:2})} due${x.customer_name ? ` · ${x.customer_name}` : ""}`, value: x.name }));
+    const r = await apiList("Sales Invoice", { fields: ["name", "customer", "customer_name", "outstanding_amount", "grand_total"], filters: f, limit: 30 });
+    invoices.value = r.map(x => {
+      const due = flt(x.outstanding_amount);
+      const label = due > 0
+        ? `${x.name} · ₹${Number(due).toLocaleString("en-IN",{minimumFractionDigits:2})} due${x.customer_name ? ` · ${x.customer_name}` : ""}`
+        : `${x.name} · Paid${x.customer_name ? ` · ${x.customer_name}` : ""}`;
+      return { ...x, label, value: x.name };
+    });
   } catch { invoices.value = []; }
 }
 function onCustomerSelect(_opt) { form.return_against = ""; invoiceSummary.data = null; cnTaxes.value = []; cnIsInterState.value = false; fetchInvoices(""); }
@@ -1063,6 +1101,7 @@ async function onInvoiceSelect(opt) {
         discount_amount: Math.abs(i.discount_amount || 0),
         amount: Math.round(Math.abs(i.qty || 1) * Math.abs(i.rate || 0) * 100) / 100,
         tax_code: i.tax_code || i.item_tax_template || "", collapsed: true,
+        batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "",
       }));
       toast.success(`Loaded ${doc.items.length} item(s) from ${invName}`);
     }
@@ -1138,6 +1177,7 @@ async function submitDraftCN(d) {
   } catch (e) { toast.error(e.message || "Submit failed"); }
 }
 async function autoApplyCN(c) {
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   try {
     const [r, balData] = await Promise.all([
       apiList("Sales Invoice", {
@@ -1162,6 +1202,7 @@ async function autoApplyCN(c) {
   } catch (e) { toast.error(e.message || "Auto-apply failed"); }
 }
 async function writeOffCN(c) {
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const balData = await apiGET("zoho_books_clone.api.docs.get_credit_note_balance", { credit_note_name: c.name }).catch(() => null);
   const balance = flt(balData?.balance ?? 0);
   if (balance <= 0) { toast.info("No balance to write off"); return; }
@@ -1187,6 +1228,7 @@ async function saveCN(submit) {
         qty: flt(l.qty), rate: flt(l.rate), uom: l.uom || "Nos",
         discount_percentage: flt(l.discount_percentage), discount_amount: flt(l.discount_amount),
         amount: flt(l.amount), tax_code: l.tax_code || "",
+        batch_no: l.batch_no || "", batch_expiry_date: l.batch_expiry_date || "",
       }));
 
     // IMPORTANT: build the tax payload from the CURRENT line items (each
@@ -1364,7 +1406,7 @@ async function cancelCN(c) {
   } catch (e) { toast.error(e.message || "Cancel failed"); }
 }
 async function deleteCN(c) {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("invoices")) { toast("Not permitted", "error"); return; }
   if (!await confirm({ title: "Delete Credit Note", body: `Permanently delete ${c.name}?`, okLabel: "Delete" })) return;
   try {
     await apiDelete("Sales Invoice", c.name);
@@ -1375,7 +1417,7 @@ async function deleteCN(c) {
 
 // ── Bulk ──────────────────────────────────────────────────────────────────
 async function bulkDelete() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canDelete("invoices")) { toast("Not permitted", "error"); return; }
   const drafts = sorted.value.filter(c => selected.value.has(c.name) && c.docstatus === 0);
   if (!drafts.length) { toast.info("No draft credit notes selected"); return; }
   if (!await confirm({ title: "Delete Drafts", body: `Delete ${drafts.length} draft credit note(s)?`, okLabel: "Delete" })) return;
@@ -1385,7 +1427,7 @@ async function bulkDelete() {
   await load();
 }
 async function bulkEmail() {
-  if (!canWrite("invoices")) { toast("Read-only access", "error"); return; }
+  if (!canEdit("invoices")) { toast("Read-only access", "error"); return; }
   const subs = sorted.value.filter(c => selected.value.has(c.name) && c.docstatus === 1);
   if (!subs.length) { toast.info("No submitted credit notes selected"); return; }
   let sent = 0;
@@ -1413,7 +1455,7 @@ function exportCSV() {
   const out = [head.map(esc).join(",")];
   for (const c of rows) {
     out.push([c.name, c.customer_name || c.customer, c.posting_date, c.return_against || "",
-      statusLabel(c), Math.abs(flt(c.grand_total)).toFixed(2), balanceFor(c.name).toFixed(2)
+      statusLabel(c), Math.abs(flt(c.grand_total)).toFixed(2), balanceFor(c.name) === null ? "Unknown" : balanceFor(c.name).toFixed(2)
     ].map(esc).join(","));
   }
   const blob = new Blob(["﻿" + out.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1689,12 +1731,12 @@ onMounted(async () => {
 /* ── View items table ── */
 .cn-view-items { display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
 .cn-view-items-head {
-  display: grid; grid-template-columns: 2.5fr 70px 90px 100px;
+  display: grid; grid-template-columns: 2fr 110px 70px 90px 100px;
   gap: 8px; background: #f9fafb; padding: 8px 12px;
   font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;
 }
 .cn-view-items-row {
-  display: grid; grid-template-columns: 2.5fr 70px 90px 100px;
+  display: grid; grid-template-columns: 2fr 110px 70px 90px 100px;
   gap: 8px; padding: 8px 12px; border-top: 1px solid #f3f4f6;
   align-items: center; font-size: 12.5px;
 }

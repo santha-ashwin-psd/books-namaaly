@@ -97,6 +97,7 @@ import { ref, reactive, onMounted } from "vue";
 import { icon } from "../utils/icons.js";
 import { apiList } from "../api/client.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
+import { useToast } from "../composables/useToast.js";
 
 const props = defineProps({
   isEdit: Boolean,
@@ -105,6 +106,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save']);
 
+const { toast } = useToast();
 const statuses = ["Completed", "Pending", "Cancelled"];
 const assetOptions = ref([]);
 const saving = ref(false);
@@ -148,7 +150,14 @@ function close() {
 }
 
 function onSave() {
-  if (!form.asset || !form.maintenance_date || !form.technician || form.cost === "" || !form.status) {
+  const missing = [];
+  if (!form.asset) missing.push("Asset");
+  if (!form.maintenance_date) missing.push("Maintenance Date");
+  if (!form.technician) missing.push("Technician");
+  if (form.cost === "") missing.push("Cost");
+  if (!form.status) missing.push("Status");
+  if (missing.length) {
+    toast.error(`Required: ${missing.join(", ")}`);
     return;
   }
   saving.value = true;

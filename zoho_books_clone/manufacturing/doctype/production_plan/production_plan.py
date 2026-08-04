@@ -2,12 +2,14 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, nowdate
+from zoho_books_clone.db.validators import set_posting_time
 
 
 class ProductionPlan(Document):
 	def validate(self):
 		if not self.posting_date:
 			self.posting_date = nowdate()
+		set_posting_time(self)
 
 		if not self.po_items:
 			frappe.throw(_(

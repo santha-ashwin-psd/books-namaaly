@@ -3,12 +3,13 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 from frappe.model.document import Document
-from zoho_books_clone.db.validators import validate_fiscal_year
+from zoho_books_clone.db.validators import validate_fiscal_year, set_posting_time
 
 
 class DeliveryNote(Document):
 
     def validate(self):
+        set_posting_time(self)
         # Guard posting_date against closed / missing fiscal years before the
         # document can be saved.  Delivery Notes are not wired to
         # central_validator, so this is the only place the check runs.

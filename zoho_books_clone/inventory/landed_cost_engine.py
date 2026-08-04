@@ -270,6 +270,7 @@ def build_landed_cost_gl_map(
     voucher_no: str,
     posting_date,
     company: str,
+    posting_time=None,
 ) -> list[dict]:
     """Pure function — no DB access. Builds the balanced gl_map for
     general_ledger_entry.make_gl_entries(): one Dr Inventory Asset line for
@@ -289,6 +290,7 @@ def build_landed_cost_gl_map(
         "voucher_type": "Landed Cost Voucher",
         "voucher_no": voucher_no,
         "posting_date": posting_date,
+        "posting_time": posting_time,
         "company": company,
         "remarks": f"Landed cost capitalized — {voucher_no}",
     }]
@@ -303,6 +305,7 @@ def build_landed_cost_gl_map(
             "voucher_type": "Landed Cost Voucher",
             "voucher_no": voucher_no,
             "posting_date": posting_date,
+            "posting_time": posting_time,
             "company": company,
             "remarks": c.get("description") or f"Reclassified into inventory — {voucher_no}",
         })

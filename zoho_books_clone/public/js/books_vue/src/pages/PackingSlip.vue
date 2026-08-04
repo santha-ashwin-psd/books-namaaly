@@ -31,7 +31,7 @@
           <div class="psx-item-meta">
             <span class="mono">{{ row.name }}</span>
             <span v-if="row.work_order">•</span>
-            <span v-if="row.work_order">{{ row.work_order }}</span>
+            <span v-if="row.work_order"><DocLink doctype="Work Order" :name="row.work_order" :mono-style="false" /></span>
           </div>
           <div class="psx-item-right">
             <span style="font-size:12px;color:var(--bx-muted)">Qty:</span>
@@ -230,18 +230,16 @@
             <div v-if="!isNew && ps.work_order" class="psx-lo-cell" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
               <div>
                 <div class="psx-section-lbl" style="margin-bottom:2px;">Linked Work Order</div>
-                <div style="font-size:13px;color:var(--bx-text);">{{ ps.work_order }}</div>
+                <div style="font-size:13px;"><DocLink doctype="Work Order" :name="ps.work_order" :mono-style="false" /></div>
               </div>
-              <span class="psx-link" @click="router.push(`/manufacturing/work-order/${ps.work_order}`)">Open Work Order ↗</span>
             </div>
 
             <!-- Sourced From (bulk WO) shortcut -->
             <div v-if="!isNew && ps.source_work_order" class="psx-lo-cell" style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
               <div>
                 <div class="psx-section-lbl" style="margin-bottom:2px;">Sourced From</div>
-                <div style="font-size:13px;color:var(--bx-text);">Bulk item packed from {{ ps.source_work_order }}</div>
+                <div style="font-size:13px;">Bulk item packed from <DocLink doctype="Work Order" :name="ps.source_work_order" :mono-style="false" /></div>
               </div>
-              <span class="psx-link" @click="router.push(`/manufacturing/work-order/${ps.source_work_order}`)">Open Work Order ↗</span>
             </div>
 
           </div>
@@ -266,6 +264,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiList, apiSave, apiCall, resolveCompany } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
 
 const route = useRoute();

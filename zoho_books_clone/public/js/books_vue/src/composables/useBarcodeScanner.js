@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, nextTick } from "vue";
 
 /**
  * useBarcodeScanner
@@ -85,10 +85,27 @@ export function useBarcodeScanner({ onScan, minLength = 3, maxKeystrokeGapMs = 4
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       cameraOpen.value = true;
-      await new Promise(r => setTimeout(r, 0)); // let v-if render the <video>
+      // Wait for Vue to actually patch the DOM and mount the v-if-gated
+      // <video> element before touching videoRef. A setTimeout(0) macrotask
+      // is not a reliable stand-in for this — it can land before Vue's
+      // microtask-based render flush under load or in a throttled/
+      // backgrounded tab, leaving videoRef.value null. When that happened,
+      // srcObject was silently never assigned (no error, no toast) and
+      // scanLoop() also bails out silently on a null videoRef — so the
+      // modal would just show a blank black box with no scanning, no
+      // camera error message, no reasonable way for the user to know it's
+      // broken. nextTick() ties us to Vue's own render completion instead.
+      await nextTick();
       if (videoRef.value) {
         videoRef.value.srcObject = stream;
         await videoRef.value.play();
+      } else {
+        // Should be unreachable now that we wait on nextTick(), but if it
+        // ever happens, fail loudly instead of leaving a dead blank modal.
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+        cameraError.value = "Couldn't initialize the camera preview. Please try again.";
+        return;
       }
       detector = new window.BarcodeDetector({
         formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"],

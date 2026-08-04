@@ -204,7 +204,7 @@
                 </div>
                 <div class="dc-info-item">
                   <div class="dc-info-lbl">Date</div>
-                  <div class="dc-info-val">{{ viewDoc.posting_date||'—' }}</div>
+                  <div class="dc-info-val">{{ viewDoc.posting_date||'—' }}<template v-if="viewDoc.posting_time"> {{ viewDoc.posting_time }}</template></div>
                 </div>
                 <div class="dc-info-item">
                   <div class="dc-info-lbl">Dispatch Warehouse</div>
@@ -934,6 +934,7 @@ async function openView(r) {
         contact_display:      doc?.contact_display || "",
         vehicle_no:           doc?.vehicle_no || "",
         lr_date:              doc?.lr_date || "",
+        posting_time:         doc?.posting_time || "",
       };
     } else {
       // Sales Order — fetch delivered lines

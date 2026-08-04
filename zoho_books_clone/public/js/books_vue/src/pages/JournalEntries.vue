@@ -470,7 +470,7 @@
             </div>
             <div class="jen-view-meta-card">
               <div class="jen-view-meta-lbl">Date</div>
-              <div class="jen-view-meta-val">{{fmtDateLocal(viewEntry.date)}}</div>
+              <div class="jen-view-meta-val">{{fmtDateLocal(viewEntry.date)}}<template v-if="viewEntry.posting_time"> {{viewEntry.posting_time}}</template></div>
             </div>
             <div class="jen-view-meta-card">
               <div class="jen-view-meta-lbl">Type</div>
@@ -743,6 +743,7 @@ async function openView(name) {
       viewEntry.value = {
         name: doc.name,
         date: doc.posting_date,
+        posting_time: doc.posting_time || "",
         type: doc.voucher_type || "Journal Entry",
         narration: doc.remark || "",
         total_debit: doc.total_debit || 0,

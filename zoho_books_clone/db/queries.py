@@ -43,14 +43,14 @@ def get_gl_entries(
     where = " AND ".join(conditions)
     return frappe.db.sql(f"""
         SELECT
-            gl.posting_date, gl.account, gl.voucher_type, gl.voucher_no,
+            gl.posting_date, gl.posting_time, gl.account, gl.voucher_type, gl.voucher_no,
             gl.party_type, gl.party, gl.debit, gl.credit, gl.remarks,
             COALESCE(c.customer_name, s.supplier_name) AS party_name
         FROM `tabGeneral Ledger Entry` gl
         LEFT JOIN `tabCustomer` c ON gl.party_type = 'Customer' AND c.name = gl.party
         LEFT JOIN `tabSupplier` s ON gl.party_type = 'Supplier' AND s.name = gl.party
         WHERE {where}
-        ORDER BY gl.posting_date, gl.creation
+        ORDER BY gl.posting_date, gl.posting_time, gl.creation
     """, params, as_dict=True)
 
 @frappe.whitelist()
@@ -1358,15 +1358,15 @@ def get_account_ledger(
     where = " AND ".join(conds)
     entries = frappe.db.sql(f"""
         SELECT
-            name, posting_date, voucher_type, voucher_no,
+            name, posting_date, posting_time, voucher_type, voucher_no,
             party_type, party, debit, credit, remarks,
             (SUM(debit - credit) OVER (
-                ORDER BY posting_date, creation
+                ORDER BY posting_date, posting_time, creation
                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) + %(opening)s) AS running_balance
         FROM `tabGeneral Ledger Entry`
         WHERE {where}
-        ORDER BY posting_date, creation
+        ORDER BY posting_date, posting_time, creation
     """, {**params, "opening": opening}, as_dict=True)
 
     total_debit  = sum(flt(e.debit)  for e in entries)
@@ -1394,12 +1394,12 @@ def get_voucher_detail(voucher_type: str, voucher_no: str) -> dict:
     """
     gl_entries = frappe.db.sql("""
         SELECT
-            name, posting_date, account, party_type, party,
+            name, posting_date, posting_time, account, party_type, party,
             debit, credit, remarks, voucher_type, voucher_no,
             is_cancelled, is_reversal
         FROM `tabGeneral Ledger Entry`
         WHERE voucher_type = %(vt)s AND voucher_no = %(vn)s
-        ORDER BY posting_date, creation
+        ORDER BY posting_date, posting_time, creation
     """, {"vt": voucher_type, "vn": voucher_no}, as_dict=True)
 
     total_debit  = sum(flt(e.debit)  for e in gl_entries if not e.is_cancelled)

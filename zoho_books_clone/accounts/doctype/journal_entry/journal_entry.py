@@ -4,12 +4,13 @@ from frappe import _
 from frappe.utils import flt
 from frappe.model.document import Document
 from zoho_books_clone.accounts.accounting_engine import post_journal_entry, reverse_voucher
-from zoho_books_clone.db.validators import validate_fiscal_year
+from zoho_books_clone.db.validators import validate_fiscal_year, set_posting_time
 
 
 class JournalEntry(Document):
 
     def validate(self):
+        set_posting_time(self)
         # Ensure posting_date falls inside an open, unlocked fiscal year before
         # any further checks — this guards against both "no FY found" and the
         # period lock_date, which central_validator._check_period_not_closed

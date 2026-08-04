@@ -132,4 +132,17 @@ def _post_due_rows_for_asset(asset_name: str) -> bool:
             latest = max(completed_rows, key=lambda r: (r.period_no or r.year or 0))
             asset.db_set("current_value", latest.closing_value, update_modified=False)
 
+        # Nothing set Asset.status here before. Safe to overwrite unconditionally:
+        # this function only ever runs against is_active assets (see the filters
+        # in post_due_depreciation), and Asset Disposal clears is_active before
+        # it sets Scrapped/Sold, so a disposed asset never reaches this branch.
+        all_completed = all(
+            r.status == "Completed" for r in asset.depreciation_schedule
+        )
+        asset.db_set(
+            "status",
+            "Fully Depreciated" if all_completed else "Partially Depreciated",
+            update_modified=False,
+        )
+
     return any_posted

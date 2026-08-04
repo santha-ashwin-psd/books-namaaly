@@ -26,7 +26,7 @@ entire invoice has no stock items the hook returns without creating any entry.
 
 import frappe
 from frappe import _
-from frappe.utils import flt, today
+from frappe.utils import flt, today, nowtime
 
 
 # ─── Public hook entry points ─────────────────────────────────────────────────
@@ -61,6 +61,7 @@ def on_sales_invoice_submit(doc, method=None):
     se = _build_stock_entry(
         entry_type=entry_type,
         posting_date=doc.posting_date or today(),
+        posting_time=getattr(doc, "posting_time", None),
         company=doc.company,
         remarks=_("Auto stock {0} — Sales Invoice {1}").format(verb, doc.name),
         rows=rows,
@@ -103,6 +104,7 @@ def on_purchase_invoice_submit(doc, method=None):
     se = _build_stock_entry(
         entry_type=entry_type,
         posting_date=doc.posting_date or today(),
+        posting_time=getattr(doc, "posting_time", None),
         company=doc.company,
         remarks=_("Auto stock {0} — Purchase Invoice {1}").format(verb, doc.name),
         rows=rows,
@@ -145,6 +147,7 @@ def on_delivery_note_submit(doc, method=None):
     se = _build_stock_entry(
         entry_type="Material Issue",
         posting_date=doc.posting_date or today(),
+        posting_time=getattr(doc, "posting_time", None),
         company=doc.company,
         remarks=_("Auto stock issue — Delivery Note {0}").format(doc.name),
         rows=rows,
@@ -170,6 +173,7 @@ def on_purchase_receipt_submit(doc, method=None):
     se = _build_stock_entry(
         entry_type="Material Receipt",
         posting_date=doc.posting_date or today(),
+        posting_time=getattr(doc, "posting_time", None),
         company=doc.company,
         remarks=_("Auto stock receipt — Purchase Receipt {0}").format(doc.name),
         rows=rows,
@@ -429,8 +433,19 @@ def _build_stock_entry(
     rows: list[dict],
     ref_doctype: str,
     ref_docname: str,
+    posting_time: str | None = None,
 ) -> "frappe.Document":
-    """Create, insert, and submit a Stock Entry; returns the submitted document."""
+    """Create, insert, and submit a Stock Entry; returns the submitted document.
+
+    posting_time is inherited from the originating voucher (Sales/Purchase
+    Invoice, Delivery Note, Purchase Receipt) so this auto-created entry's
+    SLE/GL rows land at the same point in the posting_date/posting_time/
+    creation ordering as the document that triggered it, instead of
+    defaulting to whatever wall-clock time the auto-creation happens to run
+    at (which breaks same-day chronological ordering for backdated postings).
+    set_posting_time=1 is set alongside it so Stock Entry's own posting_time
+    handling treats this as an explicit value rather than a blank default.
+    """
     warehouse_key = "t_warehouse" if entry_type == "Material Receipt" else "s_warehouse"
 
     items = [
@@ -449,6 +464,8 @@ def _build_stock_entry(
         "doctype":          "Stock Entry",
         "stock_entry_type": entry_type,
         "posting_date":     posting_date,
+        "posting_time":     posting_time or nowtime(),
+        "set_posting_time":  1,
         "company":          company,
         "remarks":          remarks,
         # Store the originating voucher for traceability

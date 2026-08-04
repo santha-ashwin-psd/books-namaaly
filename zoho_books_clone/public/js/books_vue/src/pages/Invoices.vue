@@ -812,7 +812,7 @@
           <button class="inv-ab-btn" @click="openEmail(viewInv)">
             <span v-html="icon('mail',13)"></span> <span class="ab-label">Send Email</span>
           </button>
-          <button v-if="viewInv.docstatus===1 && flt(viewInv.outstanding_amount) > 0" class="inv-ab-btn" @click="openCreditNote(viewInv)">
+          <button v-if="viewInv.docstatus===1 && !viewInv.is_return" class="inv-ab-btn" @click="openCreditNote(viewInv)">
             <span v-html="icon('creditnote',13)"></span> <span class="ab-label">Credit Note</span>
           </button>
           <button v-if="viewInv.docstatus===1&&!viewInv.is_return" class="inv-ab-btn" @click="makeRecurring(viewInv)">
@@ -867,7 +867,7 @@
                   <span class="inv-dmeta-lbl">Invoice Date</span>
                 </div>
                 <div class="inv-dmeta-date-val">{{ fmtDateLong(viewInv.posting_date) }}</div>
-                <div class="inv-dmeta-date-sub">{{ fmtDateDay(viewInv.posting_date) }}</div>
+                <div class="inv-dmeta-date-sub">{{ fmtDateDay(viewInv.posting_date) }}<template v-if="viewInv.posting_time"> · {{ viewInv.posting_time }}</template></div>
               </div>
 
               <!-- Due Date -->
@@ -2821,11 +2821,12 @@ async function openCreditNote(inv) {
     items: (freshInv.items || []).map(it => ({
       item_code: it.item_code, item_name: it.item_name,
       description: it.description, qty: it.qty, rate: it.rate,
+      uom: it.uom, batch_no: it.batch_no, batch_expiry_date: it.batch_expiry_date,
     })),
     taxes: (freshInv.taxes || []).map(t => ({
       tax_type: t.account_head, description: t.description, rate: t.rate,
     })),
-    maxInvoiceAmt: flt(freshInv.outstanding_amount),
+    invoiceTotal: flt(freshInv.grand_total),
     existingEndpoint: "zoho_books_clone.api.docs.get_credit_notes",
     createEndpoint:   "zoho_books_clone.api.docs.create_credit_note",
     paramKey:  "invoice_name",

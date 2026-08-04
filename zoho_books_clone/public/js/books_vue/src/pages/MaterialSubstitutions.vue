@@ -62,7 +62,7 @@
           <template v-else>
             <tr v-for="r in filtered" :key="r.name" class="qcar-row" @click="openView(r)">
               <td><span class="qcar-num">{{ r.name }}</span></td>
-              <td><span style="font-size:12px;color:#2563eb;font-weight:600">{{ r.work_order }}</span></td>
+              <td><DocLink doctype="Work Order" :name="r.work_order" /></td>
               <td>
                 <div style="font-size:12.5px;font-weight:600">{{ r.original_item_code }} → {{ r.alternative_item_code }}</div>
                 <div style="font-size:11px;color:#9ca3af">{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</div>
@@ -98,7 +98,7 @@
           <div class="qcar-mcard-sub">{{ r.original_item_code }} → {{ r.alternative_item_code }}</div>
           <div class="qcar-mcard-hint">{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</div>
           <div class="qcar-mcard-meta">
-            <span style="color:#2563eb;font-weight:600">{{ r.work_order }}</span>
+            <DocLink doctype="Work Order" :name="r.work_order" />
             <span>{{ shortUser(r.requested_by) }}</span>
             <span class="mono-sm text-muted">{{ fmtDate(r.request_date) }}</span>
           </div>
@@ -130,7 +130,7 @@
         <div class="qcar-dbody">
 
           <div class="qcar-info-grid">
-            <div><span class="qcar-info-lbl">Work Order</span><div class="qcar-info-val" style="color:#2563eb">{{ viewDoc.work_order }}</div></div>
+            <div><span class="qcar-info-lbl">Work Order</span><div class="qcar-info-val"><DocLink doctype="Work Order" :name="viewDoc.work_order" :mono-style="false" style="color:#2563eb" /></div></div>
             <div><span class="qcar-info-lbl">Row</span><div class="qcar-info-val">{{ viewDoc.work_order_item_row }}</div></div>
             <div><span class="qcar-info-lbl">Original Item</span><div class="qcar-info-val">{{ viewDoc.original_item_code }}</div></div>
             <div><span class="qcar-info-lbl">Alternative Item</span><div class="qcar-info-val" style="color:#2563eb">{{ viewDoc.alternative_item_code }}</div></div>
@@ -186,6 +186,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { apiCall } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
 import { icon } from "../utils/icons.js";
 import { fmtDate } from "../utils/format.js";

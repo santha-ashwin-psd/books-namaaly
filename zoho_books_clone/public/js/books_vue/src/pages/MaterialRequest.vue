@@ -100,7 +100,7 @@
           <div class="bomx-toggle-row" v-if="mr.production_plan">
             <div class="bomx-field-hint" style="margin:0">
               Production Plan:
-              <span class="bomx-link" @click="router.push(`/manufacturing/production-plan/${mr.production_plan}`)">{{ mr.production_plan }}</span>
+              <DocLink doctype="Production Plan" :name="mr.production_plan" />
             </div>
           </div>
 
@@ -167,6 +167,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiAmend, resolveCompany } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 

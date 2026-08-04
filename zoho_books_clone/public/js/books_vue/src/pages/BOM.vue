@@ -492,7 +492,7 @@
                     <td>{{ node.uom }}</td>
                     <td style="text-align:right" class="mono">{{ INR(node.rate) }}</td>
                     <td style="text-align:right;font-weight:700" class="mono">{{ INR(node.amount) }}</td>
-                    <td><span v-if="node.sub_assembly_bom" class="bomx-link" @click="router.push(`/manufacturing/bom/${node.sub_assembly_bom}`)">{{ node.sub_assembly_bom }}</span><span v-else style="color:var(--bx-muted)">—</span></td>
+                    <td><DocLink v-if="node.sub_assembly_bom" doctype="BOM" :name="node.sub_assembly_bom" /><span v-else style="color:var(--bx-muted)">—</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -581,6 +581,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { apiGet, apiList, apiSave, apiDelete, apiSubmit, apiCancel, apiAmend, apiCall } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 
 const route = useRoute();
 const router = useRouter();

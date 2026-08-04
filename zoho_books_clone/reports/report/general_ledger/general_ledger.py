@@ -35,11 +35,11 @@ def get_data(filters: dict) -> list[dict]:
 
     where = " AND ".join(conditions)
     rows = frappe.db.sql(f"""
-        SELECT posting_date, voucher_type, voucher_no, account, party_type, party,
+        SELECT posting_date, posting_time, voucher_type, voucher_no, account, party_type, party,
                debit, credit, remarks
         FROM `tabGeneral Ledger Entry`
         WHERE {where}
-        ORDER BY posting_date, creation
+        ORDER BY posting_date, posting_time, creation
     """, filters, as_dict=True)
 
     running_balance = 0

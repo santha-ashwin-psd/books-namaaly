@@ -8,6 +8,10 @@
 //     parentName: "INV-001",                // invoice/bill name
 //     party: "Acme Corp",                   // customer/supplier
 //     items: [{ item_code, item_name, qty, rate, description }, ...],
+//     invoiceTotal: 1000,                    // parent invoice/bill's grand_total
+//                                             // (NOT outstanding_amount — the CN/DN
+//                                             // cap is against remaining claimable
+//                                             // value, independent of payment status)
 //     existingEndpoint: "zoho_books_clone.api.docs.get_credit_notes",
 //     createEndpoint: "zoho_books_clone.api.docs.create_credit_note",
 //     paramKey: "invoice_name",             // request param key for fetching existing notes
@@ -25,7 +29,7 @@ const state = reactive({
   party: "",
   items: [],
   taxes: [],
-  maxInvoiceAmt: 0,
+  invoiceTotal: 0,
   existingEndpoint: "",
   createEndpoint: "",
   paramKey: "name",
@@ -44,7 +48,7 @@ export function useReturnNote() {
         party: "",
         items: [],
         taxes: [],
-        maxInvoiceAmt: 0,
+        invoiceTotal: 0,
         existingEndpoint: "",
         createEndpoint: "",
         paramKey: "name",

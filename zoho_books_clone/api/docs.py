@@ -764,7 +764,25 @@ def submit_doc(doctype, name, ignore_budget_warning=0):
     d.flags.ignore_permissions = True
     if int(ignore_budget_warning or 0) == 1:
         d.flags.ignore_budget_warning = True
-    d.submit()
+    try:
+        d.submit()
+    except (frappe.ValidationError, frappe.PermissionError):
+        # Already a friendly, actionable message (frappe.throw from validate/
+        # on_submit hooks, budget warnings, etc.) — let it through as-is.
+        raise
+    except Exception as e:
+        # Anything else (e.g. a raw DB error from a bad/stale account
+        # reference reaching an insert) would otherwise surface to the
+        # frontend as just the exception class name with no context. Wrap
+        # it so the person at least knows which document and what failed.
+        frappe.db.rollback()
+        frappe.log_error(
+            title=f"submit_doc failed: {doctype} {name}",
+            message=frappe.get_traceback(),
+        )
+        frappe.throw(
+            _("Could not submit {0} {1}: {2}").format(doctype, name, str(e))
+        )
     frappe.db.commit()
 
     # After submitting a return Sales Invoice (Credit Note), update the parent
@@ -1808,6 +1826,8 @@ def create_debit_note():
             "amount":         -abs(flt(it.get("amount", 0))) or None,
             "expense_account": it.get("expense_account") or expense_account,
             "tax_code":       it.get("tax_code") or "",
+            "batch_no":       it.get("batch_no") or None,
+            "batch_expiry_date": it.get("batch_expiry_date") or None,
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
@@ -1825,6 +1845,7 @@ def create_debit_note():
         "cost_center":      cost_center,
         "credit_to":        ap_account,
         "expense_account":  expense_account,
+        "update_stock":     1 if reason == "Goods Returned" else 0,
         "items":            pi_items,
         "taxes": [
             {
@@ -2123,6 +2144,62 @@ def get_credit_note_applications(credit_note_name):
                     "ref_doctype": "Payment Entry",
                 })
     return apps
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def cancel_debit_note(name):
+    """Cancel a submitted debit note.
+
+    Mirrors cancel_credit_note()'s JE-cleanup step, which the generic
+    cancel_doc() endpoint (previously used for this from the SPA) does not
+    do: a debit note applied to a bill via apply_debit_note_to_bill() is
+    linked by a submitted Journal Entry referencing the DN's own name
+    (reference_type='Purchase Invoice'). Calling d.cancel() directly on a
+    DN that still has such a JE outstanding either fails on Frappe's
+    submitted-document link check, or — if it doesn't — leaves a dangling
+    JE pointing at a now-cancelled voucher, corrupting the AP ledger.
+
+    Unlike cancel_credit_note(), there's no manual "restore source bill
+    outstanding" step here: PurchaseInvoice.on_cancel() already calls
+    self._adjust_source_bill_outstanding(direction=+1) for is_return docs,
+    so that happens automatically inside dn.cancel() below.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("bills", write=True)
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    dn = frappe.get_doc("Purchase Invoice", name)
+    if dn.docstatus != 1:
+        frappe.throw(f"Debit note {name} is not in a submitted state")
+
+    # ── Step 1: cancel any JE-based applications that reference this DN ──────
+    je_refs = frappe.db.sql("""
+        SELECT DISTINCT jea.parent
+        FROM `tabJournal Entry Account` jea
+        JOIN `tabJournal Entry` je ON je.name = jea.parent
+        WHERE jea.reference_type = 'Purchase Invoice'
+          AND jea.reference_name = %s
+          AND je.docstatus = 1
+    """, (name,), as_dict=True)
+
+    for row in je_refs:
+        try:
+            je_doc = frappe.get_doc("Journal Entry", row.parent)
+            je_doc.cancel()
+        except Exception as exc:
+            frappe.log_error(
+                f"cancel_debit_note: could not cancel JE {row.parent} for DN {name}: {exc}",
+                "DN Cancel JE",
+            )
+
+    # ── Step 2: cancel the debit note itself (restores bill outstanding
+    #    automatically via PurchaseInvoice.on_cancel()) ───────────────────────
+    dn.reload()  # refresh after JE cancellations
+    dn.cancel()
+
+    frappe.db.commit()
+    return {"status": "cancelled", "name": name, "bill_restored": dn.return_against}
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
@@ -2615,6 +2692,8 @@ def create_credit_note():
             "amount":         -abs(flt(it.get("amount", 0))) or None,
             "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
+            "batch_no":       it.get("batch_no") or None,
+            "batch_expiry_date": it.get("batch_expiry_date") or None,
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
@@ -2643,6 +2722,7 @@ def create_credit_note():
         "cost_center":      cost_center,
         "debit_to":         ar_account,
         "income_account":   income_account,
+        "update_stock":     1 if reason == "Goods Returned" else 0,
         "items":            cn_items,
         "taxes":            cn_taxes,
     })
@@ -2766,6 +2846,8 @@ def save_credit_note_draft():
             "amount":         -abs(flt(it.get("amount", 0))) or None,
             "income_account": it.get("income_account") or income_account,
             "tax_code":       it.get("tax_code") or "",
+            "batch_no":       it.get("batch_no") or None,
+            "batch_expiry_date": it.get("batch_expiry_date") or None,
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
@@ -2794,6 +2876,7 @@ def save_credit_note_draft():
         cn.cost_center = cost_center or cn.cost_center or ""
         cn.debit_to = cn.debit_to or ar_account
         cn.income_account = cn.income_account or income_account
+        cn.update_stock = 1 if reason == "Goods Returned" else 0
         cn.items = []
         for it in cn_items:
             cn.append("items", it)
@@ -2816,6 +2899,7 @@ def save_credit_note_draft():
             "cost_center":    cost_center,
             "debit_to":       ar_account,
             "income_account": income_account,
+            "update_stock":   1 if reason == "Goods Returned" else 0,
             "items":          cn_items,
             "taxes":          cn_taxes,
         })

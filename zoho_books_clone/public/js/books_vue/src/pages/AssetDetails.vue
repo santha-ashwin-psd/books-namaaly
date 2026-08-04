@@ -36,14 +36,14 @@
                   <label class="inv-lbl">Asset Category <span class="inv-req">*</span></label>
                   <select v-model="asset.asset_category" class="inv-fi" required>
                     <option value="">Select category</option>
-                    <option v-for="category in categories" :key="category.name" :value="category.name">{{ category.name }}</option>
+                    <option v-for="category in categories" :key="category.name" :value="category.name">{{ category.category_name || category.name }}</option>
                   </select>
                 </div>
                 <div>
                   <label class="inv-lbl">Status</label>
-                  <select v-model="asset.status" class="inv-fi">
-                    <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
-                  </select>
+                  <div class="inv-fi" style="background:#f8fafc;color:#475569;display:flex;align-items:center;">
+                    {{ asset.status || 'Draft' }}
+                  </div>
                 </div>
                 <div>
                   <label class="inv-lbl">Company</label>
@@ -290,7 +290,6 @@ const companies = ref([]);
 const creditAccountOptions = ref([]);
 const loading = ref(true);
 const saving = ref(false);
-const statuses = ['Draft', 'Submitted', 'Partially Depreciated', 'Fully Depreciated', 'Scrapped', 'Sold', 'In Maintenance', 'Out of Order'];
 let initialSnapshot = '';
 const isDirty = computed(() => JSON.stringify(asset.value) !== initialSnapshot);
 
@@ -307,7 +306,7 @@ const isNew = computed(() => route.params.id === 'new');
 
 async function loadLookups() {
   const [categoryRows, departmentRows] = await Promise.all([
-    apiList('Asset Category', { fields: ['name'], order: 'name asc', limit: 500 }),
+    apiList('Asset Category', { fields: ['name', 'category_name'], order: 'name asc', limit: 500 }),
     apiList('Department', { fields: ['name'], order: 'name asc', limit: 500 }),
   ]);
   categories.value = categoryRows || [];
@@ -373,22 +372,39 @@ async function loadAsset() {
 }
 
 async function saveAsset(targetStatus) {
+  if (saving.value) return;
   if (targetStatus === 'Submitted' && !asset.value.is_existing_asset && !asset.value.credit_account) {
     toast.error('Credit Account is required to submit a non-existing asset (used for the capitalization entry).');
     return;
   }
   saving.value = true;
   try {
-    const doc = { ...asset.value, doctype: 'Asset', status: targetStatus || asset.value.status };
+    const doc = { ...asset.value, doctype: 'Asset' };
+    if (targetStatus === 'Submitted') {
+      doc.status = 'Submitted';
+    } else if (asset.value.docstatus !== 1) {
+      // Still unsubmitted — safe to (re)label it Draft. If it's already
+      // submitted (docstatus 1), a "Save Draft" click here is just a minor
+      // field edit on an existing record — leave its real status alone
+      // rather than relabeling a Submitted asset back to "Draft" text.
+      doc.status = 'Draft';
+    }
     if (isNew.value) delete doc.name;
     // Ensure the asset is scoped to the current company for tenancy isolation.
     if (!doc.company) doc.company = window.__booksCompany || '';
     const saved = await apiSave(doc);
     const savedName = saved?.name || doc.name;
+    // Keep the in-memory doc in sync with what the server actually persisted
+    // (name, modified, docstatus, etc.) -- router.push below doesn't remount
+    // this component when it's already on the same route, so without this
+    // asset.value would keep the pre-save `modified` and the next save would
+    // be rejected as a false conflict.
+    if (saved) asset.value = { ...asset.value, ...saved };
 
     if (targetStatus === 'Submitted' && saved?.docstatus !== 1) {
       try {
-        await apiSubmit('Asset', savedName);
+        const submitted = await apiSubmit('Asset', savedName);
+        if (submitted) asset.value = { ...asset.value, ...submitted };
       } catch (subErr) {
         toast.error('Saved as draft — submit failed: ' + (subErr.message || subErr));
         initialSnapshot = JSON.stringify(asset.value);

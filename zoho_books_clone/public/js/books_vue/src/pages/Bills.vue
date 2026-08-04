@@ -592,6 +592,7 @@
                     <span class="inv-dmeta-lbl">Bill Date</span>
                   </div>
                   <div class="inv-dmeta-date-val">{{ fmtDate(viewDoc.posting_date) }}</div>
+                  <div v-if="viewDoc.posting_time" class="inv-dmeta-date-sub">{{ viewDoc.posting_time }}</div>
                 </div>
                 <div class="inv-details-meta-col col-balance">
                   <div class="inv-dmeta-icon-row">
@@ -1358,6 +1359,7 @@ async function openView(b) {
       docstatus: doc.docstatus ?? viewDoc.value.docstatus,
       status: doc.status ?? viewDoc.value.status,
       due_date: doc.due_date || viewDoc.value.due_date,
+      posting_time: doc.posting_time || "",
       cost_center: doc.cost_center, place_of_supply: doc.place_of_supply, set_warehouse: doc.set_warehouse, billing_address: doc.billing_address,
       billing_address_name: doc.billing_address_name, remark: doc.remark || "",
       discount_type: doc.discount_type || "Percentage",
@@ -1777,8 +1779,11 @@ async function issueDebitNote(b) {
   }
   const result = await openReturnNote({
     kind: "debit", parentName: b.name, party: b.supplier,
-    maxInvoiceAmt: flt(b.outstanding_amount),
-    items: billItems.map(i => ({ item_code: i.item_code, item_name: i.item_name, description: i.description, qty: i.qty, rate: i.rate })),
+    invoiceTotal: flt(b.grand_total),
+    items: billItems.map(i => ({
+      item_code: i.item_code, item_name: i.item_name, description: i.description, qty: i.qty, rate: i.rate,
+      uom: i.uom, batch_no: i.batch_no, batch_expiry_date: i.batch_expiry_date,
+    })),
     existingEndpoint: "zoho_books_clone.api.docs.get_debit_notes",
     createEndpoint: "zoho_books_clone.api.docs.create_debit_note",
     paramKey: "bill_name",

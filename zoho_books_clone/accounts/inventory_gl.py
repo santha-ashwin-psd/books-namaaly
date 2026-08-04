@@ -115,6 +115,7 @@ def build_manufacture_incoming_gl_lines(
     inventory_account: str | None,
     scrap_account: str | None,
     segregate_scrap_gl: bool,
+    posting_time=None,
 ) -> list[dict]:
     """
     Pure builder for the FG+scrap debit leg of a Manufacture Stock Entry
@@ -135,6 +136,7 @@ def build_manufacture_incoming_gl_lines(
         "voucher_type": "Stock Entry",
         "voucher_no": voucher_no,
         "posting_date": posting_date,
+        "posting_time": posting_time or "00:00:00",
         "company": company,
     }
 
@@ -297,6 +299,7 @@ def build_purchase_invoice_debit_lines(
         "voucher_type": doc.doctype,
         "voucher_no": doc.name,
         "posting_date": doc.posting_date,
+        "posting_time": getattr(doc, "posting_time", None),
         "company": doc.company,
         "fiscal_year": getattr(doc, "fiscal_year", "") or "",
         "cost_center": getattr(doc, "cost_center", "") or "",

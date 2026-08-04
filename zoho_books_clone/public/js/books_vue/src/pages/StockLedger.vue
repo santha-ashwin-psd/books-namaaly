@@ -113,7 +113,7 @@
             <div class="sl-dh-ico"><span v-html="icon('ledger',20)"></span></div>
             <div>
               <div class="sl-dh-title">{{ viewDoc.item_code }}</div>
-              <div class="sl-dh-sub">{{ viewDoc.warehouse }} · {{ fmtDate(viewDoc.posting_date) }}</div>
+              <div class="sl-dh-sub">{{ viewDoc.warehouse }} · {{ fmtDate(viewDoc.posting_date) }}<template v-if="viewDoc.posting_time"> {{ viewDoc.posting_time }}</template></div>
             </div>
             <span class="sl-badge" :class="flt(viewDoc.actual_qty)>=0?'badge-green':'badge-red'">{{ flt(viewDoc.actual_qty)>=0?'Inward':'Outward' }}</span>
           </div>
@@ -128,7 +128,7 @@
             <div><div class="sl-meta-lbl">Balance After</div><div >{{ fmtQty(viewDoc.qty_after_transaction) }}</div></div>
             <div><div class="sl-meta-lbl">Valuation Rate</div><div >{{ fmtCur(viewDoc.valuation_rate) }}</div></div>
             <div><div class="sl-meta-lbl">Value Change</div><div  :class="flt(viewDoc.stock_value_difference)>=0?'green':'red'">{{ fmtCur(viewDoc.stock_value_difference) }}</div></div>
-            <div><div class="sl-meta-lbl">Posting Date</div><div >{{ fmtDate(viewDoc.posting_date) }}</div></div>
+            <div><div class="sl-meta-lbl">Posting Date</div><div >{{ fmtDate(viewDoc.posting_date) }}<template v-if="viewDoc.posting_time"> {{ viewDoc.posting_time }}</template></div></div>
           </div>
           <div class="sl-section-hdr"><span v-html="icon('file',13)"></span> Source Voucher</div>
           <div class="sl-meta-grid">
@@ -163,7 +163,7 @@ const sortCol=ref("posting_date"),sortDir=ref("desc");
 const now=new Date();
 const firstOfMonth=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
 const filters=reactive({item:"",warehouse:"",from_date:firstOfMonth,to_date:now.toISOString().slice(0,10)});
-async function load(){loading.value=true;loaded.value=true;try{const co=await resolveCompany();const f=[["company","=",co]];if(filters.item)f.push(["item_code","=",filters.item]);if(filters.warehouse)f.push(["warehouse","=",filters.warehouse]);if(filters.from_date)f.push(["posting_date",">=",filters.from_date]);if(filters.to_date)f.push(["posting_date","<=",filters.to_date]);list.value=await apiList("Stock Ledger Entry",{fields:["name","posting_date","item_code","warehouse","voucher_type","voucher_no","actual_qty","qty_after_transaction","stock_value_difference","valuation_rate"],filters:f,limit:100000,order:"posting_date asc"});}catch(e){toast.error(e.message||"Failed to load stock ledger");}finally{loading.value=false;}}
+async function load(){loading.value=true;loaded.value=true;try{const co=await resolveCompany();const f=[["company","=",co]];if(filters.item)f.push(["item_code","=",filters.item]);if(filters.warehouse)f.push(["warehouse","=",filters.warehouse]);if(filters.from_date)f.push(["posting_date",">=",filters.from_date]);if(filters.to_date)f.push(["posting_date","<=",filters.to_date]);list.value=await apiList("Stock Ledger Entry",{fields:["name","posting_date","posting_time","item_code","warehouse","voucher_type","voucher_no","actual_qty","qty_after_transaction","stock_value_difference","valuation_rate"],filters:f,limit:100000,order:"posting_date asc"});}catch(e){toast.error(e.message||"Failed to load stock ledger");}finally{loading.value=false;}}
 const filteredRows=computed(()=>{
   let r=list.value;
   if(dirFilter.value==="in")r=r.filter(e=>flt(e.actual_qty)>0);

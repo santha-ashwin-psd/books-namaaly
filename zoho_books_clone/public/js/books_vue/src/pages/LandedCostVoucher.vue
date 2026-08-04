@@ -98,7 +98,7 @@
         <div class="inv-dh">
           <div>
             <div class="inv-dh-title">{{ isNew ? 'New Landed Cost Voucher' : lcv.name }}</div>
-            <div class="inv-dh-sub" v-if="!isNew">{{ lcv.posting_date }} • {{ lcv.purchase_receipt || lcv.purchase_invoice || 'No source' }}</div>
+            <div class="inv-dh-sub" v-if="!isNew">{{ lcv.posting_date }}<template v-if="lcv.posting_time"> {{ lcv.posting_time }}</template> • {{ lcv.purchase_receipt || lcv.purchase_invoice || 'No source' }}</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <span v-if="!isNew" class="inv-status-badge" :class="statusClass(lcv)">{{ statusLabel(lcv) }}</span>

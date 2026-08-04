@@ -58,6 +58,7 @@ from zoho_books_clone.inventory.landed_cost_engine import (
 )
 from zoho_books_clone.inventory.utils import get_valuation_rate
 from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import make_gl_entries
+from zoho_books_clone.db.validators import set_posting_time
 
 
 class LandedCostVoucher(Document):
@@ -66,6 +67,7 @@ class LandedCostVoucher(Document):
 
     def validate(self):
         self._set_defaults()
+        set_posting_time(self)
         self._validate_source_document()
         self._validate_rows()
         self._validate_no_duplicate_charge_capitalization()
@@ -465,6 +467,7 @@ class LandedCostVoucher(Document):
             charges=charges,
             voucher_no=self.name,
             posting_date=self.posting_date,
+            posting_time=self.posting_time,
             company=self.company,
         )
         if gl_map:

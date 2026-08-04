@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import flt, today as _today
+from frappe.utils import flt, today as _today, nowtime as _nowtime
 from frappe.model.document import Document
 
 
@@ -222,6 +222,7 @@ def _reverse_gl_entries(voucher_type: str, voucher_no: str) -> set[str]:
             "voucher_type": voucher_type,
             "voucher_no":   voucher_no,
             "posting_date": reversal_date,
+            "posting_time": _nowtime(),
             "party_type":   row.party_type or "",
             "party":        row.party or "",
             "cost_center":  row.cost_center or "",
@@ -242,6 +243,14 @@ def _create_gl_entry(entry: dict) -> str:
     doc = frappe.new_doc("General Ledger Entry")
     # Drop empty fiscal_year so Frappe doesn't try to validate a Link to ""
     clean = {k: v for k, v in entry.items() if not (k == "fiscal_year" and not v)}
+    # posting_time is optional on the caller's gl_map dict -- callers whose
+    # source doctype doesn't yet carry a posting_time field (Payment Entry,
+    # Expense, Expense Claim) simply omit it. Default to "now" rather than
+    # leaving it blank, so posting_date/posting_time/creation ordering
+    # (mirroring Stock Ledger Entry's FIFO ordering) never has to special-case
+    # a null time.
+    if not clean.get("posting_time"):
+        clean["posting_time"] = _nowtime()
     doc.update(clean)
     doc.flags.ignore_permissions = True
     doc.flags.ignore_mandatory   = True

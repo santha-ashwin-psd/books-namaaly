@@ -141,7 +141,7 @@
             <tbody>
               <tr v-for="r in result.rows" :key="r.name" class="arx-row" @click="router.push(`/assets/${r.name}`)">
                 <td class="arx-link">{{ r.asset_name || r.name }}<div class="arx-sub">{{ r.name }}</div></td>
-                <td class="arx-sub">{{ r.asset_category || '—' }}</td>
+                <td class="arx-sub">{{ categoryLabel(r.asset_category) || '—' }}</td>
                 <td class="arx-sub">{{ r.location || '—' }}</td>
                 <td style="text-align:right;">{{ fmt(r.purchase_cost) }}</td>
                 <td style="text-align:right;">{{ fmt(r.accumulated_depreciation) }}</td>
@@ -166,7 +166,7 @@
                 <span class="arx-link">{{ r.asset_name || r.name }}</span>
                 <span class="arx-badge" :class="statusClass(r.status)">{{ r.status }}</span>
               </div>
-              <div class="arx-sub">{{ r.name }} · {{ r.asset_category || '—' }} · {{ r.location || '—' }}</div>
+              <div class="arx-sub">{{ r.name }} · {{ categoryLabel(r.asset_category) || '—' }} · {{ r.location || '—' }}</div>
               <div class="arx-rcard-meta">
                 <div><span class="arx-rcard-mlbl">Cost</span>{{ fmt(r.purchase_cost) }}</div>
                 <div><span class="arx-rcard-mlbl">Accum. Dep.</span>{{ fmt(r.accumulated_depreciation) }}</div>
@@ -192,7 +192,7 @@
             <tbody>
               <tr v-for="r in result.rows" :key="r.name" class="arx-row" @click="router.push(`/assets/${r.name}`)" :style="r.is_overdue ? 'background:var(--bx-redS);' : ''">
                 <td class="arx-link">{{ r.asset_name || r.name }}<div class="arx-sub">{{ r.name }}</div></td>
-                <td class="arx-sub">{{ r.asset_category || '—' }}</td>
+                <td class="arx-sub">{{ categoryLabel(r.asset_category) || '—' }}</td>
                 <td style="text-align:right;font-weight:700;color:var(--bx-astB);">{{ fmt(r.purchase_cost) }}</td>
                 <td style="text-align:right;">{{ r.days_in_cwip ?? '—' }}</td>
                 <td class="arx-sub">{{ r.available_for_use_date?.slice(0,10) || '—' }}</td>
@@ -211,7 +211,7 @@
                 <span v-if="r.is_overdue" class="arx-badge badge-removed">Overdue</span>
                 <span v-else class="arx-badge badge-changed">In CWIP</span>
               </div>
-              <div class="arx-sub">{{ r.name }} · {{ r.asset_category || '—' }}</div>
+              <div class="arx-sub">{{ r.name }} · {{ categoryLabel(r.asset_category) || '—' }}</div>
               <div class="arx-rcard-meta">
                 <div><span class="arx-rcard-mlbl">Balance</span>{{ fmt(r.purchase_cost) }}</div>
                 <div><span class="arx-rcard-mlbl">Days in CWIP</span>{{ r.days_in_cwip ?? '—' }}</div>
@@ -240,7 +240,7 @@
             <tbody>
               <tr v-for="(r,i) in result.rows" :key="r.asset + '-' + r.period_no + '-' + i" class="arx-row" @click="router.push(`/assets/${r.asset}`)">
                 <td class="arx-link">{{ r.asset_name }}<div class="arx-sub">{{ r.asset }}</div></td>
-                <td class="arx-sub">{{ r.asset_category || '—' }}</td>
+                <td class="arx-sub">{{ categoryLabel(r.asset_category) || '—' }}</td>
                 <td style="text-align:right;">{{ r.period_no }}<span v-if="r.is_pro_rata" class="arx-sub"> (pro-rata)</span></td>
                 <td class="arx-sub">{{ r.depreciation_date?.slice(0,10) }}</td>
                 <td style="text-align:right;">{{ fmt(r.opening_value) }}</td>
@@ -264,7 +264,7 @@
                 <span class="arx-link">{{ r.asset_name }}</span>
                 <span class="arx-badge" :class="statusClass(r.status)">{{ r.status }}</span>
               </div>
-              <div class="arx-sub">{{ r.asset }} · {{ r.asset_category || '—' }} · {{ r.depreciation_date?.slice(0,10) }}</div>
+              <div class="arx-sub">{{ r.asset }} · {{ categoryLabel(r.asset_category) || '—' }} · {{ r.depreciation_date?.slice(0,10) }}</div>
               <div class="arx-rcard-meta">
                 <div><span class="arx-rcard-mlbl">Period</span>{{ r.period_no }}{{ r.is_pro_rata ? ' (pro-rata)' : '' }}</div>
                 <div><span class="arx-rcard-mlbl">Opening</span>{{ fmt(r.opening_value) }}</div>
@@ -480,6 +480,14 @@ function exportCSV() {
 // ── Company / Asset Category filter options ──
 const companyOptions = ref([]);
 const categoryOptions = ref([]);
+const categoryLabelMap = computed(() => {
+  const map = {};
+  for (const c of categoryOptions.value) map[c.value] = c.label;
+  return map;
+});
+function categoryLabel(id) {
+  return id ? (categoryLabelMap.value[id] || id) : "";
+}
 
 async function loadFilterOptions() {
   try {
@@ -487,8 +495,8 @@ async function loadFilterOptions() {
     companyOptions.value = (companies || []).map(c => ({ label: c.name, value: c.name }));
   } catch (e) { /* non-fatal */ }
   try {
-    const cats = await apiList("Asset Category", { fields: ["name"], limit: 500, order: "name asc" });
-    categoryOptions.value = (cats || []).map(c => ({ label: c.name, value: c.name }));
+    const cats = await apiList("Asset Category", { fields: ["name", "category_name"], limit: 500, order: "category_name asc" });
+    categoryOptions.value = (cats || []).map(c => ({ label: c.category_name || c.name, value: c.name }));
   } catch (e) { /* non-fatal */ }
 }
 

@@ -215,7 +215,7 @@
                 </div>
                 <div class="pr-info-item">
                   <div class="pr-info-lbl">Date</div>
-                  <div class="pr-info-val">{{ viewDoc.posting_date||'—' }}</div>
+                  <div class="pr-info-val">{{ viewDoc.posting_date||'—' }}<template v-if="viewDoc.posting_time"> {{ viewDoc.posting_time }}</template></div>
                 </div>
                 <div class="pr-info-item">
                   <div class="pr-info-lbl">Receiving Warehouse</div>

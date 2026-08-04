@@ -105,6 +105,40 @@ def get_category_accounts(asset_category: str, company: str) -> dict:
     return row or {}
 
 
+def _validate_account_ref(account: str, company: str, label: str) -> None:
+    """Verify `account` is a real, usable Account for `company`. Raises a
+    friendly frappe.throw for any problem, instead of letting a bad/stale
+    account name reach make_gl_entries() and fail as a raw DB error at
+    submit time (foreign key / constraint failure surfacing as an opaque
+    OperationalError with no actionable message)."""
+    row = frappe.db.get_value(
+        "Account", account, ["company", "is_group", "disabled"], as_dict=True
+    )
+    if not row:
+        frappe.throw(
+            _("{0} {1} does not exist. Check the account configured under "
+              "Asset Category \u2192 Accounting (per Company).").format(
+                label, frappe.bold(account)
+            )
+        )
+    if row.company != company:
+        frappe.throw(
+            _("{0} {1} belongs to company {2}, not {3}. Fix the account "
+              "configured under Asset Category \u2192 Accounting (per Company).").format(
+                label, frappe.bold(account), frappe.bold(row.company), frappe.bold(company)
+            )
+        )
+    if row.is_group:
+        frappe.throw(
+            _("{0} {1} is a group account and cannot be posted to directly. "
+              "Pick a leaf account instead.").format(label, frappe.bold(account))
+        )
+    if row.disabled:
+        frappe.throw(
+            _("{0} {1} is disabled and cannot be posted to.").format(label, frappe.bold(account))
+        )
+
+
 def validate_capitalization_setup(doc) -> None:
     """Called from Asset.validate() so the person finds out about missing
     setup while still editing, not only at submit time."""
@@ -122,11 +156,16 @@ def validate_capitalization_setup(doc) -> None:
                 "Add a row under Asset Category \u2192 Accounting (per Company) first."
             ).format(frappe.bold(doc.asset_category), frappe.bold(doc.company))
         )
+    _validate_account_ref(accounts["fixed_asset_account"], doc.company, "Fixed Asset Account")
+
+    if accounts.get("cwip_account"):
+        _validate_account_ref(accounts["cwip_account"], doc.company, "CWIP Account")
 
     if not doc.credit_account:
         frappe.throw(
             _("Credit Account (Payable / Bank / Cash) is required to capitalize this asset.")
         )
+    _validate_account_ref(doc.credit_account, doc.company, "Credit Account")
 
 
 def post_asset_capitalization(doc) -> None:

@@ -15,6 +15,11 @@ class Asset(Document):
         validate_capitalization_setup(self)
 
     def on_submit(self):
+        # Nothing set this before -- the old free-text status dropdown was
+        # the only thing that ever touched it. Depreciation posting later
+        # moves this on to Partially/Fully Depreciated, and Asset Disposal
+        # moves it to Scrapped/Sold; this is just the initial value.
+        self.status = "Submitted"
         post_asset_capitalization(self)
 
     def on_cancel(self):

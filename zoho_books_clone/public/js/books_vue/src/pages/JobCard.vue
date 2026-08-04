@@ -53,8 +53,8 @@
           <div style="flex:1;min-width:0">
             <div class="bomx-jc-id mono">{{ row.name }}</div>
             <div class="bomx-jc-op">{{ row.operation || '—' }}</div>
-            <div class="bomx-jc-wo">{{ row.work_order }}<span v-if="row.workstation"> • {{ row.workstation }}</span></div>
-            <div class="bomx-jc-sub" v-if="row.sub_assembly_bom">🧩 {{ subAssemblyBomLabel(row.sub_assembly_bom) }}</div>
+            <div class="bomx-jc-wo"><DocLink doctype="Work Order" :name="row.work_order" :mono-style="false" /><span v-if="row.workstation"> • <DocLink doctype="Workstation" :name="row.workstation" :mono-style="false" /></span></div>
+            <div class="bomx-jc-sub" v-if="row.sub_assembly_bom">🧩 <DocLink doctype="BOM" :name="row.sub_assembly_bom" :mono-style="false">{{ subAssemblyBomLabel(row.sub_assembly_bom) }}</DocLink></div>
           </div>
           <span class="bomx-badge" :class="statusClass(row)" style="flex-shrink:0">{{ statusLabel(row) }}</span>
         </div>
@@ -121,7 +121,7 @@
                   <option v-for="w in workOrdersList" :key="w.name" :value="w.name">{{ w.name }}</option>
                 </select>
                 <div class="bomx-field-hint" v-if="jobCardItemName">Manufactures: <strong>{{ jobCardItemName }}</strong></div>
-                <div class="bomx-field-hint" v-if="doc.sub_assembly_bom">🧩 Sub-assembly: <strong>{{ subAssemblyBomLabel(doc.sub_assembly_bom) }}</strong></div>
+                <div class="bomx-field-hint" v-if="doc.sub_assembly_bom">🧩 Sub-assembly: <DocLink doctype="BOM" :name="doc.sub_assembly_bom" :mono-style="false"><strong>{{ subAssemblyBomLabel(doc.sub_assembly_bom) }}</strong></DocLink></div>
               </div>
               <div>
                 <div class="bomx-hf-label">Operation <span style="color:var(--bx-red)">*</span></div>
@@ -318,6 +318,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { apiGet, apiList, apiSave, apiDelete } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 
 const route = useRoute();
 const router = useRouter();

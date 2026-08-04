@@ -103,7 +103,7 @@
             <div style="font-weight:600">{{ row.item_name || row.production_item }}</div>
             <div style="font-size:11.5px;color:var(--bx-muted)">{{ row.production_item }}</div>
           </td>
-          <td class="mono" style="font-size:12px;color:var(--bx-muted)">{{ row.bom || '—' }}</td>
+          <td class="mono" style="font-size:12px"><DocLink v-if="row.bom" doctype="BOM" :name="row.bom" /><span v-else style="color:var(--bx-muted)">—</span></td>
           <td style="text-align:right;font-weight:700;white-space:nowrap">{{ fmtNum(row.qty) }} <span style="font-weight:400;color:var(--bx-muted);font-size:12px">{{ row.stock_uom }}</span></td>
           <td style="text-align:right;white-space:nowrap">{{ fmtNum(row.produced_qty) }} <span style="color:var(--bx-muted);font-size:12px">{{ row.stock_uom }}</span></td>
           <td style="font-size:12.5px;color:var(--bx-muted);white-space:nowrap">{{ fmtDate(row.planned_start_date) }}</td>
@@ -851,6 +851,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiSave, apiList, apiSubmit, apiCancel, apiDelete, apiAmend, apiCall, resolveCompany } from "../api/client.js";
+import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 
@@ -1925,17 +1926,24 @@ function itemLabel(code) {
 function printWorkOrder() {
   const groups = groupedWoItems.value;
   const groupHtml = (grp) => `
-        <tr><td colspan="4" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
-        ${grp.rows.map(({ rm }) => `
+        <tr><td colspan="6" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
+        ${grp.rows.map(({ rm }) => {
+          const required = flt(rm.required_qty);
+          const transferred = flt(rm.transferred_qty);
+          const needed = Math.max(required - transferred, 0);
+          return `
         <tr>
           <td>${esc(rm.item_code)}</td>
           <td>${esc(itemLabel(rm.item_code))}</td>
-          <td style="text-align:right">${esc(fmtQty(rm.required_qty))}</td>
+          <td style="text-align:right">${esc(fmtQty(required))}</td>
+          <td style="text-align:right">${esc(fmtQty(transferred))}</td>
+          <td style="text-align:right;font-weight:700">${esc(fmtQty(needed))}</td>
           <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
-        </tr>`).join("")}`;
+        </tr>`;
+        }).join("")}`;
   const rowsHtml = groups.length
     ? groups.map(groupHtml).join("")
-    : `<tr><td colspan="4" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
+    : `<tr><td colspan="6" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
 
   const html = `
     <!DOCTYPE html>
@@ -1984,7 +1992,7 @@ function printWorkOrder() {
           <h2>Raw Materials</h2>
           <table>
             <thead>
-              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th>Warehouse</th></tr>
+              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th style="text-align:right">Already Transferred</th><th style="text-align:right">Needed Qty</th><th>Warehouse</th></tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
