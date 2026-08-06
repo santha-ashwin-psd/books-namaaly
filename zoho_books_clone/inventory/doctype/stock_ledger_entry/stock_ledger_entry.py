@@ -107,6 +107,12 @@ class StockLedgerEntry(Document):
         bin_doc.valuation_rate = new_rate if new_qty > 0 else flt(bin_doc.valuation_rate)
         bin_doc.stock_value = new_value
         bin_doc.projected_qty = flt(new_qty) + flt(bin_doc.ordered_qty) - flt(bin_doc.reserved_qty)
+        # Rack assignment is label-only and only makes sense while there's
+        # actually stock sitting in the rack. Once qty drops to zero (or
+        # below, e.g. a corrective negative entry), clear it automatically
+        # rather than leaving a stale rack label on an empty Bin.
+        if new_qty <= 0 and bin_doc.get("rack_no"):
+            bin_doc.rack_no = ""
         bin_doc.flags.ignore_links = True
         bin_doc.flags.ignore_mandatory = True
         bin_doc.save(ignore_permissions=True)

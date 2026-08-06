@@ -313,6 +313,64 @@
           </div>
         </div>
 
+        <!-- Rack panel -->
+        <div v-if="adjustTargetWH && warehouseRacks.length" class="wh-rack-panel">
+          <div class="wh-rack-panel-top">
+            <div class="wh-rack-panel-icon" :style="{ background: whMeta(adjustTargetWH.warehouse_type).bg }">
+              {{ whMeta(adjustTargetWH.warehouse_type).icon }}
+            </div>
+            <div class="wh-rack-panel-info">
+              <div class="wh-rack-panel-name">{{ adjustTargetWH.warehouse_name || adjustTargetWH.name }}</div>
+              <div class="wh-rack-panel-type">{{ adjustTargetWH.warehouse_type || 'Stores' }} Warehouse</div>
+            </div>
+            <div class="wh-rack-panel-stats">
+              <div class="wh-rack-panel-stat">
+                <span v-html="icon('box', 15)"></span>
+                <div>
+                  <div class="wh-rack-panel-stat-val">{{ whStats.items }}</div>
+                  <div class="wh-rack-panel-stat-lbl">Items</div>
+                </div>
+              </div>
+              <div class="wh-rack-panel-stat">
+                <span v-html="icon('stack', 15)"></span>
+                <div>
+                  <div class="wh-rack-panel-stat-val">{{ fmt(whStats.value) }}</div>
+                  <div class="wh-rack-panel-stat-lbl">Inventory Value</div>
+                </div>
+              </div>
+              <div class="wh-rack-panel-stat">
+                <span v-html="icon('chart', 15)"></span>
+                <div>
+                  <div class="wh-rack-panel-stat-val">{{ whStats.projected.toFixed(4) }}</div>
+                  <div class="wh-rack-panel-stat-lbl">Projected Qty</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wh-rack-chips-row">
+            <span class="wh-rack-chips-lbl">RACKS</span>
+            <button
+              class="wh-rack-chip"
+              :class="{ 'wh-rack-chip--active': stockRackFilter === '' }"
+              @click="stockRackFilter = ''">
+              All Racks
+            </button>
+            <button
+              class="wh-rack-chip"
+              :class="{ 'wh-rack-chip--active': stockRackFilter === '__none__' }"
+              @click="stockRackFilter = '__none__'">
+              Unassigned
+            </button>
+            <button
+              v-for="rk in warehouseRacks" :key="rk"
+              class="wh-rack-chip"
+              :class="{ 'wh-rack-chip--active': stockRackFilter === rk }"
+              @click="stockRackFilter = rk">
+              {{ rk }}
+            </button>
+          </div>
+        </div>
+
         <!-- Table header -->
         <div class="wh-stock-header">
           <div class="wh-stock-title">
@@ -414,6 +472,7 @@
             <div class="wh-smc-footer">
               <span v-if="r.item_group" class="wh-smc-tag">{{ r.item_group }}</span>
               <span v-if="r.uom" class="wh-smc-tag">{{ r.uom }}</span>
+              <span v-if="r.rack_no" class="wh-smc-tag">🗄 {{ r.rack_no }}</span>
               <button v-if="r.has_batch_no" class="wh-smc-batch-toggle" @click="toggleBatches(r.item_code)">
                 {{ batchesFor(r.item_code).length }} batch{{ batchesFor(r.item_code).length===1?'':'es' }} {{ expandedRows[r.item_code] ? '▲' : '▼' }}
               </button>
@@ -455,7 +514,7 @@
                 <th class="wh-th wh-th-r wh-th-hide-md sortable" @click="stockSortBy('ordered_qty')">Ordered <span v-html="stockSortArrow('ordered_qty')"></span></th>
                 <th class="wh-th wh-th-r wh-th-hide-md sortable" @click="stockSortBy('valuation_rate')">Val. Rate <span v-html="stockSortArrow('valuation_rate')"></span></th>
                 <th class="wh-th wh-th-r sortable" @click="stockSortBy('stock_value')">Stock Value <span v-html="stockSortArrow('stock_value')"></span></th>
-                <th class="wh-th wh-th-c">Status</th>
+                <th v-if="adjustTargetWH" class="wh-th">Rack</th>
                 <th v-if="adjustTargetWH" class="wh-th wh-th-c">Adjust</th>
               </tr>
             </thead>
@@ -478,9 +537,14 @@
                 <td class="wh-td wh-td-r wh-td-ordered wh-th-hide-md">{{ flt(r.ordered_qty).toFixed(4) }}</td>
                 <td class="wh-td wh-td-r wh-th-hide-md">{{ fmt(r.valuation_rate) }}</td>
                 <td class="wh-td wh-td-r wh-td-value">{{ fmt(r.stock_value) }}</td>
-                <td class="wh-td wh-td-c">
-                  <span v-if="r.below_reorder" class="wh-status-low">⚠ Low</span>
-                  <span v-else class="wh-status-ok">✓ OK</span>
+                <td v-if="adjustTargetWH" class="wh-td" @click.stop>
+                  <select v-if="flt(r.actual_qty) > 0" class="nim-input" style="min-width:76px;padding:4px 4px;font-size:12px"
+                    :disabled="!$canEdit('inventory')"
+                    :value="r.rack_no || ''" @change="setRack(r, $event.target.value)">
+                    <option value="">select</option>
+                    <option v-for="rk in warehouseRacks" :key="rk" :value="rk">{{ rk }}</option>
+                  </select>
+                  <span v-else style="color:#94a3b8;font-size:12.5px">—</span>
                 </td>
                 <td v-if="adjustTargetWH" class="wh-td wh-td-c" @click.stop>
                   <button class="wh-adj-btn" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : ''" @click="openAdjustment(r)">
@@ -489,7 +553,7 @@
                 </td>
               </tr>
               <tr v-if="r.has_batch_no && expandedRows[r.item_code]" class="wh-batch-row">
-                <td :colspan="adjustTargetWH ? 10 : 9" style="padding:0">
+                <td :colspan="adjustTargetWH ? 10 : 8" style="padding:0">
                   <div class="wh-batch-panel">
                     <div v-if="!batchesFor(r.item_code).length" class="wh-batch-empty">No batch-wise ledger entries for this item yet</div>
                     <table v-else class="wh-batch-tbl">
@@ -669,6 +733,29 @@
                 style="width:16px;height:16px;cursor:pointer"/> Disabled
             </label>
           </div>
+
+          <!-- ── Racks (label-only, leaf warehouses only) ── -->
+          <template v-if="!form.is_group">
+            <div class="nim-section-label" style="margin-top:18px">Racks</div>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">
+              Optional labels for organizing stock location within this warehouse. Not used for quantity tracking.
+            </div>
+            <div v-for="(r, idx) in form.racks" :key="idx"
+              style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <input class="nim-input" v-model="r.rack_no" placeholder="Rack no, e.g. A1" style="flex:1"
+                :disabled="drawerMode === 'edit' ? !$canEdit('inventory') : !$canCreate('inventory')"/>
+              <input class="nim-input" v-model="r.notes" placeholder="Notes (optional)" style="flex:1.4"
+                :disabled="drawerMode === 'edit' ? !$canEdit('inventory') : !$canCreate('inventory')"/>
+              <button class="wh-action-btn wh-action-btn--danger" @click="removeRackRow(idx)" title="Remove rack"
+                :disabled="drawerMode === 'edit' ? !$canEdit('inventory') : !$canCreate('inventory')">
+                <span v-html="icon('trash', 13)"></span>
+              </button>
+            </div>
+            <button class="wh-action-btn" @click="addRackRow"
+              :disabled="drawerMode === 'edit' ? !$canEdit('inventory') : !$canCreate('inventory')">
+              <span v-html="icon('plus', 13)"></span> Add Rack
+            </button>
+          </template>
         </div>
         <div class="nim-footer">
           <div></div>
@@ -787,6 +874,7 @@ const search         = ref("");
 const itemSearch     = ref("");
 const stockGroupFilter  = ref("");
 const stockStatusFilter = ref("");
+const stockRackFilter   = ref(""); // "" = all, "__none__" = unracked, else exact rack_no
 const filterType     = ref("All");
 const filterDDOpen   = ref(false);
 
@@ -809,7 +897,15 @@ const form = reactive({
   name: "", warehouse_name: "", warehouse_type: "Stores",
   parent_warehouse: "", city: "", country: "India", state: "", address_line1: "", pincode: "",
   is_group: 0, disabled: 0,
+  racks: [], // [{ rack_no, notes }] — label-only, leaf warehouses only
 });
+
+function addRackRow() {
+  form.racks.push({ rack_no: "", notes: "" });
+}
+function removeRackRow(idx) {
+  form.racks.splice(idx, 1);
+}
 const transferForm = reactive({
   from_warehouse: "", to_warehouse: "", item_code: "", qty: 1,
 });
@@ -877,6 +973,8 @@ const filteredStockItems = computed(() => {
   if (stockGroupFilter.value) r = r.filter((row) => row.item_group === stockGroupFilter.value);
   if (stockStatusFilter.value === "ok")  r = r.filter((row) => !row.below_reorder);
   if (stockStatusFilter.value === "low") r = r.filter((row) =>  row.below_reorder);
+  if (stockRackFilter.value === "__none__") r = r.filter((row) => !row.rack_no);
+  else if (stockRackFilter.value) r = r.filter((row) => row.rack_no === stockRackFilter.value);
   const q = itemSearch.value.toLowerCase().trim();
   if (q) {
     r = r.filter((row) =>
@@ -948,6 +1046,7 @@ async function loadStockForWarehouse(name) {
   itemSearch.value = "";
   stockGroupFilter.value = "";
   stockStatusFilter.value = "";
+  stockRackFilter.value = "";
   try {
     const [stock, batches] = await Promise.all([
       apiGET("zoho_books_clone.api.inventory.get_stock_summary", { warehouse: name }),
@@ -957,6 +1056,40 @@ async function loadStockForWarehouse(name) {
     warehouseBatches.value = batches || {};
   } catch { stockItems.value = []; }
   stockLoading.value = false;
+}
+
+const warehouseRacks = ref([]); // rack_no list for adjustTargetWH, kept in sync via the watcher below
+
+async function loadRacksForWarehouse(name) {
+  warehouseRacks.value = [];
+  if (!name) return;
+  try {
+    const fresh = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Warehouse", name });
+    warehouseRacks.value = (fresh?.racks || []).map(r => r.rack_no).filter(Boolean);
+  } catch { /* non-fatal — rack dropdown just stays empty */ }
+}
+
+watch(adjustTargetWH, (wh) => {
+  stockRackFilter.value = "";
+  if (wh && !wh.is_group) loadRacksForWarehouse(wh.name);
+  else warehouseRacks.value = [];
+}, { immediate: true });
+
+async function setRack(row, newRackNo) {
+  const prev = row.rack_no || "";
+  if (newRackNo === prev) return;
+  row.rack_no = newRackNo; // optimistic
+  try {
+    await apiPOST("zoho_books_clone.api.inventory.set_bin_rack", {
+      item_code: row.item_code,
+      warehouse: adjustTargetWH.value?.name,
+      rack_no: newRackNo,
+    });
+    toast(newRackNo ? `Rack set to ${newRackNo}` : "Rack cleared", "success");
+  } catch (e) {
+    row.rack_no = prev; // revert
+    toast(e.message || "Could not update rack", "error");
+  }
 }
 
 function toggleBatches(itemCode) {
@@ -1227,7 +1360,7 @@ function openAddGroup() {
   Object.assign(form, {
     name: "", warehouse_name: "", warehouse_type: "Stores",
     parent_warehouse: "", city: "", state: "", address_line1: "", pincode: "",
-    is_group: 1, disabled: 0,
+    is_group: 1, disabled: 0, racks: [],
   });
   showDrawer.value = true;
 }
@@ -1238,12 +1371,12 @@ function openAddChild() {
     name: "", warehouse_name: "", warehouse_type: "Stores",
     parent_warehouse: selectedWH.value?.name || "",
     city: "", state: "", address_line1: "", pincode: "",
-    is_group: 0, disabled: 0,
+    is_group: 0, disabled: 0, racks: [],
   });
   showDrawer.value = true;
 }
 
-function openEdit(wh) {
+async function openEdit(wh) {
   drawerMode.value = "edit";
   Object.assign(form, {
     name: wh.name,
@@ -1254,8 +1387,17 @@ function openEdit(wh) {
     address_line1: wh.address_line1 || "", pincode: wh.pincode || "",
     is_group: wh.is_group ? 1 : 0,
     disabled: wh.disabled ? 1 : 0,
+    racks: [],
   });
   showDrawer.value = true;
+  // Racks live only on leaf (non-group) warehouses; fetch the full doc for
+  // its rack rows since the list view above doesn't carry child tables.
+  if (!wh.is_group) {
+    try {
+      const fresh = await apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Warehouse", name: wh.name });
+      form.racks = (fresh?.racks || []).map(r => ({ rack_no: r.rack_no || "", notes: r.notes || "" }));
+    } catch { /* non-fatal — rack list just stays empty if this fails */ }
+  }
 }
 
 async function saveWarehouse() {
@@ -1282,6 +1424,10 @@ async function saveWarehouse() {
       city: form.city.trim(), state: form.state.trim(),
       address_line1: form.address_line1.trim(), pincode: form.pincode.trim(),
       is_group: form.is_group ? 1 : 0, disabled: form.disabled ? 1 : 0, company,
+      // Racks are label-only and only meaningful on leaf (non-group) warehouses.
+      racks: form.is_group ? [] : form.racks
+        .filter(r => (r.rack_no || "").trim())
+        .map(r => ({ rack_no: r.rack_no.trim(), notes: r.notes || "" })),
     };
     let doc = changes;
     if (drawerMode.value === "edit") {
@@ -1303,6 +1449,19 @@ async function saveWarehouse() {
 
     toast(drawerMode.value === "edit" ? "Warehouse updated" : "Warehouse created");
     showDrawer.value = false;
+
+    // warehouseRacks only reloads when adjustTargetWH's identity changes
+    // (switching warehouses) — editing racks on the warehouse currently
+    // being viewed doesn't trigger that watcher, so refresh it explicitly
+    // here or the rack chip panel / per-row dropdown keep showing stale
+    // (e.g. since-deleted) rack names.
+    if (adjustTargetWH.value && adjustTargetWH.value.name === activeName) {
+      await loadRacksForWarehouse(activeName);
+      if (stockRackFilter.value && stockRackFilter.value !== "__none__" &&
+          !warehouseRacks.value.includes(stockRackFilter.value)) {
+        stockRackFilter.value = "";
+      }
+    }
   } catch (e) { toast("Save failed: " + e.message, "error"); }
   saving.value = false;
 }
@@ -1544,7 +1703,9 @@ onMounted(() => { load(); loadItems(); });
 
 /* ── Item search (inside stock section header) ── */
 .wh-item-search-wrap {
-  flex: 0 0 220px;
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 220px;
 }
 .wh-item-search-wrap .wh-tb-search-input {
   padding-right: 26px;
@@ -1871,7 +2032,10 @@ onMounted(() => { load(); loadItems(); });
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px 12px;
+  flex-wrap: wrap;
+  row-gap: 12px;
+  column-gap: 16px;
+  padding: 16px 20px 14px;
   border-bottom: 1px solid #f1f4f8;
 }
 .wh-stock-title {
@@ -1880,6 +2044,7 @@ onMounted(() => { load(); loadItems(); });
   color: #0f172a;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .wh-stock-count {
@@ -1890,7 +2055,15 @@ onMounted(() => { load(); loadItems(); });
   padding: 1px 8px;
   border-radius: 20px;
 }
-.wh-stock-actions { display: flex; gap: 6px; }
+.wh-stock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  min-width: 0;
+}
 .wh-stock-shimmer { padding: 16px 20px; }
 .wh-stock-empty {
   padding: 48px 20px;
@@ -1902,10 +2075,14 @@ onMounted(() => { load(); loadItems(); });
 
 /* ── Stock table ── */
 .wh-tbl-wrap { overflow-x: auto; }
+.wh-tbl-wrap::-webkit-scrollbar { height: 8px; }
+.wh-tbl-wrap::-webkit-scrollbar-track { background: #f1f5f9; }
+.wh-tbl-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.wh-tbl-wrap::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 .wh-tbl { width: 100%; border-collapse: collapse; min-width: 520px; }
 
 .wh-th {
-  padding: 10px 14px;
+  padding: 10px 8px;
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1924,7 +2101,7 @@ onMounted(() => { load(); loadItems(); });
 .wh-tr:last-child { border-bottom: none; }
 .wh-tr:hover { background: #f8fafc; }
 
-.wh-td { padding: 11px 14px; font-size: 13px; color: #1e293b; vertical-align: middle; }
+.wh-td { padding: 11px 8px; font-size: 13px; color: #1e293b; vertical-align: middle; }
 .wh-td-muted   { color: #64748b; font-size: 12.5px; }
 .wh-td-r       { text-align: right; }
 .wh-td-c       { text-align: center; }
@@ -1935,6 +2112,51 @@ onMounted(() => { load(); loadItems(); });
 
 .wh-item-name { font-size: 13px; font-weight: 600; color: #0f172a; }
 .wh-item-code { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+.wh-rack-panel {
+  border: 1px solid #e2e8f0; border-radius: 12px;
+  background: #f8fafc; padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.wh-rack-panel-top {
+  display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap;
+}
+.wh-rack-panel-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.wh-rack-panel-info { flex: 1; min-width: 160px; }
+.wh-rack-panel-name { font-size: 16px; font-weight: 700; color: #0f172a; }
+.wh-rack-panel-type { font-size: 12.5px; color: #64748b; margin-top: 2px; }
+.wh-rack-panel-stats {
+  display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+}
+.wh-rack-panel-stat {
+  display: flex; align-items: center; gap: 8px; color: #475569;
+}
+.wh-rack-panel-stat-val { font-size: 14.5px; font-weight: 700; color: #0f172a; }
+.wh-rack-panel-stat-lbl { font-size: 11px; color: #94a3b8; }
+.wh-rack-chips-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;
+}
+.wh-rack-chips-lbl {
+  font-size: 11px; font-weight: 700; color: #94a3b8;
+  letter-spacing: .04em; margin-right: 4px;
+}
+.wh-rack-chip {
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  color: #475569; background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 999px;
+  padding: 5px 14px; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.wh-rack-chip:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.wh-rack-chip--active {
+  background: #6366f1; color: #fff; border-color: #6366f1;
+}
 
 .wh-status-low {
   font-size: 10.5px; font-weight: 700;
@@ -1990,8 +2212,8 @@ onMounted(() => { load(); loadItems(); });
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 11px;
-  font-size: 12px;
+  padding: 5px 9px;
+  font-size: 11.5px;
   font-weight: 600;
   border: 1.5px solid #e2e8f0;
   border-radius: 7px;

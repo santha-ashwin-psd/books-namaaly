@@ -404,18 +404,18 @@
     <div v-if="viewOpen" class="inv-drawer-bg" @click.self="viewOpen=false"></div>
     <div class="dn-drawer dn-view-drawer" :class="{open:viewOpen}">
       <template v-if="viewDoc">
-        <div class="inv-view-header">
+        <div class="inv-view-header dn-view-header">
           <div class="dn-view-head-body">
             <div class="dn-view-head-left">
               <div class="inv-view-number">{{ viewDoc.name }}</div>
               <div class="inv-view-subtitle">{{ viewDoc.supplier_name||viewDoc.supplier }}</div>
             </div>
             <div class="dn-view-head-right">
-              <div class="dn-view-amount">{{ fmtCur(Math.abs(viewDoc.grand_total||0)) }}</div>
               <span class="inv-hdr-badge" :class="statusCls(viewDoc)">{{ statusLabel(viewDoc) }}</span>
+              <div class="dn-view-amount">{{ fmtCur(Math.abs(viewDoc.grand_total||0)) }}</div>
             </div>
           </div>
-          <button class="inv-dclose dn-vclose" @click="viewOpen=false"><span v-html="icon('x',16)"></span></button>
+          <button class="dn-vclose" @click="viewOpen=false"><span v-html="icon('x',15)"></span></button>
         </div>
 
         <div class="dn-stepper-wrap"><TimelineStepper :steps="timelineSteps" /></div>
@@ -1552,11 +1552,24 @@ onMounted(async () => {
 .dn-total-row.grand { font-weight: 700; font-size: 15px; color: #111827; border-top: 2px solid #e5e7eb; padding-top: 10px; }
 
 /* ── View panel header ── */
-.dn-view-head-body { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 4px; }
-.dn-view-head-left { display: flex; flex-direction: column; gap: 2px; }
-.dn-view-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
-.dn-view-amount { font-size: 22px; font-weight: 800; color: #1a1a2e; line-height: 1; }
-.dn-vclose { align-self: flex-end; margin-left: auto; margin-bottom: 4px; }
+.dn-view-header {
+  align-items: center !important;
+  background: #fff;
+  border-bottom: 1px solid #e8ecf0;
+  padding: 18px 20px !important;
+}
+.dn-view-head-body { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; min-width: 0; }
+.dn-view-head-left { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dn-view-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.dn-view-amount { font-size: 20px; font-weight: 800; color: #1a1a2e; line-height: 1; }
+.dn-vclose {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0; margin-left: 14px;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 8px;
+  color: #6b7280; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.dn-vclose:hover { background: #f8fafc; border-color: #cbd5e1; color: #374151; }
 
 /* ── Meta/detail 2-col grid ── */
 .dn-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

@@ -243,7 +243,7 @@
               <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:20px">
                 <div>
                   <div class="bomx-hf-label">Default Source Warehouse (Raw Materials) <span style="color:var(--bx-red)">*</span></div>
-                  <select class="bomx-fi" v-model="wo.source_warehouse" :disabled="!warehousesEditable" style="width:100%">
+                  <select class="bomx-fi" v-model="wo.source_warehouse" :disabled="!warehousesEditable" style="width:100%" @change="refreshAllRacks">
                     <option value="">— Select —</option>
                     <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                   </select>
@@ -329,7 +329,7 @@
                   <div class="bomx-rm-card-body bomx-rm-card-body-3col">
                     <div class="bomx-rm-field bomx-rm-field-wide">
                       <label>Item Code</label>
-                      <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly">
+                      <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly" @change="refreshRackForRow(rm)">
                         <option value="">— Select —</option>
                         <option v-for="i in rawMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                       </select>
@@ -340,10 +340,14 @@
                     </div>
                     <div class="bomx-rm-field">
                       <label>Source Warehouse</label>
-                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="!warehousesEditable">
+                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="!warehousesEditable" @change="refreshRackForRow(rm)">
                         <option value="">— Use Default —</option>
                         <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                       </select>
+                    </div>
+                    <div class="bomx-rm-field">
+                      <label>Rack</label>
+                      <div class="bomx-rm-static" :title="rm.rack_no ? '' : 'No rack on record for this item/warehouse'">{{ rm.rack_no || '—' }}</div>
                     </div>
                     <div class="bomx-rm-field">
                       <label>Transferred</label>
@@ -492,12 +496,19 @@
                     <button v-if="wo.wip_warehouse" class="bomx-btn bomx-btn-mfg" @click="issueMaterials" :disabled="actionLoading || allTransferred || wo.status==='Stopped' || !$canEdit('inventory')">
                       {{ actionLoading==='issue' ? 'Issuing…' : (allTransferred ? 'Materials Issued' : 'Issue Materials to WIP') }}
                     </button>
-                    <button v-if="bomType!=='Packing'" class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || wo.status==='Stopped' || !$canEdit('inventory')">
+                    <button v-if="bomType!=='Packing'" class="bomx-btn" style="background:var(--bx-green);color:#fff" @click="openCompleteModal" :disabled="!canCompleteMore || !materialsFullyIssued || wo.status==='Stopped' || !$canEdit('inventory')" :title="!materialsFullyIssued ? 'Issue all materials to WIP before completing' : ''">
                       Complete Work Order
                     </button>
                   </div>
                   <div class="bomx-field-hint" v-if="bomType==='Packing'" style="margin-top:8px">This Work Order uses a Packing BOM — complete it via a Packing Slip instead (see above).</div>
                   <div class="bomx-field-hint" v-else-if="wo.status==='Stopped'" style="color:var(--bx-amber);margin-top:8px">Work Order is stopped — resume it to continue production.</div>
+                  <div v-else-if="!materialsFullyIssued" style="margin-top:8px;padding:10px 12px;background:var(--bx-amberS);border-radius:6px;color:var(--bx-amber);font-size:13px">
+                    <div style="font-weight:600">Materials not fully issued to WIP</div>
+                    <div style="margin-top:4px">Issue the remaining raw materials before completing this Work Order:</div>
+                    <ul style="margin:6px 0 0 18px;padding:0">
+                      <li v-for="r in pendingIssueRows" :key="r.name || r.item_code">{{ r.item_code }} — {{ fmtQty(r.transferred_qty) }} / {{ fmtQty(r.required_qty) }} issued</li>
+                    </ul>
+                  </div>
                   <div class="bomx-field-hint" v-else-if="!canCompleteMore" style="margin-top:8px">Fully produced — no further completions possible.</div>
                 </div>
 
@@ -1089,6 +1100,50 @@ const rawMaterialItems = computed(() =>
   stockItems.value.filter(i => i.item_type !== "Finished Good" || bomType.value === "Packing")
 );
 const warehouseList = ref([]);
+
+// ── Rack No (label-only) ──────────────────────────────────────────────────
+// A raw-material row's rack is a snapshot of Bin.rack_no for (item_code,
+// effective source warehouse) at the moment it's set here -- it does NOT
+// stay live-synced if the item's rack later changes in the warehouse, by
+// design (matches Work Order Item.rack_no's description).
+function effectiveWarehouse(rm) {
+  return rm.source_warehouse || wo.value.source_warehouse || "";
+}
+
+async function refreshRackForRow(rm) {
+  const wh = effectiveWarehouse(rm);
+  if (!wh || !rm.item_code) { rm.rack_no = ""; return; }
+  try {
+    const map = await apiCall("zoho_books_clone.api.inventory.get_item_racks", {
+      warehouse: wh, item_codes: JSON.stringify([rm.item_code]),
+    });
+    rm.rack_no = (map && map[rm.item_code]) || "";
+  } catch { rm.rack_no = ""; }
+}
+
+// Batched version for BOM load / default-warehouse change, so we don't fire
+// one request per raw material row -- grouped by effective warehouse.
+async function refreshAllRacks() {
+  const rows = wo.value.items || [];
+  const byWarehouse = {};
+  for (const rm of rows) {
+    const wh = effectiveWarehouse(rm);
+    if (!wh || !rm.item_code) { rm.rack_no = ""; continue; }
+    (byWarehouse[wh] ||= []).push(rm);
+  }
+  for (const [wh, rmRows] of Object.entries(byWarehouse)) {
+    const itemCodes = [...new Set(rmRows.map(r => r.item_code))];
+    try {
+      const map = await apiCall("zoho_books_clone.api.inventory.get_item_racks", {
+        warehouse: wh, item_codes: JSON.stringify(itemCodes),
+      });
+      for (const rm of rmRows) rm.rack_no = (map && map[rm.item_code]) || "";
+    } catch {
+      for (const rm of rmRows) rm.rack_no = "";
+    }
+  }
+}
+
 const stockEntries = ref([]);
 const reversingSE = ref(""); // name of the Stock Entry currently being reversed, if any
 // The most recent submitted Manufacture entry -- stockEntries is loaded
@@ -1118,7 +1173,7 @@ const sourcedPsLoading = ref(false);
 const reconciliation = ref(null);
 const reconLoading = ref(false);
 
-const EMPTY_MATERIAL = () => ({ item_code: "", required_qty: 1, transferred_qty: 0, consumed_qty: 0, source_warehouse: "" });
+const EMPTY_MATERIAL = () => ({ item_code: "", required_qty: 1, transferred_qty: 0, consumed_qty: 0, source_warehouse: "", rack_no: "" });
 const EMPTY_OP = () => ({ operation: "", workstation: "", planned_time_in_mins: 0, actual_time_in_mins: 0, status: "Pending", sub_assembly_bom: "", sub_assembly_item: "", sub_assembly_qty: 0 });
 
 // docstatus: 0 = Draft, 1 = Submitted, 2 = Cancelled. Once submitted, the
@@ -1558,6 +1613,7 @@ async function loadFromBom() {
     // Qty to Manufacture without clicking this button again can be detected
     // (see materialsStale below and Work Order's own server-side check).
     wo.value.items_loaded_for_qty = flt(wo.value.qty);
+    await refreshAllRacks();
   } catch (e) {
     toast(e.message, "error");
   }
@@ -1863,6 +1919,17 @@ const qtyManufacturedError = computed(() => {
 });
 const progressPct = computed(() => progressPctnew(wo.value));
 const allTransferred = computed(() => (wo.value.items || []).every(r => flt(r.transferred_qty) >= flt(r.required_qty) - 0.0001));
+// Complete Work Order pulls raw materials from wip_warehouse when one is
+// set, using required_qty (not transferred_qty) under the default "BOM"
+// backflush basis -- so completing before every row is fully issued can
+// try to consume more than what's actually staged in WIP. Only relevant
+// when a WIP warehouse is configured at all; WOs without one consume
+// straight from source_warehouse and were never gated on issuance.
+const materialsFullyIssued = computed(() => !wo.value.wip_warehouse || allTransferred.value);
+const pendingIssueRows = computed(() => {
+  if (!wo.value.wip_warehouse) return [];
+  return (wo.value.items || []).filter(r => flt(r.transferred_qty) < flt(r.required_qty) - 0.0001);
+});
 
 const productionItemHasBatch = computed(() => {
   const item = stockItems.value.find(i => i.name === wo.value.production_item);
@@ -1926,7 +1993,7 @@ function itemLabel(code) {
 function printWorkOrder() {
   const groups = groupedWoItems.value;
   const groupHtml = (grp) => `
-        <tr><td colspan="6" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
+        <tr><td colspan="7" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
         ${grp.rows.map(({ rm }) => {
           const required = flt(rm.required_qty);
           const transferred = flt(rm.transferred_qty);
@@ -1939,11 +2006,12 @@ function printWorkOrder() {
           <td style="text-align:right">${esc(fmtQty(transferred))}</td>
           <td style="text-align:right;font-weight:700">${esc(fmtQty(needed))}</td>
           <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
+          <td>${esc(rm.rack_no || "—")}</td>
         </tr>`;
         }).join("")}`;
   const rowsHtml = groups.length
     ? groups.map(groupHtml).join("")
-    : `<tr><td colspan="6" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
+    : `<tr><td colspan="7" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
 
   const html = `
     <!DOCTYPE html>
@@ -1992,7 +2060,7 @@ function printWorkOrder() {
           <h2>Raw Materials</h2>
           <table>
             <thead>
-              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th style="text-align:right">Already Transferred</th><th style="text-align:right">Needed Qty</th><th>Warehouse</th></tr>
+              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th style="text-align:right">Already Transferred</th><th style="text-align:right">Needed Qty</th><th>Warehouse</th><th>Rack</th></tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>

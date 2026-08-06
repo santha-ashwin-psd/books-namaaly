@@ -34,7 +34,7 @@
               <template v-if="loading"><div class="b-shimmer" style="width:64px;height:22px;margin-top:2px;border-radius:4px"></div></template>
               <template v-else>{{ kpi.format === 'currency' ? fmtCur(kpi.value) : kpi.value }}</template>
             </div>
-            <div class="bk-kpi-trend bk-trend-neutral">{{ kpi.sub || '—' }}</div>
+            <div class="bk-kpi-trend bk-trend-neutral">{{ kpi.sub|| '' }}</div>
           </div>
         </div>
       </div>

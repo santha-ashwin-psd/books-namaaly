@@ -568,7 +568,11 @@ const adjustmentAccounts = ref([]);
 const adjustmentAccountOptions = computed(() => adjustmentAccounts.value.map(a => ({ value: a.name, label: a.account_name || a.name })));
 async function fetchAdjustmentAccounts(q = '') {
   try {
-    const filters = [['is_group', '=', 0], ['disabled', '=', 0], ['root_type', 'in', ['Expense', 'Income', 'Equity']]];
+    // This app's Account doctype has no root_type column (see
+    // ItemEditDrawer.vue's loadAccountLists for the same fix) -- filter by
+    // account_type directly. Expense/Income/Equity are valid account_type
+    // values here too, so no other change is needed.
+    const filters = [['is_group', '=', 0], ['disabled', '=', 0], ['account_type', 'in', ['Expense', 'Income', 'Equity']]];
     if (q) filters.push(['name', 'like', `%${q}%`]);
     adjustmentAccounts.value = await apiList('Account', { fields: ['name', 'account_name'], filters, limit: 30, order: 'name asc' });
   } catch (e) {

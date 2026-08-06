@@ -1,0 +1,32 @@
+{
+ "name": "Warehouse Rack",
+ "module": "Inventory",
+ "doctype": "DocType",
+ "creation": "2026-08-06 00:00:00.000000",
+ "modified": "2026-08-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "istable": 1,
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 0,
+ "editable_grid": 1,
+ "fields": [
+  {
+   "fieldname": "rack_no",
+   "fieldtype": "Data",
+   "label": "Rack No",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1,
+   "description": "Label only — used for organizing stock location, not tracked for quantity."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "in_list_view": 0
+  }
+ ]
+}

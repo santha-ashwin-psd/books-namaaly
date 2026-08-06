@@ -500,7 +500,9 @@ const expenseAccounts = ref([]);
 const expenseAccountOptions = computed(() => expenseAccounts.value.map(a => ({ value: a.name, label: a.account_name || a.name })));
 async function fetchExpenseAccounts(q = '') {
   try {
-    const filters = [['is_group', '=', 0], ['disabled', '=', 0], ['root_type', '=', 'Expense']];
+    // This app's Account doctype has no root_type column -- filter by
+    // account_type directly (same fix as AssetValueAdjustment.vue).
+    const filters = [['is_group', '=', 0], ['disabled', '=', 0], ['account_type', '=', 'Expense']];
     if (q) filters.push(['name', 'like', `%${q}%`]);
     expenseAccounts.value = await apiList('Account', { fields: ['name', 'account_name'], filters, limit: 30, order: 'name asc' });
   } catch (e) {

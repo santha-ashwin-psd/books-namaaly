@@ -665,6 +665,24 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
 
+    # When a WIP warehouse is configured, consumption below is sourced from
+    # it (not source_warehouse), so any row still short on transferred_qty
+    # vs required_qty means WIP doesn't actually hold enough of that item
+    # yet. The Vue page disables Complete Work Order for this same reason,
+    # but this is the real guard -- it also covers Job Card auto-completion
+    # and any other caller that reaches this function directly.
+    if wo.wip_warehouse:
+        pending = [
+            f"{r.item_code} ({flt(r.transferred_qty)}/{flt(r.required_qty)})"
+            for r in wo.items
+            if flt(r.transferred_qty) < flt(r.required_qty) - 0.0001
+        ]
+        if pending:
+            frappe.throw(_(
+                "All raw materials must be issued to WIP before completing this "
+                "Work Order. Pending: {0}"
+            ).format(", ".join(pending)))
+
     # Recoverable scrap rows need somewhere to land. complete_work_order
     # falls back to fg_warehouse when scrap_warehouse isn't set (below), so
     # only fail here if BOTH are empty -- catching it up front with a clear

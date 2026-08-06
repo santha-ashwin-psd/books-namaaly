@@ -78,7 +78,7 @@
       <div class="sales-actions">
         <select class="sales-select" v-model="filterCategory" title="Filter by category">
           <option value="">All Categories</option>
-          <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+          <option v-for="c in categories" :key="c" :value="c">{{ categoryLabel(c) }}</option>
         </select>
       </div>
     </div>
@@ -114,7 +114,7 @@
           </tr>
           <tr v-for="a in pagedAssets" :key="a.name" class="inv-row" :class="{selected: selectedName === a.name}">
             <td @click="openSchedule(a)" data-label="Asset"><span class="inv-link">{{ a.asset_name || a.name }}</span><div class="asset-code">{{ a.name }}</div></td>
-            <td @click="openSchedule(a)" data-label="Category"><span v-if="a.asset_category" class="it-group-badge">{{ a.asset_category }}</span><span v-else class="text-muted">—</span></td>
+            <td @click="openSchedule(a)" data-label="Category"><span v-if="a.asset_category" class="it-group-badge">{{ categoryLabel(a.asset_category) }}</span><span v-else class="text-muted">—</span></td>
             <td @click="openSchedule(a)" data-label="Method"><span class="ds-method-badge" :class="methodClass(a.depreciation_method)">{{ a.depreciation_method || '—' }}</span></td>
             <td @click="openSchedule(a)" class="ta-r mono-sm fw-600" data-label="Cost">{{ fmt(a.purchase_cost || 0) }}</td>
             <td @click="openSchedule(a)" class="ta-r mono-sm text-muted" data-label="Life">{{ a.useful_life || '—' }}</td>
@@ -145,7 +145,7 @@
             </div>
             <div class="ii-mob-card-meta">
               <span class="inv-link" style="font-size:11.5px">{{ a.name }}</span>
-              <span v-if="a.asset_category" class="it-group-badge" style="font-size:10.5px">{{ a.asset_category }}</span>
+              <span v-if="a.asset_category" class="it-group-badge" style="font-size:10.5px">{{ categoryLabel(a.asset_category) }}</span>
             </div>
           </div>
           <div class="ii-mob-card-right">
@@ -169,7 +169,7 @@
       <div class="ds-panel-head">
         <div>
           <div class="ds-panel-title">{{ selectedAsset.asset_name || selectedAsset.name }}</div>
-          <div class="ds-panel-sub">{{ selectedAsset.name }} · {{ selectedAsset.asset_category || 'Uncategorized' }} · {{ selectedAsset.depreciation_method || 'Straight Line' }}</div>
+          <div class="ds-panel-sub">{{ selectedAsset.name }} · {{ categoryLabel(selectedAsset.asset_category) || 'Uncategorized' }} · {{ selectedAsset.depreciation_method || 'Straight Line' }}</div>
         </div>
         <div class="ds-panel-actions">
           <button class="sales-btn-ghost" @click="exportScheduleCSV(selectedAsset)"><span v-html="icon('download',13)"></span> Schedule CSV</button>
@@ -265,6 +265,15 @@ const searchTerm = ref("");
 const methodFilter = ref("all");
 const filterCategory = ref("");
 const categories = ref([]);
+const categoryRows_ = ref([]);
+const categoryLabelMap = computed(() => {
+  const map = {};
+  for (const c of categoryRows_.value) map[c.name] = c.category_name || c.name;
+  return map;
+});
+function categoryLabel(id) {
+  return id ? (categoryLabelMap.value[id] || id) : "";
+}
 const methods = ["Straight Line", "Written Down Value"];
 
 const page = ref(1);
@@ -387,7 +396,7 @@ function exportScheduleCSV(a) {
 function exportAllCSV() {
   const headers = ["Asset", "Category", "Method", "Cost", "Salvage", "Useful Life", "Annual Depreciation", "Accumulated to Date", "Book Value"];
   const rows = depreciableAssets.value.map(a => [
-    a.asset_name || a.name, a.asset_category || "", a.depreciation_method || "",
+    a.asset_name || a.name, categoryLabel(a.asset_category), a.depreciation_method || "",
     a._summary.cost, a._summary.salvage, a._summary.life, a._summary.annual, a._summary.toDate, a._summary.bookValue,
   ]);
   const csv = [headers, ...rows].map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -403,21 +412,26 @@ function exportAllCSV() {
 async function load() {
   loading.value = true;
   try {
-    const assets = await apiList("Asset", {
-      fields: [
-        "name", "asset_name", "asset_category", "status",
-        "purchase_cost", "salvage_value", "useful_life",
-        "depreciation_method", "purchase_date", "current_value",
-      ],
-      order: "asset_name asc",
-      limit: 500,
-    });
+    const [assets, categoryRows] = await Promise.all([
+      apiList("Asset", {
+        fields: [
+          "name", "asset_name", "asset_category", "status",
+          "purchase_cost", "salvage_value", "useful_life",
+          "depreciation_method", "purchase_date", "current_value",
+        ],
+        order: "asset_name asc",
+        limit: 500,
+      }),
+      apiList("Asset Category", { fields: ["name", "category_name"], order: "category_name asc", limit: 500 }),
+    ]);
     list.value = assets || [];
+    categoryRows_.value = categoryRows || [];
     categories.value = Array.from(new Set((assets || []).map(a => a.asset_category).filter(Boolean))).sort();
   } catch (e) {
     toast.error("Failed to load assets: " + e.message);
     list.value = [];
     categories.value = [];
+    categoryRows_.value = [];
   } finally {
     loading.value = false;
   }

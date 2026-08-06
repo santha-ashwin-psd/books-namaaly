@@ -887,16 +887,19 @@ async function loadBalances() {
   const ledger = allAccounts.value.filter(a => !a.is_group && a.source === "frappe");
   if (!ledger.length) return;
   balancesLoading.value = true;
-  const map = {};
-  const chunks = [];
-  for (let i = 0; i < ledger.length; i += 10) chunks.push(ledger.slice(i, i + 10));
-  for (const chunk of chunks) {
-    const results = await Promise.all(chunk.map(a =>
-      apiGET("zoho_books_clone.db.queries.get_account_balance", { account: a.name }).catch(() => null)
-    ));
-    chunk.forEach((a, i) => { if (results[i] != null) map[a.name] = Number(results[i]) || 0; });
+  // Was previously one get_account_balance() call per leaf account, sent in
+  // chunks of 10 -- for a real chart of accounts (100+ leaf accounts) that's
+  // 10+ sequential round trips just to paint balances, which is what made
+  // this page feel heavy. get_account_balances_bulk() (already used by
+  // Expenses.vue) returns every balance in one query.
+  try {
+    const map = await apiGET("zoho_books_clone.db.queries.get_account_balances_bulk", {
+      accounts: ledger.map(a => a.name),
+    }) || {};
+    balances.value = map;
+  } catch {
+    balances.value = {};
   }
-  balances.value = map;
   balancesLoading.value = false;
 }
 

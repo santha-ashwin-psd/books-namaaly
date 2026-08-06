@@ -205,7 +205,7 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
         filters=filters,
         fields=["item_code", "warehouse", "actual_qty", "reserved_qty",
                 "ordered_qty", "projected_qty", "valuation_rate", "stock_value",
-                "reorder_level", "reorder_qty", "stock_uom"],
+                "reorder_level", "reorder_qty", "stock_uom", "rack_no"],
         order_by="item_code asc",
         limit=2000,
     )
@@ -315,6 +315,7 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
             "has_batch_no":    1 if item.get("has_batch_no") else 0,
             "purchase_uom":    purchase_uom,
             "purchase_qty":    purchase_qty,
+            "rack_no":         b.rack_no or "",
         })
 
     # Also show items that have this warehouse as default_warehouse but no Bin yet (0 stock)
@@ -349,11 +350,87 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
                     "no_stock_entry": True,
                     "purchase_uom":   None,
                     "purchase_qty":   None,
+                    "rack_no":        "",
                 })
         except Exception:
             pass
 
     return result
+
+
+@frappe.whitelist(allow_guest=False)
+def get_item_racks(warehouse=None, item_codes=None):
+    """
+    Bulk-lookup Bin.rack_no for a set of items in one warehouse. Used by
+    Work Order to snapshot a rack label onto each raw material row without
+    firing one request per row.
+    Returns {item_code: rack_no} -- items with no Bin or no rack set are
+    simply absent from the result (caller treats missing as "").
+    """
+    if not warehouse:
+        return {}
+    codes = item_codes
+    if isinstance(codes, str):
+        try:
+            codes = frappe.parse_json(codes)
+        except Exception:
+            codes = [codes]
+    codes = [c for c in (codes or []) if c]
+    if not codes:
+        return {}
+
+    rows = frappe.get_all(
+        "Bin",
+        filters={"warehouse": warehouse, "item_code": ["in", codes], "rack_no": ["not in", ["", None]]},
+        fields=["item_code", "rack_no"],
+    )
+    return {r.item_code: r.rack_no for r in rows}
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def set_bin_rack():
+    """
+    Assign (or clear) the label-only rack_no on a Bin.
+
+    Rules enforced here (kept separate from Warehouse.validate() / the SLE
+    auto-clear, which handle the other two invariants):
+      - Only settable when the Bin currently has stock (actual_qty > 0).
+      - The rack must exist in the target warehouse's rack list (Warehouse.racks),
+        so this never gets out of sync with what Warehouse Rack management shows.
+      - Clearing (empty string) is always allowed regardless of qty.
+    """
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Warehouse", "write")
+
+    fd = frappe.form_dict
+    item_code = (fd.get("item_code") or "").strip()
+    warehouse = (fd.get("warehouse") or "").strip()
+    rack_no = (fd.get("rack_no") or "").strip()
+
+    if not item_code:
+        frappe.throw(_("Item is required"))
+    if not warehouse:
+        frappe.throw(_("Warehouse is required"))
+
+    bin_row = frappe.db.get_value(
+        "Bin", {"item_code": item_code, "warehouse": warehouse},
+        ["name", "actual_qty"], as_dict=True,
+    )
+    if not bin_row:
+        frappe.throw(_("No stock record found for {0} in {1}").format(item_code, warehouse))
+
+    if rack_no:
+        if flt(bin_row.actual_qty) <= 0:
+            frappe.throw(_("Cannot assign a rack — this item has no stock in {0}").format(warehouse))
+        valid_racks = frappe.get_all(
+            "Warehouse Rack", filters={"parent": warehouse, "parenttype": "Warehouse"},
+            pluck="rack_no",
+        )
+        if rack_no not in valid_racks:
+            frappe.throw(_("'{0}' is not a rack defined on warehouse {1}").format(rack_no, warehouse))
+
+    frappe.db.set_value("Bin", bin_row.name, "rack_no", rack_no)
+    return {"item_code": item_code, "warehouse": warehouse, "rack_no": rack_no}
 
 
 @frappe.whitelist(allow_guest=False)

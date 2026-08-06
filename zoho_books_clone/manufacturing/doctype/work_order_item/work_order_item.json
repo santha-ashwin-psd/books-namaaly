@@ -80,6 +80,15 @@
    "allow_on_submit": 1
   },
   {
+   "fieldname": "rack_no",
+   "fieldtype": "Data",
+   "label": "Rack No",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "Label-only snapshot of the rack this item was sourced from in Source Warehouse at the time it was set on this row (from Bin.rack_no). Not re-synced automatically if the item's rack later changes."
+  },
+  {
    "fieldname": "rate",
    "fieldtype": "Currency",
    "label": "Rate"

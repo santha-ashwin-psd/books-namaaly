@@ -159,7 +159,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
-import { apiList, apiGet, apiSave, apiPOST, resolveCompany } from "../api/client.js";
+import { apiList, apiSave, apiPOST, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
@@ -257,12 +257,29 @@ async function load() {
       fields: ["name", "template_name", "tax_type", "is_default", "disabled"],
       order: "template_name asc", limit: 200,
     }) || [];
-    list.value = await Promise.all(rows.map(async (r) => {
+    // Was previously one apiGet() per row here (N+1 -- up to 200 extra
+    // round-trips just to read each template's child tax rows), which is
+    // what made this page slow to load. Tax Template Detail rows carry
+    // their own `parent` field, so a single bulk query filtered by
+    // parent-in-[names] gets every row's taxes in one request, and we
+    // group them back onto each template client-side.
+    const names = rows.map((r) => r.name);
+    let detailRows = [];
+    if (names.length) {
       try {
-        const doc = await apiGet("Tax Template", r.name);
-        return { ...r, ...summarize(doc?.taxes, r.tax_type), _taxes: doc?.taxes || [] };
-      } catch { return { ...r, headlineRate: null, rateLabel: "", _taxes: [] }; }
-    }));
+        detailRows = await apiList("Tax Template Detail", {
+          fields: ["parent", "tax_type", "rate", "account_head", "description"],
+          filters: [["parent", "in", names]],
+          limit: names.length * 20,
+        }) || [];
+      } catch { detailRows = []; }
+    }
+    const byParent = {};
+    detailRows.forEach((d) => { (byParent[d.parent] ||= []).push(d); });
+    list.value = rows.map((r) => {
+      const taxes = byParent[r.name] || [];
+      return { ...r, ...summarize(taxes, r.tax_type), _taxes: taxes };
+    });
   } catch (e) { toast(e.message || "Failed to load tax templates", "error"); list.value = []; }
   loading.value = false;
 }
