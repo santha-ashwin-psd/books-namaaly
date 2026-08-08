@@ -64,7 +64,14 @@ def _assert_work_order_company(work_order: str) -> None:
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_substitution_options(work_order: str, work_order_item_row: str) -> dict:
     """Return the available Alternative Items for a given Work Order Item
-    row, plus whether picking one will need approval."""
+    row, plus whether picking one will need approval.
+
+    Scrap Reuse feature, Phase 2: each option is annotated with live stock
+    availability (available_qty / best_warehouse / warehouse breakdown) so
+    the picker can show e.g. "120 kg available" instead of a blind item
+    list, and so the frontend can grey out / warn on an alternative that
+    looks good on paper but has nothing in stock right now.
+    """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
 
@@ -73,6 +80,15 @@ def get_substitution_options(work_order: str, work_order_item_row: str) -> dict:
         frappe.throw(_("Work Order Item row {0} not found.").format(work_order_item_row))
 
     options = bom_engine.get_alternative_items(item_code)
+
+    company = frappe.db.get_value("Work Order", work_order, "company")
+    from zoho_books_clone.inventory.utils import get_stock_by_warehouse
+    for opt in options:
+        warehouses = get_stock_by_warehouse(opt["alternative_item_code"], company)
+        opt["available_qty"] = sum(w["qty"] for w in warehouses)
+        opt["best_warehouse"] = warehouses[0]["warehouse"] if warehouses else None
+        opt["warehouses"] = warehouses
+
     return {"item_code": item_code, "options": options}
 
 
@@ -120,6 +136,7 @@ def request_material_substitution(work_order: str, work_order_item_row: str,
     log.original_required_qty = row.required_qty
     log.new_required_qty = flt(row.required_qty) * flt(mapping.conversion_factor or 1)
     log.reason = reason
+    log.substitution_type = "Full Swap"
     log.requires_approval = 1 if requires_approval else 0
     log.requested_by = frappe.session.user
     log.request_date = nowdate()
@@ -157,6 +174,115 @@ def request_material_substitution(work_order: str, work_order_item_row: str,
     }
 
 
+# ─── Request (Scrap Reuse — partial) ────────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def request_scrap_reuse(work_order: str, work_order_item_row: str,
+                         scrap_item_code: str, scrap_qty: float, reason: str) -> dict:
+    """Scrap Reuse feature, Phase 3: request that PART of a raw-material
+    row's required qty be filled from recovered scrap (see
+    work_order_engine.apply_partial_scrap_substitution), instead of
+    request_material_substitution's whole-row swap.
+
+    Same approval branching as request_material_substitution -- keyed off
+    the ORIGINAL item's requires_substitution_approval flag, not the scrap
+    item's -- so a herb/active-ingredient row still routes scrap reuse
+    through Books Admin approval exactly like a full swap would, while
+    packaging/excipient rows apply immediately either way.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_(""), frappe.PermissionError)
+
+    from zoho_books_clone.utils.access import assert_can
+    assert_can("Material Substitution Log", "create")
+    _assert_work_order_company(work_order)
+
+    if not (reason or "").strip():
+        frappe.throw(_("A reason is required for any material substitution."))
+
+    scrap_qty = flt(scrap_qty)
+    if scrap_qty <= 0:
+        frappe.throw(_("Scrap Qty must be greater than zero."))
+
+    row = frappe.get_doc("Work Order Item", work_order_item_row)
+    if row.parent != work_order:
+        frappe.throw(_("Work Order Item row does not belong to {0}.").format(work_order))
+
+    original_item_code = row.original_item_code or row.item_code
+
+    mapping = frappe.db.get_value(
+        "Alternative Item",
+        {"item_code": original_item_code, "alternative_item_code": scrap_item_code},
+        ["conversion_factor", "source_type"],
+        as_dict=True,
+    )
+    if not mapping:
+        frappe.throw(_(
+            "{0} is not a defined Alternative Item for {1}. Add it under "
+            "Manufacturing > Alternative Items first."
+        ).format(scrap_item_code, original_item_code))
+    if mapping.source_type != "Recycled Scrap":
+        frappe.throw(_(
+            "{0} is mapped as a Fresh Stock alternative for {1}, not Recycled "
+            "Scrap. Use Substitute Material for a fresh-stock swap instead."
+        ).format(scrap_item_code, original_item_code))
+
+    requires_approval = bool(
+        frappe.db.get_value("Item", original_item_code, "requires_substitution_approval")
+    )
+
+    log = frappe.new_doc("Material Substitution Log")
+    log.work_order = work_order
+    log.work_order_item_row = work_order_item_row
+    log.original_item_code = original_item_code
+    log.alternative_item_code = scrap_item_code
+    log.substitution_type = "Scrap Reuse"
+    log.conversion_factor = mapping.conversion_factor
+    log.original_required_qty = row.required_qty
+    log.scrap_qty = scrap_qty
+    log.reason = reason
+    log.requires_approval = 1 if requires_approval else 0
+    log.requested_by = frappe.session.user
+    log.request_date = nowdate()
+
+    if requires_approval:
+        log.approval_status = "Pending"
+        log.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return {
+            "status": "Pending",
+            "log_name": log.name,
+            "message": _(
+                "{0} requires approval before scrap reuse — request sent for review."
+            ).format(original_item_code),
+        }
+
+    log.approval_status = "Applied Immediately"
+    log.approved_by = frappe.session.user
+    log.approval_date = nowdate()
+    log.insert(ignore_permissions=True)
+
+    from zoho_books_clone.manufacturing.work_order_engine import apply_partial_scrap_substitution
+    result = apply_partial_scrap_substitution(
+        work_order, work_order_item_row, scrap_item_code, scrap_qty, reason,
+    )
+
+    log.new_required_qty = result["original_row"]["new_required_qty"]
+    log.scrap_warehouse = result["scrap_row"]["source_warehouse"]
+    log.new_work_order_item_row = result["scrap_row"]["work_order_item_row"]
+    log.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {
+        "status": "Applied",
+        "log_name": log.name,
+        "result": result,
+        "message": _("{0} of {1} scrap applied against {2}.").format(
+            scrap_qty, scrap_item_code, original_item_code
+        ),
+    }
+
+
 # ─── List ─────────────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -180,6 +306,11 @@ def list_material_substitution_logs(
             "requires_approval", "approval_status",
             "requested_by", "request_date", "approved_by", "approval_date",
             "rejection_reason", "approval_remarks", "creation",
+            # Scrap Reuse feature, Phase 7: distinct log entries -- without
+            # these, MaterialSubstitutions.vue's list/drawer had no way to
+            # tell a Scrap Reuse action apart from a Full Swap, or show its
+            # scrap-specific details.
+            "substitution_type", "scrap_qty", "scrap_warehouse", "new_work_order_item_row",
         ],
         order_by="creation desc",
         limit=page_len,
@@ -208,10 +339,19 @@ def approve_material_substitution(log_name: str, remarks: str = "") -> dict:
 
     _assert_work_order_company(doc.work_order)
 
-    result = work_order_engine.apply_row_substitution(
-        doc.work_order, doc.work_order_item_row, doc.alternative_item_code,
-        doc.conversion_factor, doc.reason,
-    )
+    if doc.substitution_type == "Scrap Reuse":
+        result = work_order_engine.apply_partial_scrap_substitution(
+            doc.work_order, doc.work_order_item_row, doc.alternative_item_code,
+            doc.scrap_qty, doc.reason,
+        )
+        doc.new_required_qty = result["original_row"]["new_required_qty"]
+        doc.scrap_warehouse = result["scrap_row"]["source_warehouse"]
+        doc.new_work_order_item_row = result["scrap_row"]["work_order_item_row"]
+    else:
+        result = work_order_engine.apply_row_substitution(
+            doc.work_order, doc.work_order_item_row, doc.alternative_item_code,
+            doc.conversion_factor, doc.reason,
+        )
 
     doc.approval_status = "Approved"
     doc.approved_by = frappe.session.user

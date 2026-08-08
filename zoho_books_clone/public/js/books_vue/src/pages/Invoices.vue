@@ -526,23 +526,23 @@
                         <!-- <textarea v-model="line.description" class="inv-fi po-row-desc-ta" rows="2" maxlength="500" placeholder="Enter item description…"></textarea>
                         <div class="exp-field-hint" :class="{'exp-field-hint-err': (line.description||'').length >= 500}">{{ (line.description||'').length }}/500</div> -->
                       </td>
-                      <td class="td-hsn"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
-                      <td class="td-uom">
+                      <td class="td-hsn" data-label="HSN/SAC"><input v-model="line.hsn_code" class="inv-fi" placeholder="HSN code"/></td>
+                      <td class="td-uom" data-label="UOM">
                         <select v-model="line.uom" class="inv-fi">
                           <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </td>
-                      <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
-                      <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/></td>
-                      <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/></td>
-                      <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
-                      <td class="td-tax">
+                      <td class="td-mrp" data-label="MRP"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
+                      <td class="td-qty" data-label="Qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="onLineQtyChange(line)"/></td>
+                      <td class="td-rate" data-label="Rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/></td>
+                      <td class="td-disc" data-label="Disc %"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
+                      <td class="td-tax" data-label="Tax">
                         <select v-model="line.tax_code" class="inv-fi">
                           <option value="">— No Tax —</option>
                           <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.template_name || t.name }}</option>
                         </select>
                       </td>
-                      <td class="td-batch">
+                      <td class="td-batch" data-label="Batch No">
                         <template v-if="line.has_batch_no">
                           <SearchableSelect v-model="line.batch_no" :options="line.batchOptions" placeholder="Select batch"
                             @search="q => fetchLineBatches(line, q)" @select="opt => onLineBatchSelect(line, opt)" style="font-size:12px"
@@ -550,7 +550,7 @@
                         </template>
                         <span v-else style="color:#cbd5e1;font-size:12px">—</span>
                       </td>
-                      <td class="td-expiry">
+                      <td class="td-expiry" data-label="Exp Date">
                         <span v-if="line.has_batch_no && line.batch_no && line.batch_expiry_date" style="font-size:12px;color:#374151">{{ fmtDate(line.batch_expiry_date) }}</span>
                         <span v-else style="color:#cbd5e1;font-size:12px">—</span>
                       </td>
@@ -558,7 +558,7 @@
                         <span v-if="line.has_batch_no && line.batch_no && line._batchQty!=null" style="font-size:12px;color:#374151">{{ line._batchQty }}</span>
                         <span v-else style="color:#cbd5e1;font-size:12px">—</span>
                       </td>
-                      <td class="td-subtotal">
+                      <td class="td-subtotal" data-label="Subtotal">
                         <span class="po-row-subtotal-label">SUBTOTAL</span>
                         <span class="po-row-subtotal-amt">{{ fmtAmt(line.amount) }}</span>
                         <span v-if="lineTaxBreakup(line).length" class="po-row-subtotal-total">Total: {{ fmtAmt(lineAmountWithTax(line)) }}</span>
@@ -3528,6 +3528,12 @@ watch(() => route.query, (q) => {
   .inv-view-cta .ab-label{display:none;}
 }
 
+/* ── Invoice Add/Edit drawer on mobile: the sidebar becomes an overlay
+   (no layout width of its own) below 768px, so the "sit beside the
+   sidebar" offset below must not apply here — otherwise the drawer gets
+   squeezed into a narrow sliver and its content overlaps/cuts off. ── */
+
+
 /* ── e-Invoice status dot (list row) ── */
 .ei-status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; flex-shrink:0; }
 .ei-dot-green  { background:#16a34a; }
@@ -3581,4 +3587,38 @@ watch(() => route.query, (q) => {
 .inv-addedit-bg { left: var(--bv-sidebar-w, 220px) !important; }
 .bv-app-sidebar-collapsed .inv-addedit-bg { left: var(--bv-sidebar-w-narrow, 56px) !important; }
 .inv-addedit-bg .inv-addedit-panel { width: 100% !important; max-width: 100% !important; }
+
+/* Mobile override — placed last so it wins the cascade tie-break against
+   the unconditional desktop rules above (same specificity, later wins). */
+@media (max-width: 768px) {
+  .inv-addedit-bg,
+  .bv-app-sidebar-collapsed .inv-addedit-bg { left: 0 !important; }
+  .inv-new-drawer, .inv-drawer-wide { width: 100vw !important; max-width: 100vw !important; right: 0 !important; }
+  .inv-split { width: 100vw !important; }
+  .inv-content-row { flex-direction: column; }
+
+  /* Line-item table -> stacked cards. Each cell gets its label from the
+     data-label attribute on the <td> itself (set in the template), so a
+     label can never end up paired with the wrong field regardless of
+     column order or hidden/conditional columns. */
+  .po-items-table { table-layout: auto; }
+  .po-items-table thead { display: none; }
+  .po-items-table, .po-items-table tbody, .po-items-table tr, .po-items-table td { display: block; width: auto; }
+  .po-items-row {
+    border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 12px;
+    padding: 12px 14px 4px; background: #fff; position: relative;
+  }
+  .po-items-row .td-num { position: absolute; top: 12px; left: 14px; padding: 0; }
+  .po-items-row .td-rm { position: absolute; top: 8px; right: 8px; padding: 0; }
+  .po-items-row .td-item { padding: 0 44px 10px 0; margin-top: 2px; }
+  .po-items-row td[data-label] {
+    padding: 8px 0; border-top: 1px solid #f0f2f8;
+  }
+  .po-items-row td[data-label]::before {
+    content: attr(data-label);
+    display: block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: #9ca3af; margin-bottom: 4px;
+  }
+  .po-items-row .td-subtotal { text-align: left; border-top: 1px solid #e5e7eb; margin-top: 4px; }
+}
 </style>

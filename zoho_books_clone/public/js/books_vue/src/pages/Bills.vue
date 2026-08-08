@@ -577,7 +577,7 @@
             <div class="inv-tab-body">
 
               <!-- Meta row -->
-              <div class="inv-details-meta" style="grid-template-columns:repeat(3,1fr)">
+              <div class="inv-details-meta" style="grid-template-columns:repeat(4,1fr)">
                 <div class="inv-details-meta-col">
                   <div class="inv-dmeta-icon-row">
                     <span class="inv-dmeta-icon" v-html="icon('user',13)"></span>
@@ -593,6 +593,16 @@
                   </div>
                   <div class="inv-dmeta-date-val">{{ fmtDate(viewDoc.posting_date) }}</div>
                   <div v-if="viewDoc.posting_time" class="inv-dmeta-date-sub">{{ viewDoc.posting_time }}</div>
+                </div>
+                <div class="inv-details-meta-col">
+                  <div class="inv-dmeta-icon-row">
+                    <span class="inv-dmeta-icon" v-html="icon('calendar',13)"></span>
+                    <span class="inv-dmeta-lbl">Due Date</span>
+                  </div>
+                  <div class="inv-dmeta-date-val" :class="{ 'is-overdue': isOverdue(viewDoc) }">
+                    {{ fmtDate(viewDoc.due_date) || '—' }}
+                  </div>
+                  <div v-if="isOverdue(viewDoc)" class="inv-dmeta-date-sub" style="color:#dc2626">Overdue</div>
                 </div>
                 <div class="inv-details-meta-col col-balance">
                   <div class="inv-dmeta-icon-row">
@@ -961,19 +971,22 @@ const route = useRoute();
 const { canCreate, canEdit, canDelete } = usePermissions();
 const { confirm } = useConfirm();
 const { printDoc, renderDocument, setCompany, refreshBranding } = useLivePreview();
-async function printBILL(d) { try { await refreshBranding(); } catch {} printDoc({ ...d, items: viewItems.value, taxes: viewTaxes.value }, { title: "BILL", partyLabel: "Vendor", partyField: "supplier_name", companyName: d?.company || "" }); }
+async function printBILL(d) { try { await refreshBranding(); } catch {} printDoc({ ...d, items: withItemTaxRates(viewItems.value, d?.place_of_supply), taxes: viewTaxes.value }, { title: "BILL", partyLabel: "Vendor", partyField: "supplier_name", companyName: d?.company || "", includeHsn: true, includeDiscount: true, includeMrp: true }); }
 
 const showDownloadMenu = ref(false);
 
 function downloadBillPdf(mode = 'pdf') {
   showDownloadMenu.value = false;
-  const doc = { ...viewDoc.value, items: viewItems.value, taxes: viewTaxes.value };
+  const doc = { ...viewDoc.value, items: withItemTaxRates(viewItems.value, viewDoc.value?.place_of_supply), taxes: viewTaxes.value };
   if (!doc?.name) return;
   const html = renderDocument(doc, {
     title: "BILL",
     partyLabel: "Vendor",
     partyField: "supplier_name",
     companyName: doc.company || window.__booksCompany || "",
+    includeHsn: true,
+    includeDiscount: true,
+    includeMrp: true,
   });
   if (mode === 'print') {
     const win = window.open('', '_blank');
@@ -1163,6 +1176,22 @@ function billTaxCtx() {
   };
 }
 
+// Attach per-item CGST/SGST/IGST % (and the taxable/pre-tax amount) to a set
+// of print-ready item rows -- same purpose as Invoices.vue's withItemTaxRates,
+// mirrored here for bills so the printed/downloaded table shows the Taxable/
+// CGST/SGST/IGST columns instead of them being silently omitted.
+function withItemTaxRates(items, placeOfSupply) {
+  return (items || []).map(it => {
+    const rows = it.tax_code && flt(it.amount) ? computeTaxRows(
+      [{ amount: flt(it.amount), tax_code: it.tax_code }],
+      taxTemplates.value,
+      { companyState: companyGstState.value, placeOfSupply: placeOfSupply ?? form.place_of_supply, defaultAccount: taxAccountHead.value }
+    ) : [];
+    const rate = (type) => rows.find(r => r.tax_type === type)?.rate || 0;
+    return { ...it, taxable_amount: flt(it.amount), cgst_rate: rate("CGST"), sgst_rate: rate("SGST"), igst_rate: rate("IGST") };
+  });
+}
+
 const counts = computed(() => ({
   draft:   list.value.filter(b => b.docstatus === 0).length,
   unpaid:  list.value.filter(b => b.docstatus === 1 && flt(b.outstanding_amount) > 0 && !isOverdue(b)).length,
@@ -1269,6 +1298,19 @@ async function openEdit(b) {
         amount: i.amount || 0,
         tax_code: i.tax_code || "", expense_account: i.expense_account || "", collapsed: false,
         has_batch_no: 0, batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "", batchOptions: [], _batchQty: null,
+        // Preserve the child row's own identity + any QC link already
+        // stamped on it. Without forwarding `name`, saveBill()'s payload
+        // below has no way to tell Frappe "update this row" instead of
+        // "insert a new one" — every save/submit would otherwise replace
+        // the whole item child table with fresh rows, silently discarding
+        // quality_inspection links (and any other row-scoped state) that
+        // the QC engine's before_submit hook stamped on the previous rows.
+        // That was the root cause of QC Inspections being duplicated on
+        // every retry: the gate could never find the inspection that was
+        // already completed/passed because the row it was linked to no
+        // longer existed by the time of the next submit attempt.
+        name: i.name || null,
+        quality_inspection: i.quality_inspection || "",
       }));
       // Recompute discount_amount/amount from qty, rate & discount_percentage
       // rather than trusting the stored amount as-is — keeps the edit form
@@ -1699,6 +1741,15 @@ async function saveBill(submit) {
       additional_discount_percentage: form.discount_type === "Percentage" ? flt(form.additional_discount_percentage) : 0,
       additional_discount_amount: flt(discountAmount.value),
       items: activeLines.map(l => ({
+        // Forward the existing child row's own name (when this line came
+        // from an already-saved bill via openEdit) so Frappe updates that
+        // row in place instead of deleting it and inserting a new one.
+        // Row identity is what the QC engine's `quality_inspection` link
+        // (and any other row-scoped stamping) depends on — recreating the
+        // row every save silently orphaned that link. Also forward
+        // quality_inspection itself so a link stamped by a prior
+        // before_submit hook survives the mandatory save-before-submit.
+        ...(l.name ? { name: l.name } : {}),
         doctype: "Purchase Invoice Item", item_code: l.item_code,
         item_name: l.item_name || l.item_code,
         description: l.description || l.item_code,
@@ -1708,6 +1759,7 @@ async function saveBill(submit) {
         tax_code: l.tax_code || "", expense_account: l.expense_account || "",
         batch_no: (form.update_stock && l.has_batch_no) ? l.batch_no : "",
         batch_expiry_date: (form.update_stock && l.has_batch_no) ? (l.batch_expiry_date || "") : "",
+        quality_inspection: l.quality_inspection || "",
       })),
       taxes,
     };

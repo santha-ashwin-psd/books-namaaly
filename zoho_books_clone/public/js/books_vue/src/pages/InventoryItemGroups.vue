@@ -180,6 +180,14 @@
                 </span>
               </div>
             </div>
+            <div v-if="!selectedGroup?.is_group" class="ig-view-row">
+              <div class="ig-view-lbl">Partial Material Issue</div>
+              <div class="ig-view-val">
+                <span class="ig-type-pill" :style="selectedGroup?.allow_partial_issue ? 'background:var(--bx-amberS);color:var(--bx-amber)' : 'background:#EEF1F6;color:var(--bx-muted)'">
+                  {{ selectedGroup?.allow_partial_issue ? '✅ Allowed — can issue short / zero to WIP' : '🔒 Not allowed — must be fully in stock to issue' }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -331,6 +339,27 @@
               </div>
             </label>
           </div>
+
+          <div v-if="!form.is_group" class="ig-is-group-row">
+            <label class="ig-is-group-label">
+              <div class="ig-toggle-wrap">
+                <input type="checkbox" class="ig-toggle-input"
+                  :checked="!!form.allow_partial_issue"
+                  @change="form.allow_partial_issue = $event.target.checked ? 1 : 0"/>
+                <span class="ig-toggle-track">
+                  <span class="ig-toggle-thumb"></span>
+                </span>
+              </div>
+              <div class="ig-is-group-text">
+                <div class="ig-is-group-title">Allow Partial Material Issue</div>
+                <div class="ig-is-group-sub">
+                  Work Order → Issue Materials may issue less than required (even zero) for items in
+                  this group when stock is short. Unchecked items must be fully in stock to be issued —
+                  otherwise they're skipped and stay pending, without blocking other items.
+                </div>
+              </div>
+            </label>
+          </div>
         </div>
 
         <!-- Form actions -->
@@ -377,23 +406,23 @@ const isMobile     = ref(window.innerWidth <= 480);
 const allItems     = ref([]);
 const itemsLoading = ref(false);
 
-const form = reactive({ name: "", parent_item_group: "All Item Groups", is_group: 0, description: "" });
+const form = reactive({ name: "", parent_item_group: "All Item Groups", is_group: 0, description: "", allow_partial_issue: 0 });
 
 function onResize() { isMobile.value = window.innerWidth <= 480; }
 
 const GROUP_DEFAULTS = [
-  { name: "All Item Groups",  parent_item_group: "",                is_group: 1, description: "Root" },
-  { name: "Products",         parent_item_group: "All Item Groups", is_group: 1, description: "" },
-  { name: "Services",         parent_item_group: "All Item Groups", is_group: 1, description: "" },
-  { name: "Raw Materials",    parent_item_group: "All Item Groups", is_group: 1, description: "" },
-  { name: "Finished Goods",   parent_item_group: "All Item Groups", is_group: 1, description: "" },
+  { name: "All Item Groups",  parent_item_group: "",                is_group: 1, description: "Root", allow_partial_issue: 0 },
+  { name: "Products",         parent_item_group: "All Item Groups", is_group: 1, description: "", allow_partial_issue: 0 },
+  { name: "Services",         parent_item_group: "All Item Groups", is_group: 1, description: "", allow_partial_issue: 0 },
+  { name: "Raw Materials",    parent_item_group: "All Item Groups", is_group: 1, description: "", allow_partial_issue: 0 },
+  { name: "Finished Goods",   parent_item_group: "All Item Groups", is_group: 1, description: "", allow_partial_issue: 0 },
 ];
 
 async function load() {
   loading.value = true;
   try {
     const rows = await apiList("Item Group", {
-      fields: ["name", "parent_item_group", "is_group", "description"],
+      fields: ["name", "parent_item_group", "is_group", "description", "allow_partial_issue"],
       order: "name asc", limit: 200,
     });
     allGroups.value = rows || [];
@@ -516,6 +545,7 @@ function enterEditMode() {
     parent_item_group: selectedGroup.value.parent_item_group || "",
     is_group: selectedGroup.value.is_group ? 1 : 0,
     description: selectedGroup.value.description || "",
+    allow_partial_issue: selectedGroup.value.allow_partial_issue ? 1 : 0,
   });
   panelMode.value = "edit";
 }
@@ -523,7 +553,7 @@ function enterEditMode() {
 function newGroup(parentName) {
   selected.value = null;
   selectedGroup.value = null;
-  Object.assign(form, { name: "", parent_item_group: parentName || "All Item Groups", is_group: 0, description: "" });
+  Object.assign(form, { name: "", parent_item_group: parentName || "All Item Groups", is_group: 0, description: "", allow_partial_issue: 0 });
   panelMode.value = "new";
 }
 
@@ -558,6 +588,7 @@ async function saveGroup() {
       parent_item_group: form.parent_item_group,
       is_group: form.is_group ? 1 : 0,
       description: form.description,
+      allow_partial_issue: form.is_group ? 0 : (form.allow_partial_issue ? 1 : 0),
     });
     await load();
     await loadItems();

@@ -14,7 +14,7 @@
 
   <div v-if="!accessDenied" class="su-info-banner">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    <div><strong>Company-scoped access:</strong> Members you add here will only see data belonging to your company. Each member gets their own email &amp; password. New user sign-ups always create a separate, isolated company.</div>
+    <div><strong>Company-scoped access:</strong> Members you add here will only see data belonging to your company. Each member gets their own email &amp; password, which you set directly when adding them. New user sign-ups always create a separate, isolated company.</div>
   </div>
 
   <div v-if="accessDenied" class="su-denied">
@@ -44,6 +44,10 @@
             <button v-if="!u.is_company_admin" class="su-dd-item" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="openPerms(u);openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
               Module Access
+            </button>
+            <button class="su-dd-item" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="openResetPassword(u);openMenu=null">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Reset Password
             </button>
             <button class="su-dd-item su-dd-item--warn" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''" @click="toggleActive(u);openMenu=null">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
@@ -163,8 +167,12 @@
             <div class="nim-field"><label class="nim-label">First Name *</label><input class="nim-input" v-model="inviteForm.first_name" placeholder="First"/></div>
             <div class="nim-field"><label class="nim-label">Last Name</label><input class="nim-input" v-model="inviteForm.last_name" placeholder="Last"/></div>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="nim-field"><label class="nim-label">Password *</label><input class="nim-input" v-model="inviteForm.password" type="password" placeholder="At least 8 characters" autocomplete="new-password"/></div>
+            <div class="nim-field"><label class="nim-label">Confirm Password *</label><input class="nim-input" v-model="inviteForm.confirm_password" type="password" placeholder="Re-enter password" autocomplete="new-password"/></div>
+          </div>
           <div style="background:#f0f9ff;border:1px solid #c5d9fa;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#1971C2;line-height:1.5">
-            <strong>📧 Invite by email</strong> — Books will email <em>{{inviteForm.email||'this user'}}</em> a temporary password and a sign-in link.
+            <strong>🔑 Set the password directly</strong> — <em>{{inviteForm.email||'This user'}}</em> will sign in with the password you set here. No email will be sent.
           </div>
           <div v-if="inviteError" style="background:#fff5f5;border:1px solid #ffd0d0;border-radius:8px;padding:10px 14px;color:#C92A2A;font-size:12.5px">{{inviteError}}</div>
         </div>
@@ -223,6 +231,23 @@
           </div>
         </div>
         <div class="nim-footer"><button class="nim-btn" @click="editUser=null">Cancel</button><button class="nim-btn nim-btn-primary" @click="changeRole" :disabled="!$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''">Save Role</button></div>
+      </div>
+    </div>
+
+    <!-- Reset Password dialog -->
+    <div v-if="resetPwUser" class="nim-overlay" @click.self="resetPwUser=null">
+      <div class="nim-dialog" style="width:420px">
+        <div class="nim-header"><span style="font-weight:700;color:#fff;">Reset Password — {{resetPwUser.full_name||resetPwUser.name}}</span><button class="nim-close" @click="resetPwUser=null">✕</button></div>
+        <div class="nim-body" style="display:grid;gap:12px">
+          <div class="nim-field"><label class="nim-label">New Password *</label><input class="nim-input" v-model="resetPwForm.password" type="password" placeholder="At least 8 characters" autocomplete="new-password"/></div>
+          <div class="nim-field"><label class="nim-label">Confirm New Password *</label><input class="nim-input" v-model="resetPwForm.confirm_password" type="password" placeholder="Re-enter password" autocomplete="new-password"/></div>
+          <div style="background:#f0f9ff;border:1px solid #c5d9fa;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#1971C2">This sets the member's password directly. No email is sent — share the new password with them yourself.</div>
+          <div v-if="resetPwError" style="background:#fff5f5;border:1px solid #ffd0d0;border-radius:8px;padding:10px 14px;color:#C92A2A;font-size:12.5px">{{resetPwError}}</div>
+        </div>
+        <div class="nim-footer">
+          <button class="nim-btn" @click="resetPwUser=null">Cancel</button>
+          <button class="nim-btn nim-btn-primary" @click="saveResetPassword" :disabled="resetPwSaving || !$canEdit('admin')" :title="!$canEdit('admin') ? 'Read-only access' : ''">{{resetPwSaving?'Saving…':'Set Password'}}</button>
+        </div>
       </div>
     </div>
 
@@ -305,6 +330,11 @@ const step     = ref(1);
 const editUser = ref(null);
 const editRole = ref("");
 const showRemoveConfirm = ref(null);
+
+const resetPwUser = ref(null);
+const resetPwForm = reactive({ password: "", confirm_password: "" });
+const resetPwError = ref("");
+const resetPwSaving = ref(false);
 
 const inviteForm = reactive({
   email: "", first_name: "", last_name: "",
@@ -390,6 +420,8 @@ async function sendInvite() {
   inviteError.value = "";
   if (!inviteForm.email || !inviteForm.first_name) { inviteError.value = "Email and first name are required."; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteForm.email)) { inviteError.value = "Please enter a valid email address."; return; }
+  if (!inviteForm.password || inviteForm.password.length < 8) { inviteError.value = "Password must be at least 8 characters."; return; }
+  if (inviteForm.password !== inviteForm.confirm_password) { inviteError.value = "Passwords do not match."; return; }
   saving.value = true;
   try {
     const modulePayload = Object.fromEntries(MODULES.map((m) => [m.key, inviteForm.modules[m.key] ? 1 : 0]));
@@ -397,10 +429,10 @@ async function sendInvite() {
     await apiPOST("zoho_books_clone.api.admin.invite_member", {
       email: inviteForm.email, first_name: inviteForm.first_name,
       last_name: inviteForm.last_name, role: serverRole,
-      password: inviteForm.password || "",
+      password: inviteForm.password,
       modules: modulePayload,
     });
-    toast("Invite sent — " + inviteForm.email + " will receive an email with sign-in details.");
+    toast("Member added — share the password you set with " + inviteForm.email + ".");
     showInvite.value = false;
     load();
   } catch (e) { inviteError.value = e.message || "Failed to add member."; }
@@ -463,6 +495,30 @@ async function changeRole() {
     await apiPOST("zoho_books_clone.api.admin.update_user_role", { user: editUser.value.name, role: editRole.value });
     toast("Role updated"); editUser.value = null; load();
   } catch (e) { toast(e.message, "error"); }
+}
+
+function openResetPassword(u) {
+  resetPwUser.value = u;
+  resetPwForm.password = "";
+  resetPwForm.confirm_password = "";
+  resetPwError.value = "";
+}
+
+async function saveResetPassword() {
+  if (!resetPwUser.value) return;
+  resetPwError.value = "";
+  if (!resetPwForm.password || resetPwForm.password.length < 8) { resetPwError.value = "Password must be at least 8 characters."; return; }
+  if (resetPwForm.password !== resetPwForm.confirm_password) { resetPwError.value = "Passwords do not match."; return; }
+  resetPwSaving.value = true;
+  try {
+    await apiPOST("zoho_books_clone.api.admin.admin_reset_user_password", {
+      user: resetPwUser.value.name,
+      new_password: resetPwForm.password,
+    });
+    toast("Password updated for " + (resetPwUser.value.full_name || resetPwUser.value.name));
+    resetPwUser.value = null;
+  } catch (e) { resetPwError.value = e.message || "Failed to reset password."; }
+  resetPwSaving.value = false;
 }
 
 async function toggleActive(u) {

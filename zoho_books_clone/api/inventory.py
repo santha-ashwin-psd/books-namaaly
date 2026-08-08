@@ -255,39 +255,13 @@ def get_stock_summary(warehouse=None, item_group=None, show_zero_stock=0):
             return None, None
         return p_uom, round(flt(stock_qty) / factor, 2)
 
-    # For group warehouses aggregate all child bins by item_code
-    if is_group_wh:
-        agg = {}
-        for b in bins:
-            item = item_map.get(b.item_code, {})
-            if item_group and item.get("item_group") != item_group:
-                continue
-            if b.item_code not in agg:
-                agg[b.item_code] = {
-                    "item_code":    b.item_code,
-                    "item_name":    item.get("item_name") or b.item_code,
-                    "item_group":   item.get("item_group") or "",
-                    "warehouse":    warehouse,  # show parent name
-                    "uom":          b.stock_uom or item.get("stock_uom") or "Nos",
-                    "actual_qty":   0.0, "reserved_qty": 0.0, "ordered_qty": 0.0,
-                    "projected_qty": 0.0, "stock_value": 0.0,
-                    "valuation_rate": flt(b.valuation_rate),
-                    "reorder_level": flt(b.reorder_level),
-                    "reorder_qty":   flt(b.reorder_qty),
-                    "has_batch_no":  1 if item.get("has_batch_no") else 0,
-                }
-            agg[b.item_code]["actual_qty"]    += flt(b.actual_qty)
-            agg[b.item_code]["reserved_qty"]  += flt(b.reserved_qty)
-            agg[b.item_code]["ordered_qty"]   += flt(b.ordered_qty)
-            agg[b.item_code]["projected_qty"] += flt(b.projected_qty)
-            agg[b.item_code]["stock_value"]   += flt(b.stock_value)
-        out = []
-        for r in agg.values():
-            r["below_reorder"] = r["actual_qty"] < r["reorder_level"] if r["reorder_level"] else False
-            r["purchase_uom"], r["purchase_qty"] = _purchase_display(r["item_code"], r["actual_qty"])
-            out.append(r)
-        return out
-
+    # Group warehouses: fall through to the per-bin loop below (same as a
+    # single warehouse) instead of aggregating by item_code. `filters["warehouse"]`
+    # was already set to `["in", child_whs]` above, so each Bin here belongs to
+    # one specific child warehouse. This means an item stocked in two child
+    # warehouses shows as two rows -- one per (item_code, warehouse) -- each
+    # carrying its own `warehouse` name, rather than being summed into a single
+    # row that hides which warehouse(s) actually hold the stock.
     result = []
     seen_codes = set()
 
@@ -430,6 +404,12 @@ def set_bin_rack():
             frappe.throw(_("'{0}' is not a rack defined on warehouse {1}").format(rack_no, warehouse))
 
     frappe.db.set_value("Bin", bin_row.name, "rack_no", rack_no)
+    # Keep the auto-restore snapshot (see StockLedgerEntry._update_bin) in
+    # sync with manual actions here too: a rack picked here becomes the one
+    # silently reattached on the next restock after this item empties out.
+    # An explicit clear (rack_no == "") is a deliberate user action to
+    # detach the rack, so it should NOT be auto-restored later either.
+    frappe.db.set_value("Bin", bin_row.name, "last_rack_no", rack_no)
     return {"item_code": item_code, "warehouse": warehouse, "rack_no": rack_no}
 
 
@@ -551,6 +531,45 @@ def get_item_stock_detail(item_code, warehouse=None):
         ],
         "total_qty":   total_qty,
         "total_value": sum(flt(b.stock_value) for b in bins),
+    }
+
+
+@frappe.whitelist(allow_guest=False)
+def get_scrap_stock_for_item(item_code, company=None):
+    """Scrap Reuse feature, Phase 2: how much of this item is actually
+    sitting in stock right now, broken down per warehouse -- used to show
+    live availability (e.g. "120 kg available in Herb Scrap Warehouse")
+    before a Work Order raw material row is substituted with it.
+
+    Not restricted to item_type == "Scrap Item" -- the caller (substitution
+    options list) may want availability for a Fresh Stock alternative too,
+    and the Alternative Item mapping is the thing that actually decides
+    scrap-eligibility (see AlternativeItem.source_type), not this endpoint.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    from zoho_books_clone.utils.access import assert_company
+    from zoho_books_clone.inventory.utils import get_stock_by_warehouse
+
+    if company:
+        assert_company(company)
+    else:
+        company = _get_company(frappe.session.user)
+
+    item = frappe.db.get_value("Item", item_code, ["item_name", "item_type", "stock_uom"], as_dict=True)
+    if not item:
+        frappe.throw(_("Item {0} does not exist.").format(item_code))
+
+    warehouses = get_stock_by_warehouse(item_code, company)
+
+    return {
+        "item_code": item_code,
+        "item_name": item.item_name,
+        "item_type": item.item_type,
+        "stock_uom": item.stock_uom,
+        "total_qty": sum(w["qty"] for w in warehouses),
+        "warehouses": warehouses,
     }
 
 

@@ -970,4 +970,37 @@ class StockEntry(Document):
             if sle.batch_no:
                 self._adjust_batch_qty(sle.batch_no, rev_qty)
 
+    def on_trash(self):
+        """
+        Only a cancelled (or never-submitted draft) Stock Entry may be
+        deleted. A submitted entry must be cancelled first — deleting it
+        directly would erase the voucher while its stock/GL impact stays
+        permanently baked into Bin and Account balances, with nothing left
+        to explain them.
+
+        Once cancelled, on_cancel() has already reversed everything: the
+        original SLE/GL rows are flagged is_cancelled=1 and mirror rows
+        were posted alongside them, and every balance/report query filters
+        `is_cancelled = 0`. So the leftover rows aren't contributing to any
+        live balance — they exist purely as historical audit trail. Hard-
+        deleting them here (instead of leaving them stranded forever) is
+        what actually lets a wrongly-entered Item pass Item.on_trash()'s
+        "does this item have any Stock Ledger Entry left" check afterward.
+        """
+        if self.docstatus == 1:
+            frappe.throw(_(
+                "Cannot delete Stock Entry {0} while it is submitted. "
+                "Cancel it first, then delete."
+            ).format(frappe.bold(self.name)))
+
+        if self.docstatus == 2:
+            frappe.db.sql("""
+                DELETE FROM `tabStock Ledger Entry`
+                WHERE voucher_type = 'Stock Entry' AND voucher_no = %s
+            """, self.name)
+            frappe.db.sql("""
+                DELETE FROM `tabGeneral Ledger Entry`
+                WHERE voucher_type = 'Stock Entry' AND voucher_no = %s
+            """, self.name)
+
         frappe.db.commit()

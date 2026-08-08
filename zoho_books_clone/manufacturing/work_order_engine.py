@@ -57,6 +57,7 @@ def _get_mfg_settings():
             "over_production_allowance_pct": 0,
             "allow_negative_stock": 0,
             "backflush_raw_materials_based_on": "BOM",
+            "enable_scrap_reuse": 1,
         })
 
 
@@ -422,13 +423,19 @@ def issue_materials(work_order):
     otherwise Complete Work Order consumes straight from Source Warehouse
     and this step can be skipped entirely.
 
-    Items that don't have enough stock on hand yet (e.g. an ingredient
-    that's only needed by a later day's Job Card and hasn't been
-    purchased/received yet) are silently skipped rather than blocking the
-    whole transfer — whatever IS available gets moved to WIP now, and the
-    skipped item(s) stay pending. Once stock for a skipped item is
-    received, calling Issue Materials again will pick up just that
-    remaining item."""
+    Whether a short item can be *partially* issued now depends on its
+    Item Group's "Allow Partial Material Issue" flag:
+
+    - Item Group has the flag checked -> partial issue is allowed for that
+      item. Whatever IS available gets moved to WIP now (even 0, i.e.
+      fully skipped for this run), and the shortfall stays pending for a
+      later call. A short item like this never blocks anyone else.
+    - Item Group does NOT have the flag checked (the default) -> that item
+      must be FULLY in stock (available >= pending) for the transfer to
+      proceed AT ALL. If even one such item is short, NOTHING is issued
+      for ANY item this run -- the whole Issue Materials call is blocked
+      and no Stock Entry is created, until that item's stock is topped up
+      (or its Item Group is switched to allow partial issue)."""
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     assert_can("Stock Entry", "write")
@@ -460,6 +467,52 @@ def issue_materials(work_order):
     for wh, item_codes in by_warehouse.items():
         balances[wh] = get_stock_balance_bulk(item_codes, wh)
 
+    # Item -> Item Group, and Item Group -> Allow Partial Material Issue,
+    # fetched in bulk so we don't hit the DB per row.
+    item_codes_all = list({row.item_code for row, _wh, _pending in pending_rows})
+    item_group_by_item = {
+        d.name: d.item_group for d in frappe.get_all(
+            "Item", filters={"name": ["in", item_codes_all]},
+            fields=["name", "item_group"],
+        )
+    }
+    item_groups_all = list({g for g in item_group_by_item.values() if g})
+    partial_allowed_groups = set()
+    if item_groups_all:
+        partial_allowed_groups = {
+            d.name for d in frappe.get_all(
+                "Item Group",
+                filters={"name": ["in", item_groups_all], "allow_partial_issue": 1},
+                fields=["name"],
+            )
+        }
+
+    def _partial_allowed_for(item_code):
+        return item_group_by_item.get(item_code) in partial_allowed_groups
+
+    # ── Blocking pre-check ────────────────────────────────────────────
+    # Any pending row whose Item Group does NOT allow partial issue must
+    # be FULLY available, or the entire Issue Materials call is blocked --
+    # no Stock Entry is created for any item, not even the ones that ARE
+    # fully in stock. This has to be checked up front, before we touch
+    # anything, since a single non-partial short item invalidates the
+    # whole run.
+    blockers = []
+    for row, wh, pending in pending_rows:
+        if _partial_allowed_for(row.item_code):
+            continue
+        available = flt(balances.get(wh, {}).get(row.item_code))
+        if available < pending:
+            blockers.append(f"{row.item_code} (needs {pending}, only {available} in stock)")
+
+    if blockers:
+        frappe.throw(_(
+            "Cannot issue materials — the following item(s) are not fully in stock and "
+            "their Item Group doesn't allow partial issue: {0}. Either bring these items "
+            "fully into stock, or mark their Item Group as \"Allow Partial Material Issue\" "
+            "if short/partial transfers should be allowed for them."
+        ).format(", ".join(blockers)))
+
     se = frappe.new_doc("Stock Entry")
     se.company = wo.company
     se.stock_entry_type = "Material Transfer"
@@ -472,7 +525,10 @@ def issue_materials(work_order):
 
     for row, wh, pending in pending_rows:
         available = flt(balances.get(wh, {}).get(row.item_code))
+
         if available <= 0:
+            # Only reachable for partial-allowed items (blockers above
+            # already ruled out non-partial items being short at all).
             skipped.append(row.item_code)
             continue
 
@@ -534,6 +590,74 @@ def _consume_qty_for_row(row, wo, consumption_ratio, ms):
         remaining_transferred = flt(row.transferred_qty) - flt(row.consumed_qty)
         return max(min(consume_qty, remaining_transferred), 0)
     return flt(row.required_qty) * consumption_ratio
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_scrap_reuse_shortfall_warnings(work_order):
+    """Scrap Reuse feature, Phase 8 -- proactive edge-case check for "scrap
+    stock going short mid-production".
+
+    apply_partial_scrap_substitution only checks scrap availability at the
+    moment it's applied; it doesn't reserve stock, so by the time this Work
+    Order is actually completed, another Work Order (or a manual Stock
+    Entry) could have already drawn down the same scrap warehouse below
+    what this row still needs. complete_work_order's own pre-consumption
+    check (see the is_scrap_row branch in its raw-material loop) is the
+    authoritative gate and will still throw if this happens -- this
+    endpoint exists purely so WorkOrder.vue can warn about it BEFORE the
+    person opens the Complete Work Order modal and fills in qty, instead of
+    only finding out from an error after clicking Complete.
+
+    Returns a list of {work_order_item_row, item_code, source_warehouse,
+    required_qty, available_qty, shortfall} for every not-yet-fully-
+    consumed scrap-split row whose current stock in its own
+    source_warehouse has fallen below its remaining required_qty. Empty
+    list means no shortfall right now.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+
+    if wo.wip_warehouse:
+        # Consumption sources from WIP once materials are issued, not
+        # straight from the scrap row's own warehouse -- see
+        # complete_work_order's s_wh resolution. The shortfall this checks
+        # for can't occur once WIP is in the picture (issue_materials
+        # itself already applies its own stock guard at transfer time).
+        return []
+
+    from zoho_books_clone.inventory.utils import get_stock_balance_bulk
+
+    scrap_rows = [
+        r for r in wo.items
+        if r.is_scrap_row and flt(r.required_qty) - flt(r.consumed_qty) > 0.0001 and r.source_warehouse
+    ]
+    if not scrap_rows:
+        return []
+
+    by_warehouse = {}
+    for r in scrap_rows:
+        by_warehouse.setdefault(r.source_warehouse, []).append(r)
+
+    warnings = []
+    for warehouse, rows in by_warehouse.items():
+        balances = get_stock_balance_bulk(list({r.item_code for r in rows}), warehouse)
+        for r in rows:
+            remaining_required = flt(r.required_qty) - flt(r.consumed_qty)
+            available = flt(balances.get(r.item_code, 0.0))
+            if available < remaining_required - 0.0001:
+                warnings.append({
+                    "work_order_item_row": r.name,
+                    "item_code": r.item_code,
+                    "source_warehouse": warehouse,
+                    "required_qty": remaining_required,
+                    "available_qty": available,
+                    "shortfall": remaining_required - available,
+                })
+    return warnings
+
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_job_card_scrap_items(work_order):
@@ -803,6 +927,26 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                 "Row for {0}: no Source Warehouse set (on the Work Order Item, "
                 "the Work Order's Default Source Warehouse, or a WIP Warehouse)."
             ).format(row.item_code))
+        # Edge case (Phase 8): a scrap-split row's stock can have gone short
+        # between apply_partial_scrap_substitution (which only checked
+        # availability at split time -- it doesn't reserve stock) and this
+        # completion run, e.g. another Work Order drew from the same scrap
+        # warehouse first. Without this check the Stock Entry submission
+        # below still catches it, but via Frappe's generic negative-stock
+        # error naming only the item/warehouse -- this gives a scrap-reuse-
+        # specific message pointing at the actual shortfall and the fresh
+        # alternative, instead of leaving the person to work out why a
+        # "raw material" row is short on stock nobody told them to buy.
+        if row.is_scrap_row and not wo.wip_warehouse and not ms.get("allow_negative_stock"):
+            available = get_stock_balance_bulk([row.item_code], s_wh).get(row.item_code, 0.0)
+            if flt(available) < consume_qty - 0.0001:
+                frappe.throw(_(
+                    "Scrap reuse shortfall: only {0} of {1} is now available in {2} "
+                    "(needed {3} for this completion run). Scrap stock may have been "
+                    "drawn down elsewhere since it was reused on this Work Order. "
+                    "Reduce Qty Manufactured for this run, top up {1} in {2}, or "
+                    "reverse the scrap reuse on row {4} and fall back to fresh stock."
+                ).format(flt(available), row.item_code, s_wh, consume_qty, row.name))
         rm_rate = get_valuation_rate(row.item_code, s_wh)
         total_consumed_cost += consume_qty * rm_rate
         se.append("items", {
@@ -993,6 +1137,17 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         # last Job Card). This is the one point where forcing the status is
         # correct, since there's no more production left to track against it.
         _set_operations_status(wo, "Completed")
+        if new_produced_qty < flt(wo.qty) - 0.0001:
+            # This run only reached is_final via the close_on_loss_reconciliation
+            # OR-clause above (produced_qty + process_loss_qty >= wo.qty),
+            # not via produced_qty alone. Stamp that durably alongside status
+            # so _stamp_wo_completed's guard -- which only checks produced_qty
+            # by default -- can still recognise this Work Order as genuinely
+            # finished if it ever needs to self-heal a stuck status later
+            # (e.g. from the QC-pass release path). Without this, a WO closed
+            # via loss reconciliation would look "not yet done" to that guard
+            # and the self-heal would incorrectly no-op.
+            wo.db_set("qty_reconciled_via_loss", 1)
     else:
         # Partial completion: still in progress. Bring not-yet-started rows
         # up to "In Process" but never downgrade an operation a Job Card has
@@ -1008,7 +1163,60 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
 
     frappe.db.commit()
 
+    if is_complete:
+        _stamp_wo_completed(wo.name)
+
     return se.name
+
+
+def _stamp_wo_completed(work_order: str) -> None:
+    """Idempotent safety-net: force this Work Order's status/operations to
+    Completed and commit, on its own. Called both at the end of a completing
+    run above, and again from qc_hold_manager._do_quarantine_release once a
+    QC-required FG batch actually clears quarantine -- see the call there for
+    why a second call site exists at all.
+
+    complete_work_order already sets status="Completed" unconditionally the
+    moment produced_qty reaches wo.qty (see is_complete above), regardless of
+    whether that FG still needs QC -- QC hasn't even run yet at that point in
+    the function, so gating completion on it there isn't an option. That
+    write and this one both land in the SAME request/transaction as the
+    Stock Entry submission just above, which is exactly the situation
+    reported as leaving status stuck on "In Process" despite qty/stock
+    being fully correct: something in this function's own tail can throw
+    after Stock Entry submission (which durably commits on its own via
+    Frappe's stock-ledger posting) but before this function's closing
+    frappe.db.commit() -- rolling back only the trailing db_set() calls
+    while the physical Stock Entry (and any QC Inspection created from it)
+    survives. A second, independent call from the QC-pass release path
+    re-asserts the same end state without touching stock again, so a Work
+    Order that's physically done but stuck "In Process" self-heals the
+    moment its QC clears, with no re-consumption risk -- this only ever
+    writes status/operations, never qty or stock.
+    """
+    wo = frappe.get_doc("Work Order", work_order)
+    if wo.status in ("Completed", "Cancelled"):
+        return
+    # Base rule: produced_qty alone reached the planned qty. Loss-reconciliation
+    # rule: this Work Order was already durably flagged (in complete_work_order,
+    # at the same time as this same trailing block set produced_qty/process_loss_qty)
+    # as having been closed via produced_qty + process_loss_qty reaching wo.qty
+    # instead. Without the second clause, a Work Order that was legitimately
+    # completed via loss reconciliation would never satisfy produced_qty >= qty
+    # on its own, and this self-heal would incorrectly no-op forever for it.
+    produced_reached_qty = flt(wo.produced_qty) >= flt(wo.qty) - 0.0001
+    loss_reconciled_complete = (
+        bool(wo.get("qty_reconciled_via_loss"))
+        and (flt(wo.produced_qty) + flt(wo.process_loss_qty)) >= flt(wo.qty) - 0.0001
+    )
+    if not (produced_reached_qty or loss_reconciled_complete):
+        return
+    wo.db_set("status", "Completed")
+    _set_operations_status(wo, "Completed")
+    if wo.production_plan:
+        from zoho_books_clone.manufacturing.production_plan_engine import maybe_complete_production_plan
+        maybe_complete_production_plan(wo.production_plan)
+    frappe.db.commit()
 
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
@@ -1227,6 +1435,289 @@ def apply_row_substitution(work_order, work_order_item_row, alternative_item_cod
         "new_required_qty": new_required_qty,
         "new_rate": new_rate,
         "new_amount": new_amount,
+    }
+
+
+def _compute_scrap_split(current_required_qty, current_scrap_reused_qty, scrap_qty,
+                          conversion_factor, max_substitution_pct):
+    """Pure math for one partial-scrap-substitution call against a single
+    Work Order Item row -- kept dependency-free (no frappe/DB access) so it
+    can be unit-tested directly, the same way TestOverProductionAllowance/
+    TestLossReconciliation replicate complete_work_order's arithmetic.
+
+    conversion_factor is the Alternative Item mapping's factor: how many
+    units of the scrap item are equivalent to 1 unit of the original raw
+    material (same convention apply_row_substitution uses: new_required_qty
+    = required_qty * conversion_factor). scrap_qty is given directly in the
+    scrap item's own stock UOM (matching Bin.actual_qty / get_stock_by_warehouse),
+    so it has to be converted back into the original item's UOM to know how
+    much of the row's required_qty it actually displaces:
+
+        original_equivalent_qty = scrap_qty / conversion_factor
+
+    The row's full original requirement never changes across repeated
+    calls: required_qty + scrap_reused_qty is an invariant (each call moves
+    some of it from one side to the other), so max_substitution_pct is
+    always enforced against that same baseline regardless of how many
+    partial substitutions have already been applied to this row.
+
+    Returns a dict with original_equivalent_qty / new_required_qty /
+    new_scrap_reused_qty / max_allowed_scrap_reused_qty, or raises
+    ValueError with a caller-friendly message if the request is invalid
+    (caller wraps this in frappe.throw).
+    """
+    conversion_factor = 1.0 if conversion_factor is None else conversion_factor
+    if conversion_factor <= 0:
+        raise ValueError("Alternative Item conversion factor must be greater than zero.")
+    if scrap_qty <= 0:
+        raise ValueError("Scrap Qty must be greater than zero.")
+
+    original_baseline = current_required_qty + current_scrap_reused_qty
+    original_equivalent_qty = scrap_qty / conversion_factor
+
+    max_pct = max_substitution_pct if max_substitution_pct and max_substitution_pct > 0 else 100.0
+    max_allowed_scrap_reused_qty = original_baseline * max_pct / 100.0
+    new_scrap_reused_qty = current_scrap_reused_qty + original_equivalent_qty
+
+    if new_scrap_reused_qty > max_allowed_scrap_reused_qty + 0.0001:
+        raise ValueError(
+            f"This would let scrap cover {new_scrap_reused_qty:.4f} of "
+            f"{original_baseline:.4f} required, exceeding the {max_pct:g}% "
+            f"Max Substitution cap ({max_allowed_scrap_reused_qty:.4f})."
+        )
+
+    new_required_qty = current_required_qty - original_equivalent_qty
+    if new_required_qty < -0.0001:
+        raise ValueError(
+            f"Scrap Qty {scrap_qty:.4f} is equivalent to {original_equivalent_qty:.4f} "
+            f"of the original item, more than the {current_required_qty:.4f} still "
+            f"required on this row."
+        )
+
+    return {
+        "original_equivalent_qty": original_equivalent_qty,
+        "new_required_qty": max(new_required_qty, 0.0),
+        "new_scrap_reused_qty": new_scrap_reused_qty,
+        "max_allowed_scrap_reused_qty": max_allowed_scrap_reused_qty,
+    }
+
+
+def _resolve_scrap_warehouse(scrap_item_code, company, scrap_qty, preferred_warehouse=None):
+    """Pick a single warehouse to draw `scrap_qty` of `scrap_item_code`
+    from. A Work Order Item row carries exactly one source_warehouse, so
+    the new scrap-split row has to be satisfiable from one warehouse --
+    unlike get_substitution_options' informational available_qty (which
+    sums across every warehouse), this has to actually pick one.
+
+    QC gate (Phase 8): a company's configured RM/FG quarantine warehouse(s)
+    are excluded from consideration entirely, even if they physically hold
+    enough qty. Recovered scrap items flagged
+    inspection_required_before_manufacture get routed into quarantine at
+    receipt (see qc_engine.auto_create_qc_for_stock_entry's scrap-row
+    branch) precisely so they can't be reused until QC passes -- letting
+    this function still pick a quarantine warehouse because it happens to
+    have the qty would silently defeat that gate.
+
+    Preference order:
+      1. preferred_warehouse (the Work Order's own scrap_warehouse, if set)
+         -- kept even if it doesn't have enough, PROVIDED nothing else does
+         either, so the error message points at the warehouse the person
+         actually expected to draw from.
+      2. Any warehouse (highest qty first, per get_stock_by_warehouse's own
+         ordering) that alone covers scrap_qty.
+
+    Returns (warehouse, valuation_rate). Throws if nothing covers it.
+    """
+    from zoho_books_clone.inventory.utils import get_stock_by_warehouse
+    from zoho_books_clone.quality.qc_hold_manager import _is_quarantine_warehouse
+
+    warehouses = [
+        w for w in get_stock_by_warehouse(scrap_item_code, company)
+        if not _is_quarantine_warehouse(w["warehouse"], company)
+    ]
+    by_name = {w["warehouse"]: w for w in warehouses}
+
+    if preferred_warehouse and not _is_quarantine_warehouse(preferred_warehouse, company) \
+            and by_name.get(preferred_warehouse, {}).get("qty", 0) >= scrap_qty:
+        w = by_name[preferred_warehouse]
+        return w["warehouse"], flt(w["valuation_rate"])
+
+    for w in warehouses:
+        if flt(w["qty"]) >= scrap_qty:
+            return w["warehouse"], flt(w["valuation_rate"])
+
+    total_available = sum(flt(w["qty"]) for w in warehouses)
+    frappe.throw(_(
+        "Not enough {0} in stock in any single warehouse to cover {1} (stock "
+        "sitting in QC quarantine doesn't count -- it hasn't passed inspection "
+        "yet). Total available outside quarantine across all warehouses: {2}."
+    ).format(scrap_item_code, scrap_qty, total_available))
+
+
+def apply_partial_scrap_substitution(work_order, work_order_item_row, scrap_item_code,
+                                      scrap_qty, reason):
+    """Scrap Reuse feature, Phase 3 -- the partial reuse engine.
+
+    Splits a Work Order Item row so PART of its required qty is filled from
+    previously-recovered scrap (drawn from the Scrap Warehouse) while the
+    rest stays on the original raw material, instead of apply_row_substitution's
+    all-or-nothing whole-row swap. Two Work Order Item rows come out of
+    this:
+
+      - the ORIGINAL row, `required_qty` reduced by however much of it the
+        scrap displaces (item_code unchanged);
+      - a NEW row for the scrap portion: item_code = scrap_item_code,
+        required_qty = scrap_qty, source_warehouse = wherever the scrap was
+        drawn from, is_scrap_row = 1.
+
+    Both rows share `substitution_group` (the original row's own name) so
+    reporting/UI can reassemble "how much of this requirement came from
+    scrap vs. fresh stock" even after several calls against the same row.
+
+    Can be called more than once against the same original row (e.g. more
+    scrap becomes available later) -- each call further reduces the
+    original row's required_qty and adds/tops up scrap. Reuses the same
+    guards as apply_row_substitution (no completed/cancelled/stopped WO, no
+    already-consumed material) plus an extra transferred_qty guard: once
+    material has been staged into WIP for this row, splitting it would
+    misattribute that transfer between the resulting rows, so it's blocked
+    the same way consumed_qty already is.
+
+    Returns a dict describing both rows for the caller to report back.
+    """
+    wo = _get_work_order(work_order)
+    assert_doc_in_user_company(wo)
+    if wo.status in ("Completed", "Cancelled", "Stopped"):
+        frappe.throw(_("Cannot substitute materials on a {0} Work Order.").format(wo.status))
+
+    ms = _get_mfg_settings()
+    if not ms.get("enable_scrap_reuse", 1):
+        frappe.throw(_(
+            "Scrap Reuse is currently disabled company-wide (Manufacturing Settings "
+            "\u2192 Enable Scrap Reuse). Ask a Books Admin to turn it back on, or use "
+            "Substitute Material for a Fresh Stock alternative instead."
+        ))
+
+    row = next((r for r in wo.items if r.name == work_order_item_row), None)
+    if not row:
+        frappe.throw(_("Work Order Item row {0} not found.").format(work_order_item_row))
+    if row.is_scrap_row:
+        frappe.throw(_(
+            "{0} is itself a scrap-sourced row (split off from another row). "
+            "Select the original raw-material row to reuse more scrap against it."
+        ).format(row.item_code))
+    if flt(row.consumed_qty) > 0:
+        frappe.throw(_(
+            "{0} has already been partly or fully consumed on this Work Order "
+            "and can no longer be split for scrap reuse."
+        ).format(row.item_code))
+    if flt(row.transferred_qty) > 0:
+        frappe.throw(_(
+            "{0} has already been transferred to WIP on this Work Order. Reusing "
+            "scrap against it now would misattribute that transfer between the "
+            "resulting rows -- reuse scrap before issuing materials for this row."
+        ).format(row.item_code))
+
+    scrap_qty = flt(scrap_qty)
+    original_item_code = row.original_item_code or row.item_code
+
+    mapping = frappe.db.get_value(
+        "Alternative Item",
+        {"item_code": original_item_code, "alternative_item_code": scrap_item_code},
+        ["conversion_factor", "source_type", "max_substitution_pct"],
+        as_dict=True,
+    )
+    if not mapping:
+        frappe.throw(_(
+            "{0} is not a defined Alternative Item for {1}. Add it under "
+            "Manufacturing > Alternative Items first."
+        ).format(scrap_item_code, original_item_code))
+    if mapping.source_type != "Recycled Scrap":
+        frappe.throw(_(
+            "{0} is mapped as a Fresh Stock alternative for {1}, not Recycled "
+            "Scrap. Use Substitute Material for a fresh-stock swap instead."
+        ).format(scrap_item_code, original_item_code))
+
+    try:
+        split = _compute_scrap_split(
+            current_required_qty=flt(row.required_qty),
+            current_scrap_reused_qty=flt(row.scrap_reused_qty),
+            scrap_qty=scrap_qty,
+            conversion_factor=flt(mapping.conversion_factor),
+            max_substitution_pct=flt(mapping.max_substitution_pct),
+        )
+    except ValueError as e:
+        frappe.throw(_(str(e)))
+
+    preferred_wh = wo.scrap_warehouse or _get_mfg_settings().get("default_scrap_warehouse")
+    scrap_wh, scrap_rate = _resolve_scrap_warehouse(
+        scrap_item_code, wo.company, scrap_qty, preferred_warehouse=preferred_wh
+    )
+
+    scrap_item = frappe.db.get_value(
+        "Item", scrap_item_code, ["item_name", "stock_uom"], as_dict=True
+    )
+    if not scrap_item:
+        frappe.throw(_("Scrap item {0} does not exist.").format(scrap_item_code))
+
+    # Original row: shrink required_qty by whatever the scrap displaces,
+    # keep its existing rate (the fresh-material rate hasn't changed), and
+    # record the running total so a later call's max_substitution_pct check
+    # is against the row's true original baseline, not just what's left.
+    new_amount = flt(row.rate) * split["new_required_qty"]
+    group_key = row.substitution_group or row.name
+    row.db_set("required_qty", split["new_required_qty"], update_modified=False)
+    row.db_set("amount", new_amount, update_modified=False)
+    row.db_set("scrap_reused_qty", split["new_scrap_reused_qty"], update_modified=False)
+    row.db_set("is_substituted", 1, update_modified=False)
+    row.db_set("substitution_reason", reason or "", update_modified=False)
+    row.db_set("substitution_group", group_key, update_modified=False)
+
+    # New scrap-split row. Table field on Work Order isn't allow_on_submit,
+    # so appending to it post-submit needs ignore_validate_update_after_submit
+    # -- same pattern production_plan_engine.py uses for mr_items.
+    scrap_amount = scrap_rate * scrap_qty
+    new_row = wo.append("items", {
+        "item_code": scrap_item_code,
+        "item_name": scrap_item.item_name,
+        "uom": scrap_item.stock_uom,
+        "required_qty": scrap_qty,
+        "source_warehouse": scrap_wh,
+        "rate": scrap_rate,
+        "amount": scrap_amount,
+        "original_item_code": original_item_code,
+        "is_scrap_row": 1,
+        "is_substituted": 1,
+        "substitution_reason": reason or "",
+        "substitution_group": group_key,
+        # Carry over the original row's sub-assembly origin(s) so the split-
+        # off scrap row still groups under the right sub-assembly in
+        # WorkOrder.vue's groupedWoItems (see _merge_duplicate_rows) instead
+        # of always falling into "Direct Raw Materials" -- it's the same
+        # requirement, just partially resourced from scrap.
+        "sub_assembly_boms": row.sub_assembly_boms or "",
+    })
+    wo.flags.ignore_validate_update_after_submit = True
+    wo.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {
+        "original_row": {
+            "work_order_item_row": row.name,
+            "item_code": row.item_code,
+            "new_required_qty": split["new_required_qty"],
+            "new_amount": new_amount,
+            "scrap_reused_qty": split["new_scrap_reused_qty"],
+        },
+        "scrap_row": {
+            "work_order_item_row": new_row.name,
+            "item_code": scrap_item_code,
+            "required_qty": scrap_qty,
+            "source_warehouse": scrap_wh,
+            "rate": scrap_rate,
+            "amount": scrap_amount,
+        },
+        "substitution_group": group_key,
     }
 
 
@@ -1502,6 +1993,15 @@ def reverse_manufacture_entry(work_order, stock_entry):
         wo, "In Process" if new_status == "In Process" else "Pending",
         skip_statuses={"Completed"},
     )
+
+    # This reversal always moves status away from "Completed", so any
+    # qty_reconciled_via_loss stamp from the reversed run is now stale --
+    # without clearing it, a later unrelated self-heal call (e.g. from the
+    # QC-pass release path, triggered by some other QC Inspection entirely)
+    # could read the leftover flag and incorrectly re-mark this Work Order
+    # Completed even though the run that earned that flag was just undone.
+    if wo.get("qty_reconciled_via_loss"):
+        wo.db_set("qty_reconciled_via_loss", 0)
 
     frappe.db.commit()
     return "Reversed"

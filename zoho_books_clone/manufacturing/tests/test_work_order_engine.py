@@ -482,5 +482,372 @@ class TestLossReconciliation(unittest.TestCase):
         ))
 
 
+# ---------------------------------------------------------------------------
+# Scrap Reuse feature, Phase 3: partial reuse engine arithmetic
+# ---------------------------------------------------------------------------
+
+class TestScrapReusePartialSubstitution(unittest.TestCase):
+    """Replicates apply_partial_scrap_substitution's pure math (the
+    _compute_scrap_split helper in work_order_engine.py) the same way
+    TestOverProductionAllowance/TestLossReconciliation replicate
+    complete_work_order's -- apply_partial_scrap_substitution itself needs
+    a live site (child-table save on a submitted doc) so isn't
+    unit-tested directly here.
+    """
+
+    def _compute_scrap_split(self, current_required_qty, current_scrap_reused_qty,
+                               scrap_qty, conversion_factor, max_substitution_pct):
+        """Mirrors work_order_engine._compute_scrap_split line for line."""
+        conversion_factor = 1.0 if conversion_factor is None else conversion_factor
+        if conversion_factor <= 0:
+            raise ValueError("bad conversion factor")
+        if scrap_qty <= 0:
+            raise ValueError("bad scrap qty")
+
+        original_baseline = current_required_qty + current_scrap_reused_qty
+        original_equivalent_qty = scrap_qty / conversion_factor
+
+        max_pct = max_substitution_pct if max_substitution_pct and max_substitution_pct > 0 else 100.0
+        max_allowed_scrap_reused_qty = original_baseline * max_pct / 100.0
+        new_scrap_reused_qty = current_scrap_reused_qty + original_equivalent_qty
+
+        if new_scrap_reused_qty > max_allowed_scrap_reused_qty + 0.0001:
+            raise ValueError("exceeds max_substitution_pct")
+
+        new_required_qty = current_required_qty - original_equivalent_qty
+        if new_required_qty < -0.0001:
+            raise ValueError("exceeds remaining required_qty")
+
+        return {
+            "original_equivalent_qty": original_equivalent_qty,
+            "new_required_qty": max(new_required_qty, 0.0),
+            "new_scrap_reused_qty": new_scrap_reused_qty,
+            "max_allowed_scrap_reused_qty": max_allowed_scrap_reused_qty,
+        }
+
+    # 1:1 conversion, no cap -- the simple case.
+    def test_simple_partial_reuse_1to1(self):
+        r = self._compute_scrap_split(100, 0, 30, 1.0, 100)
+        self.assertAlmostEqual(r["new_required_qty"], 70)
+        self.assertAlmostEqual(r["new_scrap_reused_qty"], 30)
+
+    # Full-row coverage in one call -- required_qty goes to exactly 0, not negative.
+    def test_full_coverage_leaves_zero_not_negative(self):
+        r = self._compute_scrap_split(100, 0, 100, 1.0, 100)
+        self.assertAlmostEqual(r["new_required_qty"], 0)
+
+    # Requesting more scrap than remains required is rejected.
+    def test_over_request_blocked(self):
+        with self.assertRaises(ValueError):
+            self._compute_scrap_split(100, 0, 101, 1.0, 100)
+
+    # Non-1:1 conversion factor: 2 units of scrap = 1 unit of original item.
+    def test_conversion_factor_applied(self):
+        r = self._compute_scrap_split(100, 0, 20, 0.5, 100)
+        # 20 scrap units / 0.5 conversion factor = 40 original-equivalent units
+        self.assertAlmostEqual(r["original_equivalent_qty"], 40)
+        self.assertAlmostEqual(r["new_required_qty"], 60)
+
+    # max_substitution_pct caps how much of the ORIGINAL baseline can ever
+    # be scrap, not just this one call's request.
+    def test_max_pct_cap_blocks_excess(self):
+        # 100 required, cap 30% -> at most 30 can ever be scrap.
+        with self.assertRaises(ValueError):
+            self._compute_scrap_split(100, 0, 31, 1.0, 30)
+
+    def test_max_pct_cap_allows_up_to_boundary(self):
+        r = self._compute_scrap_split(100, 0, 30, 1.0, 30)
+        self.assertAlmostEqual(r["new_scrap_reused_qty"], 30)
+
+    # Repeated partial calls against the same row: baseline (required_qty +
+    # scrap_reused_qty) must stay constant, and the cap applies to the
+    # CUMULATIVE total, not each call in isolation.
+    def test_repeated_calls_baseline_invariant(self):
+        r1 = self._compute_scrap_split(100, 0, 20, 1.0, 100)
+        # After call 1: required_qty=80, scrap_reused_qty=20. Baseline=100 still.
+        self.assertAlmostEqual(r1["new_required_qty"] + r1["new_scrap_reused_qty"], 100)
+
+        r2 = self._compute_scrap_split(
+            r1["new_required_qty"], r1["new_scrap_reused_qty"], 15, 1.0, 100
+        )
+        self.assertAlmostEqual(r2["new_required_qty"], 65)
+        self.assertAlmostEqual(r2["new_scrap_reused_qty"], 35)
+        self.assertAlmostEqual(r2["new_required_qty"] + r2["new_scrap_reused_qty"], 100)
+
+    def test_repeated_calls_cumulative_cap_enforced(self):
+        # Cap is 30%; call 1 uses 20 of it, call 2 tries to add 15 more (35
+        # cumulative) -- must be blocked even though call 2's own request
+        # (15) is well under the cap looked at in isolation.
+        r1 = self._compute_scrap_split(100, 0, 20, 1.0, 30)
+        with self.assertRaises(ValueError):
+            self._compute_scrap_split(r1["new_required_qty"], r1["new_scrap_reused_qty"], 15, 1.0, 30)
+
+    # Zero/negative inputs are rejected outright.
+    def test_zero_scrap_qty_rejected(self):
+        with self.assertRaises(ValueError):
+            self._compute_scrap_split(100, 0, 0, 1.0, 100)
+
+    def test_zero_conversion_factor_rejected(self):
+        with self.assertRaises(ValueError):
+            self._compute_scrap_split(100, 0, 10, 0, 100)
+
+    # max_substitution_pct of 0/None falls back to 100 (no effective cap) --
+    # mirrors AlternativeItem._set_source_type forcing Fresh Stock rows to
+    # 100 and treating an unset value the same way.
+    def test_unset_max_pct_defaults_to_no_cap(self):
+        r = self._compute_scrap_split(100, 0, 100, 1.0, 0)
+        self.assertAlmostEqual(r["new_required_qty"], 0)
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: consumption & GL correctness for scrap-split rows
+# ---------------------------------------------------------------------------
+
+class TestScrapSplitRowConsumption(unittest.TestCase):
+    """Verifies _consume_qty_for_row and complete_work_order's per-row
+    costing loop treat a scrap-split Work Order Item row (is_scrap_row=1,
+    its own item_code/source_warehouse, see apply_partial_scrap_substitution)
+    exactly like any other row -- no special-casing needed, per the Phase 6
+    plan. _consume_qty_for_row itself is pure (just flt/attribute access)
+    so it's imported and called directly here, same as the module's real
+    code; the surrounding costing loop from complete_work_order (rate
+    lookup + total_consumed_cost accumulation) is replicated the same way
+    _compute_scrap_split is replicated above, since complete_work_order
+    itself needs a live site.
+    """
+
+    def _consume_qty_for_row(self, row, wo, consumption_ratio, ms):
+        """Mirrors work_order_engine._consume_qty_for_row line for line."""
+        basis = ms.get("backflush_raw_materials_based_on") or "BOM"
+        if basis == "Material Transferred for Manufacture" and flt(row.transferred_qty) > 0:
+            row_ratio = flt(row.transferred_qty) / flt(wo.qty or 1)
+            consume_qty = row_ratio * consumption_ratio * flt(wo.qty or 1)
+            remaining_transferred = flt(row.transferred_qty) - flt(row.consumed_qty)
+            return max(min(consume_qty, remaining_transferred), 0)
+        return flt(row.required_qty) * consumption_ratio
+
+    def _make_row(self, item_code, required_qty, source_warehouse,
+                   is_scrap_row=0, transferred_qty=0, consumed_qty=0,
+                   substitution_group="", scrap_reused_qty=0):
+        r = MagicMock()
+        r.item_code = item_code
+        r.required_qty = required_qty
+        r.source_warehouse = source_warehouse
+        r.is_scrap_row = is_scrap_row
+        r.transferred_qty = transferred_qty
+        r.consumed_qty = consumed_qty
+        r.substitution_group = substitution_group
+        r.scrap_reused_qty = scrap_reused_qty
+        return r
+
+    def _run_consumption_loop(self, wo, ms, consumption_ratio, valuation_rates):
+        """Mirrors the BOM-basis costing loop inside complete_work_order
+        (the `for row in wo.items: ... rm_rate = get_valuation_rate(...)`
+        block), with get_valuation_rate replaced by a plain
+        {(item_code, warehouse): rate} lookup so no live site is needed.
+        """
+        total_consumed_cost = 0.0
+        lines = []
+        for row in wo.items:
+            consume_qty = self._consume_qty_for_row(row, wo, consumption_ratio, ms)
+            if consume_qty <= 0:
+                continue
+            s_wh = wo.wip_warehouse or row.source_warehouse or wo.source_warehouse
+            rm_rate = valuation_rates[(row.item_code, s_wh)]
+            total_consumed_cost += consume_qty * rm_rate
+            lines.append({
+                "item_code": row.item_code, "qty": consume_qty,
+                "s_warehouse": s_wh, "basic_rate": rm_rate,
+            })
+        return lines, total_consumed_cost
+
+    # Fresh-only row (no scrap involved at all) -- baseline sanity check
+    # that the loop behaves exactly as before this feature existed.
+    def test_fresh_only_row_consumes_at_fresh_rate(self):
+        wo = _make_wo(qty=10.0)
+        row = self._make_row("RM-001", required_qty=10.0, source_warehouse="RM Stores - TC")
+        wo.items = [row]
+        ms = _make_settings()
+        lines, total_cost = self._run_consumption_loop(
+            wo, ms, consumption_ratio=1.0,
+            valuation_rates={("RM-001", "RM Stores - TC"): 50.0},
+        )
+        self.assertEqual(len(lines), 1)
+        self.assertAlmostEqual(lines[0]["qty"], 10.0)
+        self.assertEqual(lines[0]["s_warehouse"], "RM Stores - TC")
+        self.assertAlmostEqual(total_cost, 500.0)
+
+    # Full-swap: original row was fully displaced by scrap in one call, so
+    # its required_qty is 0 (contributes nothing) and only the sibling
+    # scrap row -- its own item_code, own source_warehouse (the scrap
+    # warehouse), own rate (scrap valuation) -- consumes.
+    def test_full_swap_row_consumes_at_scrap_rate_from_scrap_warehouse(self):
+        wo = _make_wo(qty=10.0)
+        original_row = self._make_row(
+            "RM-001", required_qty=0.0, source_warehouse="RM Stores - TC",
+            substitution_group="WOITEM-001", scrap_reused_qty=10.0,
+        )
+        scrap_row = self._make_row(
+            "SCRAP-RM-001", required_qty=10.0, source_warehouse="Scrap Warehouse - TC",
+            is_scrap_row=1, substitution_group="WOITEM-001",
+        )
+        wo.items = [original_row, scrap_row]
+        ms = _make_settings()
+        lines, total_cost = self._run_consumption_loop(
+            wo, ms, consumption_ratio=1.0,
+            valuation_rates={
+                ("RM-001", "RM Stores - TC"): 50.0,
+                ("SCRAP-RM-001", "Scrap Warehouse - TC"): 12.0,
+            },
+        )
+        # original row contributed nothing -- fully displaced
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["item_code"], "SCRAP-RM-001")
+        self.assertEqual(lines[0]["s_warehouse"], "Scrap Warehouse - TC")
+        self.assertAlmostEqual(lines[0]["qty"], 10.0)
+        self.assertAlmostEqual(total_cost, 120.0)
+        # scrap valuation (12) is well under fresh valuation (50) -- this
+        # is the whole point of the feature: it should reduce actual cost.
+        fresh_equivalent_cost = 10.0 * 50.0
+        self.assertLess(total_cost, fresh_equivalent_cost)
+
+    # Row split partway between fresh + scrap: two sibling rows sharing
+    # substitution_group, each consumed from its OWN source_warehouse at
+    # its OWN rate. Total consumed cost = fresh remainder cost + scrap
+    # portion cost at scrap valuation.
+    def test_partial_split_row_sums_fresh_remainder_plus_scrap_portion(self):
+        wo = _make_wo(qty=10.0)
+        # 100 originally required; 30 displaced by scrap in one call ->
+        # 70 remains on the fresh row, 30 on the new scrap-sourced row.
+        original_row = self._make_row(
+            "RM-001", required_qty=70.0, source_warehouse="RM Stores - TC",
+            substitution_group="WOITEM-001", scrap_reused_qty=30.0,
+        )
+        scrap_row = self._make_row(
+            "SCRAP-RM-001", required_qty=30.0, source_warehouse="Scrap Warehouse - TC",
+            is_scrap_row=1, substitution_group="WOITEM-001",
+        )
+        wo.items = [original_row, scrap_row]
+        ms = _make_settings()
+        lines, total_cost = self._run_consumption_loop(
+            wo, ms, consumption_ratio=1.0,
+            valuation_rates={
+                ("RM-001", "RM Stores - TC"): 50.0,
+                ("SCRAP-RM-001", "Scrap Warehouse - TC"): 12.0,
+            },
+        )
+        self.assertEqual(len(lines), 2)
+        fresh_line = next(l for l in lines if l["item_code"] == "RM-001")
+        scrap_line = next(l for l in lines if l["item_code"] == "SCRAP-RM-001")
+        self.assertAlmostEqual(fresh_line["qty"], 70.0)
+        self.assertEqual(fresh_line["s_warehouse"], "RM Stores - TC")
+        self.assertAlmostEqual(scrap_line["qty"], 30.0)
+        self.assertEqual(scrap_line["s_warehouse"], "Scrap Warehouse - TC")
+
+        fresh_remainder_cost = 70.0 * 50.0
+        scrap_portion_cost = 30.0 * 12.0
+        self.assertAlmostEqual(total_cost, fresh_remainder_cost + scrap_portion_cost)
+        self.assertAlmostEqual(total_cost, 3860.0)
+
+    # A partial completion run (consumption_ratio < 1) must scale BOTH
+    # sibling rows by the same ratio, same as any other pair of rows would
+    # be -- nothing about is_scrap_row should change how consumption_ratio
+    # applies.
+    def test_partial_completion_scales_both_sibling_rows_equally(self):
+        wo = _make_wo(qty=10.0)
+        original_row = self._make_row(
+            "RM-001", required_qty=70.0, source_warehouse="RM Stores - TC",
+            substitution_group="WOITEM-001", scrap_reused_qty=30.0,
+        )
+        scrap_row = self._make_row(
+            "SCRAP-RM-001", required_qty=30.0, source_warehouse="Scrap Warehouse - TC",
+            is_scrap_row=1, substitution_group="WOITEM-001",
+        )
+        wo.items = [original_row, scrap_row]
+        ms = _make_settings()
+        # Half the batch this run.
+        lines, total_cost = self._run_consumption_loop(
+            wo, ms, consumption_ratio=0.5,
+            valuation_rates={
+                ("RM-001", "RM Stores - TC"): 50.0,
+                ("SCRAP-RM-001", "Scrap Warehouse - TC"): 12.0,
+            },
+        )
+        fresh_line = next(l for l in lines if l["item_code"] == "RM-001")
+        scrap_line = next(l for l in lines if l["item_code"] == "SCRAP-RM-001")
+        self.assertAlmostEqual(fresh_line["qty"], 35.0)
+        self.assertAlmostEqual(scrap_line["qty"], 15.0)
+        self.assertAlmostEqual(total_cost, 35.0 * 50.0 + 15.0 * 12.0)
+
+    # No WIP warehouse and no row-level source_warehouse override: the
+    # scrap row still falls back correctly to its OWN source_warehouse
+    # (set by _resolve_scrap_warehouse at split time) rather than the Work
+    # Order's default -- confirms no special-casing is needed for is_scrap_row.
+    def test_scrap_row_source_warehouse_not_overridden_by_wo_default(self):
+        wo = _make_wo(qty=10.0)
+        wo.source_warehouse = "RM Stores - TC"  # WO-level default, different item entirely
+        scrap_row = self._make_row(
+            "SCRAP-RM-001", required_qty=10.0, source_warehouse="Scrap Warehouse - TC",
+            is_scrap_row=1,
+        )
+        wo.items = [scrap_row]
+        ms = _make_settings()
+        lines, _total_cost = self._run_consumption_loop(
+            wo, ms, consumption_ratio=1.0,
+            valuation_rates={("SCRAP-RM-001", "Scrap Warehouse - TC"): 12.0},
+        )
+        self.assertEqual(lines[0]["s_warehouse"], "Scrap Warehouse - TC")
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 loose end: scrap-split row should inherit sub_assembly_boms from
+# the original row it was split off, so it groups under the right
+# sub-assembly in WorkOrder.vue instead of always landing in "Direct Raw
+# Materials". apply_partial_scrap_substitution itself needs a live site
+# (child-table save on a submitted doc), so this replicates just the
+# new-row dict construction, the same pattern used above.
+# ---------------------------------------------------------------------------
+
+class TestScrapSplitRowInheritsSubAssemblyOrigin(unittest.TestCase):
+
+    def _build_scrap_row_dict(self, row, scrap_item_code, scrap_qty, scrap_wh, scrap_rate,
+                                original_item_code, group_key, reason):
+        """Mirrors the `wo.append("items", {...})` dict built inside
+        apply_partial_scrap_substitution for the new scrap-split row."""
+        return {
+            "item_code": scrap_item_code,
+            "required_qty": scrap_qty,
+            "source_warehouse": scrap_wh,
+            "rate": scrap_rate,
+            "amount": scrap_rate * scrap_qty,
+            "original_item_code": original_item_code,
+            "is_scrap_row": 1,
+            "is_substituted": 1,
+            "substitution_reason": reason or "",
+            "substitution_group": group_key,
+            "sub_assembly_boms": row.sub_assembly_boms or "",
+        }
+
+    def test_inherits_sub_assembly_boms_from_original_row(self):
+        original_row = MagicMock()
+        original_row.name = "WOITEM-001"
+        original_row.sub_assembly_boms = "BOM-SUB-002"
+        new_row = self._build_scrap_row_dict(
+            original_row, "SCRAP-RM-001", 30.0, "Scrap Warehouse - TC", 12.0,
+            "RM-001", "WOITEM-001", "reuse test",
+        )
+        self.assertEqual(new_row["sub_assembly_boms"], "BOM-SUB-002")
+
+    def test_direct_raw_material_row_gets_empty_sub_assembly_boms(self):
+        original_row = MagicMock()
+        original_row.name = "WOITEM-002"
+        original_row.sub_assembly_boms = ""
+        new_row = self._build_scrap_row_dict(
+            original_row, "SCRAP-RM-002", 5.0, "Scrap Warehouse - TC", 8.0,
+            "RM-002", "WOITEM-002", "",
+        )
+        self.assertEqual(new_row["sub_assembly_boms"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

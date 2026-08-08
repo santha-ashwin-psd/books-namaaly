@@ -174,11 +174,17 @@ def get_users_list():
 
 
 @frappe.whitelist(methods=["POST"])
-def invite_user(email, first_name, last_name="", role="Books Viewer", modules=None):
-    """Create a new user, link them to the admin's company, and email login credentials.
-    `modules` is an optional dict like {"invoices": 1, "banking": 0, ...}."""
+def invite_user(email, first_name, last_name="", role="Books Viewer", modules=None, password=None):
+    """Create a new user, link them to the admin's company, and set their login credentials.
+    `modules` is an optional dict like {"invoices": 1, "banking": 0, ...}.
+    If `password` is given, it is set directly as the user's password and no
+    credentials email is sent. Otherwise a temp password is generated and emailed."""
     company = _require_company_admin()
     email = email.strip().lower()
+
+    password = (password or "").strip()
+    if password and len(password) < 8:
+        frappe.throw(_("Password must be at least 8 characters"))
 
     existing_user = frappe.db.exists("User", email)
     reactivating = False
@@ -217,7 +223,11 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
             modules = {}
     modules = modules or {}
 
-    temp_password = _gen_temp_password()
+    # Use the admin-supplied password when given; otherwise generate a temp
+    # one to email. use_temp_password tracks which path we took, since that
+    # decides whether we send the credentials email below.
+    use_temp_password = not password
+    temp_password = password or _gen_temp_password()
 
     if reactivating:
         # ── Reactivate the existing (previously removed) User
@@ -239,7 +249,7 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
         user.first_name = (first_name or "").strip() or email.split("@")[0]
         user.last_name = (last_name or "").strip()
         user.user_type = "System User"
-        user.send_welcome_email = 0  # we send our own via system SMTP
+        user.send_welcome_email = 0  # we send our own via system SMTP (or none, if admin set the password)
         user.enabled = 1
         user.new_password = temp_password
         user.append("roles", {"role": role})
@@ -273,10 +283,13 @@ def invite_user(email, first_name, last_name="", role="Books Viewer", modules=No
 
     frappe.db.commit()
 
-    # ── Send invite email via system SMTP
-    _send_invite_email(email, user.first_name, company, temp_password, role)
+    # ── Only email credentials when we generated the password ourselves.
+    # If the admin set the password directly, they're responsible for
+    # sharing it with the member however they choose.
+    if use_temp_password:
+        _send_invite_email(email, user.first_name, company, temp_password, role)
 
-    return {"success": True, "user": email, "company": company, "role": role, "reactivated": reactivating}
+    return {"success": True, "user": email, "company": company, "role": role, "reactivated": reactivating, "emailed": use_temp_password}
 
 
 def _send_invite_email(email: str, first_name: str, company: str, temp_password: str, role: str):
@@ -400,6 +413,25 @@ def toggle_user_active(user, enabled):
 
 
 @frappe.whitelist(methods=["POST"])
+def admin_reset_user_password(user, new_password):
+    """Directly set a new password for an existing member of the admin's company.
+    No email is sent -- the admin is expected to share the new password themselves."""
+    company = _require_company_admin()
+    if user in ("Administrator", "Guest"):
+        frappe.throw(_("Cannot reset password for this user"))
+    if not frappe.db.exists("Books Company Member", {"user": user, "company": company}):
+        frappe.throw(_("User {0} is not part of your company.").format(user))
+
+    new_password = (new_password or "").strip()
+    if len(new_password) < 8:
+        frappe.throw(_("New password must be at least 8 characters"))
+
+    update_password(user, new_password)
+    frappe.db.commit()
+    return {"success": True}
+
+
+@frappe.whitelist(methods=["POST"])
 def remove_user_from_company(user):
     """Remove a user from the admin's company (deletes the membership row, disables the user)."""
     company = _require_company_admin()
@@ -479,10 +511,10 @@ def get_company_members():
 
 @frappe.whitelist(methods=["POST"])
 def invite_member(email, first_name, last_name="", role="Books Viewer", password=None, modules=None):
-    """Alias for invite_user. The legacy SPA also passes a `password` field, which we ignore
-    (we always generate a temp password and email it via system SMTP). All other args pass through."""
+    """Alias for invite_user. If `password` is supplied, it's set directly on the
+    new member's account instead of generating/emailing a temp password."""
     return invite_user(email=email, first_name=first_name, last_name=last_name,
-                       role=role, modules=modules)
+                       role=role, modules=modules, password=password)
 
 
 @frappe.whitelist(methods=["POST"])

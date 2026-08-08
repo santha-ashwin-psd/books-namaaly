@@ -28,7 +28,12 @@ doc_requires_qc(doc) -> bool
 get_linked_qc_status(doc) -> str
 create_qc_inspection_for_item(reference_type, reference_name, item_code, inspection_type, batch_no) -> str
 get_qc_summary_for_doc(reference_type, reference_name) -> dict
+get_or_create_coverage(doc, row, item_code, inspection_type, create_if_missing) -> dict
+    -- single source of truth for row-level QC coverage; see QC Coverage doctype
+reconcile_row_identity(doc, method=None)           -- before_save hook (all 5 QC-gated doctypes)
 """
+
+from collections import defaultdict
 
 import frappe
 from frappe import _
@@ -70,7 +75,31 @@ def check_qc_before_stock_link(doc, method=None):
            elif doc.flags.ignore_qc_warning -> log override + proceed
            else -> frappe.msgprint (orange) -> SPA shows confirm dialog
     """
-    if not _qc_master_switch_on():
+
+    if doc.doctype == "Stock Entry":
+        # This gate can never pass for a Stock Entry. doc_requires_qc already
+        # narrows Stock Entry to Manufacture-type rows with t_warehouse set
+        # (i.e. exactly the finished-goods/scrap receipt rows) -- and THIS
+        # SAME submission's own before_submit hook, auto_create_qc_for_stock_entry,
+        # is what creates the QC Inspection(s) for those rows, moments before
+        # this on_submit hook runs. The finished good/scrap physically didn't
+        # exist to inspect until this submission produced it, so its freshly
+        # -created QC Inspection can never already be Pass by the time this
+        # check runs -- in hard-block mode this frappe.throw()s on every
+        # single Manufacture completion of a QC-required item, unconditionally,
+        # with no way to ever satisfy it (the WO's own bookkeeping -- consumed_qty
+        # /produced_qty/status -- never even runs, since the throw happens
+        # inside se.submit() before complete_work_order reaches any of it).
+        # In soft-warn mode it's equally pointless: it would msgprint-warn
+        # every time too, for something not actually wrong.
+        #
+        # FG/scrap usability is already correctly gated downstream instead:
+        # _stamp_and_route_fg_quarantine / _stamp_and_route_scrap_quarantine
+        # (both called from THIS SAME before_submit hook) route the stock into
+        # a quarantine warehouse it can't be consumed or shipped from until its
+        # QC Inspection actually passes and qc_hold_manager releases it. That
+        # already does this gate's job correctly for Stock Entry, so this gate
+        # is a no-op here by design.
         return
 
     if not doc_requires_qc(doc):
@@ -84,7 +113,13 @@ def check_qc_before_stock_link(doc, method=None):
 
     failed_items  = summary.get("failed_items", [])
     missing_items = summary.get("missing_items", [])
-    all_problems  = failed_items + missing_items
+    pending_items = summary.get("pending_items", [])
+    # Include pending_items too -- previously only failed/missing fed into
+    # the message, so the "still Pending" branch below always rendered an
+    # empty item list (all_problems + item_list would be blank whenever
+    # status == "Pending" specifically, since pending rows never fell into
+    # either of the other two buckets).
+    all_problems  = failed_items + missing_items + pending_items
     item_list     = ", ".join(all_problems[:5])
     if len(all_problems) > 5:
         item_list += f" ... (+{len(all_problems) - 5} more)"
@@ -161,10 +196,8 @@ def _auto_create_qc_for_rows(
     success_message is a translated format string using {0}=count, {1}=names.
     Returns the list of created QC Inspection names.
     """
-    if not _qc_master_switch_on():
-        return []
-
     created = []
+    failed  = []
     for row in (getattr(doc, "items", []) or []):
         item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
         if not item_code:
@@ -174,44 +207,73 @@ def _auto_create_qc_for_rows(
         if not frappe.db.get_value("Item", item_code, flag_field):
             continue
 
-        # Skip if this row already has a QC Inspection linked and it's not
-        # cancelled — checked at the row level (not just by item) so two
-        # rows of the same item (different batches, or a split receipt)
-        # each get their own inspection rather than one row's link being
-        # mistaken for coverage of the other.
-        existing = getattr(row, "quality_inspection", None)
-        if existing and frappe.db.get_value("QC Inspection", existing, "docstatus") != 2:
-            continue
-
+        # All coverage lookup/creation/race-handling now lives in one place
+        # -- see get_or_create_coverage(). This used to be ~90 lines here
+        # re-deriving "does this row have coverage" via the row's own link,
+        # a dangling-link check, and a SELECT...FOR UPDATE by item+batch --
+        # a second, independent implementation of the exact same question
+        # get_qc_summary_for_doc also answers on its own. Two
+        # implementations drifting out of sync is what let duplicate/
+        # dangling QC Inspections reappear in different shapes.
         try:
-            qci_name = create_qc_inspection_for_item(
-                doc.doctype, doc.name, item_code, inspection_type,
+            result = get_or_create_coverage(
+                doc, row, item_code, inspection_type,
+                create_if_missing=True,
                 batch_no=getattr(row, "batch_no", None),
                 inspected_qty=getattr(row, "qty", None) or getattr(row, "received_qty", None),
             )
-            if getattr(row, "doctype", None) and getattr(row, "name", None) \
-                    and frappe.db.has_column(row.doctype, "quality_inspection"):
-                # Set the in-memory field on the row FIRST. This hook runs
-                # in before_submit, before Frappe's own submit flow writes
-                # the whole document (including this child table) back to
-                # the DB via db_update() -- a frappe.db.set_value() alone,
-                # with the in-memory `row.quality_inspection` still blank,
-                # would get silently overwritten back to blank when that
-                # later db_update() flushes memory over what we just wrote.
-                # Setting it here as well as via db.set_value covers both
-                # the in-flight submit (via memory) and any caller that
-                # doesn't go through the normal submit flow afterward.
-                row.quality_inspection = qci_name
-                frappe.db.set_value(row.doctype, row.name, "quality_inspection", qci_name,
-                                     update_modified=False)
-            if on_created:
-                on_created(qci_name, row)
-            created.append(qci_name)
         except Exception:
             frappe.log_error(
                 title=f"QC auto-create failed for {item_code} on {doc.name}",
                 message=frappe.get_traceback(),
             )
+            failed.append(item_code)
+            continue
+
+        if result.get("created") and result.get("qci"):
+            if on_created:
+                on_created(result["qci"], row)
+            created.append(result["qci"])
+
+            # CRITICAL: commit now, not after the whole before_submit hook
+            # chain / on_submit gate finishes. This runs before the parent
+            # doc's own docstatus flip, so this commit only durably saves
+            # the new QC Inspection + QC Coverage row -- it does NOT
+            # prematurely submit `doc` itself.
+            #
+            # Without this: if the on_submit gate (check_qc_before_stock_
+            # link, running later in the SAME request) then hard-blocks via
+            # frappe.throw(), Frappe rolls back the ENTIRE transaction --
+            # including the QC Inspection and QC Coverage rows just created
+            # here, since they were never committed. The name Frappe
+            # assigned it (e.g. "QCI-2026-00006") survives, because the
+            # naming-series counter is bumped outside the document
+            # transaction specifically so two parallel inserts never
+            # collide on a name -- but the row itself vanishes. The user
+            # sees an error message pointing at a QC Inspection that does
+            # not exist anywhere, can never open it to complete it, and
+            # every retry burns another series number the same way,
+            # forever. Committing here is what makes the auto-created
+            # inspection an actual, durable, completable work item instead
+            # of a phantom reference in an error message.
+            frappe.db.commit()
+
+    if failed:
+        # Previously this failure was only written to the Error Log and
+        # never shown to the user -- the on_submit gate would then report
+        # a plain "No QC Inspection found" with no indication that
+        # auto-create had actually been attempted and failed. Surfacing it
+        # here (still non-blocking; the submit-time gate below is what
+        # actually stops submission) means a failed creation is visible at
+        # the moment it happens, not just discoverable after the fact by
+        # someone with Error Log access.
+        frappe.msgprint(
+            _("QC Inspection auto-creation failed for item(s): {0}. "
+              "Check the Error Log for details, or create the QC Inspection "
+              "manually before submitting.").format(", ".join(failed)),
+            indicator="red",
+            title=_("QC Auto-Create Failed"),
+        )
 
     if created:
         frappe.msgprint(
@@ -222,6 +284,258 @@ def _auto_create_qc_for_rows(
         )
 
     return created
+
+
+# --- Unified coverage resolver (single source of truth) ---------------------
+
+def get_or_create_coverage(
+    doc,
+    row,
+    item_code: str,
+    inspection_type: str,
+    create_if_missing: bool = False,
+    batch_no: str | None = None,
+    inspected_qty: float | None = None,
+) -> dict:
+    """
+    THE single function that answers "does this row already have QC
+    coverage." Every caller -- the auto-create hooks (create_if_missing=
+    True) and the read-only gate/summary (create_if_missing=False) -- goes
+    through this instead of independently re-deriving coverage via
+    item+batch matching. See QC_Flow_Redesign §5.
+
+    Coverage is keyed on `source_row = f"{row.doctype}:{row.name}"`, stored
+    in the `QC Coverage` doctype where source_row has a genuine DB unique
+    index -- that index, not any lock, is what makes this safe under
+    concurrency: two near-simultaneous submits for the same row can both
+    reach the "create" branch below having both seen no coverage yet, but
+    only one of their `QC Coverage` inserts can succeed. The loser catches
+    the duplicate-key failure and re-reads the winner's row instead of
+    ending up with two QC Inspections covering the same source_row.
+
+    Returns {"qci": <name or None>, "status": "Pass"|"Fail"|"Pending"|"Missing",
+             "created": bool}
+    """
+    row_name = getattr(row, "name", None)
+    if not row_name:
+        # No stable row identity to key coverage on (row hasn't actually
+        # been saved yet). Fail safe to "no coverage" rather than guessing
+        # via item/batch -- this should not normally happen, since every
+        # call site here runs in before_submit/on_submit, after the parent
+        # doc (and therefore its child rows) has already been saved once.
+        return {"qci": None, "status": "Missing", "created": False}
+
+    source_row = f"{row.doctype}:{row_name}"
+
+    coverage_qci = frappe.db.get_value("QC Coverage", {"source_row": source_row}, "qc_inspection")
+
+    if coverage_qci:
+        qci_info = frappe.db.get_value(
+            "QC Inspection", coverage_qci, ["docstatus", "status"], as_dict=True
+        )
+        if qci_info is None:
+            # The QC Inspection this coverage row points at was deleted out
+            # from under it (e.g. someone removed a bad/duplicate inspection
+            # directly). A stale coverage row must not keep blocking a
+            # legitimate re-inspection -- drop it and fall through exactly
+            # as if this row had never had coverage.
+            frappe.db.delete("QC Coverage", {"source_row": source_row})
+            coverage_qci = None
+        elif qci_info.docstatus == 2:
+            # Cancelled QCI -- also not live coverage. Same cleanup.
+            frappe.db.delete("QC Coverage", {"source_row": source_row})
+            coverage_qci = None
+        else:
+            _stamp_row_link(row, coverage_qci)
+            status = "Pending" if qci_info.docstatus == 0 else (qci_info.status or "Pending")
+            return {"qci": coverage_qci, "status": status, "created": False}
+
+    if not create_if_missing:
+        return {"qci": None, "status": "Missing", "created": False}
+
+    # Safeguard: refuse to silently spawn ANOTHER QCI for this item on this
+    # reference doc if one is already sitting there unresolved (draft/
+    # Pending). This is the exact failure mode that produced QCI-2026-00006/
+    # 00007/00008 for one logical Bill line: each save minted a new
+    # source_row (child row identity was unstable -- see save_doc fix), so
+    # this function never found existing coverage and kept creating more.
+    # That root cause is now fixed at the source, but this stays as
+    # defense-in-depth for any other path that can re-trigger the pattern.
+    # Fails LOUD (logs + msgprint) rather than silently creating a second
+    # inspection an operator would have to notice and clean up by hand.
+    existing_unresolved = frappe.get_all(
+        "QC Inspection",
+        filters={
+            "reference_type": doc.doctype,
+            "reference_name": doc.name,
+            "item": item_code,
+            "docstatus": ["<", 2],
+            "status": ["in", ["Pending", ""]],
+        },
+        pluck="name",
+    )
+    if existing_unresolved:
+        frappe.log_error(
+            title=f"QC auto-create blocked: unresolved QCI series for {item_code} on {doc.doctype} {doc.name}",
+            message=(
+                f"Refused to create another QC Inspection for item {item_code} "
+                f"on {doc.doctype} {doc.name} -- unresolved inspection(s) already "
+                f"exist: {existing_unresolved}. This usually means the row's "
+                f"identity is not stable across saves (source_row is being "
+                f"regenerated), so get_or_create_coverage keeps missing the "
+                f"existing coverage. Investigate row identity before creating "
+                f"more inspections; do not just re-run submit."
+            ),
+        )
+        frappe.msgprint(
+            _(
+                "Item {0} already has an unresolved QC Inspection ({1}) on this "
+                "document. Not creating another -- please complete or cancel it "
+                "first, or contact an admin if this keeps recurring."
+            ).format(item_code, ", ".join(existing_unresolved)),
+            indicator="red",
+            title=_("QC Auto-Create Blocked"),
+        )
+        return {"qci": existing_unresolved[0], "status": "Pending", "created": False}
+
+    qci_name = create_qc_inspection_for_item(
+        doc.doctype, doc.name, item_code, inspection_type,
+        batch_no=batch_no, inspected_qty=inspected_qty,
+    )
+
+    try:
+        coverage = frappe.new_doc("QC Coverage")
+        coverage.source_row    = source_row
+        coverage.qc_inspection = qci_name
+        coverage.insert(ignore_permissions=True)
+    except Exception as e:
+        # Duplicate-key = someone else's insert won the race between our
+        # lookup above and our insert here. Anything else is a real error
+        # and should propagate (caller logs it and treats the row as
+        # failed, same as before).
+        if not _is_duplicate_key_error(e):
+            raise
+        # Discard the QCI we just created -- it's an orphan, nothing points
+        # at it -- and use the winner's instead. Deliberately NOT a
+        # frappe.db.rollback(): this hook runs partway through submitting
+        # `doc` inside a larger transaction, and rolling back here would
+        # discard everything else that transaction has done so far. Only
+        # the orphan draft we made is removed; it's safe to hard-delete
+        # since nothing else can reference a draft that's milliseconds old.
+        frappe.delete_doc("QC Inspection", qci_name, ignore_permissions=True,
+                           force=True, delete_permanently=True)
+        winner_qci = frappe.db.get_value("QC Coverage", {"source_row": source_row}, "qc_inspection")
+        if not winner_qci:
+            # Extremely unlikely (the winner's own insert would have to
+            # have been rolled back between our failed insert and this
+            # re-read) -- surface as Missing rather than raise, so this
+            # row's submit gets one more chance next attempt instead of
+            # hard-failing the whole document.
+            return {"qci": None, "status": "Missing", "created": False}
+        qci_info = frappe.db.get_value("QC Inspection", winner_qci, ["docstatus", "status"], as_dict=True)
+        _stamp_row_link(row, winner_qci)
+        status = "Pending" if (qci_info and qci_info.docstatus == 0) else ((qci_info and qci_info.status) or "Pending")
+        return {"qci": winner_qci, "status": status, "created": False}
+
+    _stamp_row_link(row, qci_name)
+    return {"qci": qci_name, "status": "Pending", "created": True}
+
+
+def _is_duplicate_key_error(exc: Exception) -> bool:
+    """Best-effort detection of a DB duplicate-key/unique-constraint failure,
+    across Frappe's own UniqueValidationError and the raw DB driver error."""
+    name = exc.__class__.__name__
+    if "UniqueValidationError" in name or "DuplicateEntryError" in name:
+        return True
+    msg = str(exc).lower()
+    return "duplicate" in msg or "unique" in msg
+
+
+def _stamp_row_link(row, qci_name: str):
+    """
+    Mirror the resolved QC Inspection onto the row's own `quality_inspection`
+    field (in-memory and in the DB) purely for UI/display convenience --
+    `QC Coverage.source_row` remains the actual source of truth, this field
+    is not read back by get_or_create_coverage.
+    """
+    if not (getattr(row, "doctype", None) and getattr(row, "name", None)):
+        return
+    if not frappe.db.has_column(row.doctype, "quality_inspection"):
+        return
+    row.quality_inspection = qci_name
+    frappe.db.set_value(row.doctype, row.name, "quality_inspection", qci_name,
+                         update_modified=False)
+
+
+# --- Backend defense-in-depth: row reconciliation on save --------------------
+
+def reconcile_row_identity(doc, method=None):
+    """
+    before_save hook (every save, draft or submit) on every QC-gated
+    doctype. See QC_Flow_Redesign §4.
+
+    The backend never trusts the frontend to forward a child row's `name`.
+    If a page ever rebuilds `items[]` from local state without forwarding
+    `name` (the exact Bills.vue bug, as a *pattern* rather than a one-off),
+    Frappe would treat every row as brand new on save -- silently losing
+    the link between the row and any QC coverage it already had.
+
+    For every incoming row that looks new (no `name` yet) but matches
+    exactly one row in the previous saved version on
+    (item_code, batch_no, qty, rate), recover that previous row's identity
+    (name + quality_inspection) before Frappe's own save machinery runs.
+    Ambiguous matches (zero or multiple candidates) are left alone --
+    fails safe to "new row, no assumed coverage" rather than guessing wrong
+    and attaching someone else's inspection.
+    """
+    if doc.is_new():
+        return
+
+    try:
+        previous = doc.get_doc_before_save()
+    except Exception:
+        previous = None
+    if not previous:
+        return
+
+    prev_items = getattr(previous, "items", []) or []
+    if not prev_items:
+        return
+
+    prev_buckets = defaultdict(list)
+    for prow in prev_items:
+        key = _row_identity_key(prow)
+        if key:
+            prev_buckets[key].append(prow)
+
+    for row in (getattr(doc, "items", []) or []):
+        if getattr(row, "name", None):
+            continue  # Frappe already has an identity for this row
+        key = _row_identity_key(row)
+        if not key:
+            continue
+        candidates = prev_buckets.get(key) or []
+        if len(candidates) != 1:
+            continue
+        match = candidates[0]
+        row.name = match.name
+        if hasattr(row, "quality_inspection"):
+            row.quality_inspection = getattr(match, "quality_inspection", None)
+        # Consumed -- a second incoming row must not also claim this same
+        # previous row.
+        prev_buckets[key] = []
+
+
+def _row_identity_key(row):
+    item_code = getattr(row, "item_code", None) or getattr(row, "item", None)
+    if not item_code:
+        return None
+    return (
+        item_code,
+        getattr(row, "batch_no", None),
+        flt(getattr(row, "qty", None)),
+        flt(getattr(row, "rate", None)),
+    )
 
 
 # --- Phase 2: stamp target_warehouse before quarantine routing overrides row -
@@ -335,6 +649,59 @@ def _resolve_fg_quarantine_warehouse(company: str | None) -> str | None:
     return frappe.db.get_value("Books Company", company, "default_quarantine_warehouse")
 
 
+def _resolve_rm_quarantine_warehouse(company: str | None) -> str | None:
+    """Scrap Reuse feature, Phase 8 -- resolve the RM quarantine warehouse
+    for a company. Recovered scrap becomes a RAW MATERIAL again the moment
+    it's reused (see work_order_engine.apply_partial_scrap_substitution),
+    so it belongs in the RM quarantine, not FG's -- mirrors
+    _resolve_fg_quarantine_warehouse's fallback shape but doesn't fall back
+    to the FG warehouse, since scrap awaiting QC has no business sitting
+    alongside finished-goods holds.
+    """
+    if not company:
+        return None
+    return frappe.db.get_value("Books Company", company, "default_quarantine_warehouse")
+
+
+def _stamp_and_route_quarantine(doc, row, qci_name, quarantine_wh):
+    """Shared body behind _stamp_and_route_fg_quarantine and the Phase 8
+    scrap-row routing below -- both mutate THIS row's own t_warehouse
+    in-memory before_submit (Stock Entry is the physical movement itself,
+    unlike Purchase Receipt/Invoice's stock_link.py proxy) and stamp the
+    same QC Inspection bookkeeping (target_warehouse / release_status /
+    quarantine_warehouse) so qc_hold_manager's existing release-on-pass
+    flow (_release_quarantine_on_pass) works identically for either kind
+    of row with no changes needed there.
+    """
+    if not frappe.db.has_column("QC Inspection", "target_warehouse"):
+        return
+    try:
+        original_t_warehouse = getattr(row, "t_warehouse", None)
+        if original_t_warehouse:
+            frappe.db.set_value(
+                "QC Inspection", qci_name, "target_warehouse", original_t_warehouse,
+                update_modified=False,
+            )
+
+        if not quarantine_wh:
+            return  # nothing configured -- row stays exactly where it was
+
+        row.t_warehouse = quarantine_wh
+
+        update = {}
+        if frappe.db.has_column("QC Inspection", "release_status"):
+            update["release_status"] = "Not Released"
+        if frappe.db.has_column("QC Inspection", "quarantine_warehouse"):
+            update["quarantine_warehouse"] = quarantine_wh
+        if update:
+            frappe.db.set_value("QC Inspection", qci_name, update, update_modified=False)
+    except Exception:
+        frappe.log_error(
+            title=f"Quarantine routing failed for {qci_name}",
+            message=frappe.get_traceback(),
+        )
+
+
 def _stamp_and_route_fg_quarantine(doc, row, qci_name):
     """
     Phase 5 — on_created callback for Manufacturing finished-goods QC rows.
@@ -368,34 +735,31 @@ def _stamp_and_route_fg_quarantine(doc, row, qci_name):
          already headed, unchanged (soft-warn only, same as Purchase before
          Phase 2 for a company that hasn't set one up yet).
     """
-    if not frappe.db.has_column("QC Inspection", "target_warehouse"):
-        return
-    try:
-        original_t_warehouse = getattr(row, "t_warehouse", None)
-        if original_t_warehouse:
-            frappe.db.set_value(
-                "QC Inspection", qci_name, "target_warehouse", original_t_warehouse,
-                update_modified=False,
-            )
+    _stamp_and_route_quarantine(
+        doc, row, qci_name, _resolve_fg_quarantine_warehouse(getattr(doc, "company", None))
+    )
 
-        fg_quarantine_wh = _resolve_fg_quarantine_warehouse(getattr(doc, "company", None))
-        if not fg_quarantine_wh:
-            return  # nothing configured -- row stays exactly where it was
 
-        row.t_warehouse = fg_quarantine_wh
+def _stamp_and_route_scrap_quarantine(doc, row, qci_name):
+    """Scrap Reuse feature, Phase 8 -- on_created callback for recoverable
+    scrap/by-product rows whose Item has inspection_required_before_manufacture
+    set. Same mechanics as _stamp_and_route_fg_quarantine, routed to the RM
+    quarantine warehouse instead of FG's (see _resolve_rm_quarantine_warehouse).
 
-        update = {}
-        if frappe.db.has_column("QC Inspection", "release_status"):
-            update["release_status"] = "Not Released"
-        if frappe.db.has_column("QC Inspection", "quarantine_warehouse"):
-            update["quarantine_warehouse"] = fg_quarantine_wh
-        if update:
-            frappe.db.set_value("QC Inspection", qci_name, update, update_modified=False)
-    except Exception:
-        frappe.log_error(
-            title=f"FG quarantine routing failed for {qci_name}",
-            message=frappe.get_traceback(),
-        )
+    This closes the gap that let a QC-flagged scrap item go straight from
+    "recovered on this Work Order" to "reused as a raw material on another
+    Work Order" (apply_partial_scrap_substitution) with no inspection ever
+    happening in between -- auto_create_qc_for_stock_entry previously
+    excluded every scrap/by-product row from QC entirely (see the
+    docstring on that function), which was correct for NOT spuriously
+    QC'ing every scrap row, but also meant a row that genuinely SHOULD be
+    inspected never was. Once routed here, work_order_engine.
+    _resolve_scrap_warehouse refuses to pick this warehouse as a scrap
+    source until qc_hold_manager's pass flow releases it back out.
+    """
+    _stamp_and_route_quarantine(
+        doc, row, qci_name, _resolve_rm_quarantine_warehouse(getattr(doc, "company", None))
+    )
 
 
 def auto_create_qc_for_stock_entry(doc, method=None):
@@ -410,6 +774,11 @@ def auto_create_qc_for_stock_entry(doc, method=None):
     applies to incoming Purchase rows, adapted for the fact that Stock Entry
     is itself the physical movement rather than something stock_link.py
     proxies.
+
+    Phase 8: a second, separate pass does the same for recoverable
+    scrap/by-product rows (is_scrap_item=1) whose OWN Item has
+    inspection_required_before_manufacture set, routing them into RM
+    quarantine instead -- see _stamp_and_route_scrap_quarantine.
     """
     if getattr(doc, "stock_entry_type", "") != "Manufacture":
         return
@@ -432,6 +801,17 @@ def auto_create_qc_for_stock_entry(doc, method=None):
         if production_item:
             return row.item_code == production_item
         return True  # no Work Order linked -- fall back to the old behaviour
+
+    def _is_scrap_row_for_qc(row):
+        # Recoverable scrap/by-product rows only -- see complete_work_order,
+        # which stamps is_scrap_item=1 on exactly these rows (as opposed to
+        # the FG receipt row, or a plain raw-material consumption row which
+        # has no t_warehouse at all). Deliberately does NOT also require
+        # is_scrap_row on the Work Order Item side -- that flag lives on the
+        # SOURCE row a scrap-split raw material was drawn from, not on this
+        # Stock Entry's incoming scrap receipt row, which is an unrelated
+        # concept that happens to share a similar name.
+        return bool(getattr(row, "t_warehouse", None)) and bool(getattr(row, "is_scrap_item", None))
 
     def _stamp_work_order(qci_name, row):
         # Stamp work_order traceability if column exists
@@ -456,6 +836,35 @@ def auto_create_qc_for_stock_entry(doc, method=None):
         # Only the finished-goods receipt row(s) -- see _is_fg_row above.
         row_filter=_is_fg_row,
         on_created=_on_created,
+    )
+
+    # Scrap Reuse feature, Phase 8 -- QC-required scrap items via
+    # qc_hold_manager. Recoverable scrap/by-product rows were previously
+    # EXCLUDED from QC entirely by design (see the comment above on
+    # production_item/_is_fg_row) -- correct for not spuriously QC'ing every
+    # scrap row using the FG item's own flag, but it also meant a scrap
+    # item that genuinely has inspection_required_before_manufacture=1 on
+    # its own Item master was never inspected before being available for
+    # apply_partial_scrap_substitution to pull back into another Work
+    # Order's raw materials. This is a second, separate
+    # _auto_create_qc_for_rows pass scoped to exactly those rows, routed
+    # into RM quarantine (see _stamp_and_route_scrap_quarantine) instead of
+    # scrap_warehouse -- work_order_engine._resolve_scrap_warehouse then
+    # refuses to source scrap reuse from a quarantine warehouse, so
+    # quarantined scrap can't be reused until it passes.
+    def _on_scrap_created(qci_name, row):
+        _stamp_work_order(qci_name, row)
+        _stamp_and_route_scrap_quarantine(doc, row, qci_name)
+
+    _auto_create_qc_for_rows(
+        doc,
+        flag_field="inspection_required_before_manufacture",
+        inspection_type="In Process",
+        success_message=_("Scrap/By-Product QC Inspection(s) auto-created: {1}. "
+                           "This scrap is held in quarantine until inspection passes."),
+        success_title=_("Scrap QC Created"),
+        row_filter=_is_scrap_row_for_qc,
+        on_created=_on_scrap_created,
     )
 
 
@@ -554,35 +963,32 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
     Return full QC status summary for all items on the document.
     Returns dict with overall_status, inspections, passed/failed/pending/missing item lists.
 
-    Row-scoped, not item-scoped: matching used to be done purely by item
-    code across the whole document, so if the same item appeared on two
-    rows (e.g. two different batches, or a partial receipt split across
-    rows) one row's QC Inspection would silently "cover" the other row
-    too. Each row's own `quality_inspection` Link (stamped at creation
-    time by create_qc_inspection_for_item / the manual-create API) is now
-    checked first, so each row is tracked independently. Older inspections
-    created before this link existed won't have it set on their row, so we
-    fall back to the legacy by-item match for those specifically.
+    Row-scoped, not item-scoped: coverage for every row is resolved through
+    get_or_create_coverage() (create_if_missing=False, read-only -- this
+    function must never mutate state, only observe it), which is keyed on
+    QC Coverage.source_row -- a genuine DB-unique key per (child_doctype,
+    child_row_name). The legacy item-code fallback matching that used to
+    live here (falling back to "first inspection found for this item" when
+    a row's own link was blank) has been removed entirely: it's what let
+    two different rows' statuses bleed into each other, and source_row is
+    now authoritative so it's no longer needed.
     """
     inspection_type = _DOCTYPE_TO_INSPECTION_TYPE.get(reference_type)
 
+    # Still returned for display/reporting purposes (e.g. listing every
+    # inspection tied to this doc), just no longer used to resolve
+    # per-row status below.
     inspections = frappe.get_all(
         "QC Inspection",
         filters={
             "reference_type": reference_type,
             "reference_name": reference_name,
-            "docstatus": 1,
+            "docstatus": ["in", [0, 1]],
         },
-        fields=["name", "item", "status", "inspection_type", "inspection_date", "inspected_by"],
+        fields=["name", "item", "status", "inspection_type", "inspection_date",
+                "inspected_by", "docstatus"],
         ignore_permissions=True,
     )
-
-    inspections_by_name = {qi["name"]: qi for qi in inspections}
-    # Legacy fallback only: first inspection found for a given item, used
-    # solely for rows whose own quality_inspection link is blank.
-    legacy_by_item = {}
-    for qi in inspections:
-        legacy_by_item.setdefault(qi["item"], qi)
 
     doc = frappe.get_doc(reference_type, reference_name)
     flag_field = _ITEM_FLAG_FOR_INSPECTION_TYPE.get(inspection_type, "")
@@ -618,21 +1024,25 @@ def get_qc_summary_for_doc(reference_type: str, reference_name: str) -> dict:
         batch = getattr(row, "batch_no", None)
         label = f"{item_code} (Batch {batch})" if batch else item_code
 
-        qi = None
-        row_qi_name = getattr(row, "quality_inspection", None)
-        if row_qi_name:
-            qi = inspections_by_name.get(row_qi_name)
-        if not qi:
-            qi = legacy_by_item.get(item_code)
+        result = get_or_create_coverage(
+            doc, row, item_code, inspection_type, create_if_missing=False,
+        )
+        status   = result["status"]
+        qci_name = result["qci"]
 
-        if not qi:
+        if status == "Missing" or not qci_name:
             missing.append(label)
-        elif qi["status"] == "Pass":
+        elif status == "Pending":
+            # Include the QC Inspection's own name so the message points
+            # the user at exactly which draft to go finish, rather than
+            # just repeating the item label with nothing to act on.
+            pending.append(f"{label} [{qci_name}]")
+        elif status == "Pass":
             passed.append(label)
-        elif qi["status"] == "Fail":
+        elif status == "Fail":
             failed.append(label)
         else:
-            pending.append(label)
+            pending.append(f"{label} [{qci_name}]")
 
     if failed:
         overall = "Fail"

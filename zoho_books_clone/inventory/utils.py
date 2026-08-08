@@ -345,6 +345,42 @@ def get_stock_balance_bulk(item_codes: list[str], warehouse: str) -> dict[str, f
     return {r.item_code: flt(r.actual_qty) for r in rows}
 
 
+def get_stock_by_warehouse(item_code: str, company: str | None = None) -> list[dict]:
+    """Return this item's positive stock, broken down per warehouse, for the
+    Scrap Reuse "how much recovered scrap is actually available" check.
+
+    Bin isn't in hooks.py's permission_query_conditions, so frappe.get_all
+    here would return every company's stock -- callers that expose this
+    across a whitelisted endpoint MUST pass `company` (see
+    api/inventory.py:get_scrap_stock_for_item, which scopes it via
+    assert_company before calling this). Left optional here since a couple
+    of internal/administrative callers legitimately want the unscoped view.
+
+    Zero/negative-qty bins are dropped -- a Bin row persists after stock is
+    fully consumed, and callers of this (deciding whether there's scrap to
+    reuse) only care about warehouses that actually have something in them.
+    Sorted qty descending so "the warehouse with the most" is always [0].
+    """
+    filters = {"item_code": item_code, "actual_qty": [">", 0]}
+    if company:
+        filters["company"] = company
+
+    rows = frappe.get_all(
+        "Bin",
+        filters=filters,
+        fields=["warehouse", "actual_qty", "valuation_rate"],
+        order_by="actual_qty desc",
+    )
+    return [
+        {
+            "warehouse": r.warehouse,
+            "qty": flt(r.actual_qty),
+            "valuation_rate": flt(r.valuation_rate),
+        }
+        for r in rows
+    ]
+
+
 # ── Valuation ─────────────────────────────────────────────────────────────────
 
 def get_valuation_rate(item_code: str, warehouse: str) -> float:

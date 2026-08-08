@@ -407,6 +407,51 @@
             </div>
           </div>
         </div>
+        <!-- ── Scrap Reuse Savings table ── -->
+        <div v-if="activeTab === 'scrap-savings'" class="mrx-table-wrap">
+          <div v-if="!result.rows.length" class="mrx-empty">No applied Scrap Reuse actions found for the selected filters.</div>
+          <table v-else class="mrx-table">
+            <thead>
+              <tr>
+                <th>Log #</th><th>Work Order</th><th>Original Item</th><th>Scrap Item</th>
+                <th style="text-align:right;">Displaced Qty</th>
+                <th style="text-align:right;">Fresh Avoided</th>
+                <th style="text-align:right;">Scrap Cost</th>
+                <th style="text-align:right;">Savings</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in result.rows" :key="r.log_name" class="mrx-row" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+                <td class="mrx-link" style="font-size:12px;">{{ r.log_name }}</td>
+                <td class="mrx-sub"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></td>
+                <td>{{ r.original_item_code }}</td>
+                <td style="color:var(--bx-green);">{{ r.alternative_item_code }}</td>
+                <td style="text-align:right;">{{ fmt(r.displaced_qty) }}</td>
+                <td style="text-align:right;">{{ fmt(r.fresh_cost_avoided) }}</td>
+                <td style="text-align:right;">{{ fmt(r.scrap_cost_incurred) }}</td>
+                <td style="text-align:right;font-weight:700;" :style="r.savings >= 0 ? 'color:var(--bx-green);' : 'color:var(--bx-red);'">{{ fmt(r.savings) }}</td>
+                <td class="mrx-sub">{{ r.request_date }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="result.rows.length" class="mrx-cards-wrap">
+            <div v-for="r in result.rows" :key="r.log_name" class="mrx-rcard" @click="router.push(`/manufacturing/work-order/${r.work_order}`)">
+              <div class="mrx-rcard-top">
+                <span class="mrx-link" style="font-size:12px;">{{ r.log_name }}</span>
+                <span class="mrx-sub">{{ r.request_date }}</span>
+              </div>
+              <div class="mrx-rcard-title">{{ r.original_item_code }} ← {{ r.alternative_item_code }}</div>
+              <div class="mrx-sub"><DocLink doctype="Work Order" :name="r.work_order" :mono-style="false" /></div>
+              <div class="mrx-rcard-meta">
+                <div><span class="mrx-rcard-mlbl">Displaced Qty</span><span>{{ fmt(r.displaced_qty) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Fresh Avoided</span><span>{{ fmt(r.fresh_cost_avoided) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Scrap Cost</span><span>{{ fmt(r.scrap_cost_incurred) }}</span></div>
+                <div><span class="mrx-rcard-mlbl">Savings</span><span :style="r.savings >= 0 ? 'color:var(--bx-green);font-weight:700;' : 'color:var(--bx-red);font-weight:700;'">{{ fmt(r.savings) }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
 
       <!-- Empty state before first run -->
@@ -439,6 +484,7 @@ const tabs = [
   { id: "performance", label: "Production Performance",  icon: "⚙️", desc: "Yield, efficiency, and process loss across completed runs." },
   { id: "bulk-recon",  label: "Bulk → Packed Reconciliation", icon: "🔄", desc: "Bulk qty produced vs. consumed via Packing Slips vs. remaining in warehouse, across every bulk-producing Work Order." },
   { id: "scrap-variance", label: "Scrap & Variance", icon: "🧪", desc: "Recovered scrap value and abnormal manufacturing variance loss per completion run." },
+  { id: "scrap-savings", label: "Scrap Reuse Savings", icon: "♻️", desc: "Cost saved (or added) by reusing recovered scrap in place of fresh raw material, per applied Scrap Reuse action." },
 ];
 
 const today = new Date().toISOString().slice(0, 10);
@@ -462,6 +508,7 @@ const API_MAP = {
   "performance": "zoho_books_clone.manufacturing.reports.get_production_performance_report",
   "bulk-recon":  "zoho_books_clone.manufacturing.reports.get_bulk_packing_reconciliation_report",
   "scrap-variance": "zoho_books_clone.manufacturing.reports.get_scrap_variance_report",
+  "scrap-savings": "zoho_books_clone.manufacturing.reports.get_scrap_reuse_savings_report",
 };
 
 async function runReport() {
@@ -522,6 +569,12 @@ const summaryKpis = computed(() => {
     { label: "Entries", value: s.total_entries },
     { label: "Total Scrap Value", value: fmt(s.total_scrap_value), color: "var(--bx-green)" },
     { label: "Total Variance Loss", value: fmt(s.total_variance_loss), color: s.total_variance_loss > 0 ? "var(--bx-red)" : "var(--bx-muted)" },
+  ];
+  if (activeTab.value === "scrap-savings") return [
+    { label: "Actions", value: s.total_actions },
+    { label: "Fresh Cost Avoided", value: fmt(s.total_fresh_avoided), color: "var(--bx-muted)" },
+    { label: "Scrap Cost Incurred", value: fmt(s.total_scrap_cost), color: "var(--bx-muted)" },
+    { label: "Net Savings", value: fmt(s.total_savings), color: s.total_savings >= 0 ? "var(--bx-green)" : "var(--bx-red)" },
   ];
   return [];
 });

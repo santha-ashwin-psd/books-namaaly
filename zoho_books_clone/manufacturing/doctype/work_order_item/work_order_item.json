@@ -113,6 +113,29 @@
    "label": "Substitution"
   },
   {
+   "fieldname": "is_scrap_row",
+   "fieldtype": "Check",
+   "label": "Scrap-Sourced Row",
+   "default": "0",
+   "read_only": 1,
+   "description": "Set when this row is the scrap portion split off from another raw-material row by the Scrap Reuse feature (apply_partial_scrap_substitution) -- its material is drawn from the Scrap Warehouse instead of fresh stock. See substitution_group to find the row it was split from."
+  },
+  {
+   "fieldname": "scrap_reused_qty",
+   "fieldtype": "Float",
+   "label": "Qty Displaced By Scrap (Original UOM)",
+   "default": "0",
+   "read_only": 1,
+   "description": "Cumulative amount of THIS row's original required_qty (in its own UOM) that has been displaced onto scrap-sourced sibling row(s) so far. required_qty + scrap_reused_qty always equals the row's full original requirement, regardless of how many partial scrap substitutions have been applied -- used to enforce Alternative Item.max_substitution_pct across repeated calls. Meaningless (stays 0) on a row where is_scrap_row is set."
+  },
+  {
+   "fieldname": "substitution_group",
+   "fieldtype": "Data",
+   "label": "Substitution Group",
+   "read_only": 1,
+   "description": "Shared reference (the original row's own name) linking a raw-material row to the scrap-sourced row(s) split off from it by the Scrap Reuse feature, so reporting/UI can reassemble \"how much of this requirement came from scrap vs. fresh stock\"."
+  },
+  {
    "fieldname": "is_substituted",
    "fieldtype": "Check",
    "label": "Is Substituted",

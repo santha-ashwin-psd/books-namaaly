@@ -438,11 +438,12 @@
         <!-- Stock data: mobile cards + desktop table (toggled via CSS) -->
         <template v-else>
         <div class="wh-tbl-mobile">
-          <div v-for="r in sortedStockItems" :key="'mc-' + r.item_code" class="wh-stock-mc">
+          <div v-for="r in sortedStockItems" :key="'mc-' + r.item_code + '-' + r.warehouse" class="wh-stock-mc">
             <div class="wh-smc-top">
               <div class="wh-smc-name-wrap">
                 <div class="wh-smc-name">{{ r.item_name }}</div>
                 <div class="wh-smc-code">{{ r.item_code }}</div>
+                <div v-if="!selectedChild && r.warehouse" class="wh-item-wh">📍 {{ warehouseLabel(r.warehouse) }}</div>
               </div>
               <span v-if="r.below_reorder" class="wh-status-low">⚠ Low</span>
               <span v-else class="wh-status-ok">✓ OK</span>
@@ -519,7 +520,7 @@
               </tr>
             </thead>
             <tbody>
-              <template v-for="r in sortedStockItems" :key="r.item_code">
+              <template v-for="r in sortedStockItems" :key="r.item_code + '-' + r.warehouse">
               <tr class="wh-tr" :class="{ 'wh-tr-clickable': r.has_batch_no }" @click="r.has_batch_no && toggleBatches(r.item_code)">
                 <td class="wh-td wh-td-c">
                   <span v-if="r.has_batch_no" class="wh-expand-chevron" :class="{ 'wh-expand-chevron--open': expandedRows[r.item_code] }">
@@ -529,6 +530,7 @@
                 <td class="wh-td">
                   <div class="wh-item-name">{{ r.item_name }}</div>
                   <div class="wh-item-code">{{ r.item_code }}</div>
+                  <div v-if="!selectedChild && r.warehouse" class="wh-item-wh">📍 {{ warehouseLabel(r.warehouse) }}</div>
                 </td>
                 <td class="wh-td wh-td-muted wh-th-hide-sm">{{ r.item_group || '—' }}</td>
                 <td class="wh-td wh-td-muted wh-th-hide-sm">{{ r.uom || 'Nos' }}</td>
@@ -911,6 +913,14 @@ const transferForm = reactive({
 });
 
 function whMeta(type) { return WH_TYPE_META[type] || WH_DEFAULT; }
+
+// Friendly display name for a warehouse row's `warehouse` code (shown next
+// to the item name when the "All" / group scope mixes multiple child
+// warehouses together). Falls back to the raw name if not found in `list`.
+function warehouseLabel(name) {
+  const w = list.value.find((x) => x.name === name);
+  return w ? (w.warehouse_name || w.name) : name;
+}
 
 // Groups dropdown
 const groups = computed(() => list.value.filter((w) => w.is_group));
@@ -2112,6 +2122,7 @@ onMounted(() => { load(); loadItems(); });
 
 .wh-item-name { font-size: 13px; font-weight: 600; color: #0f172a; }
 .wh-item-code { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.wh-item-wh { font-size: 10.5px; font-weight: 600; color: #2563eb; margin-top: 2px; }
 
 .wh-rack-panel {
   border: 1px solid #e2e8f0; border-radius: 12px;

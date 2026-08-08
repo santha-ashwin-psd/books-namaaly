@@ -456,6 +456,27 @@ def _do_quarantine_release(doc):
         if frappe.db.has_column("QC Inspection", "release_stock_entry"):
             update["release_stock_entry"] = se_name
         frappe.db.set_value("QC Inspection", doc.name, update, update_modified=False)
+
+        # A FG batch that needed QC can leave its Work Order's own status
+        # stuck on "In Process" even once produced_qty already reached
+        # wo.qty -- complete_work_order() sets status in the same request
+        # as the Manufacture Stock Entry's submission, and a failure late in
+        # that request can roll back that status write while the physical
+        # Stock Entry (durably committed via its own stock-ledger posting)
+        # and this QC Inspection survive. Re-asserting completion here, the
+        # moment the FG batch actually clears quarantine, self-heals that
+        # without touching stock a second time -- see
+        # work_order_engine._stamp_wo_completed for the full reasoning.
+        if frappe.db.has_column("QC Inspection", "work_order") and doc.get("work_order"):
+            try:
+                from zoho_books_clone.manufacturing.work_order_engine import _stamp_wo_completed
+                _stamp_wo_completed(doc.get("work_order"))
+            except Exception:
+                frappe.log_error(
+                    title=f"Work Order completion re-check failed after {doc.name}",
+                    message=frappe.get_traceback(),
+                )
+
         frappe.msgprint(
             _("QC Inspection {0} Passed. Stock released from quarantine to {1} via {2}.").format(
                 doc.name, target_wh, frappe.bold(se_name)),

@@ -669,6 +669,7 @@
                         <td style="padding:8px 14px" @click.stop>
                           <DocLink v-if="custDocTypeFor(row.type)" :doctype="custDocTypeFor(row.type)" :name="row.ref" />
                           <span v-else>{{row.ref}}</span>
+                          <span v-if="row.type==='Payment' && row.mode_of_payment" style="color:#9CA3AF;font-weight:500"> ({{row.mode_of_payment}})</span>
                         </td>
                         <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.debit ? '₹'+fmtStmt(row.debit) : ''}}</td>
                         <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.credit ? '₹'+fmtStmt(row.credit) : ''}}</td>
@@ -695,6 +696,7 @@
                       <span class="cus-stmt-mc-name" @click.stop>
                         <DocLink v-if="custDocTypeFor(row.type)" :doctype="custDocTypeFor(row.type)" :name="row.ref" />
                         <span v-else>{{row.ref}}</span>
+                        <span v-if="row.type==='Payment' && row.mode_of_payment" style="color:#9CA3AF;font-weight:500"> ({{row.mode_of_payment}})</span>
                       </span>
                       <span class="cus-stmt-mc-badge" :style="row.type==='Payment'?'background:#EBFBEE;color:#2F9E44':'background:#EFF6FF;color:#1D4ED8'">
                         {{row.type}}
@@ -2193,7 +2195,7 @@ function buildStatementPdfHtml() {
 
   const rowsHtml = ledgerRows.value.map(r => `<tr>
       <td>${fmtStmtDate(r.date)}</td>
-      <td>${r.type || ""}</td>
+      <td>${r.type || ""}${r.type === "Payment" && r.mode_of_payment ? ` <span class="mop">(${r.mode_of_payment})</span>` : ""}</td>
       <td>${r.ref || ""}</td>
       <td class="num">${Number(r.debit||0) ? fmtStmt(r.debit) : ""}</td>
       <td class="num">${Number(r.credit||0) ? fmtStmt(r.credit) : ""}</td>
@@ -2218,6 +2220,7 @@ function buildStatementPdfHtml() {
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.bal { font-weight: 600; }
   tfoot td { font-weight: 700; background: #f7f7f7; }
+  .mop { color: #666; font-weight: 500; }
 </style></head>
 <body>
   <div class="stmt-header">

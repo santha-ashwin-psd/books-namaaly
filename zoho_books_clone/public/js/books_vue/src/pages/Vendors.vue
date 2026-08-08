@@ -629,7 +629,10 @@
                   </tr>
                   <tr v-for="(r,i) in stmtRowsVisible" :key="r.ref+'-'+i" style="border-bottom:1px solid #F3F4F6">
                     <td style="padding:8px 14px;color:#6B7280;white-space:nowrap">{{fmtDate(r.date)}}</td>
-                    <td style="padding:8px 14px" @click.stop><DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" /></td>
+                    <td style="padding:8px 14px" @click.stop>
+                      <DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" />
+                      <span v-if="r.type==='Payment' && r.mode_of_payment" style="color:#9CA3AF;font-weight:500"> ({{r.mode_of_payment}})</span>
+                    </td>
                     <td style="padding:8px 14px;font-size:11px;color:#6B7280;white-space:nowrap">{{r.type}}</td>
                     <td style="padding:8px 14px;text-align:right;color:#059669;white-space:nowrap">{{r.debit>0?fmtCur(r.debit):'—'}}</td>
                     <td style="padding:8px 14px;text-align:right;color:#E67700;white-space:nowrap">{{r.credit>0?fmtCur(r.credit):'—'}}</td>
@@ -650,7 +653,10 @@
               <div v-if="!vendorStatement.rows?.length" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px">No statement rows for this period.</div>
               <div v-for="(r,i) in stmtRowsVisible" :key="'smc-'+r.ref+'-'+i" class="ven-stmt-mc">
                 <div class="ven-stmt-mc-top">
-                  <span class="ven-stmt-mc-ref" @click.stop><DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" /></span>
+                  <span class="ven-stmt-mc-ref" @click.stop>
+                    <DocLink :doctype="vendDocTypeFor(r.type)" :name="r.ref" />
+                    <span v-if="r.type==='Payment' && r.mode_of_payment" style="color:#9CA3AF;font-weight:500"> ({{r.mode_of_payment}})</span>
+                  </span>
                   <span class="ven-stmt-mc-type">{{r.type}}</span>
                 </div>
                 <div class="ven-stmt-mc-date">{{fmtDate(r.date)}}</div>
@@ -1785,7 +1791,7 @@ function buildVendorStatementPdfHtml() {
 
   const rowsHtml = (vendorStatement.value.rows || []).map(r => `<tr>
       <td>${fmtVendStmtDate(r.date)}</td>
-      <td>${r.type || ""}</td>
+      <td>${r.type || ""}${r.type === "Payment" && r.mode_of_payment ? ` <span class="mop">(${r.mode_of_payment})</span>` : ""}</td>
       <td>${r.ref || ""}</td>
       <td class="num">${Number(r.debit||0) ? fmtCur(r.debit) : ""}</td>
       <td class="num">${Number(r.credit||0) ? fmtCur(r.credit) : ""}</td>
@@ -1813,6 +1819,7 @@ function buildVendorStatementPdfHtml() {
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.bal { font-weight: 600; }
   tfoot td { font-weight: 700; background: #f7f7f7; }
+  .mop { color: #666; font-weight: 500; }
 </style></head>
 <body>
   <div class="stmt-header">

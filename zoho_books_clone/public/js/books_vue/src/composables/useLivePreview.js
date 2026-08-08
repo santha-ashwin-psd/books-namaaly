@@ -190,11 +190,11 @@ function _renderClassic(doc, cfg) {
       ${cfg.includeHsn ? `<td class="c nw">${_esc(it.gst_hsn_code || it.hsn_code || "—")}</td>` : ""}
       <td class="r nw">${Number(it.qty || 0)}</td>
       <td class="c nw">${_esc(it.uom || "Nos")}</td>
+      ${includeMrp ? `<td class="r nw">${it.mrp ? _fmtNum(it.mrp) : "—"}</td>` : ""}
       <td class="r nw">${_fmtNum(it.rate)}</td>
       ${cfg.includeDiscount ? `<td class="c nw">${Number(it.discount_percentage || 0).toFixed(2)}%</td>` : ""}
       ${includeGst ? `<td class="r nw">${_fmtNum(it.taxable_amount != null ? it.taxable_amount : it.amount)}</td>` : ""}
       ${includeGst ? (hasIgst ? `<td class="c nw">${Number(it.igst_rate || 0).toFixed(2)}%</td>` : `<td class="c nw">${Number(it.cgst_rate || 0).toFixed(2)}%</td><td class="c nw">${Number(it.sgst_rate || 0).toFixed(2)}%</td>`) : ""}
-      ${includeMrp ? `<td class="r nw">${it.mrp ? _fmtNum(it.mrp) : "—"}</td>` : ""}
       <td class="r b nw">${_fmtNum(it.amount)}</td>
     </tr>`).join("");
   const taxRows = (doc.taxes || []).map(t => {
@@ -313,6 +313,7 @@ function _renderClassic(doc, cfg) {
     <div class="hb-r">
       <div class="inv-no"><b>${_esc(cfg.title ? cfg.title.charAt(0) + cfg.title.slice(1).toLowerCase() : "")} No. :</b> ${_esc(doc.name || "")}</div>
       <div><b>Date :</b> ${_esc(_fmtDocDate(docDate))}</div>
+      ${doc.due_date ? `<div><b>Due Date :</b> ${_esc(_fmtDocDate(doc.due_date))}</div>` : ""}
     </div>
   </div>
   ${(() => {
@@ -342,11 +343,11 @@ function _renderClassic(doc, cfg) {
       <th class="c" style="width:30px">No.</th><th>Item &amp; Description</th>
       ${cfg.includeHsn ? `<th class="c" style="width:78px">HSN / SAC</th>` : ""}
       <th class="r" style="width:44px">Qty</th><th class="c" style="width:50px">Unit</th>
+      ${includeMrp ? `<th class="r" style="width:82px">MRP (${_esc(_currencySymbol(currency))})</th>` : ""}
       <th class="r" style="width:82px">Rate (${_esc(_currencySymbol(currency))})</th>
       ${cfg.includeDiscount ? `<th class="c" style="width:64px">Discount</th>` : ""}
       ${includeGst ? `<th class="r" style="width:88px">Taxable (${_esc(_currencySymbol(currency))})</th>` : ""}
       ${includeGst ? (hasIgst ? `<th class="c" style="width:58px">IGST</th>` : `<th class="c" style="width:58px">CGST</th><th class="c" style="width:58px">SGST</th>`) : ""}
-      ${includeMrp ? `<th class="r" style="width:82px">MRP (${_esc(_currencySymbol(currency))})</th>` : ""}
       <th class="r" style="width:104px">Amount (${_esc(_currencySymbol(currency))})</th>
     </tr></thead>
     <tbody>${items || `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">No items</td></tr>`}</tbody>

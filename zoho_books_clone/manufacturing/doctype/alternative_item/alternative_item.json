@@ -68,6 +68,33 @@
    "description": "Mark the preferred alternative. Only one should be default per item."
   },
   {
+   "fieldname": "sec_ai_scrap",
+   "fieldtype": "Section Break",
+   "label": "Source"
+  },
+  {
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "label": "Source Type",
+   "options": "Fresh Stock\nRecycled Scrap",
+   "default": "Fresh Stock",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Derived automatically from the Alternative Item's Item Type -- set the Alternative Item's Item Type to \"Scrap Item\" to mark this mapping as a scrap-reuse substitution."
+  },
+  {
+   "fieldname": "col_break_ai2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "max_substitution_pct",
+   "fieldtype": "Percent",
+   "label": "Max Substitution %",
+   "default": "100",
+   "depends_on": "eval:doc.source_type==\"Recycled Scrap\"",
+   "description": "Caps how much of the Original Item's required quantity may be met from this scrap alternative on any one Work Order row (recovered scrap is often lower-purity than fresh stock). Not applicable to Fresh Stock alternatives."
+  },
+  {
    "fieldname": "sec_ai_more",
    "fieldtype": "Section Break",
    "label": "Notes"

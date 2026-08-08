@@ -110,9 +110,20 @@ class StockLedgerEntry(Document):
         # Rack assignment is label-only and only makes sense while there's
         # actually stock sitting in the rack. Once qty drops to zero (or
         # below, e.g. a corrective negative entry), clear it automatically
-        # rather than leaving a stale rack label on an empty Bin.
+        # rather than leaving a stale rack label on an empty Bin -- but first
+        # snapshot it into last_rack_no so the same rack can be silently
+        # restored the next time this item/warehouse gets stocked again,
+        # instead of the user having to re-enter/re-scan the rack from
+        # scratch every restock cycle.
         if new_qty <= 0 and bin_doc.get("rack_no"):
+            bin_doc.last_rack_no = bin_doc.rack_no
             bin_doc.rack_no = ""
+        # Restock case: qty just went from empty back to positive. If no
+        # rack is currently set (i.e. it wasn't manually assigned in the
+        # meantime) and we have a remembered rack from before it emptied
+        # out, silently reattach it.
+        elif old_qty <= 0 and new_qty > 0 and not bin_doc.get("rack_no") and bin_doc.get("last_rack_no"):
+            bin_doc.rack_no = bin_doc.last_rack_no
         bin_doc.flags.ignore_links = True
         bin_doc.flags.ignore_mandatory = True
         bin_doc.save(ignore_permissions=True)

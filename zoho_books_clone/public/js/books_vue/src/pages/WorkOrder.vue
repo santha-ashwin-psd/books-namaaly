@@ -319,9 +319,11 @@
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">📦</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ rm.item_code || 'New Row' }}</span>
-                    <span v-if="rm.is_substituted" class="bomx-badge" style="background:#eef2ff;color:#4338ca;font-size:10px" :title="'Substituted from ' + rm.original_item_code">Substituted</span>
+                    <span v-if="rm.is_scrap_row" class="bomx-badge" style="background:#ecfdf5;color:#047857;font-size:10px" :title="'Split off from ' + rm.original_item_code + ' as a scrap-reuse row'">From Scrap</span>
+                    <span v-else-if="flt(rm.scrap_reused_qty) > 0" class="bomx-badge" style="background:#ecfdf5;color:#047857;font-size:10px" :title="scrapBreakdownTooltip(rm)">Partly from Scrap</span>
+                    <span v-else-if="rm.is_substituted" class="bomx-badge" style="background:#eef2ff;color:#4338ca;font-size:10px" :title="'Substituted from ' + rm.original_item_code">Substituted</span>
                     <div style="flex:1"></div>
-                    <button v-if="readOnly && wo.docstatus===1 && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canEdit('inventory')" @click="openSubstitute(rm)" :title="!$canEdit('inventory') ? 'Read-only access' : 'Substitute this material'">Substitute</button>
+                    <button v-if="readOnly && wo.docstatus===1 && !rm.is_scrap_row && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canEdit('inventory')" @click="openSubstitute(rm)" :title="!$canEdit('inventory') ? 'Read-only access' : 'Substitute or reuse scrap against this material'">Substitute</button>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -828,16 +830,40 @@
           No Alternative Items are defined for this item. Add one under Manufacturing → Alternative Items first.
         </div>
         <template v-else>
+          <div v-if="!scrapReuseEnabled && scrapReuseHiddenCount > 0" class="bomx-field-hint" style="color:var(--bx-amber);font-weight:600;margin-bottom:10px">
+            Scrap Reuse is disabled company-wide (Manufacturing Settings) — {{ scrapReuseHiddenCount }} Recycled Scrap alternative{{ scrapReuseHiddenCount > 1 ? 's are' : ' is' }} hidden from this list.
+          </div>
           <div style="margin-bottom:14px">
             <div class="bomx-hf-label">Alternative Item <span style="color:var(--bx-red)">*</span></div>
             <select class="bomx-fi" v-model="substituteForm.alternative_item_code" style="width:100%">
               <option value="">— Select —</option>
-              <option v-for="o in substituteOptions" :key="o.alternative_item_code" :value="o.alternative_item_code">
-                {{ o.alternative_item_code }}{{ o.is_default ? ' (default)' : '' }} — factor {{ o.conversion_factor }}
+              <option v-for="o in visibleSubstituteOptions" :key="o.alternative_item_code" :value="o.alternative_item_code">
+                {{ o.alternative_item_code }}{{ o.is_default ? ' (default)' : '' }}{{ o.source_type === 'Recycled Scrap' ? ' ♻️' : '' }} — factor {{ o.conversion_factor }}
               </option>
             </select>
             <div v-if="selectedOption && selectedOption.requires_approval" class="bomx-field-hint" style="color:var(--bx-amber);font-weight:600">
               This item requires approval — the substitution won't apply until a Books Admin / System Manager reviews it.
+            </div>
+            <div v-if="selectedOption" class="bomx-field-hint" :style="{color: selectedOption.available_qty > 0 ? 'var(--bx-muted)' : 'var(--bx-red)', fontWeight: selectedOption.available_qty > 0 ? 400 : 600}">
+              <span v-if="selectedOption.available_qty > 0">
+                {{ selectedOption.available_qty }} {{ selectedOption.uom || '' }} available{{ selectedOption.best_warehouse ? ' in ' + selectedOption.best_warehouse : '' }}
+                <span v-if="selectedOption.source_type === 'Recycled Scrap' && selectedOption.max_substitution_pct < 100">
+                  — scrap capped at {{ selectedOption.max_substitution_pct }}% of required qty
+                </span>
+              </span>
+              <span v-else>No stock currently available for this alternative — substitution will still apply, but sourcing may be a problem.</span>
+            </div>
+          </div>
+          <div v-if="selectedOption && selectedOption.source_type === 'Recycled Scrap'" style="margin-bottom:14px">
+            <div class="bomx-hf-label">Scrap Qty to Reuse ({{ selectedOption.uom || '' }}) <span style="color:var(--bx-red)">*</span></div>
+            <input class="bomx-fi bomx-fi-mono" type="number" v-model="substituteForm.scrap_qty" min="0.0001" :max="scrapQtyCap || undefined" step="any" style="width:100%"/>
+            <div class="bomx-field-hint">
+              This will only fill PART of the row — up to {{ scrapQtyCap.toFixed(4) }} {{ selectedOption.uom || '' }} can be applied
+              against {{ flt(substituteRow?.required_qty).toFixed(4) }} {{ substituteRow?.uom }} still required, once stock and the
+              {{ selectedOption.max_substitution_pct }}% substitution cap are both accounted for. The rest stays sourced from {{ substituteRow?.item_code }}.
+            </div>
+            <div v-if="flt(substituteRow?.transferred_qty) > 0" class="bomx-field-hint bomx-field-hint-danger">
+              Material has already been transferred to WIP for this row — scrap reuse will be rejected until materials are un-issued for it.
             </div>
           </div>
           <div style="margin-bottom:14px">
@@ -849,7 +875,7 @@
       <div class="bomx-modal-actions">
         <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeSubstituteModal" :disabled="substituteSaving">Cancel</button>
         <button v-if="substituteOptions.length" class="bomx-btn bomx-btn-mfg" @click="submitSubstitute" :disabled="substituteSaving || !$canEdit('inventory')">
-          {{ substituteSaving ? 'Submitting…' : 'Submit Substitution' }}
+          {{ substituteSaving ? 'Submitting…' : (selectedOption && selectedOption.source_type === 'Recycled Scrap' ? 'Apply Scrap Reuse' : 'Submit Substitution') }}
         </button>
       </div>
     </div>
@@ -1273,6 +1299,7 @@ const warnOnMissingJobCards = ref(true);
 const jobCardHoursPerDay = ref(8);
 const capacityPlanningForDays = ref(30);
 const defaultCloseOnLossReconciliation = ref(false);
+const scrapReuseEnabled = ref(true);
 async function fetchManufacturingDefaults() {
   try {
     manufacturingDefaults = await apiCall(
@@ -1285,6 +1312,7 @@ async function fetchManufacturingDefaults() {
       jobCardHoursPerDay.value = flt(manufacturingDefaults.job_card_hours_per_day) || 8;
       capacityPlanningForDays.value = flt(manufacturingDefaults.capacity_planning_for_days) || 30;
       defaultCloseOnLossReconciliation.value = !!manufacturingDefaults.default_close_on_loss_reconciliation;
+      scrapReuseEnabled.value = manufacturingDefaults.enable_scrap_reuse !== 0 && manufacturingDefaults.enable_scrap_reuse !== false;
     }
   } catch (e) {
     // non-fatal — settings may not be configured yet
@@ -1990,10 +2018,15 @@ function itemLabel(code) {
   return (i && i.item_name) || code || "";
 }
 
+function itemUom(code) {
+  const i = stockItems.value.find(x => x.name === code);
+  return (i && i.stock_uom) || "";
+}
+
 function printWorkOrder() {
   const groups = groupedWoItems.value;
   const groupHtml = (grp) => `
-        <tr><td colspan="7" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
+        <tr><td colspan="8" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
         ${grp.rows.map(({ rm }) => {
           const required = flt(rm.required_qty);
           const transferred = flt(rm.transferred_qty);
@@ -2002,6 +2035,7 @@ function printWorkOrder() {
         <tr>
           <td>${esc(rm.item_code)}</td>
           <td>${esc(itemLabel(rm.item_code))}</td>
+          <td>${esc(itemUom(rm.item_code) || "—")}</td>
           <td style="text-align:right">${esc(fmtQty(required))}</td>
           <td style="text-align:right">${esc(fmtQty(transferred))}</td>
           <td style="text-align:right;font-weight:700">${esc(fmtQty(needed))}</td>
@@ -2011,7 +2045,7 @@ function printWorkOrder() {
         }).join("")}`;
   const rowsHtml = groups.length
     ? groups.map(groupHtml).join("")
-    : `<tr><td colspan="7" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
+    : `<tr><td colspan="8" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
 
   const html = `
     <!DOCTYPE html>
@@ -2060,7 +2094,7 @@ function printWorkOrder() {
           <h2>Raw Materials</h2>
           <table>
             <thead>
-              <tr><th>Item Code</th><th>Item Name</th><th style="text-align:right">Required Qty</th><th style="text-align:right">Already Transferred</th><th style="text-align:right">Needed Qty</th><th>Warehouse</th><th>Rack</th></tr>
+              <tr><th>Item Code</th><th>Item Name</th><th>UOM</th><th style="text-align:right">Required Qty</th><th style="text-align:right">Already Transferred</th><th style="text-align:right">Needed Qty</th><th>Warehouse</th><th>Rack</th></tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
@@ -2520,15 +2554,85 @@ const substituteRow = ref(null);
 const substituteOptions = ref([]);
 const substituteLoading = ref(false);
 const substituteSaving = ref(false);
-const substituteForm = ref({ alternative_item_code: "", reason: "" });
+const substituteForm = ref({ alternative_item_code: "", reason: "", scrap_qty: 0 });
 
 const selectedOption = computed(() =>
   substituteOptions.value.find(o => o.alternative_item_code === substituteForm.value.alternative_item_code) || null
 );
 
+// Manufacturing Settings > Enable Scrap Reuse rollout gate (Phase 8): hide
+// Recycled Scrap alternatives from the picker entirely when disabled
+// company-wide, rather than letting someone pick one and only find out it's
+// rejected on submit. Fresh Stock alternatives are unaffected either way.
+const visibleSubstituteOptions = computed(() =>
+  scrapReuseEnabled.value
+    ? substituteOptions.value
+    : substituteOptions.value.filter(o => o.source_type !== "Recycled Scrap")
+);
+const scrapReuseHiddenCount = computed(() =>
+  substituteOptions.value.length - visibleSubstituteOptions.value.length
+);
+
+// Client-side preview of the max Scrap Qty (in the scrap item's own UOM)
+// that request_scrap_reuse is likely to accept for the row currently open
+// in the modal -- mirrors work_order_engine._compute_scrap_split's math so
+// the input's default/max feel right, but the server call remains the only
+// authoritative check (rounding or a stock change between opening the
+// modal and submitting can still make it reject a value at/under this cap).
+const scrapQtyCap = computed(() => {
+  const opt = selectedOption.value;
+  const row = substituteRow.value;
+  if (!opt || opt.source_type !== "Recycled Scrap" || !row) return 0;
+  const factor = flt(opt.conversion_factor) || 1;
+  const requiredQty = flt(row.required_qty);
+  const alreadyScrapQty = flt(row.scrap_reused_qty);
+  const baseline = requiredQty + alreadyScrapQty;
+  const pct = opt.max_substitution_pct && opt.max_substitution_pct > 0 ? opt.max_substitution_pct : 100;
+  const maxAllowedEquiv = baseline * pct / 100;
+  const remainingEquivAllowed = Math.max(maxAllowedEquiv - alreadyScrapQty, 0);
+  // Can't displace more of the row than is still required, regardless of
+  // how generous the % cap is.
+  const equivCap = Math.min(requiredQty, remainingEquivAllowed);
+  const scrapUnitsCap = equivCap * factor;
+  return Math.max(0, Math.min(flt(opt.available_qty), scrapUnitsCap));
+});
+
+// Default the Qty field to the cap whenever a Recycled Scrap alternative is
+// picked (or clear it when switching back to a Fresh Stock one), so the
+// common case -- "reuse as much scrap as I'm allowed" -- needs no typing.
+watch(selectedOption, (opt) => {
+  if (opt && opt.source_type === "Recycled Scrap") {
+    substituteForm.value.scrap_qty = scrapQtyCap.value > 0 ? +scrapQtyCap.value.toFixed(4) : 0;
+  } else {
+    substituteForm.value.scrap_qty = 0;
+  }
+});
+
+// Fresh-vs-scrap cost breakdown for the "Partly from Scrap" badge tooltip.
+// The scrap portion isn't on this row -- Phase 3's partial-reuse engine
+// splits it into sibling row(s) sharing substitution_group -- so this walks
+// the rest of wo.items to reassemble the full picture for display.
+function scrapBreakdownFor(rm) {
+  const group = rm.substitution_group || rm.name;
+  const siblings = (wo.value.items || []).filter(r => r.is_scrap_row && r.substitution_group === group);
+  return {
+    freshQty: flt(rm.required_qty),
+    freshValue: flt(rm.amount),
+    scrapQty: siblings.reduce((s, r) => s + flt(r.required_qty), 0),
+    scrapValue: siblings.reduce((s, r) => s + flt(r.amount), 0),
+    scrapItems: siblings.map(r => `${r.item_code} (${flt(r.required_qty).toFixed(4)} ${r.uom})`).join(", "),
+  };
+}
+function scrapBreakdownTooltip(rm) {
+  const b = scrapBreakdownFor(rm);
+  const fresh = `Fresh: ${b.freshQty.toFixed(4)} ${rm.uom || ''} (₹${b.freshValue.toFixed(2)})`;
+  const scrap = `Scrap: ${b.scrapQty.toFixed(4)} (₹${b.scrapValue.toFixed(2)})${b.scrapItems ? ' from ' + b.scrapItems : ''}`;
+  return `${fresh} + ${scrap}`;
+}
+
 async function openSubstitute(rm) {
   substituteRow.value = rm;
-  substituteForm.value = { alternative_item_code: "", reason: "" };
+  substituteForm.value = { alternative_item_code: "", reason: "", scrap_qty: 0 };
   substituteOptions.value = [];
   showSubstituteModal.value = true;
   substituteLoading.value = true;
@@ -2549,16 +2653,28 @@ function closeSubstituteModal() { showSubstituteModal.value = false; }
 async function submitSubstitute() {
   if (!substituteForm.value.alternative_item_code) return toast("Select an alternative item", "error");
   if (!substituteForm.value.reason.trim()) return toast("A reason is required", "error");
+  const isScrapReuse = selectedOption.value && selectedOption.value.source_type === "Recycled Scrap";
+  if (isScrapReuse && !(flt(substituteForm.value.scrap_qty) > 0)) {
+    return toast("Enter a Scrap Qty to reuse", "error");
+  }
   substituteSaving.value = true;
   try {
-    const res = await apiCall("zoho_books_clone.api.material_substitution.request_material_substitution", {
-      work_order: wo.value.name,
-      work_order_item_row: substituteRow.value.name,
-      alternative_item_code: substituteForm.value.alternative_item_code,
-      reason: substituteForm.value.reason,
-    });
+    const res = isScrapReuse
+      ? await apiCall("zoho_books_clone.api.material_substitution.request_scrap_reuse", {
+          work_order: wo.value.name,
+          work_order_item_row: substituteRow.value.name,
+          scrap_item_code: substituteForm.value.alternative_item_code,
+          scrap_qty: substituteForm.value.scrap_qty,
+          reason: substituteForm.value.reason,
+        })
+      : await apiCall("zoho_books_clone.api.material_substitution.request_material_substitution", {
+          work_order: wo.value.name,
+          work_order_item_row: substituteRow.value.name,
+          alternative_item_code: substituteForm.value.alternative_item_code,
+          reason: substituteForm.value.reason,
+        });
     const data = res?.message || res || {};
-    toast(data.message || "Substitution submitted");
+    toast(data.message || (isScrapReuse ? "Scrap reuse submitted" : "Substitution submitted"));
     showSubstituteModal.value = false;
     await loadWO();
   } catch (e) {
@@ -2714,6 +2830,7 @@ function icon(name, size) {
 }
 .bomx-hf-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--bx-muted); margin-bottom:4px; }
 .bomx-field-hint { font-size:12px; color:var(--bx-muted); margin-top:5px; }
+.bomx-field-hint-danger { color:var(--bx-red); font-weight:600; }
 .bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 

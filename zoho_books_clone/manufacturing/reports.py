@@ -450,3 +450,124 @@ def get_scrap_variance_report(filters=None):
     }
 
     return {"rows": rows, "summary": summary}
+
+
+# ─── 7. Scrap Reuse Savings Report ───────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_scrap_reuse_savings_report(filters=None):
+    """Scrap Reuse feature, Phase 7 -- the actual cost impact of every
+    applied Scrap Reuse action (Material Substitution Log entries with
+    substitution_type='Scrap Reuse' and approval_status in Approved /
+    Applied Immediately -- Pending/Rejected never touched the Work Order,
+    so they carry no cost impact).
+
+    Per log entry:
+      displaced_qty      -- how much of the ORIGINAL raw material's
+                             required_qty this action displaced, in the
+                             original item's own UOM (original_required_qty
+                             - new_required_qty, i.e. this action's own
+                             delta -- not the row's cumulative total if
+                             scrap was reused against it more than once,
+                             since each call gets its own log entry).
+      fresh_cost_avoided -- displaced_qty * the ORIGINAL row's fresh rate,
+                             read from the Work Order Item row itself
+                             (work_order_item_row -- see
+                             apply_partial_scrap_substitution, which keeps
+                             that row's `rate` unchanged across the split,
+                             so it's still the fresh-material rate that was
+                             in effect at split time, not a rate that could
+                             have drifted since).
+      scrap_cost_incurred -- scrap_qty * the scrap row's rate, read from
+                             the new Work Order Item row (new_work_order_item_row
+                             -- the scrap valuation rate resolved by
+                             _resolve_scrap_warehouse at split time).
+      savings             -- fresh_cost_avoided - scrap_cost_incurred. This
+                             is the whole point of the feature (see Phase 6
+                             plan): positive savings means scrap was cheaper
+                             than the fresh material it displaced. Can be
+                             negative in principle (e.g. an unusually
+                             overvalued scrap warehouse) -- shown as-is
+                             rather than clamped, so a negative-savings
+                             pattern is visible instead of hidden.
+
+    Columns: log_name, work_order, original_item_code, alternative_item_code
+             (the scrap item), displaced_qty, scrap_qty, fresh_unit_rate,
+             scrap_unit_rate, fresh_cost_avoided, scrap_cost_incurred,
+             savings, requested_by, request_date, approval_status.
+
+    Filters: from_date, to_date (Material Substitution Log request_date
+             range), work_order (optional exact match).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Work Order", "read")
+
+    f = _parse_filters(filters)
+    from_date, to_date = _date_filters(f, date_field="request_date")
+
+    log_filters = {
+        "substitution_type": "Scrap Reuse",
+        "approval_status": ["in", ["Approved", "Applied Immediately"]],
+        "request_date": ["between", [from_date, to_date]],
+    }
+    if f.get("work_order"):
+        log_filters["work_order"] = f["work_order"]
+
+    logs = frappe.get_all(
+        "Material Substitution Log",
+        filters=log_filters,
+        fields=[
+            "name", "work_order", "work_order_item_row", "new_work_order_item_row",
+            "original_item_code", "alternative_item_code",
+            "original_required_qty", "new_required_qty", "scrap_qty",
+            "requested_by", "request_date", "approval_status",
+        ],
+        order_by="request_date desc",
+        limit=500,
+        ignore_permissions=True,
+    )
+
+    if not logs:
+        return {"rows": [], "summary": {}}
+
+    # Batch-fetch every fresh/scrap row's rate in one query rather than two
+    # lookups per log entry.
+    row_names = list({l.work_order_item_row for l in logs} | {l.new_work_order_item_row for l in logs if l.new_work_order_item_row})
+    row_rates = {
+        r.name: flt(r.rate)
+        for r in frappe.get_all("Work Order Item", filters=[["name", "in", row_names]], fields=["name", "rate"])
+    }
+
+    rows = []
+    for l in logs:
+        displaced_qty = flt(l.original_required_qty) - flt(l.new_required_qty)
+        fresh_unit_rate = row_rates.get(l.work_order_item_row, 0.0)
+        scrap_unit_rate = row_rates.get(l.new_work_order_item_row, 0.0)
+        fresh_cost_avoided = displaced_qty * fresh_unit_rate
+        scrap_cost_incurred = flt(l.scrap_qty) * scrap_unit_rate
+        rows.append({
+            "log_name": l.name,
+            "work_order": l.work_order,
+            "original_item_code": l.original_item_code,
+            "alternative_item_code": l.alternative_item_code,
+            "displaced_qty": displaced_qty,
+            "scrap_qty": flt(l.scrap_qty),
+            "fresh_unit_rate": fresh_unit_rate,
+            "scrap_unit_rate": scrap_unit_rate,
+            "fresh_cost_avoided": fresh_cost_avoided,
+            "scrap_cost_incurred": scrap_cost_incurred,
+            "savings": fresh_cost_avoided - scrap_cost_incurred,
+            "requested_by": l.requested_by,
+            "request_date": str(l.request_date) if l.request_date else "",
+            "approval_status": l.approval_status,
+        })
+
+    summary = {
+        "total_actions":        len(rows),
+        "total_fresh_avoided":  sum(r["fresh_cost_avoided"] for r in rows),
+        "total_scrap_cost":     sum(r["scrap_cost_incurred"] for r in rows),
+        "total_savings":        sum(r["savings"] for r in rows),
+    }
+
+    return {"rows": rows, "summary": summary}

@@ -59,6 +59,17 @@
    "bold": 1
   },
   {
+   "fieldname": "substitution_type",
+   "fieldtype": "Select",
+   "label": "Substitution Type",
+   "options": "Full Swap\nScrap Reuse",
+   "default": "Full Swap",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Full Swap -- the whole row's item_code was replaced (apply_row_substitution). Scrap Reuse -- part of the row's required qty was split off into a new row sourced from recovered scrap (apply_partial_scrap_substitution); the rest stays on the original item."
+  },
+  {
    "fieldname": "sec_items",
    "fieldtype": "Section Break",
    "label": "Substitution"
@@ -103,6 +114,37 @@
    "fieldtype": "Float",
    "label": "New Required Qty",
    "read_only": 1
+  },
+  {
+   "fieldname": "sec_scrap_reuse",
+   "fieldtype": "Section Break",
+   "label": "Scrap Reuse Details",
+   "depends_on": "eval:doc.substitution_type=='Scrap Reuse'"
+  },
+  {
+   "fieldname": "scrap_qty",
+   "fieldtype": "Float",
+   "label": "Scrap Qty Consumed",
+   "read_only": 1,
+   "description": "Qty of the scrap item (in its own stock UOM) drawn from scrap_warehouse for this action -- distinct from new_required_qty/original_required_qty above, which are in the ORIGINAL raw material's UOM."
+  },
+  {
+   "fieldname": "scrap_warehouse",
+   "fieldtype": "Link",
+   "label": "Scrap Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_scrap_reuse",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "new_work_order_item_row",
+   "fieldtype": "Data",
+   "label": "New (Scrap) Work Order Item Row (name)",
+   "read_only": 1,
+   "description": "The newly-created Work Order Item row holding the scrap portion. work_order_item_row above stays the ORIGINAL row (now reduced to the remaining fresh-stock qty)."
   },
   {
    "fieldname": "sec_reason",

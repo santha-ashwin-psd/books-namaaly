@@ -48,6 +48,7 @@
       <table class="qcar-table">
         <thead><tr>
           <th>Log #</th>
+          <th>Type</th>
           <th>Work Order</th>
           <th>Substitution</th>
           <th>Requested By</th>
@@ -57,15 +58,19 @@
         </tr></thead>
         <tbody>
           <template v-if="loading">
-            <tr v-for="n in 6" :key="n"><td colspan="7"><div class="qcar-shimmer"></div></td></tr>
+            <tr v-for="n in 6" :key="n"><td colspan="8"><div class="qcar-shimmer"></div></td></tr>
           </template>
           <template v-else>
             <tr v-for="r in filtered" :key="r.name" class="qcar-row" @click="openView(r)">
               <td><span class="qcar-num">{{ r.name }}</span></td>
+              <td><span class="qcar-type-badge" :class="typeClass(r.substitution_type)">{{ typeLabel(r.substitution_type) }}</span></td>
               <td><DocLink doctype="Work Order" :name="r.work_order" /></td>
               <td>
                 <div style="font-size:12.5px;font-weight:600">{{ r.original_item_code }} → {{ r.alternative_item_code }}</div>
-                <div style="font-size:11px;color:#9ca3af">{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</div>
+                <div style="font-size:11px;color:#9ca3af">
+                  <template v-if="r.substitution_type === 'Scrap Reuse'">{{ r.scrap_qty }} scrap reused</template>
+                  <template v-else>{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</template>
+                </div>
               </td>
               <td style="font-size:12px;color:#6b7280">{{ shortUser(r.requested_by) }}</td>
               <td class="mono-sm text-muted">{{ fmtDate(r.request_date) }}</td>
@@ -73,7 +78,7 @@
               <td @click.stop><button class="qcar-act-btn" @click="openView(r)"><span v-html="icon('eye',13)"></span></button></td>
             </tr>
             <tr v-if="!filtered.length">
-              <td colspan="7" class="qcar-empty">
+              <td colspan="8" class="qcar-empty">
                 <div style="font-size:32px;margin-bottom:8px">🔀</div>
                 <div style="font-weight:600;margin-bottom:4px">No Material Substitutions found</div>
                 <div style="font-size:13px;color:#9ca3af">Logs appear when a raw material is substituted on a Work Order</div>
@@ -93,10 +98,16 @@
         <div v-for="r in filtered" :key="r.name" class="qcar-card qcar-mcard" @click="openView(r)">
           <div class="qcar-mcard-top">
             <span class="qcar-num">{{ r.name }}</span>
-            <span class="qcar-status-badge" :class="statusClass(r.approval_status)">{{ r.approval_status }}</span>
+            <span style="display:flex;gap:6px;align-items:center">
+              <span class="qcar-type-badge" :class="typeClass(r.substitution_type)">{{ typeLabel(r.substitution_type) }}</span>
+              <span class="qcar-status-badge" :class="statusClass(r.approval_status)">{{ r.approval_status }}</span>
+            </span>
           </div>
           <div class="qcar-mcard-sub">{{ r.original_item_code }} → {{ r.alternative_item_code }}</div>
-          <div class="qcar-mcard-hint">{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</div>
+          <div class="qcar-mcard-hint">
+            <template v-if="r.substitution_type === 'Scrap Reuse'">{{ r.scrap_qty }} scrap reused</template>
+            <template v-else>{{ r.requires_approval ? 'Requires approval' : 'No approval needed' }}</template>
+          </div>
           <div class="qcar-mcard-meta">
             <DocLink doctype="Work Order" :name="r.work_order" />
             <span>{{ shortUser(r.requested_by) }}</span>
@@ -122,9 +133,12 @@
             </div>
             <div>
               <div class="qcar-dh-title">{{ viewDoc.name }}</div>
-              <div class="qcar-dh-sub">Material Substitution · {{ fmtDate(viewDoc.request_date) }}</div>
+              <div class="qcar-dh-sub">{{ typeLabel(viewDoc.substitution_type) }} · {{ fmtDate(viewDoc.request_date) }}</div>
             </div>
-            <span class="qcar-status-badge" :class="statusClass(viewDoc.approval_status)" style="margin-left:auto;flex-shrink:0">{{ viewDoc.approval_status }}</span>
+            <span style="margin-left:auto;flex-shrink:0;display:flex;gap:6px;align-items:center">
+              <span class="qcar-type-badge" :class="typeClass(viewDoc.substitution_type)" style="background:rgba(255,255,255,.2);color:#fff;border:none">{{ typeLabel(viewDoc.substitution_type) }}</span>
+              <span class="qcar-status-badge" :class="statusClass(viewDoc.approval_status)">{{ viewDoc.approval_status }}</span>
+            </span>
           </div>
         </div>
         <div class="qcar-dbody">
@@ -133,11 +147,20 @@
             <div><span class="qcar-info-lbl">Work Order</span><div class="qcar-info-val"><DocLink doctype="Work Order" :name="viewDoc.work_order" :mono-style="false" style="color:#2563eb" /></div></div>
             <div><span class="qcar-info-lbl">Row</span><div class="qcar-info-val">{{ viewDoc.work_order_item_row }}</div></div>
             <div><span class="qcar-info-lbl">Original Item</span><div class="qcar-info-val">{{ viewDoc.original_item_code }}</div></div>
-            <div><span class="qcar-info-lbl">Alternative Item</span><div class="qcar-info-val" style="color:#2563eb">{{ viewDoc.alternative_item_code }}</div></div>
+            <div><span class="qcar-info-lbl">{{ viewDoc.substitution_type === 'Scrap Reuse' ? 'Scrap Item' : 'Alternative Item' }}</span><div class="qcar-info-val" style="color:#2563eb">{{ viewDoc.alternative_item_code }}</div></div>
             <div><span class="qcar-info-lbl">Conversion Factor</span><div class="qcar-info-val">{{ viewDoc.conversion_factor }}</div></div>
-            <div><span class="qcar-info-lbl">Qty</span><div class="qcar-info-val">{{ viewDoc.original_required_qty }} → {{ viewDoc.new_required_qty }}</div></div>
+            <div><span class="qcar-info-lbl">Required Qty</span><div class="qcar-info-val">{{ viewDoc.original_required_qty }} → {{ viewDoc.new_required_qty }}</div></div>
             <div><span class="qcar-info-lbl">Requested By</span><div class="qcar-info-val">{{ viewDoc.requested_by }}</div></div>
             <div><span class="qcar-info-lbl">Request Date</span><div class="qcar-info-val">{{ fmtDate(viewDoc.request_date) }}</div></div>
+          </div>
+
+          <div v-if="viewDoc.substitution_type === 'Scrap Reuse'" class="qcar-view-section">
+            <div class="qcar-sec-lbl">Scrap Reuse Details</div>
+            <div class="qcar-info-grid">
+              <div><span class="qcar-info-lbl">Scrap Qty Consumed</span><div class="qcar-info-val">{{ viewDoc.scrap_qty }}</div></div>
+              <div><span class="qcar-info-lbl">Scrap Warehouse</span><div class="qcar-info-val">{{ viewDoc.scrap_warehouse || '—' }}</div></div>
+              <div><span class="qcar-info-lbl">New (Scrap) Row</span><div class="qcar-info-val">{{ viewDoc.new_work_order_item_row || '—' }}</div></div>
+            </div>
           </div>
 
           <div class="qcar-view-section">
@@ -210,6 +233,12 @@ function statusClass(s) {
   if (s === "Rejected") return "qcar-status-rejected";
   if (s === "Applied Immediately") return "qcar-status-approved";
   return "qcar-status-pending";
+}
+function typeLabel(t) {
+  return t === "Scrap Reuse" ? "♻️ Scrap Reuse" : "🔀 Full Swap";
+}
+function typeClass(t) {
+  return t === "Scrap Reuse" ? "qcar-type-scrap" : "qcar-type-swap";
 }
 function shortUser(u) {
   if (!u) return "—";
@@ -357,6 +386,10 @@ onMounted(load);
 .qcar-status-approved { background:#dcfce7; color:#15803d; }
 .qcar-status-rejected { background:#fee2e2; color:#dc2626; }
 .qcar-status-pending  { background:#fef3c7; color:#b45309; }
+
+.qcar-type-badge { font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; }
+.qcar-type-scrap { background:#ecfdf5; color:#059669; }
+.qcar-type-swap  { background:#eef2ff; color:#4338ca; }
 
 .qcar-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:998; }
 .qcar-drawer { position:fixed; right:0; top:0; bottom:0; width:560px; background:#fff; z-index:999; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); box-shadow:-4px 0 24px rgba(0,0,0,.12); }

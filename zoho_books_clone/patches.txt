@@ -64,3 +64,33 @@ zoho_books_clone.patches.v1_10.backfill_permission_levels
 # columns only, safe in either sync phase, kept in post_model_sync for
 # consistency with the rest of this rework's patches.
 zoho_books_clone.patches.v1_11.backfill_historical_process_loss_qty
+
+# QC Flow Redesign Phase 1/4: back-fills the new QC Coverage doctype's
+# source_row from every existing non-cancelled QC Inspection, recovered via
+# best-effort 1:1 matching against the current rows of each inspection's
+# reference document. New doctype, so must run after schema sync
+# (post_model_sync). Safe to re-run.
+zoho_books_clone.patches.v1_12.backfill_qc_coverage
+
+# Account.balance_must_be ("Balance Type" Debit/Credit) was accepted by
+# save_account() but never declared as a real field on the Account doctype,
+# so it was silently dropped on every save. New column added in account.json
+# -- back-fill existing rows to 'Debit' (the old implicit assumption) so
+# nothing is left NULL. Safe to re-run.
+zoho_books_clone.patches.v1_13.backfill_account_balance_must_be
+
+# Scrap Reuse feature, Phase 1: back-fills Alternative Item.source_type /
+# max_substitution_pct — new columns added via alternative_item.json, so
+# must run after schema sync creates them (pre_model_sync would hit
+# "Unknown column"). source_type is derived per-row from whether
+# alternative_item_code points at an Item typed "Scrap Item"; future rows
+# get this set automatically by AlternativeItem.validate(). Safe to re-run.
+zoho_books_clone.patches.v1_14.backfill_alternative_item_source_type
+
+# Scrap Reuse feature, Phase 3: back-fills Work Order Item.is_scrap_row /
+# scrap_reused_qty (both correctly 0 for every pre-existing row -- the
+# partial-reuse engine didn't exist yet) and Material Substitution Log.
+# substitution_type (every pre-existing log came from the whole-row
+# apply_row_substitution() path, so unambiguously "Full Swap"). New
+# columns, so must run after schema sync (post_model_sync). Safe to re-run.
+zoho_books_clone.patches.v1_15.backfill_scrap_reuse_phase3_fields

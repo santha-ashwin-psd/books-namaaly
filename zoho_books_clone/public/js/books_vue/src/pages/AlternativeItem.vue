@@ -24,7 +24,10 @@
              @click="selectRow(row.name)">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
             <div class="aix-item-name">{{ row.item_code }}</div>
-            <span v-if="row.is_default" class="aix-badge badge-active">Default</span>
+            <div style="display:flex;gap:4px">
+              <span v-if="row.source_type==='Recycled Scrap'" class="aix-badge" style="background:#fef3c7;color:#92400e" :title="'Up to ' + (row.max_substitution_pct ?? 100) + '% may be filled from scrap'">♻️ Scrap</span>
+              <span v-if="row.is_default" class="aix-badge badge-active">Default</span>
+            </div>
           </div>
           <div class="aix-item-meta">
             <span>→</span>
@@ -73,6 +76,8 @@
                   <span>→ {{ itemNameFor(rec.alternative_item_code) || rec.alternative_item_code || '—' }}</span>
                   <span v-if="rec.is_default">•</span>
                   <span v-if="rec.is_default" class="aix-badge badge-active" style="font-size:11px">Default</span>
+                  <span v-if="rec.source_type==='Recycled Scrap'">•</span>
+                  <span v-if="rec.source_type==='Recycled Scrap'" class="aix-badge" style="font-size:11px;background:#fef3c7;color:#92400e">♻️ Recycled Scrap</span>
                 </div>
               </div>
               <div class="aix-hdr-actions">
@@ -103,7 +108,7 @@
                 <div class="aix-hf-label">Alternative Item <span class="aix-req">*</span></div>
                 <select class="aix-fi" v-model="rec.alternative_item_code" style="width:100%">
                   <option value="">— Select —</option>
-                  <option v-for="i in itemsList" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+                  <option v-for="i in itemsList" :key="i.name" :value="i.name">{{ i.item_name || i.name }}{{ i.item_type === 'Scrap Item' ? ' (Scrap)' : '' }}</option>
                 </select>
               </div>
             </div>
@@ -121,6 +126,23 @@
                   <option value="">— Select —</option>
                   <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="aix-section-lbl" style="margin-top:20px;">Source</div>
+            <div class="aix-fg">
+              <div>
+                <div class="aix-hf-label">Source Type</div>
+                <div style="display:flex;align-items:center;gap:6px;min-height:32px">
+                  <span v-if="previewSourceType==='Recycled Scrap'" class="aix-badge" style="background:#fef3c7;color:#92400e">♻️ Recycled Scrap</span>
+                  <span v-else class="aix-badge" style="background:#f3f4f6;color:#4b5563">Fresh Stock</span>
+                </div>
+                <div class="aix-field-hint">Derived from the Alternative Item's Item Type — set it to "Scrap Item" on the Item master to mark this as scrap reuse.</div>
+              </div>
+              <div v-if="previewSourceType==='Recycled Scrap'">
+                <div class="aix-hf-label">Max Substitution %</div>
+                <input type="number" class="aix-fi aix-fi-mono" v-model="rec.max_substitution_pct" min="1" max="100" step="1" style="width:100%"/>
+                <div class="aix-field-hint">Caps how much of a Work Order row's required qty may be filled from this scrap alternative.</div>
               </div>
             </div>
 
@@ -176,7 +198,7 @@ const selectedName = computed(() => (route.params.name && route.params.name !== 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "item_code", "alternative_item_code", "conversion_factor", "uom", "is_default", "modified"];
+    const fields = ["name", "item_code", "alternative_item_code", "conversion_factor", "uom", "is_default", "source_type", "max_substitution_pct", "modified"];
     const r = await apiList("Alternative Item", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
   } catch (e) {
@@ -219,6 +241,8 @@ function emptyRec() {
     conversion_factor: 1,
     uom: "",
     is_default: 0,
+    source_type: "Fresh Stock",
+    max_substitution_pct: 100,
     description: "",
   };
 }
@@ -232,10 +256,19 @@ function itemNameFor(code) {
   return i ? i.item_name : null;
 }
 
+// Client-side preview of source_type, so the badge/pct field reflect the
+// currently-selected Alternative Item even before save — the real value is
+// always recomputed server-side by AlternativeItem.validate() from the
+// Item's item_type, so this can never actually drift from what gets saved.
+const previewSourceType = computed(() => {
+  const alt = itemsList.value.find(x => x.name === rec.value.alternative_item_code);
+  return alt && alt.item_type === "Scrap Item" ? "Recycled Scrap" : "Fresh Stock";
+});
+
 onMounted(async () => {
   loading.value = true;
   try {
-    const items = await apiList("Item", { fields: ["name", "item_name"], limit: 5000, order: "name asc" });
+    const items = await apiList("Item", { fields: ["name", "item_name", "item_type"], limit: 5000, order: "name asc" });
     itemsList.value = items || [];
     const uoms = await apiList("UOM", { fields: ["name"], limit: 200, order: "name asc" });
     uomList.value = (uoms || []).map(u => u.name);

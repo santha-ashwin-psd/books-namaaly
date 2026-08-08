@@ -116,6 +116,7 @@
                 <button v-if="e.docstatus===0 && $canEdit('inventory')" class="se-act-btn" @click="openEdit(e)" title="Edit"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click="editSubmittedEntry(e)" title="Edit (cancels &amp; re-posts corrected GL)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click="cancelSubmittedEntry(e)" title="Cancel entry"><span v-html="icon('x',13)"></span></button>
+                <button v-if="e.docstatus===2 && $canDelete('inventory')" class="se-act-btn" :disabled="actionBusy" @click="deleteEntry(e)" title="Delete cancelled entry"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length">
@@ -152,6 +153,7 @@
                 <button v-if="e.docstatus===0 && $canEdit('inventory')" class="se-act-btn" @click.stop="openEdit(e)" title="Edit"><span v-html="icon('edit',12)"></span></button>
                 <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click.stop="editSubmittedEntry(e)" title="Edit (cancels &amp; re-posts corrected GL)"><span v-html="icon('edit',12)"></span></button>
                 <button v-if="e.docstatus===1 && $canEdit('inventory')" class="se-act-btn" :disabled="actionBusy" @click.stop="cancelSubmittedEntry(e)" title="Cancel entry"><span v-html="icon('x',12)"></span></button>
+                <button v-if="e.docstatus===2 && $canDelete('inventory')" class="se-act-btn" :disabled="actionBusy" @click.stop="deleteEntry(e)" title="Delete cancelled entry"><span v-html="icon('trash',12)"></span></button>
               </span>
             </div>
             <div class="se-mc-mid">
@@ -527,6 +529,9 @@
           <button v-if="viewDoc.docstatus===1 && $canEdit('inventory')" class="se-btn-ghost" :disabled="actionBusy" @click="cancelSubmittedEntry(viewDoc)">
             <span v-html="icon('x',13)"></span> Cancel Entry
           </button>
+          <button v-if="viewDoc.docstatus===2 && $canDelete('inventory')" class="se-btn-ghost" :disabled="actionBusy" @click="deleteEntry(viewDoc)" title="Delete cancelled entry">
+            <span v-html="icon('trash',13)"></span> Delete
+          </button>
         </div>
       </template>
     </div>
@@ -537,7 +542,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, resolveCompany, apiLinkValues } from "../api/client.js";
+import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, apiDelete, resolveCompany, apiLinkValues } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
@@ -943,6 +948,32 @@ async function cancelSubmittedEntry(e) {
     await load();
   } catch (err) {
     toast.error(err.message || "Failed to cancel entry");
+  } finally { actionBusy.value = false; }
+}
+
+// A cancelled Stock Entry's stock/GL impact was already fully reversed at
+// cancel-time (on_cancel() flips the original rows to is_cancelled=1 and
+// posts mirror rows) — the entry itself is just leftover audit trail at
+// that point. Deleting it is safe: Stock Entry.on_trash() hard-deletes
+// those already-inert ledger rows too, which is what actually lets a
+// wrongly-entered Item pass its own "any Stock Ledger Entry left?" check
+// afterward. A submitted (docstatus 1) entry can't be deleted this way —
+// only cancel/edit apply until it's cancelled first.
+async function deleteEntry(e) {
+  const ok = await confirm({
+    title: "Delete this stock entry?",
+    body: `Permanently delete cancelled entry ${e.name}? This also removes its (already-reversed) ledger history. This can't be undone.`,
+    okLabel: "Delete", okStyle: "danger",
+  });
+  if (!ok) return;
+  actionBusy.value = true;
+  try {
+    await apiDelete("Stock Entry", e.name);
+    toast.success(`${e.name} deleted`);
+    viewOpen.value = false;
+    await load();
+  } catch (err) {
+    toast.error(err.message || "Failed to delete entry");
   } finally { actionBusy.value = false; }
 }
 

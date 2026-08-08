@@ -605,16 +605,57 @@ def save_doc(doc):
     from zoho_books_clone.utils.access import assert_can
     assert_can(doctype, "write")
 
-    # Strip stale child-row identity fields so Frappe replaces rows cleanly
-    # instead of trying to look up rows by old hash names that may no longer exist.
-    _CHILD_META_KEYS = ("name", "parent", "parenttype", "parentfield", "owner",
-                        "creation", "modified", "modified_by")
+    # Strip stale child-row metadata so Frappe replaces genuinely-orphaned rows
+    # cleanly instead of trying to look up old hash names that no longer exist.
+    #
+    # CRITICAL: `name` must NOT be blanket-stripped. Doing so unconditionally
+    # (as this used to) throws away a valid, currently-forwarded row name on
+    # every single save of every existing document -- even when the frontend
+    # correctly sent it (e.g. Bills.vue's saveBill(submit) forwards `l.name`).
+    # Frappe's child-table diffing then sees "no name" and treats the row as
+    # brand new, deleting the real row and inserting a fresh one with a new
+    # hash name. Anything keyed on child-row identity (QC Coverage.source_row
+    # being the concrete case) loses its link on every save as a result, and
+    # `reconcile_row_identity`'s (item_code, batch_no, qty, rate) matching is
+    # only a best-effort fallback for this -- it can't recover an ambiguous
+    # or slightly-changed row, so this must be fixed at the source instead.
+    #
+    # A row's `name` is kept when it still genuinely identifies a live row
+    # under this same parent document; it is only dropped (so Frappe inserts
+    # a fresh row instead of erroring) when it's missing, or stale/foreign
+    # (points at a row that doesn't exist, or exists under a different
+    # parent -- e.g. a duplicated/copied document).
+    _CHILD_META_KEYS_NO_NAME = ("parent", "parenttype", "parentfield", "owner",
+                                "creation", "modified", "modified_by")
+    _meta = frappe.get_meta(doctype)
+    _table_fieldnames = {tf.fieldname: tf.options for tf in _meta.get_table_fields()}
     for key, val in doc.items():
-        if isinstance(val, list):
-            for row in val:
-                if isinstance(row, dict):
-                    for mk in _CHILD_META_KEYS:
-                        row.pop(mk, None)
+        if not isinstance(val, list):
+            continue
+        child_doctype = _table_fieldnames.get(key)
+        for row in val:
+            if not isinstance(row, dict):
+                continue
+            for mk in _CHILD_META_KEYS_NO_NAME:
+                row.pop(mk, None)
+            row_name = row.get("name")
+            if not row_name:
+                continue
+            row_doctype = row.get("doctype") or child_doctype
+            if not row_doctype:
+                row.pop("name", None)
+                continue
+            actual_parent = frappe.db.get_value(row_doctype, row_name, "parent")
+            _doc_name = doc.get("name")
+            # Strip when: the row doesn't exist at all: OR this is a brand
+            # new parent document (no name yet -- nothing can legitimately
+            # already own a child row, so any forwarded name here, even one
+            # pointing at a real row, must be foreign/stale); OR the row
+            # exists but under a different parent. `not _doc_name` must be
+            # checked on its own (not gated behind `actual_parent`) --
+            # a falsy _doc_name alone is always disqualifying.
+            if actual_parent is None or not _doc_name or actual_parent != _doc_name:
+                row.pop("name", None)
 
     # Auto-stamp books_company for master types that have no native company field
     _MASTER_TYPES = {"Customer", "Supplier", "Item", "Contact", "Sales Person"}
@@ -4106,7 +4147,7 @@ def get_vendor_statement(vendor, from_date=None, to_date=None):
                      "type": "Debit Note", "debit": abs(flt(d.grand_total)), "credit": 0})
 
     pes = frappe.db.sql("""
-        SELECT name, payment_date, paid_amount
+        SELECT name, payment_date, paid_amount, mode_of_payment
         FROM `tabPayment Entry`
         WHERE party_type='Supplier' AND party=%s AND payment_type='Pay' AND docstatus=1
         ORDER BY payment_date ASC
@@ -4115,7 +4156,8 @@ def get_vendor_statement(vendor, from_date=None, to_date=None):
         if fd.from_date and str(p.payment_date) < fd.from_date: continue
         if fd.to_date   and str(p.payment_date) > fd.to_date:   continue
         rows.append({"date": p.payment_date, "ref": p.name,
-                     "type": "Payment", "debit": flt(p.paid_amount), "credit": 0})
+                     "type": "Payment", "debit": flt(p.paid_amount), "credit": 0,
+                     "mode_of_payment": p.mode_of_payment or ""})
 
     rows.sort(key=lambda r: (str(r["date"]) if r["date"] else "", r["ref"] or ""))
     running = 0.0
@@ -4352,7 +4394,7 @@ def get_customer_statement(customer, from_date=None, to_date=None):
                      "type": "Credit Note", "debit": 0, "credit": abs(flt(c.grand_total))})
 
     pes = frappe.db.sql("""
-        SELECT name, payment_date, paid_amount
+        SELECT name, payment_date, paid_amount, mode_of_payment
         FROM `tabPayment Entry`
         WHERE party_type='Customer' AND party=%s AND payment_type='Receive' AND docstatus=1
         ORDER BY payment_date ASC
@@ -4361,7 +4403,8 @@ def get_customer_statement(customer, from_date=None, to_date=None):
         if fd.from_date and str(p.payment_date) < fd.from_date: continue
         if fd.to_date   and str(p.payment_date) > fd.to_date:   continue
         rows.append({"date": p.payment_date, "ref": p.name,
-                     "type": "Payment", "debit": 0, "credit": flt(p.paid_amount)})
+                     "type": "Payment", "debit": 0, "credit": flt(p.paid_amount),
+                     "mode_of_payment": p.mode_of_payment or ""})
 
     rows.sort(key=lambda r: (str(r["date"]) if r["date"] else "", r["ref"] or ""))
     running = 0.0

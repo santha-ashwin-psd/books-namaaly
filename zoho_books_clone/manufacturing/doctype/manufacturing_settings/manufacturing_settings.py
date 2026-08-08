@@ -39,6 +39,7 @@ def get_manufacturing_defaults():
         "capacity_planning_for_days": 30,
         "warn_if_bom_not_default": 1,
         "warn_on_missing_job_cards": 1,
+        "enable_scrap_reuse": 1,
     }
 
     try:

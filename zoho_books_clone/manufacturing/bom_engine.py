@@ -7,6 +7,9 @@ compare_boms       -- side-by-side diff of raw materials and operations between
                       two BOMs — highlights added, removed, and changed rows.
 get_alternative_items
                    -- list Alternative Item substitutions defined for an item.
+get_scrap_alternatives, upsert_scrap_alternative, delete_scrap_alternative
+                   -- Scrap Reuse Phase 4: manage a raw material's Recycled
+                      Scrap Alternative Item mappings from the BOM screen.
 """
 
 import frappe
@@ -225,10 +228,140 @@ def get_alternative_items(item_code):
     rows = frappe.get_all(
         "Alternative Item",
         filters={"item_code": item_code},
-        fields=["alternative_item_code", "conversion_factor", "uom", "is_default", "description"],
+        fields=[
+            "alternative_item_code", "conversion_factor", "uom", "is_default", "description",
+            "source_type", "max_substitution_pct",
+        ],
         order_by="is_default desc, alternative_item_code asc",
     )
     requires_approval = bool(frappe.db.get_value("Item", item_code, "requires_substitution_approval"))
     for row in rows:
         row["requires_approval"] = requires_approval
     return rows
+
+
+# ─── Scrap Reuse — BOM-level eligibility (Phase 4) ────────────────────────────
+#
+# Scrap Reuse Phases 1-3 built the data model (Alternative Item.source_type /
+# max_substitution_pct) and the partial-reuse engine on the Work Order. What's
+# been missing is a way to actually *define* "this raw material may be partly
+# filled from that scrap item" without leaving the BOM screen and hand-editing
+# Alternative Item records from a generic list view. These three endpoints let
+# BOM.vue manage a raw material row's scrap eligibility inline — they're a thin
+# CRUD wrapper around Alternative Item, scoped to source_type="Recycled Scrap",
+# so every mapping created here is automatically picked up wherever
+# get_substitution_options()/get_alternative_items() already look (Work Order
+# substitution, reporting) with no separate lookup path to keep in sync.
+
+def _assert_scrap_item(alternative_item_code):
+    """Alternative Item derives source_type from the alternative's Item Type
+    at save time (see AlternativeItem._set_source_type), so a mapping only
+    counts as scrap-reuse eligibility if the item picked really is typed
+    "Scrap Item". Checked here too so the BOM-side picker can't silently
+    create what looks like a scrap mapping but resolves to Fresh Stock.
+    """
+    item_type = frappe.db.get_value("Item", alternative_item_code, "item_type")
+    if item_type is None:
+        frappe.throw(_("Item {0} does not exist.").format(alternative_item_code))
+    if item_type != "Scrap Item":
+        frappe.throw(_(
+            "{0} is not typed as a Scrap Item, so it can't be added as a scrap-reuse "
+            "alternative. Set its Item Type to \"Scrap Item\" first, or use Manufacturing "
+            "→ Alternative Items to add it as a Fresh Stock alternative instead."
+        ).format(alternative_item_code))
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
+def get_scrap_alternatives(item_code, company=None):
+    """List the Recycled Scrap Alternative Item mappings defined for a raw
+    material, for the "Scrap Reuse Eligibility" panel on a BOM row. Includes
+    live stock (when `company` is given) purely as a helpful preview -- the
+    Work Order substitution flow (get_substitution_options) still does its
+    own authoritative lookup at substitution time.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Alternative Item", "read")
+
+    rows = frappe.get_all(
+        "Alternative Item",
+        filters={"item_code": item_code, "source_type": "Recycled Scrap"},
+        fields=[
+            "name", "alternative_item_code", "conversion_factor", "uom",
+            "max_substitution_pct", "description", "is_default",
+        ],
+        order_by="alternative_item_code asc",
+    )
+    for row in rows:
+        row["item_name"] = frappe.db.get_value("Item", row["alternative_item_code"], "item_name")
+
+    if company:
+        from zoho_books_clone.inventory.utils import get_stock_by_warehouse
+        for row in rows:
+            warehouses = get_stock_by_warehouse(row["alternative_item_code"], company)
+            row["available_qty"] = sum(w["qty"] for w in warehouses)
+
+    return rows
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def upsert_scrap_alternative(item_code, alternative_item_code, conversion_factor=1,
+                              max_substitution_pct=100, description="", name=None):
+    """Create or update a scrap-reuse Alternative Item mapping from the BOM
+    screen. `name` present -> edit that row; absent -> create a new one.
+    Deliberately does not expose `uom`/`is_default` here -- those matter for
+    the Fresh Stock substitution path, not scrap reuse, and stay editable
+    from the full Alternative Item list if ever needed.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    _assert_scrap_item(alternative_item_code)
+
+    if name:
+        assert_can("Alternative Item", "write")
+        doc = frappe.get_doc("Alternative Item", name)
+        if doc.item_code != item_code:
+            frappe.throw(_("Mapping {0} does not belong to {1}.").format(name, item_code))
+    else:
+        assert_can("Alternative Item", "create")
+        existing = frappe.db.exists("Alternative Item", {
+            "item_code": item_code, "alternative_item_code": alternative_item_code,
+        })
+        if existing:
+            frappe.throw(_(
+                "{0} is already mapped as an alternative for {1} ({2}). Edit that entry instead."
+            ).format(alternative_item_code, item_code, existing))
+        doc = frappe.new_doc("Alternative Item")
+        doc.item_code = item_code
+        doc.alternative_item_code = alternative_item_code
+
+    doc.conversion_factor = flt(conversion_factor) or 1
+    doc.max_substitution_pct = flt(max_substitution_pct) or 100
+    doc.description = description or ""
+    doc.save()
+
+    return {
+        "name": doc.name,
+        "alternative_item_code": doc.alternative_item_code,
+        "conversion_factor": doc.conversion_factor,
+        "max_substitution_pct": doc.max_substitution_pct,
+        "description": doc.description,
+        "source_type": doc.source_type,
+    }
+
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def delete_scrap_alternative(name):
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    assert_can("Alternative Item", "delete")
+
+    doc = frappe.get_doc("Alternative Item", name)
+    if doc.source_type != "Recycled Scrap":
+        frappe.throw(_(
+            "{0} is a Fresh Stock alternative, not a scrap-reuse mapping -- remove it from "
+            "Manufacturing → Alternative Items instead."
+        ).format(name))
+    doc.delete()
+    return {"deleted": name}

@@ -112,6 +112,16 @@
    "no_copy": 1
   },
   {
+   "fieldname": "qty_reconciled_via_loss",
+   "fieldtype": "Check",
+   "label": "Completed via Loss Reconciliation",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Set when this Work Order was marked Completed because produced_qty + process_loss_qty (not produced_qty alone) reached the planned qty -- see complete_work_order's close_on_loss_reconciliation flag. Read by _stamp_wo_completed so it can recognise this Work Order as genuinely finished even though produced_qty alone never reaches qty."
+  },
+  {
    "fieldname": "process_loss_percent",
    "fieldtype": "Percent",
    "label": "Expected Process Loss %",

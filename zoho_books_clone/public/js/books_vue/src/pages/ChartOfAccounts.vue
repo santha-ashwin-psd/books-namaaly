@@ -102,9 +102,9 @@
             <div style="display:flex;gap:8px">
             <div class="coa-detail-balance coa-detail-balance-opening" v-if="!selectedAccount.is_group">
             <div class="coa-detail-balance-lbl">Opening Balance</div>
-            <div class="coa-detail-balance-val" :class="(selectedAccount.opening||0) < 0 ? 'coa-cr' : 'coa-dr'">
+            <div class="coa-detail-balance-val" :class="selectedAccount.bal_type === 'Credit' ? 'coa-cr' : 'coa-dr'">
               {{ fmtBal(selectedAccount.opening) }}
-              <span class="coa-detail-balance-tag">{{ (selectedAccount.opening||0) < 0 ? '(Cr)' : '(Dr)' }}</span>
+              <span class="coa-detail-balance-tag">{{ selectedAccount.bal_type === 'Credit' ? '(Cr)' : '(Dr)' }}</span>
             </div>
           </div>
             <div class="coa-detail-balance" v-if="!selectedAccount.is_group">
@@ -805,6 +805,7 @@ async function saveAccount() {
   if (!form.name.trim())  { toast("Account name is required", "error"); return; }
   if (!form.root_type)    { toast("Root Type is required", "error");    return; }
   drawerSaving.value = true;
+  let savedName = editingName.value || "";
   try {
     const payload = {
       account_name: form.name.trim(),
@@ -833,9 +834,19 @@ async function saveAccount() {
       } catch (e) { toast(e.message || "Frappe create failed", "error"); }
       allAccounts.value.push({ name: newName, account_name: form.name.trim(), code: form.code.trim(), root_type: form.root_type, account_type: form.account_type, parent: form.parent, is_group: form.is_group ? 1 : 0, opening: flt(form.opening), bal_type: form.bal_type, notes: form.notes, source: "frappe" });
       toast("Account created", "success");
+      savedName = newName;
     }
     drawerOpen.value = false;
     await load();
+    // `load()` rebuilds `allAccounts` as a fresh array of new objects, so the
+    // detail panel's `selectedAccount` (still pointing at the pre-save object)
+    // would otherwise keep showing the old values — e.g. Balance Type staying
+    // "Debit" in the UI even though the save succeeded. Re-point it at the
+    // freshly-loaded record for whichever account was just edited/created.
+    if (savedName) {
+      const fresh = allAccounts.value.find((x) => x.name === savedName);
+      if (fresh) selectedAccount.value = fresh;
+    }
   } catch (e) {
     toast(e.message || "Save failed", "error");
   } finally {

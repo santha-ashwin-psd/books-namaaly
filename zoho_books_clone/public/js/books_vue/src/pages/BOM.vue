@@ -217,6 +217,10 @@
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
                       <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ INR((rm.qty||0)*(rm.rate||0)) }}</span>
                     </div>
+                    <button v-if="rm.item_code" class="bomx-btn-icon bomx-rm-card-scrap" :class="{ 'has-mappings': scrapCountFor(rm.item_code) > 0 }"
+                            @click="openScrapPanel(rm)" :title="bom.allow_alternative_item ? 'Manage scrap-reuse eligibility for this item' : 'Enable \'Allow Alternative Item\' (More Info tab) to use scrap reuse'">
+                      ♻<span v-if="scrapCountFor(rm.item_code) > 0" class="bomx-rm-card-scrap-count">{{ scrapCountFor(rm.item_code) }}</span>
+                    </button>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -459,6 +463,12 @@
                 <label class="bomx-toggle"><input type="checkbox" v-model="bom.set_rate_of_sub_assembly_from_bom" :true-value="1" :false-value="0" :disabled="readOnly"/> Set Rate of Sub-Assembly from BOM</label>
               </div>
               <div class="bomx-toggle-row" style="margin-top:8px">
+                <label class="bomx-toggle"><input type="checkbox" v-model="bom.allow_alternative_item" :true-value="1" :false-value="0" :disabled="readOnly"/> Allow Alternative Item</label>
+              </div>
+              <div class="bomx-field-hint" style="margin-top:4px">
+                Lets a raw material row on this BOM be substituted with a Fresh Stock or Recycled Scrap alternative on the Work Order. Manage which items are eligible per raw material from the ♻ button on each row in the Raw Materials tab.
+              </div>
+              <div class="bomx-toggle-row" style="margin-top:8px">
                 <label class="bomx-toggle"><input type="checkbox" v-model="bom.publish_bom" :true-value="1" :false-value="0" :disabled="readOnly"/> Publish to Website</label>
               </div>
             </div>
@@ -571,6 +581,80 @@
       </template>
     </div>
 
+  </div>
+
+  <!-- Scrap Reuse Eligibility Modal -->
+  <div v-if="showScrapPanel" class="bomx-modal-overlay" @click.self="closeScrapPanel">
+    <div class="bomx-modal" style="width:560px;max-width:94vw">
+      <div class="bomx-modal-title">Scrap Reuse Eligibility</div>
+      <div class="bomx-modal-body">
+        <div style="margin-bottom:14px">
+          <div class="bomx-hf-label">Raw Material</div>
+          <div class="bomx-rm-static">{{ scrapPanelItem }}</div>
+        </div>
+        <div v-if="!bom.allow_alternative_item" class="bomx-field-hint bomx-field-hint-danger" style="margin-bottom:14px">
+          "Allow Alternative Item" is off for this BOM (More Info tab) — mappings below can still be viewed here, but Work Order substitution won't offer them until it's turned on.
+        </div>
+
+        <div v-if="scrapPanelLoading" class="bomx-tree-empty">Loading…</div>
+        <template v-else>
+          <div v-if="!scrapPanelRows.length" class="bomx-tree-empty">No scrap items are mapped as an alternative for {{ scrapPanelItem }} yet.</div>
+          <div class="bomx-rm-cards" v-else>
+            <div class="bomx-rm-card" v-for="row in scrapPanelRows" :key="row.name">
+              <div class="bomx-rm-card-hdr">
+                <span class="bomx-tree-icon">♻️</span>
+                <span class="bomx-rm-card-title" style="flex:1;font-weight:600">{{ row.item_name || row.alternative_item_code }}</span>
+                <button v-if="$canDelete('inventory')" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeScrapMapping(row)" title="Remove">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div class="bomx-rm-card-body" style="grid-template-columns:1fr 1fr">
+                <div class="bomx-rm-field">
+                  <label>Conversion Factor</label>
+                  <input class="bomx-fi bomx-fi-mono" type="number" v-model="row.conversion_factor" min="0.0001" step="any" @change="saveScrapMapping(row)" :disabled="!$canEdit('inventory')"/>
+                  <div class="bomx-field-hint">Units of scrap per 1 unit of {{ scrapPanelItem }} displaced.</div>
+                </div>
+                <div class="bomx-rm-field">
+                  <label>Max Substitution %</label>
+                  <input class="bomx-fi bomx-fi-mono" type="number" v-model="row.max_substitution_pct" min="1" max="100" step="any" @change="saveScrapMapping(row)" :disabled="!$canEdit('inventory')"/>
+                  <div class="bomx-field-hint">Caps how much of a Work Order row's requirement scrap may cover.</div>
+                </div>
+                <div class="bomx-rm-field bomx-rm-field-wide">
+                  <label>Description / Reason</label>
+                  <input class="bomx-fi" type="text" v-model="row.description" placeholder="Optional note…" @change="saveScrapMapping(row)" :disabled="!$canEdit('inventory')"/>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-if="$canCreate('inventory')" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bx-border)">
+          <div class="bomx-hf-label">Add Scrap Alternative</div>
+          <div style="display:flex;gap:8px;align-items:flex-end;margin-top:6px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <select class="bomx-fi" v-model="newScrapMapping.alternative_item_code" style="width:100%">
+                <option value="">— Select scrap item —</option>
+                <option v-for="i in availableScrapPickerItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
+              </select>
+            </div>
+            <div style="width:110px">
+              <input class="bomx-fi bomx-fi-mono" type="number" v-model="newScrapMapping.conversion_factor" placeholder="Factor" min="0.0001" step="any" title="Conversion Factor"/>
+            </div>
+            <div style="width:90px">
+              <input class="bomx-fi bomx-fi-mono" type="number" v-model="newScrapMapping.max_substitution_pct" placeholder="Max %" min="1" max="100" step="any" title="Max Substitution %"/>
+            </div>
+            <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" @click="addScrapMapping" :disabled="scrapPanelSaving || !newScrapMapping.alternative_item_code">
+              {{ scrapPanelSaving ? 'Adding…' : 'Add' }}
+            </button>
+          </div>
+          <div v-if="!scrapPickerItems.length" class="bomx-field-hint" style="margin-top:6px">No items of type "Scrap Item" exist yet — create one from Inventory → Items first.</div>
+          <div v-else-if="!availableScrapPickerItems.length" class="bomx-field-hint" style="margin-top:6px">Every existing Scrap Item is already mapped for {{ scrapPanelItem }}.</div>
+        </div>
+      </div>
+      <div class="bomx-modal-actions">
+        <button class="bomx-btn" style="background:#fff;border:1px solid var(--bx-border)" @click="closeScrapPanel">Close</button>
+      </div>
+    </div>
   </div>
 </div>
 </template>
@@ -1044,6 +1128,122 @@ async function onRoutingChange() {
 
 function addMaterial() { bom.value.items.push({ item_code: "", uom: "Nos", qty: 1, rate: 0 }); }
 function removeMaterial(idx) { bom.value.items.splice(idx, 1); }
+
+// ── Scrap Reuse Eligibility panel (Phase 4) ────────────────────────────────
+// Lets a raw material row's Recycled Scrap Alternative Item mappings be
+// managed inline from the BOM screen instead of the generic Alternative
+// Item list view. Every mapping saved here is picked up automatically by
+// the existing get_substitution_options()/get_alternative_items() lookups
+// used on the Work Order — nothing extra to wire up on that side.
+const showScrapPanel = ref(false);
+const scrapPanelItem = ref("");
+const scrapPanelRows = ref([]);
+const scrapPanelLoading = ref(false);
+const scrapPanelSaving = ref(false);
+const newScrapMapping = ref({ alternative_item_code: "", conversion_factor: 1, max_substitution_pct: 100 });
+// item_code -> mapped scrap-alternative count, for the ♻ badge on each raw
+// material card. Populated lazily as rows appear, not fetched in bulk.
+const scrapMappingCounts = ref({});
+
+function scrapCountFor(item_code) {
+  return scrapMappingCounts.value[item_code] || 0;
+}
+
+async function refreshScrapCount(item_code) {
+  if (!item_code) return;
+  try {
+    const rows = await apiCall("zoho_books_clone.manufacturing.bom_engine.get_scrap_alternatives", { item_code });
+    scrapMappingCounts.value = { ...scrapMappingCounts.value, [item_code]: (rows || []).length };
+  } catch (e) {
+    // Non-fatal — the badge just won't show a count for this row.
+  }
+}
+
+watch(() => (bom.value.items || []).map(r => r.item_code).filter(Boolean).join(","), () => {
+  (bom.value.items || []).forEach(r => {
+    if (r.item_code && !(r.item_code in scrapMappingCounts.value)) refreshScrapCount(r.item_code);
+  });
+}, { immediate: true });
+
+// Scrap items not yet mapped for the item currently open in the panel —
+// keeps the "Add" picker from offering a duplicate that upsert_scrap_alternative
+// would just reject.
+const availableScrapPickerItems = computed(() => {
+  const mapped = new Set(scrapPanelRows.value.map(r => r.alternative_item_code));
+  return scrapPickerItems.value.filter(i => !mapped.has(i.name));
+});
+
+async function openScrapPanel(rm) {
+  if (!rm.item_code) return;
+  scrapPanelItem.value = rm.item_code;
+  newScrapMapping.value = { alternative_item_code: "", conversion_factor: 1, max_substitution_pct: 100 };
+  scrapPanelRows.value = [];
+  showScrapPanel.value = true;
+  scrapPanelLoading.value = true;
+  try {
+    const rows = await apiCall("zoho_books_clone.manufacturing.bom_engine.get_scrap_alternatives", { item_code: rm.item_code });
+    scrapPanelRows.value = rows || [];
+    scrapMappingCounts.value = { ...scrapMappingCounts.value, [rm.item_code]: scrapPanelRows.value.length };
+  } catch (e) {
+    toast("Could not load scrap alternatives: " + (e.message || e), "error");
+  }
+  scrapPanelLoading.value = false;
+}
+
+function closeScrapPanel() { showScrapPanel.value = false; }
+
+async function saveScrapMapping(row) {
+  try {
+    await apiCall("zoho_books_clone.manufacturing.bom_engine.upsert_scrap_alternative", {
+      item_code: scrapPanelItem.value,
+      alternative_item_code: row.alternative_item_code,
+      conversion_factor: row.conversion_factor,
+      max_substitution_pct: row.max_substitution_pct,
+      description: row.description,
+      name: row.name,
+    });
+    toast("Saved");
+  } catch (e) {
+    toast("Could not save: " + (e.message || e), "error");
+  }
+}
+
+async function addScrapMapping() {
+  if (!newScrapMapping.value.alternative_item_code) return;
+  scrapPanelSaving.value = true;
+  try {
+    const res = await apiCall("zoho_books_clone.manufacturing.bom_engine.upsert_scrap_alternative", {
+      item_code: scrapPanelItem.value,
+      alternative_item_code: newScrapMapping.value.alternative_item_code,
+      conversion_factor: newScrapMapping.value.conversion_factor || 1,
+      max_substitution_pct: newScrapMapping.value.max_substitution_pct || 100,
+    });
+    const pickedItem = stockItems.value.find(i => i.name === res.alternative_item_code);
+    scrapPanelRows.value.push({ ...res, item_name: pickedItem ? pickedItem.item_name : res.alternative_item_code });
+    scrapMappingCounts.value = { ...scrapMappingCounts.value, [scrapPanelItem.value]: scrapPanelRows.value.length };
+    newScrapMapping.value = { alternative_item_code: "", conversion_factor: 1, max_substitution_pct: 100 };
+    toast("Scrap alternative added");
+  } catch (e) {
+    toast("Could not add scrap alternative: " + (e.message || e), "error");
+  }
+  scrapPanelSaving.value = false;
+}
+
+async function removeScrapMapping(row) {
+  if (!(await confirm({
+    title: "Remove scrap alternative?",
+    body: `Remove ${row.item_name || row.alternative_item_code} as a scrap-reuse alternative for ${scrapPanelItem.value}? Existing Work Order rows already split against it are unaffected.`,
+    okLabel: "Remove", okStyle: "danger",
+  }))) return;
+  try {
+    await apiCall("zoho_books_clone.manufacturing.bom_engine.delete_scrap_alternative", { name: row.name });
+    scrapPanelRows.value = scrapPanelRows.value.filter(r => r.name !== row.name);
+    scrapMappingCounts.value = { ...scrapMappingCounts.value, [scrapPanelItem.value]: scrapPanelRows.value.length };
+    toast("Removed");
+  } catch (e) {
+    toast("Could not remove: " + (e.message || e), "error");
+  }
+}
 function onPackingItemChange(pi) {
   if (!pi.item_code) return;
   const item = stockItems.value.find(i => i.name === pi.item_code);
@@ -1461,6 +1661,18 @@ function icon(name, size) {
 .bomx-rm-card-amt { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; gap:1px; }
 .bomx-rm-card-amt-lbl { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--bx-muted); }
 .bomx-rm-card-rm { flex-shrink:0; }
+.bomx-rm-card-scrap { flex-shrink:0; position:relative; font-size:13px; color:var(--bx-muted); }
+.bomx-rm-card-scrap.has-mappings { color:var(--bx-mfgB); }
+.bomx-rm-card-scrap-count { position:absolute; top:-4px; right:-4px; background:var(--bx-mfgB); color:#fff; font-size:9px; font-weight:700; line-height:1; padding:2px 4px; border-radius:8px; min-width:12px; text-align:center; }
+
+/* ── Scrap Reuse modal (reuses the same overlay convention as other pages) ── */
+.bomx-modal-overlay { position:fixed; inset:0; background:rgba(17,24,39,.5); display:flex; align-items:center; justify-content:center; z-index:1000; padding:24px; box-sizing:border-box; }
+.bomx-modal { background:#fff; border-radius:12px; padding:22px; max-width:94vw; max-height:90vh; box-shadow:0 20px 50px rgba(0,0,0,.25); display:flex; flex-direction:column; overflow:hidden; }
+.bomx-modal-title { font-size:16px; font-weight:700; color:var(--bx-text); margin-bottom:14px; flex-shrink:0; }
+.bomx-modal-body { font-size:13.5px; color:var(--bx-text); line-height:1.5; overflow-y:auto; flex:1 1 auto; min-height:0; padding-right:4px; }
+.bomx-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; flex-shrink:0; }
+.bomx-field-hint-danger { color:var(--bx-red); font-weight:600; }
+.bomx-rm-static { font-size:13px; color:var(--bx-text); padding:7px 0; font-weight:600; }
 .bomx-rm-card-body { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; padding:12px 14px; }
 .bomx-rm-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .bomx-landed-hint { font-size:10.5px; color:var(--bx-amber); background:var(--bx-amberS); border-radius:5px; padding:3px 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; cursor:help; }

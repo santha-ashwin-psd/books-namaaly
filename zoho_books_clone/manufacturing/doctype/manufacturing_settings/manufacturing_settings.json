@@ -149,7 +149,18 @@
    "fieldtype": "Check",
    "label": "Segregate Scrap/By-Product GL",
    "default": "0",
-   "description": "If enabled, recoverable scrap/by-products received from a Work Order post to the company's Default Scrap/By-Product Account (Books Company) instead of the Default Inventory Account, for audit/reporting segregation. Falls back to the Default Inventory Account if no Scrap account is configured, so GL always balances. Off by default — existing companies are unaffected until they opt in."
+   "description": "If enabled, recoverable scrap/by-products received from a Work Order post to the company's Default Scrap/By-Product Account (Books Company) instead of the Default Inventory Account, for audit/reporting segregation. Falls back to the Default Inventory Account if no Scrap account is configured, so GL always balances. Off by default -- existing companies are unaffected until they opt in."
+  },
+  {
+   "fieldname": "col_break_scrap1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enable_scrap_reuse",
+   "fieldtype": "Check",
+   "label": "Enable Scrap Reuse",
+   "default": "1",
+   "description": "Master switch for the Scrap Reuse feature (partially filling a raw-material requirement from previously-recovered scrap -- see Alternative Item.source_type='Recycled Scrap'). Checked by apply_partial_scrap_substitution() before any scrap-reuse action is applied, whether requested directly or via approval, so turning this off immediately stops all NEW scrap reuse company-wide without touching already-applied splits. To pilot on a single BOM instead of a blanket rollout, leave this on and only enable 'Allow Alternative Item' + define Recycled Scrap alternatives on that one BOM -- other BOMs simply have no scrap alternatives to pick from."
   },
   {
    "fieldname": "sb_notifications",

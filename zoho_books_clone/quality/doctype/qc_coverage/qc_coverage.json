@@ -1,0 +1,62 @@
+{
+ "name": "QC Coverage",
+ "module": "Quality",
+ "doctype": "DocType",
+ "creation": "2026-08-07 00:00:00.000000",
+ "modified": "2026-08-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "document_type": "",
+ "description": "One row per (child_doctype, child_row_name) that currently has an active QC Inspection. source_row is the DB-enforced uniqueness primitive that answers 'does this row already have coverage' without guessing via item+batch matching. Rows are inserted the moment a QC Inspection is created for a source row, and deleted when that QC Inspection is cancelled/deleted so a fresh inspection can legitimately be created later (e.g. rework after a Fail).",
+ "search_fields": "source_row,qc_inspection",
+ "title_field": "source_row",
+ "is_submittable": 0,
+ "track_changes": 0,
+ "istable": 0,
+ "issingle": 0,
+ "naming_rule": "By fieldname",
+ "autoname": "field:source_row",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "source_row",
+   "fieldtype": "Data",
+   "label": "Source Row",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "{child_doctype}:{child_row_name} — computed once the row itself has a stable name. This is the actual concurrency-safe uniqueness primitive: the DB rejects a second QC Coverage row for the same source_row, so a duplicate-key error (not a lock) is what stops two simultaneous submits from both creating coverage for the same row."
+  },
+  {
+   "fieldname": "qc_inspection",
+   "fieldtype": "Link",
+   "options": "QC Inspection",
+   "label": "QC Inspection",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1, "write": 1, "create": 1, "delete": 1,
+   "email": 0, "export": 1, "print": 1, "report": 1, "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1, "write": 1, "create": 1, "delete": 0,
+   "email": 0, "export": 1, "print": 1, "report": 1, "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1, "write": 0, "create": 0, "delete": 0,
+   "email": 0, "export": 1, "print": 1, "report": 1, "share": 0
+  }
+ ]
+}
