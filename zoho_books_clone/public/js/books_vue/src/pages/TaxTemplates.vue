@@ -29,19 +29,26 @@
           <th>Type</th>
           <th>Components</th>
           <th class="ta-r">Rate</th>
+          <th>Applies To</th>
           <th>Default</th>
           <th>Status</th>
           <th style="width:90px"></th>
         </tr>
       </thead>
       <tbody>
-        <tr v-if="loading" v-for="n in 5" :key="'s'+n" class="shimmer-row"><td v-for="c in 7" :key="c"><div class="shimmer" style="width:80%"></div></td></tr>
+        <tr v-if="loading" v-for="n in 5" :key="'s'+n" class="shimmer-row"><td v-for="c in 8" :key="c"><div class="shimmer" style="width:80%"></div></td></tr>
         <template v-else>
           <tr v-for="t in filtered" :key="t.name" class="inv-row" @click="openEdit(t)">
             <td data-label="Template" class="td-id"><span class="inv-link">{{ t.template_name }}</span></td>
             <td data-label="Type">{{ t.tax_type || 'GST' }}</td>
             <td data-label="Components" class="text-muted" style="font-size:12px">{{ t.rateLabel || '—' }}</td>
             <td data-label="Rate" class="ta-r">{{ t.headlineRate != null ? t.headlineRate + '%' : '—' }}</td>
+            <td data-label="Applies To">
+              <span class="inv-status-badge" :class="t.applies_to==='Sales' ? 'status-active' : t.applies_to==='Purchase' ? 'status-inactive' : ''"
+                    :style="t.applies_to==='Both' ? 'background:#EEF1F6;color:var(--bx-muted)' : ''">
+                {{ t.applies_to || 'Both' }}
+              </span>
+            </td>
             <td data-label="Default"><span v-if="t.is_default" class="inv-status-badge status-active">Default</span><span v-else class="text-muted">—</span></td>
             <td data-label="Status"><span class="inv-status-badge" :class="t.disabled ? 'status-inactive' : 'status-active'">{{ t.disabled ? 'Disabled' : 'Active' }}</span></td>
             <td data-label="" @click.stop>
@@ -84,6 +91,19 @@
           <div class="tt-field" style="margin-bottom:16px">
             <label class="tt-label">Template Name <span class="tt-req">*</span></label>
             <input v-model="form.template_name" class="b-input" :placeholder="form.tax_type==='VAT' ? 'e.g. VAT 5%' : form.tax_type==='GST' ? 'e.g. GST 18%' : 'e.g. Cess 1%'" :disabled="!!editing" />
+          </div>
+
+          <div class="tt-field" style="margin-bottom:16px">
+            <label class="tt-label">Applies To <span class="tt-req">*</span></label>
+            <div class="tt-pills">
+              <button v-for="a in ['Sales','Purchase','Both']" :key="a" type="button" class="tt-pill" :class="{active:form.applies_to===a}" @click="form.applies_to = a">{{ a }}</button>
+            </div>
+            <div class="text-muted" style="font-size:12px;margin-top:6px">
+              Which documents can use this template. <b>Sales</b> templates should post to Payable/liability
+              accounts and only show up on Invoices/Credit Notes/Sales Orders/Quotes. <b>Purchase</b> templates
+              should post to Input/ITC accounts and only show up on Bills/Debit Notes/Purchase Orders. Get this
+              wrong and tax gets posted to the wrong side of the ledger.
+            </div>
           </div>
 
           <div class="tt-field" style="margin-bottom:6px">
@@ -190,7 +210,7 @@ const editing   = ref(null);
 const saving    = ref(false);
 const quick     = ref(null);
 
-const form = reactive({ template_name: "", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
+const form = reactive({ template_name: "", applies_to: "Both", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
 
 const allowedComponents = computed(() => COMPONENTS_BY_TYPE[form.tax_type] || COMPONENTS_BY_TYPE.Custom);
 
@@ -254,7 +274,7 @@ async function load() {
   loading.value = true;
   try {
     const rows = await apiList("Tax Template", {
-      fields: ["name", "template_name", "tax_type", "is_default", "disabled"],
+      fields: ["name", "template_name", "tax_type", "applies_to", "is_default", "disabled"],
       order: "template_name asc", limit: 200,
     }) || [];
     // Was previously one apiGet() per row here (N+1 -- up to 200 extra
@@ -309,7 +329,7 @@ const filtered = computed(() => {
 function openNew() {
   editing.value = null;
   quick.value = null;
-  Object.assign(form, { template_name: "", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
+  Object.assign(form, { template_name: "", applies_to: "Both", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
   drawer.value = true;
 }
 function openEdit(t) {
@@ -323,6 +343,7 @@ function openEdit(t) {
   }));
   Object.assign(form, {
     template_name: t.template_name,
+    applies_to: t.applies_to || "Both",
     tax_type: t.tax_type || "GST",
     is_default: t.is_default ? 1 : 0,
     disabled: t.disabled ? 1 : 0,
@@ -354,6 +375,7 @@ async function save() {
       template_name: form.template_name.trim(),
       company,
       tax_type: form.tax_type,
+      applies_to: form.applies_to || "Both",
       is_default: form.is_default,
       disabled: form.disabled,
       taxes,

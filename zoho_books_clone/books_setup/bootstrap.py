@@ -65,25 +65,40 @@ COA = [
 
 
 # Default Indian GST tax templates, seeded once per company.
-# (template_name, [ (tax_type, description, rate, account_name), ... ])
+# (template_name, applies_to, [ (tax_type, description, rate, account_name), ... ])
+# applies_to is one of "Sales" / "Purchase" / "Both" -- it's what the Bills/
+# PurchaseOrders/DebitNotes pages filter to "Purchase"/"Both", and what the
+# Invoices/CreditNotes/Quotes/SalesOrders pages filter to "Sales"/"Both", so
+# a Payable (Sales) template can never be picked on a Bill and vice versa.
 # account_name is resolved to the company's full account name at seed time.
+#
+# NOTE: every Output/Payable rate tier below has a matching Input/ITC tier --
+# do not add a new Payable rate without also adding its Input counterpart,
+# or purchase-side users will have no correct template to pick for that rate
+# (this is exactly how the CGST/SGST Payable-on-Bills bug happened for 12/5/28%).
 TAX_TEMPLATES = [
-    ("GST 18% (Intra-State)", [("CGST", "CGST @ 9%", 9, "CGST Payable"), ("SGST", "SGST @ 9%", 9, "SGST Payable")]),
-    ("GST 12% (Intra-State)", [("CGST", "CGST @ 6%", 6, "CGST Payable"), ("SGST", "SGST @ 6%", 6, "SGST Payable")]),
-    ("GST 5% (Intra-State)",  [("CGST", "CGST @ 2.5%", 2.5, "CGST Payable"), ("SGST", "SGST @ 2.5%", 2.5, "SGST Payable")]),
-    ("GST 28% (Intra-State)", [("CGST", "CGST @ 14%", 14, "CGST Payable"), ("SGST", "SGST @ 14%", 14, "SGST Payable")]),
-    ("IGST 18% (Inter-State)", [("IGST", "IGST @ 18%", 18, "IGST Payable")]),
-    ("IGST 12% (Inter-State)", [("IGST", "IGST @ 12%", 12, "IGST Payable")]),
-    ("IGST 5% (Inter-State)",  [("IGST", "IGST @ 5%", 5, "IGST Payable")]),
-    ("IGST 28% (Inter-State)", [("IGST", "IGST @ 28%", 28, "IGST Payable")]),
-    ("GST Exempt", []),
-    ("Input GST 18% (Intra-State)", [("CGST", "CGST ITC @ 9%", 9, "CGST Input"), ("SGST", "SGST ITC @ 9%", 9, "SGST Input")]),
-    ("Input IGST 18% (Inter-State)", [("IGST", "IGST ITC @ 18%", 18, "IGST Input")]),
+    ("GST 18% (Intra-State)", "Sales", [("CGST", "CGST @ 9%", 9, "CGST Payable"), ("SGST", "SGST @ 9%", 9, "SGST Payable")]),
+    ("GST 12% (Intra-State)", "Sales", [("CGST", "CGST @ 6%", 6, "CGST Payable"), ("SGST", "SGST @ 6%", 6, "SGST Payable")]),
+    ("GST 5% (Intra-State)",  "Sales", [("CGST", "CGST @ 2.5%", 2.5, "CGST Payable"), ("SGST", "SGST @ 2.5%", 2.5, "SGST Payable")]),
+    ("GST 28% (Intra-State)", "Sales", [("CGST", "CGST @ 14%", 14, "CGST Payable"), ("SGST", "SGST @ 14%", 14, "SGST Payable")]),
+    ("IGST 18% (Inter-State)", "Sales", [("IGST", "IGST @ 18%", 18, "IGST Payable")]),
+    ("IGST 12% (Inter-State)", "Sales", [("IGST", "IGST @ 12%", 12, "IGST Payable")]),
+    ("IGST 5% (Inter-State)",  "Sales", [("IGST", "IGST @ 5%", 5, "IGST Payable")]),
+    ("IGST 28% (Inter-State)", "Sales", [("IGST", "IGST @ 28%", 28, "IGST Payable")]),
+    ("GST Exempt", "Both", []),
+    ("Input GST 18% (Intra-State)", "Purchase", [("CGST", "CGST ITC @ 9%", 9, "CGST Input"), ("SGST", "SGST ITC @ 9%", 9, "SGST Input")]),
+    ("Input GST 12% (Intra-State)", "Purchase", [("CGST", "CGST ITC @ 6%", 6, "CGST Input"), ("SGST", "SGST ITC @ 6%", 6, "SGST Input")]),
+    ("Input GST 5% (Intra-State)",  "Purchase", [("CGST", "CGST ITC @ 2.5%", 2.5, "CGST Input"), ("SGST", "SGST ITC @ 2.5%", 2.5, "SGST Input")]),
+    ("Input GST 28% (Intra-State)", "Purchase", [("CGST", "CGST ITC @ 14%", 14, "CGST Input"), ("SGST", "SGST ITC @ 14%", 14, "SGST Input")]),
+    ("Input IGST 18% (Inter-State)", "Purchase", [("IGST", "IGST ITC @ 18%", 18, "IGST Input")]),
+    ("Input IGST 12% (Inter-State)", "Purchase", [("IGST", "IGST ITC @ 12%", 12, "IGST Input")]),
+    ("Input IGST 5% (Inter-State)",  "Purchase", [("IGST", "IGST ITC @ 5%", 5, "IGST Input")]),
+    ("Input IGST 28% (Inter-State)", "Purchase", [("IGST", "IGST ITC @ 28%", 28, "IGST Input")]),
 ]
 
 # Template names known to be app defaults — used by the back-fill patch to
 # distinguish seeded defaults from user-created templates (which are left alone).
-DEFAULT_TAX_TEMPLATE_NAMES = frozenset(name for name, _ in TAX_TEMPLATES)
+DEFAULT_TAX_TEMPLATE_NAMES = frozenset(name for name, _applies_to, _rows in TAX_TEMPLATES)
 
 
 def _acc_name(account_name: str, company: str) -> str:
@@ -116,7 +131,7 @@ def _seed_tax_templates(company: str) -> None:
             "Account", {"account_name": name, "company": company, "is_group": 0}, "name"
         ) or _acc_name(name, company)
 
-    for template_name, rows in TAX_TEMPLATES:
+    for template_name, applies_to, rows in TAX_TEMPLATES:
         doc_name = f"{template_name} - {company}"
         if frappe.db.exists("Tax Template", doc_name):
             continue
@@ -126,6 +141,7 @@ def _seed_tax_templates(company: str) -> None:
                 "template_name": template_name,
                 "company": company,
                 "tax_type": "GST",
+                "applies_to": applies_to,
                 "taxes": [
                     {"tax_type": t[0], "description": t[1], "rate": t[2], "account_head": _acct(t[3])}
                     for t in rows

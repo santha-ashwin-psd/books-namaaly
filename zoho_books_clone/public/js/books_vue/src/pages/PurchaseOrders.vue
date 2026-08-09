@@ -1108,7 +1108,7 @@ async function loadTaxAccount() {
   } catch {}
   try {
     // Fetch all Item Tax Templates and their first tax rate
-    const templates = await apiList("Tax Template", { fields: ["name", "template_name"], filters: [["disabled", "=", 0]], limit: 100, order: "template_name asc" });
+    const templates = await apiList("Tax Template", { fields: ["name", "template_name"], filters: [["disabled", "=", 0], ["applies_to", "in", ["Purchase", "Both"]]], limit: 100, order: "template_name asc" });
     const withRates = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
@@ -1435,8 +1435,8 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "tax_code"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
-    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.tax_code || "" }));
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "stock_uom", "default_purchase_tax_template"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
+    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, description: x.description || "", tax_code: x.default_purchase_tax_template || "" }));
   } catch { items.value = []; }
 }
 async function onItemSelect(line, opt) {
@@ -1451,7 +1451,7 @@ async function onItemSelect(line, opt) {
       const doc = await apiGet("Item", opt.value);
       if (doc?.description) line.description = doc.description;
       if (doc?.item_name)   line.item_name   = doc.item_name;
-      if (doc?.tax_code) line.tax_code = doc.tax_code;
+      if (doc?.default_purchase_tax_template) line.tax_code = doc.default_purchase_tax_template;
     } catch {}
   }
   calcLine(line);

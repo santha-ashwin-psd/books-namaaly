@@ -182,12 +182,24 @@
           <div class="ad-section">
             <div class="ad-section-title">Tax</div>
             <div class="ad-field">
-              <label class="ad-label">Tax Template <span class="ad-required">*</span></label>
+              <label class="ad-label">Default Sales Tax Template <span class="ad-required">*</span></label>
               <select class="ad-input" v-model="form.tax_code">
                 <option value="">— Select —</option>
-                <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.label }}</option>
+                <option v-for="t in salesTaxTemplates" :key="t.name" :value="t.name">{{ t.label }}</option>
               </select>
-              <div class="ad-hint" style="margin-top:6px">Tax on transactions is determined by the selected Tax Template.</div>
+              <div class="ad-hint" style="margin-top:6px">Auto-filled on Invoices, Credit Notes, Quotes &amp; Sales Orders.</div>
+            </div>
+            <div class="ad-field" style="margin-top:12px">
+              <label class="ad-label">Default Purchase Tax Template</label>
+              <select class="ad-input" v-model="form.default_purchase_tax_template">
+                <option value="">— Select —</option>
+                <option v-for="t in purchaseTaxTemplates" :key="t.name" :value="t.name">{{ t.label }}</option>
+              </select>
+              <div class="ad-hint" style="margin-top:6px">
+                Auto-filled on Bills, Debit Notes &amp; Purchase Orders instead of the Sales template above —
+                purchases need to post to an Input/ITC account, not the Payable account sales use. Left blank,
+                the field is left empty on Bills too, so it won't silently pick the wrong account.
+              </div>
             </div>
           </div>
 
@@ -474,6 +486,8 @@ const itemGroups     = ref([]);
 const itemGroupsFull = ref([]);
 const warehouses     = ref([]);
 const taxTemplates   = ref([]);
+const salesTaxTemplates    = computed(() => taxTemplates.value.filter((t) => t.applies_to === "Sales" || t.applies_to === "Both" || !t.applies_to));
+const purchaseTaxTemplates = computed(() => taxTemplates.value.filter((t) => t.applies_to === "Purchase" || t.applies_to === "Both" || !t.applies_to));
 const uomList        = ref([]);
 const brandList      = ref([]);
 const defaultAccounts  = ref({ income: "", expense: "" });
@@ -484,7 +498,7 @@ const bomOptions       = ref([]);   // Active, submitted BOMs for the item being
 const form = reactive({
   name: "", item_code: "", item_name: "", item_group: "", item_type: "Product",
   stock_uom: "Nos", hsn_code: "", barcode: "", description: "", disabled: 0, brand: "",
-  standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
+  standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "", default_purchase_tax_template: "",
   income_account: "", expense_account: "",
   is_sales_item: 1, is_purchase_item: 1,
   is_stock_item: 1, has_batch_no: 0, shelf_life_in_days: 0, valuation_method: "FIFO", default_warehouse: "",
@@ -576,7 +590,7 @@ async function loadDrawerReferenceData() {
       filters: [["disabled", "=", 0]], order: "warehouse_name asc", limit: 200,
     }),
     apiList("Tax Template", {
-      fields: ["name", "template_name"],
+      fields: ["name", "template_name", "applies_to"],
       filters: [["disabled", "=", 0]],
       order: "template_name asc", limit: 100,
     }),
@@ -600,7 +614,7 @@ async function loadDrawerReferenceData() {
   } else { warehouses.value = []; }
 
   if (ttRes.status === "fulfilled") {
-    taxTemplates.value = (ttRes.value || []).map((r) => ({ name: r.name, label: r.template_name || r.name }));
+    taxTemplates.value = (ttRes.value || []).map((r) => ({ name: r.name, label: r.template_name || r.name, applies_to: r.applies_to || "Both" }));
   } else { taxTemplates.value = []; }
 
   if (uomRes.status === "fulfilled") {
@@ -726,7 +740,7 @@ function openAdd(presetType) {
   Object.assign(form, {
     name: "", item_code: "", item_name: "", item_group: "", item_type: defaultType,
     stock_uom: "Nos", hsn_code: "", barcode: "", description: "", disabled: 0, brand: "",
-    standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "",
+    standard_rate: 0, standard_buying_rate: 0, mrp: 0, gst_rate: 18, tax_code: "", default_purchase_tax_template: "",
     income_account:  defaultAccounts.value.income,
     expense_account: defaultAccounts.value.expense,
     is_stock_item: d.is_stock !== undefined ? d.is_stock : 1,
@@ -757,7 +771,7 @@ async function openEdit(row) {
   Object.assign(form, {
     ...row,
     hsn_code: "", barcode: "", description: "", standard_buying_rate: 0, mrp: 0, brand: "",
-    tax_code: "", income_account: "", expense_account: "",
+    tax_code: "", default_purchase_tax_template: "", income_account: "", expense_account: "",
     valuation_method: "FIFO", default_warehouse: "",
     reorder_level: 0, reorder_qty: 0, opening_stock: 0,
   });
@@ -773,6 +787,7 @@ async function openEdit(row) {
       standard_buying_rate: flt(full.standard_buying_rate),
       mrp:                  flt(full.mrp),
       tax_code:             full.tax_code             || "",
+      default_purchase_tax_template: full.default_purchase_tax_template || "",
       income_account:       full.income_account       || defaultAccounts.value.income,
       expense_account:      full.expense_account      || defaultAccounts.value.expense,
       is_stock_item:        full.is_stock_item ? 1 : 0,
@@ -824,7 +839,7 @@ function validateItem() {
   const checks = [
     [!form.item_name.trim(),                         "Item name is required",        "basic"],
     [!form.stock_uom,                                "Default UOM is required",      "basic"],
-    [!form.tax_code,                                 "Tax Template is required",     "pricing"],
+    [!form.tax_code,                                 "Default Sales Tax Template is required",     "pricing"],
     [!form.income_account,                           "Income account is required",   "pricing"],
     [!form.expense_account,                          "Expense account is required",  "pricing"],
     [!!form.is_stock_item && !form.default_warehouse, "Default Warehouse is required when Track Inventory is on", "inventory"],
@@ -864,6 +879,7 @@ async function saveItem({ close = true } = {}) {
       standard_rate: flt(form.standard_rate), standard_buying_rate: flt(form.standard_buying_rate),
       mrp: flt(form.mrp),
       tax_code: form.tax_code,
+      default_purchase_tax_template: form.default_purchase_tax_template || "",
       income_account: form.income_account, expense_account: form.expense_account,
       is_stock_item: form.is_stock_item ? 1 : 0, has_batch_no: form.is_stock_item ? (form.has_batch_no ? 1 : 0) : 0,
       is_sales_item: form.is_sales_item ? 1 : 0, is_purchase_item: form.is_purchase_item ? 1 : 0,

@@ -1149,7 +1149,7 @@ async function fetchTaxTemplates() {
   } catch {}
   try {
     const templates = await apiList("Tax Template", {
-      fields: ["name","template_name","tax_type"], filters: [["disabled","=",0]], limit: 50
+      fields: ["name","template_name","tax_type"], filters: [["disabled","=",0], ["applies_to","in",["Sales","Both"]]], limit: 50
     });
     const withRows = await Promise.all((templates || []).map(async t => {
       try {

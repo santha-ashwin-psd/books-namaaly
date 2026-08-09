@@ -92,7 +92,8 @@
             <div class="iv-kv"><span class="iv-k">Type</span><span class="iv-v">{{ item.item_type || 'Product' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Unit of Measure</span><span class="iv-v">{{ item.stock_uom || 'Nos' }}</span></div>
             <div class="iv-kv"><span class="iv-k">HSN / SAC Code</span><span class="iv-v iv-mono">{{ item.hsn_code || '—' }}</span></div>
-            <div class="iv-kv"><span class="iv-k">Tax Template</span><span class="iv-v">{{ item.tax_code || '—' }}</span></div>
+            <div class="iv-kv"><span class="iv-k">Sales Tax Template</span><span class="iv-v">{{ item.tax_code || '—' }}</span></div>
+            <div class="iv-kv"><span class="iv-k">Purchase Tax Template</span><span class="iv-v">{{ item.default_purchase_tax_template || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Income Account</span><span class="iv-v">{{ item.income_account || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Expense Account</span><span class="iv-v">{{ expenseAccountName || item.expense_account || '—' }}</span></div>
             <div class="iv-kv"><span class="iv-k">Valuation Method</span><span class="iv-v">{{ item.valuation_method || 'FIFO' }}</span></div>

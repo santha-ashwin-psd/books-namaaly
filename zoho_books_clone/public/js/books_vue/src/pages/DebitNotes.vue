@@ -1114,7 +1114,7 @@ async function onItemChange(line) {
       if (doc?.hsn_code) line.hsn_code = doc.hsn_code;
       if (!flt(line.rate) && doc?.standard_rate) line.rate = flt(doc.standard_rate);
       if (doc?.stock_uom) line.uom = doc.stock_uom;
-      if (doc?.tax_code) line.tax_code = doc.tax_code;
+      if (doc?.default_purchase_tax_template) line.tax_code = doc.default_purchase_tax_template;
       calcLine(line);
     } catch {}
   }
@@ -1136,7 +1136,7 @@ async function fetchTaxTemplates() {
     taxAccountHead.value = r?.[0]?.name || "";
   } catch {}
   try {
-    const templates = await apiList("Tax Template", { fields: ["name","template_name","tax_type"], filters: [["disabled","=",0]], limit: 50 });
+    const templates = await apiList("Tax Template", { fields: ["name","template_name","tax_type"], filters: [["disabled","=",0], ["applies_to","in",["Purchase","Both"]]], limit: 50 });
     const withRows = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);

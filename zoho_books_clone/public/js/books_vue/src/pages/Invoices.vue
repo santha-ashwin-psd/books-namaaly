@@ -2220,7 +2220,7 @@ async function loadTaxAccount() {
     taxAccountHead.value=r[0]?.name||"";
   } catch {}
   try {
-    const templates=await apiList("Tax Template",{fields:["name","template_name","tax_type"],filters:[["disabled","=",0]],limit:100,order:"template_name asc"});
+    const templates=await apiList("Tax Template",{fields:["name","template_name","tax_type"],filters:[["disabled","=",0],["applies_to","in",["Sales","Both"]]],limit:100,order:"template_name asc"});
     const withRates=await Promise.all((templates||[]).map(async t=>{
       try{
         const doc=await apiGet("Tax Template",t.name);

@@ -1143,7 +1143,7 @@ async function loadTaxAccount() {
     if (r?.length) taxAccountHead.value = r[0].name;
   } catch {}
   try {
-    const templates = await apiList("Tax Template", { fields: ["name", "template_name", "tax_type"], filters: [["disabled", "=", 0]], limit: 100, order: "template_name asc" });
+    const templates = await apiList("Tax Template", { fields: ["name", "template_name", "tax_type"], filters: [["disabled", "=", 0], ["applies_to", "in", ["Purchase", "Both"]]], limit: 100, order: "template_name asc" });
     const withRates = await Promise.all((templates || []).map(async t => {
       try {
         const doc = await apiGet("Tax Template", t.name);
@@ -1427,8 +1427,8 @@ async function fetchItems(q = "") {
   try {
     const f = [["disabled", "=", 0]];
     if (q) f.push(["item_name", "like", "%" + q + "%"]);
-    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "mrp", "stock_uom", "purchase_uom", "hsn_code", "tax_code", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
-    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, mrp: x.mrp || x.standard_buying_rate || x.standard_rate || 0, stock_uom: x.stock_uom || "Nos", purchase_uom: x.purchase_uom || "", hsn_code: x.hsn_code || "", description: x.description || "", tax_code: x.tax_code || "", expense_account: x.expense_account || "" }));
+    const r = await apiList("Item", { fields: ["name", "item_name", "description", "standard_rate", "standard_buying_rate", "mrp", "stock_uom", "purchase_uom", "hsn_code", "default_purchase_tax_template", "expense_account"], filters: [...f, ["has_variants", "=", 0], ["is_purchase_item", "=", 1]], limit: 30, order: "item_name asc" });
+    items.value = r.map(x => ({ ...x, label: x.item_name || x.name, value: x.name, rate: x.standard_buying_rate || x.standard_rate || 0, mrp: x.mrp || x.standard_buying_rate || x.standard_rate || 0, stock_uom: x.stock_uom || "Nos", purchase_uom: x.purchase_uom || "", hsn_code: x.hsn_code || "", description: x.description || "", tax_code: x.default_purchase_tax_template || "", expense_account: x.expense_account || "" }));
   } catch { items.value = []; }
 }
 watch(() => form.supplier, async (name) => {
@@ -1486,7 +1486,7 @@ async function onItemSelect(line, opt) {
       const doc = await apiGet("Item", opt.value);
       if (doc?.description) line.description = doc.description;
       if (doc?.item_name) line.item_name = doc.item_name;
-      if (doc?.tax_code) line.tax_code = doc.tax_code;
+      if (doc?.default_purchase_tax_template) line.tax_code = doc.default_purchase_tax_template;
       if (doc?.expense_account) line.expense_account = doc.expense_account;
       if (doc?.hsn_code) line.hsn_code = doc.hsn_code;
       if (doc?.stock_uom) line._stock_uom = doc.stock_uom;
@@ -1657,9 +1657,9 @@ async function copyLastItems() {
       const codes = [...new Set(lines.value.map(l => l.item_code).filter(Boolean))];
       if (codes.length) {
         try {
-          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no", "tax_code"], filters: [["name", "in", codes]], limit: codes.length });
+          const itemRows = await apiList("Item", { fields: ["name", "has_batch_no", "default_purchase_tax_template"], filters: [["name", "in", codes]], limit: codes.length });
           const flagMap = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.has_batch_no ? 1 : 0]));
-          const taxMap  = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.tax_code || ""]));
+          const taxMap  = Object.fromEntries(itemRows.map(r2 => [r2.name, r2.default_purchase_tax_template || ""]));
           lines.value.forEach(l => {
             l.has_batch_no = flagMap[l.item_code] || 0;
             if (!l.tax_code && taxMap[l.item_code]) l.tax_code = taxMap[l.item_code];
