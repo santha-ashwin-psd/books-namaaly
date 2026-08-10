@@ -99,6 +99,15 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "over_production_qty",
+   "fieldtype": "Float",
+   "label": "Over Production Qty",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1,
+   "description": "Cumulative qty produced beyond the planned Qty to Manufacture, explicitly entered at completion time (e.g. batch yielded 1250 against a planned 1000 -- 250 recorded here). Included in produced_qty/FG stock as normal; this field exists purely so the extra is visible and reportable separately, without relying on a global over-production % setting."
+  },
+  {
    "fieldname": "col_break_wo_yield",
    "fieldtype": "Column Break",
    "label": ""

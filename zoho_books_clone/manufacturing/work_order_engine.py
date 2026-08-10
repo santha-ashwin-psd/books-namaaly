@@ -704,12 +704,30 @@ def get_job_card_scrap_items(work_order):
 def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                          scrap_items=None, batch_no=None,
                          manufacturing_date=None, expiry_date=None,
-                         close_on_loss_reconciliation=0):
+                         close_on_loss_reconciliation=0, over_production_qty=0):
     """Create & submit the Manufacture Stock Entry for a batch of production
     against this Work Order. Can be called multiple times for partial
     completions until produced_qty reaches the planned qty.
 
     qty_manufactured  -- finished-good qty actually produced this run
+    over_production_qty -- explicit qty, entered per-completion in the
+                         Complete Work Order dialog, that this run is
+                         allowed to exceed the planned qty by (e.g. planned
+                         qty is 1000, actual yield is 1250 -- the caller
+                         passes qty_manufactured=1250 (or split across runs)
+                         and over_production_qty=250 to justify the excess
+                         for THIS call only). Widens the completion cap in
+                         addition to (not instead of) Manufacturing
+                         Settings' Over-Production Allowance %, so a
+                         one-off yield variance doesn't require raising a
+                         global % that would then apply to every Work
+                         Order. Purely a per-call authorization + audit
+                         trail -- it does not change how qty_manufactured
+                         itself is consumed, costed, or moved to the FG
+                         warehouse; that happens exactly as it always has,
+                         for the full qty_manufactured amount. The
+                         cumulative total across all completions is kept
+                         on wo.over_production_qty for reporting.
     process_loss_qty  -- manual/legacy process-loss qty for this run
                          (material that never became stock — evaporation,
                          trimming, spillage etc. — logged for yield
@@ -786,8 +804,15 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
 
     qty_manufactured = flt(qty_manufactured)
     process_loss_qty = flt(process_loss_qty) + scrap_process_loss_qty
+    over_production_qty = flt(over_production_qty)
     if qty_manufactured <= 0:
         frappe.throw(_("Quantity Manufactured must be greater than zero."))
+    if over_production_qty < 0:
+        frappe.throw(_("Over Production Qty cannot be negative."))
+    if over_production_qty > qty_manufactured:
+        frappe.throw(_(
+            "Over Production Qty ({0}) cannot exceed Quantity Manufactured ({1})."
+        ).format(over_production_qty, qty_manufactured))
 
     # When a WIP warehouse is configured, consumption below is sourced from
     # it (not source_warehouse), so any row still short on transferred_qty
@@ -839,21 +864,52 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
 
     ms = _get_mfg_settings()
     over_pct = flt(ms.get("over_production_allowance_pct", 0))
-    max_allowed = flt(wo.qty) * (1.0 + over_pct / 100.0)
+    # Settings % (auto-applies to every Work Order) and the explicit
+    # per-call over_production_qty (typed once, for this batch only) are
+    # additive -- either alone can open up the cap, and together they
+    # stack. This lets a one-off yield variance be authorized right in the
+    # Complete Work Order dialog without touching the global % setting.
+    max_allowed = flt(wo.qty) * (1.0 + over_pct / 100.0) + over_production_qty
     new_total = current_produced_qty + qty_manufactured
+
+    # The actual overshoot THIS run contributes above the planned qty --
+    # i.e. how far new_total sits above wo.qty, minus how far
+    # current_produced_qty already sat above wo.qty. This is the same
+    # quantity used further down to grow the cumulative wo.over_production_qty
+    # tracker, and it's deliberately NOT the same as the raw
+    # over_production_qty argument: that argument is only a ceiling the
+    # caller is authorizing (used above to widen max_allowed), not a
+    # trustworthy measure of how much of this run is actually bonus. A run
+    # that's still partly or wholly within the planned qty must still pull
+    # material for that portion regardless of what over_production_qty was
+    # typed into the dialog -- see material_basis_qty below, which uses
+    # this_run_over_qty rather than over_production_qty for exactly that
+    # reason.
+    this_run_over_qty = (
+        max(0.0, new_total - flt(wo.qty)) - max(0.0, current_produced_qty - flt(wo.qty))
+    )
+
     if new_total > max_allowed + 0.0001:
-        if over_pct > 0:
+        if over_production_qty > 0:
             frappe.throw(_(
                 "Total produced qty ({0}) would exceed the planned qty ({1}) plus the "
-                "{2}% over-production allowance (max {3})."
+                "Over Production Qty entered ({2}) (max {3}). Increase Over Production "
+                "Qty in the Complete Work Order dialog to allow this."
+            ).format(new_total, wo.qty, over_production_qty, max_allowed))
+        elif over_pct > 0:
+            frappe.throw(_(
+                "Total produced qty ({0}) would exceed the planned qty ({1}) plus the "
+                "{2}% over-production allowance (max {3}). Enter an Over Production Qty "
+                "in the Complete Work Order dialog to allow more."
             ).format(new_total, wo.qty, over_pct, max_allowed))
         else:
             frappe.throw(_(
                 "Quantity Manufactured ({0}) exceeds the remaining planned qty ({1}). "
-                "If this run is finishing the batch and the shortfall is genuine process loss "
-                "(e.g. evaporation/trimming/spillage), check \"this completes the batch\" and "
-                "enter the loss in Process Loss / Wastage Qty instead. Otherwise, increase "
-                "Over-Production Allowance % in Manufacturing Settings to allow this."
+                "If this run genuinely produced more than planned, enter the extra in "
+                "\"Over Production Qty\" in the Complete Work Order dialog. If the "
+                "difference is process loss instead (e.g. evaporation/trimming/spillage), "
+                "check \"this completes the batch\" and enter the loss in Process Loss / "
+                "Wastage Qty instead."
             ).format(qty_manufactured, flt(wo.qty) - current_produced_qty))
 
     close_on_loss_reconciliation = bool(frappe.utils.cint(close_on_loss_reconciliation))
@@ -897,7 +953,36 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # spillage). Scaling consumption by qty_manufactured alone would under-
     # consume raw material stock any time there's process loss, leaving
     # material "in stock" on paper that was actually used up on the floor.
-    consumption_ratio = (qty_manufactured + process_loss_qty) / flt(wo.qty or 1)
+    #
+    # this_run_over_qty (computed above, from actual produced_qty history --
+    # NOT the raw over_production_qty argument) is carved OUT of this basis
+    # first: it's an explicit yield improvement -- the same raw material
+    # batch simply produced more finished units than the BOM ratio predicted
+    # (e.g. 1kg of material was transferred/issued expecting 1kg output, but
+    # the actual process yielded 6kg). It is NOT "make a bigger batch" and
+    # must never scale up how much raw material this run tries to consume --
+    # doing so would try to pull WIP/source stock for material that was
+    # never issued for the extra qty in the first place, and previously
+    # threw "Insufficient stock" for exactly that reason. material_basis_qty
+    # is what actually determines raw material AND operating cost
+    # consumption below; qty_manufactured (the full amount, over-production
+    # included) is still what gets received into the FG warehouse and what
+    # the resulting material+operating cost pool is spread across per unit
+    # (see fg_unit_rate below) -- so the bonus units simply come out
+    # cheaper per unit, which is the correct economics of a yield gain.
+    #
+    # Using this_run_over_qty here (instead of the raw over_production_qty
+    # argument) matters for two bugs it fixes: (1) a caller passing
+    # over_production_qty larger than what this run actually overshot by
+    # (e.g. mis-estimating, or a straddling run where only part of it is
+    # above wo.qty) can no longer under-consume material for units that were
+    # still within the planned qty; (2) since this_run_over_qty is derived
+    # from produced_qty history rather than trusted user input, it can never
+    # exceed qty_manufactured itself, so material_basis_qty can never go
+    # negative or silently zero out consumption for a run that's mostly or
+    # entirely within plan.
+    material_basis_qty = max(0.0, qty_manufactured - this_run_over_qty)
+    consumption_ratio = (material_basis_qty + process_loss_qty) / flt(wo.qty or 1)
 
     se = frappe.new_doc("Stock Entry")
     se.company = wo.company
@@ -981,12 +1066,16 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # Operating Cost allocation: spread the Work Order's Total Operating Cost
     # (labor/overhead from the Operations table, see work_order.py::
     # calculate_operating_cost) across the finished good, same as raw
-    # material cost is. Uses consumption_ratio (qty_manufactured +
+    # material cost is. Uses consumption_ratio (material_basis_qty +
     # process_loss_qty, scaled against wo.qty) rather than qty_manufactured
     # alone -- the time/labor behind process_loss_qty was genuinely spent
     # too, same reasoning as why raw material consumption already includes
     # it (see consumption_ratio above), so operating cost should absorb into
     # the FG that did come out on the same basis, not be under-applied.
+    # Bonus over-production qty is excluded from this basis the same way it
+    # is from material consumption -- no extra labor/machine time was spent
+    # to get the extra yield, so it shouldn't absorb extra operating cost
+    # either; it still shares in the resulting cost pool per unit below.
     #
     # Note: total_operating_cost can itself change between partial
     # completions (Actual Operating Cost rises as more Job Card time is
@@ -1019,9 +1108,9 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # into FG cost same as before; only the excess is carved out and
     # expensed via manufacturing_variance_loss instead of inflating
     # fg_unit_rate.
-    expected_loss_qty_this_run = flt(wo.process_loss_percent) / 100.0 * qty_manufactured
+    expected_loss_qty_this_run = flt(wo.process_loss_percent) / 100.0 * material_basis_qty
     abnormal_loss_qty = max(0.0, process_loss_qty - expected_loss_qty_this_run)
-    total_consumed_qty_this_run = qty_manufactured + process_loss_qty
+    total_consumed_qty_this_run = material_basis_qty + process_loss_qty
     rm_unit_cost_this_run = (
         total_consumed_cost / total_consumed_qty_this_run if total_consumed_qty_this_run > 0 else 0.0
     )
@@ -1058,6 +1147,11 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     se.operating_cost_absorbed = operating_cost_this_run
     se.manufacturing_variance_loss = manufacturing_variance_loss
     se.process_loss_qty = process_loss_qty
+    # this_run_over_qty (not the raw over_production_qty argument -- see
+    # material_basis_qty above) stored on the entry so reverse_wo_completion
+    # can roll back exactly this run's contribution to wo.over_production_qty
+    # instead of leaving it stale after a reversal.
+    se.over_production_qty = this_run_over_qty
 
     # Receive the finished good. If it's batch-tracked, pre-create the Batch
     # record first (same pattern the transaction pages use) so Stock Entry's
@@ -1125,9 +1219,20 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
             current_consumed_qty = flt(frappe.db.get_value("Work Order Item", row.name, "consumed_qty"))
             row.db_set("consumed_qty", current_consumed_qty + consume_qty, update_modified=False)
 
-    new_produced_qty = current_produced_qty + qty_manufactured
+    new_produced_qty = new_total  # == current_produced_qty + qty_manufactured
     wo.db_set("produced_qty", new_produced_qty)
     wo.db_set("process_loss_qty", current_process_loss_qty + process_loss_qty)
+    # Incremental over-production contributed by THIS run only -- already
+    # computed above (as this_run_over_qty) so material_basis_qty and this
+    # cumulative tracker always agree on how much of the run was bonus.
+    # Computed the way it is (rather than just adding qty_manufactured
+    # whenever over_production_qty was passed) so it stays correct across
+    # partial completions: a run that's still entirely within the planned
+    # qty contributes 0 here even if a caller passed a nonzero
+    # over_production_qty just to widen the cap check above.
+    current_over_qty = flt(frappe.db.get_value("Work Order", wo.name, "over_production_qty"))
+    if this_run_over_qty > 0:
+        wo.db_set("over_production_qty", current_over_qty + this_run_over_qty)
     wo.db_set("operating_cost_absorbed_total", current_operating_cost_absorbed_total + operating_cost_this_run)
     is_complete = is_final
     wo.db_set("status", "Completed" if is_complete else "In Process")
@@ -1882,6 +1987,13 @@ def reverse_manufacture_entry(work_order, stock_entry):
     the over-consumption block and the is_final OR-clause, so leaving it
     stale here would let a reversed run's loss keep counting against future
     completions.
+
+    over_production_qty IS rolled back too (by the reversed entry's own
+    over_production_qty, stored on the Stock Entry the same way
+    process_loss_qty is). It never moved any stock on its own either -- but
+    it's the cumulative figure any over-production reporting reads, so
+    leaving it stale here would permanently overstate a Work Order's
+    over-production after the very run that caused it is reversed.
     """
     if frappe.session.user == "Guest":
         frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -1927,6 +2039,7 @@ def reverse_manufacture_entry(work_order, stock_entry):
     # own fields, but read it now regardless so this doesn't depend on that.
     operating_cost_absorbed_this_entry = flt(se.operating_cost_absorbed)
     process_loss_qty_this_entry = flt(se.process_loss_qty)
+    over_production_qty_this_entry = flt(se.over_production_qty)
 
     se.flags.ignore_manufacturing_guard = True
     se.cancel()
@@ -1947,6 +2060,15 @@ def reverse_manufacture_entry(work_order, stock_entry):
     # planned qty or marking the Work Order reconciled too early.
     new_process_loss_qty = max(flt(wo.process_loss_qty) - process_loss_qty_this_entry, 0)
     wo.db_set("process_loss_qty", new_process_loss_qty)
+
+    # Roll back this run's contribution to over_production_qty too. This
+    # never moved any stock on its own (see material_basis_qty in
+    # complete_work_order), but it's the cumulative figure any over-production
+    # reporting reads -- leaving it stale here would permanently overstate
+    # how much a Work Order actually over-produced after a reversal undoes
+    # the very run that caused it.
+    new_over_production_qty = max(flt(wo.over_production_qty) - over_production_qty_this_entry, 0)
+    wo.db_set("over_production_qty", new_over_production_qty)
 
     # Defensive check for pre-migration data the v1_11 backfill couldn't
     # fully resolve: if this reversal leaves process_loss_qty > 0 on the

@@ -25,7 +25,12 @@ from unittest.mock import patch
 
 import frappe
 
-from zoho_books_clone.db.queries import get_cash_flow, get_gst_summary
+from zoho_books_clone.db.queries import (
+    get_cash_flow,
+    get_gst_summary,
+    get_gstr1_data,
+    get_gstr_summary,
+)
 from zoho_books_clone.reports.report.cash_flow_statement.cash_flow_statement import (
     execute as cash_flow_execute,
 )
@@ -141,6 +146,180 @@ class TestGetGstSummary(unittest.TestCase):
         mock_sql.return_value = rows
         result = get_gst_summary("VK Herbal", "2026-08-01", "2026-08-31")
         self.assertEqual(result, rows)
+
+    @patch.object(frappe.db, "sql")
+    def test_query_filters_to_gst_tax_types(self, mock_sql):
+        # Same contamination risk as the GSTR-3B bug: Tax Line.tax_type
+        # includes VAT/Other, and TDS deductions are stored as tax_type
+        # "Other" (see get_tds_transactions) -- must not leak in here either.
+        mock_sql.return_value = []
+        get_gst_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        query = mock_sql.call_args.args[0]
+        self.assertIn("t.tax_type", query)
+        self.assertIn("IN ('CGST', 'SGST', 'IGST', 'Cess')", query)
+
+
+class TestGetGstrSummary(unittest.TestCase):
+    """
+    Regression tests for two GSTR-3B contamination bugs:
+
+    Bug 1: Tax Line.tax_type isn't GST-exclusive (VAT/Cess/Other exist, and
+    TDS deductions are stored as tax_type "Other" -- see
+    get_tds_transactions). The output/ITC queries must filter to actual GST
+    types or TDS/VAT/Other rows inflate total_output/total_itc.
+
+    Bug 2: the taxable-value query filtered out is_return rows while
+    total_output did not (relying on credit notes' negative net_total/
+    tax_amount to net correctly instead). That mismatch broke the implied
+    tax rate in any period with credit notes -- taxable_value must include
+    returns too.
+    """
+
+    @patch.object(frappe.db, "sql")
+    def test_output_and_itc_queries_filter_to_gst_tax_types(self, mock_sql):
+        mock_sql.return_value = []
+        get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        output_query = mock_sql.call_args_list[0].args[0]
+        itc_query = mock_sql.call_args_list[1].args[0]
+        for query in (output_query, itc_query):
+            self.assertIn("tl.tax_type", query)
+            self.assertIn("IN ('CGST', 'SGST', 'IGST', 'Cess')", query)
+
+    @patch.object(frappe.db, "sql")
+    def test_taxable_value_query_does_not_exclude_returns(self, mock_sql):
+        mock_sql.return_value = []
+        get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        taxable_query = mock_sql.call_args_list[2].args[0]
+        self.assertNotIn("is_return", taxable_query)
+
+    @patch.object(frappe.db, "sql")
+    def test_totals_ignore_non_gst_tax_lines(self, mock_sql):
+        # Simulate the filtered queries already excluding a TDS ("Other")
+        # row -- if the SQL-level filter from the previous test ever
+        # regresses, this still catches contamination reaching the totals.
+        mock_sql.side_effect = [
+            [frappe._dict(tax_type="CGST", description="CGST", amount=900, invoice_count=2)],
+            [frappe._dict(tax_type="IGST", description="IGST", amount=400, invoice_count=1)],
+            [frappe._dict(taxable_value=10000)],
+        ]
+        result = get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(result["totals"]["total_output"], 900)
+        self.assertEqual(result["totals"]["total_itc"], 400)
+        self.assertEqual(result["totals"]["net_tax_liability"], 500)
+        self.assertEqual(result["taxable_value"], 10000)
+
+
+class TestGetGstr1Data(unittest.TestCase):
+    """
+    Regression tests for GSTR-1 tax-line contamination: the per-invoice and
+    aggregate total_tax must come from GST-only Tax Line rows, not the
+    stored si.total_tax field (which sums every Tax Line row including TDS/
+    VAT/Other) and not an unfiltered tax_rows query.
+    """
+
+    @patch.object(frappe.db, "sql")
+    def test_tax_rows_query_filters_to_gst_tax_types(self, mock_sql):
+        mock_sql.return_value = []
+        get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")
+        tax_rows_query = mock_sql.call_args_list[1].args[0]
+        self.assertIn("IN ('CGST', 'SGST', 'IGST', 'Cess')", tax_rows_query)
+
+    @patch.object(frappe.db, "sql")
+    def test_invoice_total_tax_recomputed_from_filtered_tax_lines(self, mock_sql):
+        # si.total_tax (stored) is contaminated with a TDS line ("Other",
+        # not returned by the now-filtered tax_rows query) -- the invoice's
+        # effective total_tax must reflect only the GST lines actually
+        # returned, not the stored field.
+        mock_sql.side_effect = [
+            [frappe._dict(
+                name="SINV-0001", posting_date="2026-08-05",
+                customer="Acme Pharma", customer_name="Acme Pharma",
+                customer_gstin="29AAAAA0000A1Z5", place_of_supply="29-Karnataka",
+                net_total=10000, total_tax=1900,  # stored field: 1800 GST + 100 TDS
+                grand_total=11900, is_return=0, return_against=None,
+            )],
+            [
+                frappe._dict(parent="SINV-0001", tax_type="CGST",
+                              description="CGST", rate=9, tax_amount=900),
+                frappe._dict(parent="SINV-0001", tax_type="SGST",
+                              description="SGST", rate=9, tax_amount=900),
+            ],
+            [],
+        ]
+        result = get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(len(result["b2b"]), 1)
+        self.assertEqual(result["b2b"][0]["total_tax"], 1800)
+        self.assertEqual(result["totals"]["total_tax"], 1800)
+
+    @patch.object(frappe.db, "sql")
+    def test_credit_note_with_gstin_routed_to_cdnr_not_b2b(self, mock_sql):
+        mock_sql.side_effect = [
+            [frappe._dict(
+                name="SINV-0002", posting_date="2026-08-06",
+                customer="Acme Pharma", customer_name="Acme Pharma",
+                customer_gstin="29AAAAA0000A1Z5", place_of_supply="29-Karnataka",
+                net_total=-2000, total_tax=-360,
+                grand_total=-2360, is_return=1, return_against="SINV-0001",
+            )],
+            [],
+            [],
+        ]
+        result = get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(len(result["cdnr"]), 1)
+        self.assertEqual(len(result["b2b"]), 0)
+        self.assertEqual(result["totals"]["cdnr_count"], 1)
+
+    @patch.object(frappe.db, "sql")
+    def test_credit_note_without_gstin_routed_to_cdnur_not_dropped(self, mock_sql):
+        # Regression test: unregistered (B2C) credit notes used to be
+        # silently skipped entirely -- present in neither cdnr nor b2c, with
+        # no trace anywhere in the return. They must land in cdnur instead.
+        mock_sql.side_effect = [
+            [frappe._dict(
+                name="SINV-0003", posting_date="2026-08-07",
+                customer="Walk-in Customer", customer_name="Walk-in Customer",
+                customer_gstin="", place_of_supply="29-Karnataka",
+                net_total=-500, total_tax=-90,
+                grand_total=-590, is_return=1, return_against="SINV-0002",
+            )],
+            [],
+            [],
+        ]
+        result = get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(len(result["cdnur"]), 1)
+        self.assertEqual(result["cdnur"][0]["name"], "SINV-0003")
+        self.assertEqual(result["totals"]["cdnur_count"], 1)
+        self.assertEqual(len(result["b2c"]), 0)
+        self.assertEqual(len(result["cdnr"]), 0)
+
+    @patch.object(frappe.db, "sql")
+    def test_cdnur_not_counted_in_taxable_or_tax_totals(self, mock_sql):
+        # Mirrors how cdnr already stays out of total_taxable/total_tax --
+        # both credit-note tables report separately rather than netting into
+        # the forward-supply totals, so cdnur must follow the same rule.
+        mock_sql.side_effect = [
+            [
+                frappe._dict(
+                    name="SINV-0004", posting_date="2026-08-08",
+                    customer="Retail Buyer", customer_name="Retail Buyer",
+                    customer_gstin="", place_of_supply="29-Karnataka",
+                    net_total=1000, total_tax=180,
+                    grand_total=1180, is_return=0, return_against=None,
+                ),
+                frappe._dict(
+                    name="SINV-0005", posting_date="2026-08-09",
+                    customer="Retail Buyer", customer_name="Retail Buyer",
+                    customer_gstin="", place_of_supply="29-Karnataka",
+                    net_total=-1000, total_tax=-180,
+                    grand_total=-1180, is_return=1, return_against="SINV-0004",
+                ),
+            ],
+            [],
+            [],
+        ]
+        result = get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(result["totals"]["total_taxable"], 1000)
+        self.assertEqual(result["totals"]["total_tax"], 180)
 
 
 class TestCashFlowWrapper(unittest.TestCase):

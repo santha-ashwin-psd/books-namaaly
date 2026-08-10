@@ -849,5 +849,298 @@ class TestScrapSplitRowInheritsSubAssemblyOrigin(unittest.TestCase):
         self.assertEqual(new_row["sub_assembly_boms"], "")
 
 
+# ---------------------------------------------------------------------------
+# Multi-partial-completion tests for over_production_qty cumulative tracking
+#
+# Replicates (in isolation, the same way the classes above replicate
+# complete_work_order's arithmetic) the exact three lines from
+# complete_work_order that matter here:
+#
+#   material_basis_qty  = max(0.0, qty_manufactured - over_production_qty)
+#   consumption_ratio   = (material_basis_qty + process_loss_qty) / wo.qty
+#   this_run_over_qty   = max(0, new_produced_qty - wo.qty)
+#                          - max(0, current_produced_qty - wo.qty)
+#
+# this_run_over_qty is deliberately NOT "credit whatever over_production_qty
+# was passed in" -- it's derived from how far cumulative produced_qty sits
+# above wo.qty, before vs. after this run. That's what's supposed to make it
+# safe across an arbitrary sequence of partial completions, and is exactly
+# what these tests check.
+# ---------------------------------------------------------------------------
+
+class _FakeWorkOrderState:
+    """Minimal stand-in for the persisted Work Order fields that
+    complete_work_order reads/writes across calls: produced_qty and
+    over_production_qty. One instance represents one WO across its whole
+    completion history, the same way the real DB row does.
+
+    complete() replicates the CURRENT (post-fix) engine logic: the material
+    basis is reduced by this_run_over_qty (derived from produced_qty
+    history), never by the raw over_production_qty argument directly. It
+    also replicates the validation that over_production_qty cannot exceed
+    qty_manufactured."""
+
+    def __init__(self, planned_qty):
+        self.planned_qty = flt(planned_qty)
+        self.produced_qty = 0.0
+        self.over_production_qty = 0.0
+
+    def complete(self, qty_manufactured, over_production_qty=0.0, process_loss_qty=0.0):
+        """Runs one completion against this WO, mutating state exactly as
+        complete_work_order's db_set calls do, and returns a dict of the
+        per-run values a caller/test would want to assert on."""
+        qty_manufactured = flt(qty_manufactured)
+        over_production_qty = flt(over_production_qty)
+        process_loss_qty = flt(process_loss_qty)
+
+        if over_production_qty < 0:
+            raise ValueError("Over Production Qty cannot be negative.")
+        if over_production_qty > qty_manufactured:
+            raise ValueError("Over Production Qty cannot exceed Quantity Manufactured.")
+
+        current_produced_qty = self.produced_qty
+        new_produced_qty = current_produced_qty + qty_manufactured
+        this_run_over_qty = (
+            max(0.0, new_produced_qty - self.planned_qty)
+            - max(0.0, current_produced_qty - self.planned_qty)
+        )
+
+        # Post-fix: material basis is reduced by the actual overshoot
+        # (this_run_over_qty), not the raw over_production_qty argument.
+        material_basis_qty = max(0.0, qty_manufactured - this_run_over_qty)
+        consumption_ratio = (material_basis_qty + process_loss_qty) / (self.planned_qty or 1)
+
+        self.produced_qty = new_produced_qty
+        if this_run_over_qty > 0:
+            self.over_production_qty += this_run_over_qty
+
+        return {
+            "material_basis_qty": material_basis_qty,
+            "consumption_ratio": consumption_ratio,
+            "this_run_over_qty": this_run_over_qty,
+            "new_produced_qty": new_produced_qty,
+            "cumulative_over_production_qty": self.over_production_qty,
+        }
+
+
+class TestOverProductionMultiPartialCompletion(unittest.TestCase):
+
+    def test_single_run_matches_simple_case(self):
+        """Sanity check against the scenario from the spec: WO qty=1000,
+        one completion of 1250 (all in one run, over_production_qty=250)."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        r = wo.complete(qty_manufactured=1250, over_production_qty=250)
+        self.assertAlmostEqual(r["material_basis_qty"], 1000.0)
+        self.assertAlmostEqual(r["consumption_ratio"], 1.0)
+        self.assertAlmostEqual(r["this_run_over_qty"], 250.0)
+        self.assertAlmostEqual(wo.over_production_qty, 250.0)
+
+    def test_two_runs_first_under_plan_second_carries_over_production(self):
+        """Run 1: 600/1000, no over-production -- shouldn't touch the
+        tracker. Run 2: 650 more (total 1250) with over_production_qty=250
+        declared for this run only."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+
+        r1 = wo.complete(qty_manufactured=600, over_production_qty=0)
+        self.assertAlmostEqual(r1["material_basis_qty"], 600.0)
+        self.assertAlmostEqual(r1["consumption_ratio"], 0.6)
+        self.assertAlmostEqual(r1["this_run_over_qty"], 0.0)
+        self.assertAlmostEqual(wo.over_production_qty, 0.0)
+
+        r2 = wo.complete(qty_manufactured=650, over_production_qty=250)
+        # material basis for run 2: 650 manufactured - 250 declared bonus = 400
+        self.assertAlmostEqual(r2["material_basis_qty"], 400.0)
+        self.assertAlmostEqual(r2["consumption_ratio"], 0.4)
+        self.assertAlmostEqual(r2["new_produced_qty"], 1250.0)
+        self.assertAlmostEqual(r2["this_run_over_qty"], 250.0)
+        self.assertAlmostEqual(wo.over_production_qty, 250.0)
+        self.assertAlmostEqual(wo.produced_qty, 1250.0)
+
+    def test_over_production_qty_passed_but_run_stays_under_plan_contributes_zero(self):
+        """A run can pass a nonzero over_production_qty (e.g. to widen the
+        cap check) and still land entirely within the planned qty once
+        combined with what's already produced -- the cumulative tracker
+        must NOT credit anything in that case, only the actual overshoot."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=500, over_production_qty=0)  # produced=500
+
+        # This run declares over_production_qty=100 (maybe just to be safe),
+        # but 500 + 300 = 800 is still under the 1000 plan -- no actual
+        # overshoot happened.
+        r = wo.complete(qty_manufactured=300, over_production_qty=100)
+        self.assertAlmostEqual(r["new_produced_qty"], 800.0)
+        self.assertAlmostEqual(r["this_run_over_qty"], 0.0)
+        self.assertAlmostEqual(wo.over_production_qty, 0.0)
+        # FIXED: material_basis_qty is no longer reduced by the raw
+        # over_production_qty argument -- since this run didn't actually
+        # overshoot (this_run_over_qty=0), the full 300 manufactured still
+        # pulls material. Previously this returned 200, silently under-
+        # consuming raw material for 100 units that were still within plan.
+        self.assertAlmostEqual(r["material_basis_qty"], 300.0)
+        self.assertAlmostEqual(r["consumption_ratio"], 0.3)
+
+    def test_run_that_straddles_the_planned_qty_boundary(self):
+        """Run pushes produced_qty from under plan to over plan within a
+        single call -- only the portion that actually crosses the line
+        should count as over-production, even though the whole
+        over_production_qty argument was passed for the call."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=900, over_production_qty=0)  # produced=900
+
+        # This run: 200 manufactured, produced goes 900 -> 1100.
+        # Caller declares over_production_qty=100 (their estimate of the
+        # bonus). Only 100 of it actually sits above the 1000 line.
+        r = wo.complete(qty_manufactured=200, over_production_qty=100)
+        self.assertAlmostEqual(r["new_produced_qty"], 1100.0)
+        self.assertAlmostEqual(r["this_run_over_qty"], 100.0)
+        self.assertAlmostEqual(wo.over_production_qty, 100.0)
+        # Declared over_production_qty happens to equal the real overshoot
+        # here, so material_basis_qty comes out the same either way: 100 of
+        # the 200 units still pull material (the other 100 are genuinely
+        # bonus). See the next test for a case where the declared amount is
+        # WRONG relative to the real straddle point.
+        self.assertAlmostEqual(r["material_basis_qty"], 100.0)
+
+    def test_straddling_run_with_overstated_declared_over_qty_still_consumes_correctly(self):
+        """Same straddle as above, but the caller mis-declares the WHOLE
+        run as bonus (over_production_qty=qty_manufactured) when only part
+        of it is actually above plan. FIXED: material_basis_qty must still
+        be based on the real overshoot (100), not the overstated declaration
+        (200) -- otherwise this run would consume zero raw material despite
+        100 of its units still being within the planned qty."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=900, over_production_qty=0)  # produced=900
+
+        r = wo.complete(qty_manufactured=200, over_production_qty=200)
+        self.assertAlmostEqual(r["new_produced_qty"], 1100.0)
+        # Real overshoot is still only 100 (900->1100 crosses 1000 by 100),
+        # regardless of the caller declaring the full 200 as bonus.
+        self.assertAlmostEqual(r["this_run_over_qty"], 100.0)
+        self.assertAlmostEqual(wo.over_production_qty, 100.0)
+        # FIXED: material_basis_qty is 100 (200 - real overshoot of 100),
+        # not 0 (200 - declared 200). Raw material is still pulled for the
+        # 100 units that were genuinely within the planned qty.
+        self.assertAlmostEqual(r["material_basis_qty"], 100.0)
+        self.assertAlmostEqual(r["consumption_ratio"], 0.1)
+
+    def test_over_production_qty_exceeding_qty_manufactured_is_rejected(self):
+        """FIXED: previously ungualified input -- over_production_qty could
+        exceed qty_manufactured with no validation, driving material_basis_qty
+        to 0 via max(0, ...) clamping and silently zeroing raw material
+        consumption for a real production run. Now rejected outright."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        with self.assertRaises(ValueError):
+            wo.complete(qty_manufactured=25, over_production_qty=30)
+
+    def test_over_production_qty_equal_to_qty_manufactured_allowed_when_all_bonus(self):
+        """The boundary case (over_production_qty == qty_manufactured) is
+        valid input on its own -- it's only wrong when the run also
+        straddles the plan line. When the WO is already fully at/over plan,
+        the whole run legitimately IS bonus."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=1000, over_production_qty=0)  # exactly at plan
+        r = wo.complete(qty_manufactured=50, over_production_qty=50)
+        self.assertAlmostEqual(r["this_run_over_qty"], 50.0)
+        self.assertAlmostEqual(r["material_basis_qty"], 0.0)
+
+    def test_three_runs_over_production_declared_on_each(self):
+        """Three partial completions, each declaring its own bonus, none of
+        which straddle the plan boundary once combined -- cumulative
+        tracker should just sum them."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+
+        wo.complete(qty_manufactured=1000, over_production_qty=0)   # exactly at plan
+        r2 = wo.complete(qty_manufactured=100, over_production_qty=100)  # +100 over
+        r3 = wo.complete(qty_manufactured=150, over_production_qty=150)  # +150 over
+
+        self.assertAlmostEqual(r2["this_run_over_qty"], 100.0)
+        self.assertAlmostEqual(r3["this_run_over_qty"], 150.0)
+        self.assertAlmostEqual(wo.over_production_qty, 250.0)
+        self.assertAlmostEqual(wo.produced_qty, 1250.0)
+        # each run's material_basis_qty pulled material only for its own
+        # declared non-bonus portion
+        self.assertAlmostEqual(r2["material_basis_qty"], 0.0)
+        self.assertAlmostEqual(r3["material_basis_qty"], 0.0)
+
+    def test_cumulative_tracker_never_double_counts_across_many_small_runs(self):
+        """Regression-style check: many small over-production runs after
+        plan is reached should sum to exactly the total bonus produced, with
+        no drift from floating point or from re-deriving via the max()
+        subtraction each time."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=1000, over_production_qty=0)
+
+        bonus_runs = [10, 25, 5, 40, 12.5, 7.5]
+        for bonus in bonus_runs:
+            wo.complete(qty_manufactured=bonus, over_production_qty=bonus)
+
+        self.assertAlmostEqual(wo.over_production_qty, sum(bonus_runs))
+        self.assertAlmostEqual(wo.produced_qty, 1000 + sum(bonus_runs))
+
+    def test_final_run_exactly_closes_the_boundary_gap(self):
+        """current_produced_qty sits just under plan; this run's
+        over_production_qty is larger than needed to close the gap --
+        this_run_over_qty should only count what's above wo.qty, not the
+        full declared amount."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=950, over_production_qty=0)  # produced=950
+
+        # 100 manufactured this run (950 -> 1050), but caller declares
+        # over_production_qty=100 (i.e. claims the whole run is bonus,
+        # perhaps mis-estimating). Only 50 of it is actually above plan.
+        r = wo.complete(qty_manufactured=100, over_production_qty=100)
+        self.assertAlmostEqual(r["new_produced_qty"], 1050.0)
+        self.assertAlmostEqual(r["this_run_over_qty"], 50.0)
+        self.assertAlmostEqual(wo.over_production_qty, 50.0)
+
+
+# ---------------------------------------------------------------------------
+# reverse_wo_completion: over_production_qty rollback
+#
+# Mirrors TestLossReconciliation's process_loss_qty reversal tests --
+# over_production_qty is stored per-Stock-Entry (se.over_production_qty,
+# set from this_run_over_qty in complete_work_order) for exactly the same
+# reason process_loss_qty is: so reversing one completion rolls back only
+# that run's contribution to the Work Order's cumulative
+# over_production_qty, not the whole field.
+# ---------------------------------------------------------------------------
+
+class TestOverProductionReversal(unittest.TestCase):
+
+    def _rolled_back_over_production_qty(self, current_cumulative, this_entry_amount):
+        """Replicates: new_over_production_qty = max(wo.over_production_qty -
+        se.over_production_qty, 0) from reverse_wo_completion."""
+        return max(flt(current_cumulative) - flt(this_entry_amount), 0)
+
+    def test_reversal_rolls_back_this_entrys_over_production(self):
+        self.assertAlmostEqual(self._rolled_back_over_production_qty(250, 250), 0)
+
+    def test_reversal_leaves_other_entries_over_production_intact(self):
+        # Two completions each contributed 100 over-production (cumulative
+        # 200); reversing only one must leave the other's untouched.
+        self.assertAlmostEqual(self._rolled_back_over_production_qty(200, 100), 100)
+
+    def test_reversal_never_goes_negative(self):
+        self.assertAlmostEqual(self._rolled_back_over_production_qty(50, 250), 0)
+
+    def test_full_scenario_reversal_matches_forward_completion(self):
+        """End-to-end check tying this together with
+        TestOverProductionMultiPartialCompletion: complete a WO with a
+        bonus run, then reverse that exact run -- the WO's
+        over_production_qty should return to exactly what it was before
+        that run, not stay stuck at the post-completion value."""
+        wo = _FakeWorkOrderState(planned_qty=1000)
+        wo.complete(qty_manufactured=1000, over_production_qty=0)  # produced=1000
+        r = wo.complete(qty_manufactured=250, over_production_qty=250)  # +250 over
+        self.assertAlmostEqual(wo.over_production_qty, 250.0)
+
+        # Reversing that run: se.over_production_qty would have stored
+        # r["this_run_over_qty"] (250) at completion time.
+        after_reversal = self._rolled_back_over_production_qty(
+            wo.over_production_qty, r["this_run_over_qty"]
+        )
+        self.assertAlmostEqual(after_reversal, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

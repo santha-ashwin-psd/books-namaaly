@@ -67,6 +67,9 @@
           <button class="g1-tab" :class="{active:section==='cdnr'}" @click="section='cdnr';search=''">
             CDNR <span class="g1-tab-ct">{{ data ? data.cdnr.length : 0 }}</span>
           </button>
+          <button class="g1-tab" :class="{active:section==='cdnur'}" @click="section='cdnur';search=''">
+            CDNUR <span class="g1-tab-ct">{{ data ? data.cdnur.length : 0 }}</span>
+          </button>
           <button class="g1-tab" :class="{active:section==='hsn'}" @click="section='hsn';search=''">
             HSN Summary <span class="g1-tab-ct">{{ data ? data.hsn_summary.length : 0 }}</span>
           </button>
@@ -181,6 +184,38 @@
       </div>
 
       <!-- HSN table -->
+      <div v-else-if="section==='cdnur'" class="g1-table-wrap">
+        <table class="g1-table">
+          <thead><tr>
+            <th @click="sortBy('name')" class="sortable">Note # <span v-html="sortArrow('name')"></span></th>
+            <th @click="sortBy('posting_date')" class="sortable">Date <span v-html="sortArrow('posting_date')"></span></th>
+            <th>Customer</th>
+            <th>Against Invoice</th>
+            <th class="ta-r">Taxable</th>
+            <th class="ta-r">Tax</th>
+            <th class="ta-r">Note Value</th>
+          </tr></thead>
+          <tbody>
+            <template v-if="loading">
+              <tr v-for="n in 4" :key="n"><td colspan="7"><div class="g1-shimmer"></div></td></tr>
+            </template>
+            <template v-else>
+              <tr v-for="inv in paginatedRows" :key="inv.name" class="g1-row">
+                <td data-label="Note #"><span class="g1-code cdnr-code">{{ inv.name }}</span></td>
+                <td data-label="Date" class="mono muted">{{ fmtDate(inv.posting_date) }}</td>
+                <td data-label="Customer" class="fw5">{{ inv.customer_name || inv.customer }}</td>
+                <td data-label="Against Invoice" class="mono muted">{{ inv.return_against || '—' }}</td>
+                <td data-label="Taxable" class="ta-r mono">{{ fmtCur(inv.net_total) }}</td>
+                <td data-label="Tax" class="ta-r mono fw6">{{ fmtCur(inv.total_tax) }}</td>
+                <td data-label="Note Value" class="ta-r mono fw6 cdnr-code">{{ fmtCur(inv.grand_total) }}</td>
+              </tr>
+              <tr v-if="!filteredRows.length"><td colspan="7" class="g1-empty">No credit notes against unregistered customers for this period</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- HSN table -->
       <div v-else-if="section==='hsn'" class="g1-table-wrap">
         <table class="g1-table">
           <thead><tr>
@@ -270,17 +305,19 @@ const noHsnCount = computed(() => {
 });
 
 const searchPlaceholder = computed(() => {
-  if (section.value === "hsn")  return "Search HSN code…";
-  if (section.value === "cdnr") return "Search note # or GSTIN…";
+  if (section.value === "hsn")   return "Search HSN code…";
+  if (section.value === "cdnr")  return "Search note # or GSTIN…";
+  if (section.value === "cdnur") return "Search note #…";
   return "Search invoice # or customer…";
 });
 
 const activeRows = computed(() => {
   if (!data.value) return [];
-  if (section.value === "b2b")  return data.value.b2b;
-  if (section.value === "b2c")  return data.value.b2c;
-  if (section.value === "cdnr") return data.value.cdnr;
-  if (section.value === "hsn")  return data.value.hsn_summary;
+  if (section.value === "b2b")   return data.value.b2b;
+  if (section.value === "b2c")   return data.value.b2c;
+  if (section.value === "cdnr")  return data.value.cdnr;
+  if (section.value === "cdnur") return data.value.cdnur;
+  if (section.value === "hsn")   return data.value.hsn_summary;
   return [];
 });
 
@@ -347,6 +384,7 @@ function exportCSV() {
     ...data.value.b2b.map(i=>["B2B",i.name,i.posting_date,i.customer_name||i.customer,i.customer_gstin||"",i.place_of_supply||"",flt(i.net_total),flt(i.total_tax),flt(i.grand_total)]),
     ...data.value.b2c.map(i=>["B2C",i.name,i.posting_date,i.customer_name||i.customer,"",i.place_of_supply||"",flt(i.net_total),flt(i.total_tax),flt(i.grand_total)]),
     ...data.value.cdnr.map(i=>["CDNR",i.name,i.posting_date,i.customer_name||i.customer,i.customer_gstin||"",i.place_of_supply||"",flt(i.net_total),flt(i.total_tax),flt(i.grand_total)]),
+    ...data.value.cdnur.map(i=>["CDNUR",i.name,i.posting_date,i.customer_name||i.customer,"",i.place_of_supply||"",flt(i.net_total),flt(i.total_tax),flt(i.grand_total)]),
     [],[" HSN Code","Invoice Count","Taxable Value"],
     ...data.value.hsn_summary.map(h=>[h.hsn_code,h.invoice_count,flt(h.taxable_value)]),
   ];

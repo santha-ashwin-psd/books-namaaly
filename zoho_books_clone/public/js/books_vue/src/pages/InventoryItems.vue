@@ -290,7 +290,7 @@ const tabs = [
 const list       = ref([]);
 const loading    = ref(true);
 const search     = ref("");
-const filterTab  = ref("all");
+const filterTab  = ref("active");
 const viewMode   = ref(window.innerWidth <= 480 ? "grid" : "table");
 const deleting   = ref(false);
 const showDel    = ref(false);

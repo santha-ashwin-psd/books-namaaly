@@ -469,6 +469,7 @@ def get_gst_summary(company: str, from_date: str, to_date: str) -> list[dict]:
           AND si.docstatus      = 1
           AND si.posting_date   BETWEEN %(from_date)s AND %(to_date)s
           AND t.tax_amount      != 0
+          AND t.tax_type        IN ('CGST', 'SGST', 'IGST', 'Cess')
         GROUP BY tax_type
         ORDER BY tax_type
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
@@ -1240,6 +1241,9 @@ def get_gstr_summary(company: str, from_date: str, to_date: str) -> dict:
     {"tax_type": str, "amount": float} rows plus a totals dict.
     """
     # ── Output tax (from Sales Invoices) ──────────────────────────────────────
+    # Tax Line.tax_type also carries non-GST rows (VAT/Other) -- notably TDS
+    # deductions, which are stored as tax_type "Other" (see get_tds_transactions).
+    # GSTR-3B must only ever total actual GST components.
     output_rows = frappe.db.sql("""
         SELECT
             COALESCE(NULLIF(tl.tax_type, ''), tl.description) AS tax_type,
@@ -1252,6 +1256,7 @@ def get_gstr_summary(company: str, from_date: str, to_date: str) -> dict:
         WHERE si.company        = %(company)s
           AND si.docstatus      = 1
           AND si.posting_date   BETWEEN %(from_date)s AND %(to_date)s
+          AND tl.tax_type       IN ('CGST', 'SGST', 'IGST', 'Cess')
         GROUP BY tax_type, tl.description
         ORDER BY tax_type
     """, {"company": company, "from_date": from_date, "to_date": to_date},
@@ -1270,6 +1275,7 @@ def get_gstr_summary(company: str, from_date: str, to_date: str) -> dict:
         WHERE pi.company        = %(company)s
           AND pi.docstatus      = 1
           AND pi.posting_date   BETWEEN %(from_date)s AND %(to_date)s
+          AND tl.tax_type       IN ('CGST', 'SGST', 'IGST', 'Cess')
         GROUP BY tax_type, tl.description
         ORDER BY tax_type
     """, {"company": company, "from_date": from_date, "to_date": to_date},
@@ -1278,11 +1284,15 @@ def get_gstr_summary(company: str, from_date: str, to_date: str) -> dict:
     total_output = sum(flt(r.amount) for r in output_rows)
     total_itc    = sum(flt(r.amount) for r in itc_rows)
 
-    # Taxable value = sum of net_total on outward SIs for the period
+    # Taxable value = net sum of net_total on outward SIs for the period.
+    # Credit notes carry negative net_total/tax_amount by convention (see
+    # sales_invoice.py), the same convention total_output relies on to net
+    # correctly -- so this must NOT filter out is_return rows, or the implied
+    # tax rate stops reconciling in any period containing credit notes.
     taxable_row = frappe.db.sql("""
         SELECT COALESCE(SUM(net_total), 0) AS taxable_value
         FROM `tabSales Invoice`
-        WHERE company = %(company)s AND docstatus = 1 AND is_return = 0
+        WHERE company = %(company)s AND docstatus = 1
           AND posting_date BETWEEN %(from_date)s AND %(to_date)s
     """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)
     taxable_value = flt(taxable_row[0].taxable_value) if taxable_row else 0.0
@@ -1563,6 +1573,7 @@ def get_gstr1_data(company: str, from_date: str, to_date: str) -> dict:
     - b2b: invoices with customer GSTIN (registered buyers)
     - b2c: invoices without GSTIN (unregistered / consumer)
     - cdnr: credit notes for B2B customers
+    - cdnur: credit/debit notes for unregistered (B2C) customers
     - hsn_summary: HSN-wise taxable + tax amounts
     """
     params = {"company": company, "from_date": from_date, "to_date": to_date}
@@ -1581,13 +1592,16 @@ def get_gstr1_data(company: str, from_date: str, to_date: str) -> dict:
         ORDER BY si.posting_date, si.name
     """, params, as_dict=True)
 
-    # Tax lines for each invoice
+    # Tax lines for each invoice. GST-only -- Tax Line rows also carry TDS
+    # (tax_type "Other") and other non-GST deductions (see get_tds_transactions),
+    # which must not leak into the GSTR-1 tax totals.
     tax_rows = frappe.db.sql("""
         SELECT tl.parent, tl.tax_type, tl.description, tl.rate, tl.tax_amount
         FROM `tabTax Line` tl
         JOIN `tabSales Invoice` si ON si.name = tl.parent AND tl.parenttype = 'Sales Invoice'
         WHERE si.company = %(company)s AND si.docstatus = 1
           AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+          AND tl.tax_type IN ('CGST', 'SGST', 'IGST', 'Cess')
     """, params, as_dict=True)
 
     taxes_by_inv = {}
@@ -1609,13 +1623,24 @@ def get_gstr1_data(company: str, from_date: str, to_date: str) -> dict:
         ORDER BY taxable_value DESC
     """, params, as_dict=True)
 
-    b2b, b2c, cdnr = [], [], []
+    b2b, b2c, cdnr, cdnur = [], [], [], []
     for inv in invoices:
         inv["taxes"] = taxes_by_inv.get(inv.name, [])
+        # si.total_tax is the stored field and sums ALL Tax Line rows on the
+        # invoice, including non-GST ones (TDS, etc.) -- override it with the
+        # GST-only figure derived from the filtered tax_rows query above so
+        # nothing downstream (UI, totals) reads the contaminated value.
+        inv["total_tax"] = sum(flt(t.tax_amount) for t in inv["taxes"])
         if inv.is_return:
             if inv.customer_gstin:
                 cdnr.append(inv)
-            # Skip unregistered credit notes (B2CS debit note — rare, omit for now)
+            else:
+                # Credit/debit notes against unregistered (B2C) customers.
+                # GSTR-1 has a dedicated CDNUR table for exactly this --
+                # these used to be silently dropped, which understated the
+                # period's total credit-note value with no trace of them
+                # anywhere in the return.
+                cdnur.append(inv)
         else:
             if inv.customer_gstin:
                 b2b.append(inv)
@@ -1629,11 +1654,13 @@ def get_gstr1_data(company: str, from_date: str, to_date: str) -> dict:
         "b2b": [dict(r) for r in b2b],
         "b2c": [dict(r) for r in b2c],
         "cdnr": [dict(r) for r in cdnr],
+        "cdnur": [dict(r) for r in cdnur],
         "hsn_summary": [dict(r) for r in hsn_rows],
         "totals": {
             "b2b_count": len(b2b),
             "b2c_count": len(b2c),
             "cdnr_count": len(cdnr),
+            "cdnur_count": len(cdnur),
             "total_taxable": total_taxable,
             "total_tax": total_tax,
         },

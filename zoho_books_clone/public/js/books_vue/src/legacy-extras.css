@@ -410,6 +410,18 @@
   color: #fff !important;
 }
 
+/* Fix: when a pill has BOTH .active and a status-tint class (e.g. .pill-active,
+   .pill-paid) at the same time, the two rules above have equal specificity to
+   the tint rules below, so bundle order can let the tint's color win while the
+   active rule's blue background wins — leaving invisible/mismatched text.
+   This selector combines both classes for higher specificity so the active
+   (blue-fill, white-text) state always wins outright. */
+[class*="-pill"].active[class*="pill-"] {
+  background: linear-gradient(135deg,#2563eb,#1d4ed8) !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+
 /* Status-tinted inactive pills */
 [class*="-pill"].pill-draft     { background: linear-gradient(135deg,#f9fafb,#fff) !important; border-color:#e5e7eb !important; color:#6b7280; }
 [class*="-pill"].pill-sent      { background: linear-gradient(135deg,#ecfeff,#fff) !important; border-color:#a5f3fc !important; color:#0891b2; }

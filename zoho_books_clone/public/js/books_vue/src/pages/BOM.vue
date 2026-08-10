@@ -41,6 +41,7 @@
             <span style="font-size:12px;color:var(--bx-muted)">BOM Cost:</span>
             <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--bx-mfgB)">{{ INR(row.total_cost) }}</span>
             <span v-if="row.is_default" class="bomx-default-tag">Default</span>
+            <span v-if="row.bom_type" class="bomx-default-tag" :style="bomTypeStyle(row.bom_type)">{{ row.bom_type }}</span>
           </div>
         </div>
       </div>
@@ -761,6 +762,14 @@ function statusLabel(row) {
 function statusClass(row) {
   const l = statusLabel(row);
   return l === "Active" ? "badge-active" : (l === "Draft" ? "badge-draft" : "badge-obsolete");
+}
+const BOM_TYPE_COLORS = {
+  "Manufacturing": { background: "#FFF3E0", color: "#E65100" },
+  "Sub-Assembly":  { background: "#E3F2FD", color: "#1565C0" },
+  "Packing":       { background: "#F3E5F5", color: "#6A1B9A" },
+};
+function bomTypeStyle(type) {
+  return BOM_TYPE_COLORS[type] || { background: "#ECEFF1", color: "#455A64" };
 }
 
 function selectBOM(name) {

@@ -28,6 +28,7 @@
   "operating_cost_absorbed",
   "manufacturing_variance_loss",
   "process_loss_qty",
+  "over_production_qty",
   "sec_misc",
   "remarks",
   "col4",
@@ -165,6 +166,15 @@
    "description": "The process_loss_qty this specific Manufacture entry contributed to its Work Order (manual/legacy arg plus any is_process_loss scrap rows, set by complete_work_order()). Never moves stock on its own -- stored here purely so reverse_manufacture_entry() can roll back exactly this run's contribution from the Work Order's cumulative process_loss_qty instead of leaving it stale after a reversal."
   },
   {
+   "fieldname": "over_production_qty",
+   "fieldtype": "Float",
+   "label": "Over Production Qty",
+   "read_only": 1,
+   "no_copy": 1,
+   "default": "0",
+   "description": "This specific Manufacture entry's actual contribution to the Work Order's cumulative over_production_qty (this_run_over_qty, set by complete_work_order() -- not the raw over_production_qty argument the caller passed in, which may overstate the real overshoot). Stored here for the same reason as process_loss_qty above: so reverse_wo_completion() can roll back exactly this run's contribution from the Work Order's cumulative over_production_qty instead of leaving it stale (permanently overstated) after a reversal."
+  },
+  {
    "fieldname": "sec_misc",
    "fieldtype": "Section Break",
    "label": "Additional Info"
@@ -227,7 +237,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-07-01 13:54:01.978111",
+ "modified": "2026-08-10 00:00:00.000000",
  "modified_by": "santhaashwin24@gmail.com",
  "module": "Inventory",
  "name": "Stock Entry",

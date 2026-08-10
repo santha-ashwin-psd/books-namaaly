@@ -56,10 +56,17 @@ def _invoice_party_gstin(inv) -> tuple[str, str]:
         company_gstin = frappe.db.get_value("Books Company", inv.company, "gstin") or ""
     except Exception:
         pass
-    try:
-        customer_gstin = frappe.db.get_value("Customer", inv.customer, "gstin") or ""
-    except Exception:
-        pass
+    # Prefer the invoice's own customer_gstin (set at save time by
+    # Sales Invoice._set_customer_gstin, already sourced from Customer.tax_id)
+    # -- Customer has no "gstin" field, only "tax_id" ("GSTIN / Tax ID"), so
+    # querying Customer.gstin directly always raised and was swallowed by the
+    # bare except below, silently leaving to_gstin blank on every EWB.
+    customer_gstin = getattr(inv, "customer_gstin", "") or ""
+    if not customer_gstin:
+        try:
+            customer_gstin = frappe.db.get_value("Customer", inv.customer, "tax_id") or ""
+        except Exception:
+            pass
     return company_gstin, customer_gstin
 
 

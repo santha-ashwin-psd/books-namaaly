@@ -728,13 +728,18 @@
           <div>
             <div class="bomx-hf-label">Qty Manufactured <span style="color:var(--bx-red)">*</span></div>
             <input class="bomx-fi" type="number" v-model="completeForm.qty_manufactured" min="0.01" :max="maxCompletableQty" step="any" style="width:100%" :style="qtyManufacturedError ? 'border-color:var(--bx-red)' : ''"/>
-            <div class="bomx-field-hint">Remaining planned qty: {{ fmt(remainingQty) }}<span v-if="overProductionAllowancePct>0"> · up to {{ fmt(maxCompletableQty) }} allowed with the {{ overProductionAllowancePct }}% over-production allowance</span></div>
+            <div class="bomx-field-hint">Remaining planned qty: {{ fmt(remainingQty) }}</div>
             <div v-if="qtyManufacturedError" class="bomx-field-hint" style="color:var(--bx-red)">{{ qtyManufacturedError }}</div>
           </div>
           <div>
             <div class="bomx-hf-label">Process Loss / Wastage Qty</div>
             <input class="bomx-fi" type="number" v-model="completeForm.process_loss_qty" min="0" step="any" style="width:100%"/>
           </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <div class="bomx-hf-label">Over Production Qty</div>
+          <input class="bomx-fi" type="number" v-model="completeForm.over_production_qty" min="0" step="any" style="width:100%"/>
+          <div class="bomx-field-hint">Actual yield came in higher than the same raw materials were expected to produce (e.g. planned 1000, produced 1250)? Enter the extra ({{ fmt(flt(wo.qty)) }} planned{{ flt(completeForm.over_production_qty) > 0 ? `, up to ${fmt(maxCompletableQty)} allowed this run` : '' }}). It's included in Qty Manufactured above and the extra units move to the Finished Goods warehouse the same way as the rest — but no additional raw material is consumed for it (only the planned qty's worth is pulled from stock). Tracked separately on the Work Order for reporting.</div>
         </div>
         <div style="margin-bottom:14px">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
@@ -1593,6 +1598,14 @@ async function onProductionItemChange() {
 
 async function onBomChange() {
   if (!wo.value.bom) return;
+  // Default Qty to Manufacture to the selected BOM's own base quantity
+  // (e.g. a BOM defined "per 100Nos" defaults the WO to 100 instead of 1),
+  // so the breakdown loads at a 1:1 ratio out of the box. User can still
+  // edit the qty afterwards and re-load materials at the new quantity.
+  const selectedBom = bomList.value.find(b => b.name === wo.value.bom);
+  if (selectedBom && flt(selectedBom.quantity) > 0) {
+    wo.value.qty = flt(selectedBom.quantity);
+  }
   await loadFromBom();
 }
 
@@ -1919,7 +1932,13 @@ const overProductionAllowancePct = ref(0);
 const maxCompletableQty = computed(() => {
   const planned = flt(wo.value.qty);
   const allowance = planned * (flt(overProductionAllowancePct.value) / 100);
-  return Math.max(0, planned + allowance - flt(wo.value.produced_qty));
+  // The Over Production Qty typed in the modal (this run only) stacks on
+  // top of whatever Manufacturing Settings' % allowance already opens up,
+  // rather than requiring that global % to be raised for a one-off yield
+  // variance -- e.g. a batch planned at 1000 that actually yields 1250 is
+  // handled by entering 250 here for just this completion.
+  const explicitOver = flt(completeForm.value.over_production_qty);
+  return Math.max(0, planned + allowance + explicitOver - flt(wo.value.produced_qty));
 });
 // Whether there's still any completable qty left, INCLUDING what the
 // over-production allowance opens up once produced_qty reaches the planned
@@ -1934,14 +1953,13 @@ const canCompleteMore = computed(() => maxCompletableQty.value > 0.0001);
 const qtyManufacturedError = computed(() => {
   const qty = flt(completeForm.value.qty_manufactured);
   if (qty > maxCompletableQty.value + 0.0001) {
-    if (overProductionAllowancePct.value > 0) {
-      return `Cannot exceed ${fmt(maxCompletableQty.value)} (planned qty + ${overProductionAllowancePct.value}% over-production allowance)`;
+    if (flt(completeForm.value.over_production_qty) > 0 || overProductionAllowancePct.value > 0) {
+      return `Cannot exceed ${fmt(maxCompletableQty.value)} (planned qty + Over Production Qty${overProductionAllowancePct.value>0 ? ` + ${overProductionAllowancePct.value}% allowance` : ""}). Increase Over Production Qty below to allow more.`;
     }
-    // No over-production allowance configured -- if this shortfall is
-    // actually process loss (e.g. a decoction/extraction batch), the way
-    // out is the checkbox below, not a higher Qty Manufactured. Point at
-    // it here instead of leaving the person to discover it on their own.
-    return `Cannot exceed ${fmt(maxCompletableQty.value)}. If the difference is process loss, check "completes the batch" below instead of increasing this.`;
+    // No over-production allowed yet -- if this shortfall is actually
+    // process loss (e.g. a decoction/extraction batch), the way out is the
+    // checkbox below. If it's genuine excess yield, point at the new field.
+    return `Cannot exceed ${fmt(maxCompletableQty.value)}. If you produced more than planned, enter the extra in "Over Production Qty" below. If the difference is process loss instead, check "completes the batch" below.`;
   }
   return "";
 });
@@ -2299,6 +2317,7 @@ const showCompleteModal = ref(false);
 const completeForm = ref({
   qty_manufactured: 0,
   process_loss_qty: 0,
+  over_production_qty: 0,
   batch_no: "",
   manufacturing_date: "",
   expiry_date: "",
@@ -2392,6 +2411,7 @@ async function openCompleteModal() {
   completeForm.value = {
     qty_manufactured: qtyMfg,
     process_loss_qty: derivedLoss,
+    over_production_qty: 0,
     batch_no: "",
     manufacturing_date: new Date().toISOString().slice(0, 10),
     expiry_date: "",
@@ -2478,7 +2498,7 @@ async function submitComplete() {
     // be the final word, same as before this refresh existed.
   }
 
-  if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}${overProductionAllowancePct.value>0 ? ` (planned qty + ${overProductionAllowancePct.value}% over-production allowance)` : ""}. This Work Order's numbers were just refreshed -- someone may have recorded another completion.`, "error");
+  if (qty > maxCompletableQty.value + 0.0001) return toast(`Qty Manufactured cannot exceed ${fmt(maxCompletableQty.value)}. This Work Order's numbers were just refreshed -- someone may have recorded another completion, or increase Over Production Qty below.`, "error");
   if (lossReconciliationExceeds.value) return toast(`Produced qty plus process loss (${fmt(lossReconciliationTotal.value)}) would exceed the planned qty (${fmt(wo.value.qty)}). Cannot consume more raw material than was issued for this batch.`, "error");
 
   // Warn on Incomplete Job Cards (Manufacturing Settings): if this completion
@@ -2511,6 +2531,7 @@ async function submitComplete() {
       work_order: wo.value.name,
       qty_manufactured: qty,
       process_loss_qty: flt(completeForm.value.process_loss_qty),
+      over_production_qty: flt(completeForm.value.over_production_qty),
       scrap_items: scrapItems,
       batch_no: completeForm.value.batch_no || undefined,
       manufacturing_date: completeForm.value.manufacturing_date || undefined,
@@ -2714,7 +2735,7 @@ function icon(name, size) {
   --bx-blue:#1971C2; --bx-blueS:#E7F5FF;
   --bx-violet:#7048E8; --bx-violetS:#F3F0FF;
   --bx-mfg:#1a6ef7; --bx-mfgL:#2f74f5; --bx-mfgS:#EAF1FF; --bx-mfgB:#1e3a5f;
-  --bx-radius:10px; --bx-rsm:6px;
+  --bx-radius:10px; --bx-rsm:10px;
   padding: 16px;
 }
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
