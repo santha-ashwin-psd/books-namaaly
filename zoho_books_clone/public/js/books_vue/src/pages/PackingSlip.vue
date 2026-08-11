@@ -206,9 +206,16 @@
                       <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                     </select>
                   </div>
-                  <div class="psx-item-field" v-if="row.batch_no || !readOnly">
+                  <div class="psx-item-field" v-if="row.batch_no || !postLocked">
                     <label>Batch</label>
-                    <input class="psx-fi" v-model="row.batch_no" placeholder="—" :disabled="readOnly" />
+                    <select v-if="batchOptionsFor(row).length || row.batch_no" class="psx-fi" v-model="row.batch_no" :disabled="postLocked">
+                      <option value="">— Select Batch —</option>
+                      <option v-for="b in batchOptionsFor(row)" :key="b.batch_no" :value="b.batch_no">
+                        {{ b.batch_no }} — {{ fmt(b.qty) }} on hand{{ b.is_expired ? ' · Expired' : (b.expires_soon ? ' · Expires soon' : '') }}
+                      </option>
+                      <option v-if="row.batch_no && !batchOptionsFor(row).some(b => b.batch_no === row.batch_no)" :value="row.batch_no">{{ row.batch_no }}</option>
+                    </select>
+                    <input v-else class="psx-fi" v-model="row.batch_no" placeholder="No batches in warehouse" :disabled="postLocked" />
                   </div>
                 </div>
               </div>
@@ -358,6 +365,38 @@ const readOnly = computed(() => !isNew.value && (ps.value.status === "Packed" ||
 const postLocked = computed(() => !!ps.value.stock_entry || ps.value.status === "Cancelled");
 const warehouseList = ref([]);
 const postingStock = ref(false);
+// item_code -> [{batch_no, qty, expiry_date, is_expired, expires_soon}] for
+// whichever warehouse a row actually consumes from, so the Batch dropdown
+// only ever offers lots that really exist there.
+const warehouseBatches = ref({});
+function batchOptionsFor(row) {
+  return warehouseBatches.value[row.item_code] || [];
+}
+async function loadWarehouseBatches() {
+  // Mirrors the engine's own fallback (row.source_warehouse or ps.source_warehouse)
+  // so a row-level warehouse override still gets the right batch list.
+  const whs = [...new Set(
+    (ps.value.items || []).map(r => r.source_warehouse || ps.value.source_warehouse).filter(Boolean)
+  )];
+  if (!whs.length) { warehouseBatches.value = {}; return; }
+  try {
+    const results = await Promise.all(
+      whs.map(wh => apiCall("zoho_books_clone.api.inventory.get_warehouse_batches", { warehouse: wh }).catch(() => ({})))
+    );
+    const merged = {};
+    results.forEach(r => {
+      const map = r?.message || r || {};
+      Object.entries(map).forEach(([item, list]) => {
+        merged[item] = [...(merged[item] || []), ...list];
+      });
+    });
+    warehouseBatches.value = merged;
+  } catch (e) {
+    warehouseBatches.value = {};
+  }
+}
+watch(() => ps.value.source_warehouse, loadWarehouseBatches);
+watch(() => (ps.value.items || []).map(r => r.source_warehouse).join(","), loadWarehouseBatches);
 const packedCount = computed(() =>
   (ps.value.items || []).filter(r => flt(r.packed_qty) >= flt(r.required_qty) - 0.0001 && flt(r.required_qty) > 0).length
 );
@@ -399,12 +438,14 @@ onMounted(async () => {
   }
   await loadList();
   if (route.params.name) await loadPS();
+  await loadWarehouseBatches();
   loading.value = false;
 });
 
 watch(() => route.params.name, async (name) => {
   if (!name) { ps.value = emptyPS(); return; }
   await loadPS();
+  await loadWarehouseBatches();
 });
 
 async function loadPS() {
