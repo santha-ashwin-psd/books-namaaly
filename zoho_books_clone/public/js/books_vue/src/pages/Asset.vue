@@ -138,13 +138,14 @@
         <th class="sortable" @click="sortBy('asset_name')">Asset Name <span v-html="sortArrow('asset_name')"></span></th>
         <th class="sortable" @click="sortBy('asset_category')">Category <span v-html="sortArrow('asset_category')"></span></th>
         <th class="sortable" @click="sortBy('purchase_date')">Purchase Date <span v-html="sortArrow('purchase_date')"></span></th>
+        <th class="ta-r sortable" @click="sortBy('qty')">Qty <span v-html="sortArrow('qty')"></span></th>
         <th class="ta-r sortable" @click="sortBy('purchase_cost')">Purchase Cost <span v-html="sortArrow('purchase_cost')"></span></th>
         <th class="sortable" @click="sortBy('status')">Status <span v-html="sortArrow('status')"></span></th>
         <th style="width:110px;text-align:center">Actions</th>
       </tr></thead>
       <tbody>
-        <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="7"><div class="shimmer"></div></td></tr></template>
-        <tr v-else-if="!sorted.length"><td colspan="7" class="bk-empty-state"><div class="bk-empty-inner">
+        <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="8"><div class="shimmer"></div></td></tr></template>
+        <tr v-else-if="!sorted.length"><td colspan="8" class="bk-empty-state"><div class="bk-empty-inner">
           <template v-if="search||filterGroup||filterTab!=='all'">
             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <p class="bk-empty-title">No assets match your filters</p>
@@ -160,12 +161,13 @@
           <td @click="openView(row)" data-label="Asset Name"><span class="inv-link">{{row.asset_name || row.name}}</span><div class="asset-code">{{ row.name }}</div></td>
           <td @click="openView(row)" data-label="Asset Category"><span v-if="row.asset_category" class="it-group-badge">{{categoryLabel(row.asset_category)}}</span><span v-else class="text-muted">-</span></td>
           <td @click="openView(row)" class="mono-sm text-muted" data-label="Purchase Date">{{ fmtDate(row.purchase_date) }}</td>
+          <td @click="openView(row)" class="ta-r mono-sm" data-label="Qty">{{ row.qty || 1 }}</td>
           <td @click="openView(row)" class="ta-r mono-sm fw-600" data-label="Purchase Cost">{{ fmt(row.purchase_cost || 0) }}</td>
           <td @click="openView(row)" data-label="Status"><span class="inv-status-badge" :class="statusClass(row.status)">{{row.status || 'Draft'}}</span></td>
           <td style="text-align:center;white-space:nowrap" @click.stop>
             <button class="inv-act-btn" @click="openView(row)" title="View"><span v-html="icon('eye',13)"></span></button>
-            <button class="inv-act-btn" @click="openEdit(row)" :disabled="!$canEdit('inventory')" title="Quick Edit"><span v-html="icon('edit',13)"></span></button>
-            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" :disabled="!$canDelete('inventory')" title="Delete"><span v-html="icon('trash',13)"></span></button>
+            <button class="inv-act-btn" @click="openEdit(row)" :disabled="!$canEdit('inventory')" :title="row.status && row.status !== 'Draft' ? 'Edit — financial fields are locked once submitted' : 'Quick Edit'"><span v-html="icon('edit',13)"></span></button>
+            <button class="inv-act-btn" style="color:#dc2626" @click="confirmDel(row)" :disabled="!$canDelete('inventory') || !isDeletable(row)" :title="isDeletable(row) ? 'Delete' : 'Submitted assets are already capitalized in the ledger — cancel via Asset Disposal or Value Adjustment instead of deleting'"><span v-html="icon('trash',13)"></span></button>
           </td>
         </tr>
       </tbody>
@@ -190,10 +192,11 @@
         <div class="ii-mob-card-right">
           <div class="fw-700" style="font-size:14px;color:#2F9E44">{{ fmt(row.purchase_cost || 0) }}</div>
           <div class="text-muted" style="font-size:11px">{{ fmtDate(row.purchase_date) }}</div>
+          <div class="text-muted" style="font-size:11px">Qty: {{ row.qty || 1 }}</div>
         </div>
         <div class="ii-mob-card-actions">
           <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit" :disabled="!$canEdit('inventory')" title="Edit" v-html="icon('edit',13)"></button>
-          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" :disabled="!$canDelete('inventory')" title="Delete" v-html="icon('trash',13)"></button>
+          <button @click.stop="confirmDel(row)" class="ii-qa-btn ii-qa-del" :disabled="!$canDelete('inventory') || !isDeletable(row)" :title="isDeletable(row) ? 'Delete' : 'Submitted assets are already capitalized — cancel via Disposal/Value Adjustment instead'" v-html="icon('trash',13)"></button>
         </div>
       </div>
     </div>
@@ -218,6 +221,7 @@
           <span v-else class="text-muted" style="font-size:12px">-</span>
           <span class="fw-700" style="font-size:13px;color:#2F9E44">{{fmt(row.purchase_cost || 0)}}</span>
         </div>
+        <div class="text-muted" style="font-size:11px;margin-top:4px">Qty: {{row.qty || 1}}</div>
       </div>
     </div>
   </template>
@@ -256,6 +260,13 @@ const categoryLabelMap = computed(() => {
 });
 function categoryLabel(id) {
   return categoryLabelMap.value[id] || id;
+}
+// Once an asset is Submitted, post_asset_capitalization() has already posted
+// its GL entry (asset.py on_submit). Deleting straight from the list would
+// either be rejected server-side or, worse, orphan that ledger entry -- only
+// Draft assets (never submitted, nothing posted) are safe to hard-delete.
+function isDeletable(row) {
+  return !row.status || row.status === 'Draft';
 }
 const search = ref('');
 const filterTab = ref('all');
@@ -305,7 +316,7 @@ const filtered = computed(() => {
   if (search.value) {
     const s = search.value.toLowerCase();
     result = result.filter(i =>
-      i.asset_name.toLowerCase().includes(s) ||
+      (i.asset_name || '').toLowerCase().includes(s) ||
       (i.asset_category && i.asset_category.toLowerCase().includes(s))
     );
   }
@@ -386,7 +397,7 @@ async function load() {
       apiList('Asset', {
         fields: [
           'name', 'asset_name', 'status', 'asset_category', 'purchase_date', 
-          'purchase_cost', 'supplier', 'location', 'department',
+          'qty', 'purchase_cost', 'supplier', 'location', 'department',
           'depreciation_method', 'useful_life', 'salvage_value', 
           'last_maintenance_date', 'next_maintenance_date', 'maintenance_frequency_days',
           'description', 'is_active'
@@ -420,6 +431,10 @@ function openEdit(row) {
 }
 
 async function confirmDel(row) {
+  if (!isDeletable(row)) {
+    toast.error('Submitted assets are already capitalized in the ledger and cannot be deleted directly.');
+    return;
+  }
   const ok = await confirm({
     title: 'Delete Asset',
     body: `Are you sure you want to delete asset ${row.asset_name || row.name}?`,
@@ -456,6 +471,11 @@ async function bulkSetActive(value) {
 async function bulkDelete() {
   if (!selected.value.size) return;
   const names = [...selected.value];
+  const blocked = list.value.filter(r => names.includes(r.name) && !isDeletable(r));
+  if (blocked.length) {
+    toast.error(`${blocked.length} selected asset${blocked.length > 1 ? 's are' : ' is'} already submitted/capitalized and can't be deleted. Deselect them first.`);
+    return;
+  }
   const ok = await confirm({
     title: 'Delete Assets',
     body: `Are you sure you want to delete ${names.length} selected asset${names.length > 1 ? 's' : ''}?`,
@@ -477,8 +497,8 @@ async function bulkDelete() {
 }
 
 function exportCSV() {
-  const headers = ['Asset ID', 'Asset Name', 'Category', 'Purchase Date', 'Purchase Cost', 'Status'];
-  const rows = filtered.value.map(r => [r.name, r.asset_name || '', r.asset_category || '', r.purchase_date || '', r.purchase_cost || 0, r.status || '']);
+  const headers = ['Asset ID', 'Asset Name', 'Category', 'Purchase Date', 'Qty', 'Purchase Cost', 'Status'];
+  const rows = filtered.value.map(r => [r.name, r.asset_name || '', r.asset_category || '', r.purchase_date || '', r.qty || 1, r.purchase_cost || 0, r.status || '']);
   const csv = [headers, ...rows].map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

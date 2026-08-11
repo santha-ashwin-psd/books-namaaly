@@ -2462,7 +2462,7 @@ def get_gstr_summary(company=None, from_date=None, to_date=None):
     """
     Return a GSTR-3B style summary:
       output  — taxes collected on Sales Invoices
-      itc     — input tax credit from Purchase Invoices
+      itc     — input tax credit from Purchase Invoices + capitalized Assets
       net     — output - ITC per tax type
       totals  — aggregate figures
     """
@@ -2485,7 +2485,9 @@ def get_gstr_summary(company=None, from_date=None, to_date=None):
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_itc_ledger(company=None, from_date=None, to_date=None):
     """
-    Line-by-line ITC ledger from Purchase Invoices — for GSTR-2A reconciliation.
+    Line-by-line ITC ledger from Purchase Invoices and capitalized Assets
+    (each row tagged 'source': 'Purchase Invoice' or 'Asset') — for GSTR-2A
+    reconciliation.
     """
     from zoho_books_clone.db.queries import get_itc_ledger as _itc
     from frappe.utils import nowdate

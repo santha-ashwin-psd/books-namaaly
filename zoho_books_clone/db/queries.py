@@ -1262,21 +1262,57 @@ def get_gstr_summary(company: str, from_date: str, to_date: str) -> dict:
     """, {"company": company, "from_date": from_date, "to_date": to_date},
     as_dict=True)
 
-    # ── Input Tax Credit (from Purchase Invoices) ─────────────────────────────
+    # ── Input Tax Credit (from Purchase Invoices + capitalized Assets) ────────
+    # Phase 6: ITC-eligible tax lines on Asset (Asset Tax Detail, see
+    # asset_gl.post_asset_capitalization) post to the same GST Input account
+    # as Purchase Invoice ITC, but live in a different child doctype -- they
+    # were invisible to GSTR-3B/2A reporting until this UNION ALL was added.
+    # Non-eligible ("blocked credit") Asset tax rows are deliberately
+    # excluded here (is_itc_eligible=1 filter): those get folded into the
+    # asset's capitalized cost instead of claimed, so they were never GST
+    # Input Account postings in the first place -- see Asset Tax Detail's
+    # is_itc_eligible description and asset_gl.py's itc_by_account logic.
+    # is_existing_asset assets are excluded too: post_asset_capitalization
+    # skips their GL entirely (opening-balance assets, never capitalized
+    # through this app), so there's no GST Input postings to reconcile.
     itc_rows = frappe.db.sql("""
         SELECT
-            COALESCE(NULLIF(tl.tax_type, ''), tl.description) AS tax_type,
-            tl.description,
-            SUM(tl.tax_amount)      AS amount,
-            COUNT(DISTINCT pi.name) AS invoice_count
-        FROM `tabTax Line` tl
-        JOIN `tabPurchase Invoice` pi
-          ON pi.name = tl.parent AND tl.parenttype = 'Purchase Invoice'
-        WHERE pi.company        = %(company)s
-          AND pi.docstatus      = 1
-          AND pi.posting_date   BETWEEN %(from_date)s AND %(to_date)s
-          AND tl.tax_type       IN ('CGST', 'SGST', 'IGST', 'Cess')
-        GROUP BY tax_type, tl.description
+            tax_type,
+            description,
+            SUM(tax_amount)         AS amount,
+            COUNT(DISTINCT voucher_no) AS invoice_count
+        FROM (
+            SELECT
+                COALESCE(NULLIF(tl.tax_type, ''), tl.description) AS tax_type,
+                tl.description AS description,
+                tl.tax_amount   AS tax_amount,
+                pi.name         AS voucher_no
+            FROM `tabTax Line` tl
+            JOIN `tabPurchase Invoice` pi
+              ON pi.name = tl.parent AND tl.parenttype = 'Purchase Invoice'
+            WHERE pi.company        = %(company)s
+              AND pi.docstatus      = 1
+              AND pi.posting_date   BETWEEN %(from_date)s AND %(to_date)s
+              AND tl.tax_type       IN ('CGST', 'SGST', 'IGST', 'Cess')
+
+            UNION ALL
+
+            SELECT
+                COALESCE(NULLIF(atd.tax_type, ''), atd.description) AS tax_type,
+                atd.description AS description,
+                atd.amount       AS tax_amount,
+                a.name           AS voucher_no
+            FROM `tabAsset Tax Detail` atd
+            JOIN `tabAsset` a
+              ON a.name = atd.parent AND atd.parenttype = 'Asset'
+            WHERE a.company          = %(company)s
+              AND a.docstatus        = 1
+              AND a.is_existing_asset = 0
+              AND a.purchase_date    BETWEEN %(from_date)s AND %(to_date)s
+              AND atd.is_itc_eligible = 1
+              AND atd.tax_type        IN ('CGST', 'SGST', 'IGST', 'Cess')
+        ) itc
+        GROUP BY tax_type, description
         ORDER BY tax_type
     """, {"company": company, "from_date": from_date, "to_date": to_date},
     as_dict=True)
@@ -1540,7 +1576,17 @@ def get_party_ledger(
 
 def get_itc_ledger(company: str, from_date: str, to_date: str) -> list[dict]:
     """
-    Line-by-line ITC ledger — every tax line on every submitted Purchase Invoice.
+    Line-by-line ITC ledger — every ITC-eligible tax line on every submitted
+    Purchase Invoice, PLUS every ITC-eligible tax line on every capitalized
+    Asset (Phase 6 — see get_gstr_summary's UNION for why Asset ITC needed
+    wiring in separately: it lives in Asset Tax Detail, not Tax Line, so it
+    was invisible to this ledger before).
+
+    Purchase Invoice rows keep bill_no/bill_date (vendor's own invoice
+    reference); Asset rows have no equivalent field so those come back
+    NULL. `source` distinguishes the two so a caller/UI can tell a
+    capitalized-asset ITC line apart from a regular purchase ITC line
+    without guessing from voucher_no's naming series.
     Useful for GSTR-2A reconciliation.
     """
     return frappe.db.sql("""
@@ -1554,14 +1600,39 @@ def get_itc_ledger(company: str, from_date: str, to_date: str) -> list[dict]:
             tl.description,
             tl.rate            AS tax_rate,
             tl.tax_amount,
-            tl.account_head
+            tl.account_head,
+            'Purchase Invoice' AS source
         FROM `tabTax Line` tl
         JOIN `tabPurchase Invoice` pi
           ON pi.name = tl.parent AND tl.parenttype = 'Purchase Invoice'
         WHERE pi.company        = %(company)s
           AND pi.docstatus      = 1
           AND pi.posting_date   BETWEEN %(from_date)s AND %(to_date)s
-        ORDER BY pi.posting_date, pi.name, tl.idx
+
+        UNION ALL
+
+        SELECT
+            a.name                      AS voucher_no,
+            a.purchase_date             AS posting_date,
+            a.supplier,
+            NULL                        AS bill_no,
+            NULL                        AS bill_date,
+            COALESCE(NULLIF(atd.tax_type, ''), atd.description) AS tax_type,
+            atd.description,
+            atd.rate                    AS tax_rate,
+            atd.amount                  AS tax_amount,
+            COALESCE(atd.account_head, '') AS account_head,
+            'Asset'                     AS source
+        FROM `tabAsset Tax Detail` atd
+        JOIN `tabAsset` a
+          ON a.name = atd.parent AND atd.parenttype = 'Asset'
+        WHERE a.company          = %(company)s
+          AND a.docstatus        = 1
+          AND a.is_existing_asset = 0
+          AND a.purchase_date    BETWEEN %(from_date)s AND %(to_date)s
+          AND atd.is_itc_eligible = 1
+
+        ORDER BY posting_date, voucher_no, tax_type
     """, {"company": company, "from_date": from_date, "to_date": to_date},
     as_dict=True)
 

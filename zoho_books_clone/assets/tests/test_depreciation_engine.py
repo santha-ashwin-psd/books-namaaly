@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 from zoho_books_clone.assets.depreciation_engine import (
     build_schedule,
+    recompute_pending_rows,
     _wdv_annual_rate,
     _wdv_monthly_rate,
 )
@@ -169,6 +170,71 @@ class TestMonthlyProRation(unittest.TestCase):
                              depreciation_method="Written Down Value", depreciation_posting_frequency="Monthly")
         rows = build_schedule(asset)
         self.assertAlmostEqual(rows[-1]["closing_value"], 0.0, places=2)
+
+
+class TestRecomputePendingRows(unittest.TestCase):
+    """Phase 5: recompute_pending_rows() re-derives the remaining Pending
+    rows' figures after cost/qty shrinks mid-schedule. period_no/date/year/
+    is_pro_rata aren't part of these dicts at all in production (they're
+    left alone by the caller) -- these tests only exercise the
+    opening/depreciation/closing recompute."""
+
+    def _pending(self, n):
+        # Shape mirrors what depreciation_posting.rederive_schedule feeds
+        # in: pre-adjustment figures that are about to be overwritten.
+        return [
+            {"opening_value": 999, "depreciation_amount": 999, "closing_value": 999}
+            for _ in range(n)
+        ]
+
+    def test_empty_rows_is_a_noop(self):
+        rows = []
+        recompute_pending_rows(rows, opening_value=1000, salvage=0, method="Straight Line")
+        self.assertEqual(rows, [])
+
+    def test_straight_line_splits_evenly_across_remaining_periods(self):
+        rows = self._pending(4)
+        recompute_pending_rows(rows, opening_value=40000, salvage=0, method="Straight Line")
+        for row in rows:
+            self.assertAlmostEqual(row["depreciation_amount"], 10000)
+        self.assertAlmostEqual(rows[0]["opening_value"], 40000)
+        self.assertAlmostEqual(rows[-1]["closing_value"], 0.0)
+
+    def test_straight_line_fully_depreciates_to_salvage(self):
+        rows = self._pending(3)
+        recompute_pending_rows(rows, opening_value=10000, salvage=1000, method="Straight Line")
+        self.assertAlmostEqual(rows[-1]["closing_value"], 1000)
+        total_dep = sum(r["depreciation_amount"] for r in rows)
+        self.assertAlmostEqual(total_dep, 9000)
+
+    def test_wdv_re_rates_off_new_opening_value_not_original_cost(self):
+        """A WDV asset written down mid-schedule must still land on salvage
+        by its last remaining row, using a freshly-derived rate off the
+        new (smaller) opening value -- not the stale rate baked in when
+        the schedule was first built off the original cost."""
+        rows = self._pending(3)
+        recompute_pending_rows(rows, opening_value=27000, salvage=1000, method="Written Down Value")
+        self.assertAlmostEqual(rows[-1]["closing_value"], 1000, places=2)
+        # Opening value chains through: each row's opening == prior closing.
+        self.assertAlmostEqual(rows[1]["opening_value"], rows[0]["closing_value"])
+        self.assertAlmostEqual(rows[2]["opening_value"], rows[1]["closing_value"])
+
+    def test_opening_already_at_or_below_salvage_zeroes_remaining_rows(self):
+        """Can legitimately happen: a large enough write-off drops
+        current_value to (or below) salvage before the schedule's nominal
+        period count is exhausted. Remaining rows carry zero further
+        depreciation rather than a negative/undefined one."""
+        rows = self._pending(2)
+        recompute_pending_rows(rows, opening_value=500, salvage=1000, method="Straight Line")
+        for row in rows:
+            self.assertEqual(row["depreciation_amount"], 0.0)
+            self.assertEqual(row["closing_value"], 500)
+
+    def test_single_remaining_row_absorbs_full_remaining_balance(self):
+        rows = self._pending(1)
+        recompute_pending_rows(rows, opening_value=5000, salvage=0, method="Straight Line")
+        self.assertAlmostEqual(rows[0]["depreciation_amount"], 5000)
+        self.assertAlmostEqual(rows[0]["closing_value"], 0.0)
 
 
 if __name__ == "__main__":

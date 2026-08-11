@@ -23,6 +23,7 @@ from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry
     make_gl_entries,
 )
 from zoho_books_clone.assets.asset_gl import get_category_accounts
+from zoho_books_clone.assets.depreciation_engine import recompute_pending_rows
 
 _VOUCHER_TYPE = "Asset Depreciation"
 
@@ -146,3 +147,76 @@ def _post_due_rows_for_asset(asset_name: str) -> bool:
         )
 
     return any_posted
+
+
+def rederive_schedule(asset_name: str, new_opening_value: float | None = None) -> bool:
+    """Phase 5: re-derive the remaining Pending Depreciation Schedule rows
+    on `asset_name` after its cost/qty was shrunk outside the normal
+    depreciation cycle (currently: Asset Quantity Adjustment). Completed
+    rows -- and their posted GL -- are never touched.
+
+    Caller convention: call this AFTER the caller has already updated
+    Asset.current_value/purchase_cost via db_set (Asset Quantity
+    Adjustment does this itself), then pass that same new current_value
+    in as `new_opening_value` -- or omit it to fall back to reading
+    asset.current_value off the doc as re-fetched here. An explicit value
+    is preferred so this function never has to guess whether a caller's
+    db_set has actually landed on a stale in-memory copy of the doc.
+
+    Returns True if any Pending row's figures actually changed, False if
+    there was nothing to re-derive (no schedule at all, or every row
+    already Completed -- the schedule is done, "future rows" is empty by
+    definition).
+    """
+    asset = frappe.get_doc("Asset", asset_name)
+    rows = list(asset.depreciation_schedule or [])
+    if not rows:
+        return False
+
+    rows.sort(key=lambda r: (r.period_no or r.year or 0))
+    pending_rows = [r for r in rows if r.status == "Pending"]
+    if not pending_rows:
+        return False
+
+    opening_value = flt(new_opening_value) if new_opening_value is not None else flt(asset.current_value)
+
+    # recompute_pending_rows is pure/DB-free -- feed it plain dicts, not
+    # live child docs, then write the results back explicitly below.
+    row_dicts = [
+        {
+            "opening_value": flt(r.opening_value),
+            "depreciation_amount": flt(r.depreciation_amount),
+            "closing_value": flt(r.closing_value),
+        }
+        for r in pending_rows
+    ]
+    recompute_pending_rows(
+        row_dicts,
+        opening_value=opening_value,
+        salvage=flt(asset.salvage_value),
+        method=asset.depreciation_method or "Straight Line",
+    )
+
+    changed = False
+    for row, values in zip(pending_rows, row_dicts):
+        if (
+            abs(flt(row.opening_value) - values["opening_value"]) > 0.005
+            or abs(flt(row.depreciation_amount) - values["depreciation_amount"]) > 0.005
+            or abs(flt(row.closing_value) - values["closing_value"]) > 0.005
+        ):
+            row.db_set("opening_value", values["opening_value"], update_modified=False)
+            row.db_set("depreciation_amount", values["depreciation_amount"], update_modified=False)
+            row.db_set("closing_value", values["closing_value"], update_modified=False)
+            changed = True
+
+    if changed:
+        frappe.msgprint(
+            _(
+                "Re-derived {0} remaining depreciation period(s) on {1} against the "
+                "updated book value of {2}."
+            ).format(len(pending_rows), asset.name, opening_value),
+            indicator="blue",
+            alert=True,
+        )
+
+    return changed

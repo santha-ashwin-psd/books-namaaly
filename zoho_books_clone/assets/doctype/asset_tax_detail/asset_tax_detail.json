@@ -1,0 +1,78 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tax_type",
+  "rate",
+  "column_break_rate",
+  "is_itc_eligible",
+  "amount",
+  "account_head",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "tax_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Tax Type",
+   "options": "CGST\nSGST\nIGST\nVAT\nCess\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Rate (%)"
+  },
+  {
+   "fieldname": "column_break_rate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_itc_eligible",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "ITC Eligible",
+   "description": "Checked: this tax amount is claimable input tax credit and posts to the category's GST Input account. Unchecked: it is a blocked/non-claimable credit (Sec 17(5) or similar) and is added into the asset's capitalized cost instead."
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "read_only": 1,
+   "description": "Computed as Rate % of the Asset's Taxable Value. Recalculated on save."
+  },
+  {
+   "fieldname": "account_head",
+   "fieldtype": "Link",
+   "label": "Account Head",
+   "options": "Account",
+   "description": "Optional override. If left blank, ITC-eligible lines use the category's GST Input Account and non-eligible lines have no separate account (folded into Fixed Asset Account)."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Tax Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

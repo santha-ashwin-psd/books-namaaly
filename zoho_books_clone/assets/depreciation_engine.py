@@ -100,6 +100,81 @@ def _wdv_monthly_rate(annual_rate: float) -> float:
     return 1 - (1 - annual_rate) ** (1.0 / 12)
 
 
+def recompute_pending_rows(pending_rows: list[dict], opening_value: float, salvage: float, method: str) -> None:
+    """Phase 5: re-derive depreciation_amount/opening_value/closing_value
+    for a run of still-Pending schedule rows, in place, after the asset's
+    cost or qty changed underneath them (Asset Quantity Adjustment today;
+    any future "shrinks current_value mid-schedule" event tomorrow).
+
+    Deliberately preserves period_no / depreciation_date / year /
+    is_pro_rata exactly as originally generated -- i.e. it recomputes the
+    remaining *amounts* against the new, smaller book value, but does not
+    restart the calendar from the adjustment date. Two reasons:
+
+      1. Completed rows are never touched (can't be -- their GL is
+         already posted), so the only sane anchor for "what date is period
+         N" is the schedule that was already built; restarting the clock
+         would leave a gap or overlap around the adjustment date.
+      2. The monthly engine's pro-ration only ever applies to the very
+         first period of a schedule's life. An asset that's already mid
+         schedule has no "first period" left to pro-rate -- every
+         remaining row is already a full period -- so there is nothing
+         calendar-shaped left to recompute, only the money.
+
+    `pending_rows` must be in period order and contain only rows whose
+    status is still Pending. Mutates each dict's opening_value /
+    depreciation_amount / closing_value; other keys are left alone.
+    """
+    if not pending_rows:
+        return
+
+    if salvage < 0:
+        salvage = 0.0
+
+    remaining = len(pending_rows)
+    opening = flt(opening_value)
+
+    if opening <= salvage:
+        for row in pending_rows:
+            row["opening_value"] = opening
+            row["depreciation_amount"] = 0.0
+            row["closing_value"] = opening
+        return
+
+    if method == "Written Down Value":
+        # Rate is re-derived from the *new* opening value and the number
+        # of periods still left to run -- not the original cost/life_years
+        # -- so a WDV asset still fully depreciates to salvage by its
+        # last remaining row instead of drifting from the shrunk basis.
+        rate_basis = salvage if salvage > 0 else opening * _ZERO_SALVAGE_RATE_BASIS_PCT
+        ratio = max(rate_basis / opening, 1e-6)
+        rate = 1 - ratio ** (1.0 / remaining)
+        straight_line_amount = 0.0
+    else:
+        rate = 0.0
+        straight_line_amount = (opening - salvage) / remaining
+
+    for row in pending_rows:
+        if opening <= salvage:
+            row["opening_value"] = opening
+            row["depreciation_amount"] = 0.0
+            row["closing_value"] = opening
+            continue
+
+        dep = opening * rate if method == "Written Down Value" else straight_line_amount
+        closing = opening - dep
+        if closing < salvage:
+            closing = salvage
+        dep = opening - closing
+
+        row["opening_value"] = opening
+        row["depreciation_amount"] = dep
+        row["closing_value"] = closing
+        opening = closing
+
+    _true_up_final_row(pending_rows, salvage)
+
+
 def _true_up_final_row(rows: list[dict], salvage: float) -> None:
     """A pro-rated first period contributes less than a full period's
     depreciation, so summing exactly total_periods periods can leave a

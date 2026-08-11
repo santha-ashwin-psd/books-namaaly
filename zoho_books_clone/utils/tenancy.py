@@ -302,11 +302,15 @@ qc_asset_disposal         = _make_qc("Asset Disposal")
 qc_asset_repair           = _make_qc("Asset Repair")
 qc_asset_movement         = _make_qc("Asset Movement")
 qc_asset_value_adjustment = _make_qc("Asset Value Adjustment")
+qc_asset_quantity_adjustment = _make_qc("Asset Quantity Adjustment")
+qc_asset_addition = _make_qc("Asset Addition")
 
 hp_asset_disposal         = _make_hp("Asset Disposal")
 hp_asset_repair           = _make_hp("Asset Repair")
 hp_asset_movement         = _make_hp("Asset Movement")
 hp_asset_value_adjustment = _make_hp("Asset Value Adjustment")
+hp_asset_quantity_adjustment = _make_hp("Asset Quantity Adjustment")
+hp_asset_addition = _make_hp("Asset Addition")
 
 
 # ── Maintenance Log: no `company` field, only an `asset` Link ───────────────

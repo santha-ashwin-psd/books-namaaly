@@ -12,10 +12,21 @@ uses, and consistent with this app's own per-company default pattern
 Phase 2 (this file): on Asset submit, post a capitalization entry —
 
     DR Fixed Asset Account (from the asset's category+company)
+    DR GST Input Account (per Asset Tax Detail row, only for rows with
+                           is_itc_eligible checked — see below)
     CR Asset.credit_account (Payable, for a supplier-billed purchase, or
                               Bank/Cash, for a cash purchase)
 
-for `purchase_cost`. On cancel, reverse it via the same
+for `purchase_cost` (+ any ITC-eligible tax). Non-ITC-eligible tax is not
+a separate GL line here — Asset.calculate_totals() already folds it into
+`purchase_cost`, so it rides along on the Fixed Asset/CWIP debit like any
+other blocked-credit cost. ITC-eligible tax lines (Asset Tax Detail rows
+with is_itc_eligible checked) debit a GST Input account instead — either
+the row's own `account_head` override, or the category's default
+`gst_input_account` — since that portion is a recoverable input credit,
+not part of the asset's book value. validate_capitalization_setup()
+requires gst_input_account to be configured whenever eligible tax is
+present. On cancel, reverse it via the same
 general_ledger_entry.make_gl_entries(cancel=True) path every other
 financial doctype in this app uses (Sales/Purchase Invoice, Landed Cost
 Voucher, Stock Entry) — entries are reversed, not deleted, preserving the
@@ -99,6 +110,7 @@ def get_category_accounts(asset_category: str, company: str) -> dict:
             "accumulated_depreciation_account",
             "depreciation_expense_account",
             "cwip_account",
+            "gst_input_account",
         ],
         as_dict=True,
     )
@@ -161,6 +173,21 @@ def validate_capitalization_setup(doc) -> None:
     if accounts.get("cwip_account"):
         _validate_account_ref(accounts["cwip_account"], doc.company, "CWIP Account")
 
+    eligible_tax = sum(
+        flt(row.amount) for row in (doc.taxes or []) if row.is_itc_eligible
+    )
+    if eligible_tax:
+        if not accounts.get("gst_input_account"):
+            frappe.throw(
+                _(
+                    "Asset Category {0} has no GST Input Account configured for company {1}, "
+                    "but this asset has ITC-eligible tax lines. Add a GST Input Account under "
+                    "Asset Category \u2192 Accounting (per Company), or uncheck ITC Eligible "
+                    "on the relevant tax row(s) if this credit is actually blocked."
+                ).format(frappe.bold(doc.asset_category), frappe.bold(doc.company))
+            )
+        _validate_account_ref(accounts["gst_input_account"], doc.company, "GST Input Account")
+
     if not doc.credit_account:
         frappe.throw(
             _("Credit Account (Payable / Bank / Cash) is required to capitalize this asset.")
@@ -191,6 +218,20 @@ def post_asset_capitalization(doc) -> None:
     remarks = f"Asset capitalized \u2014 {doc.asset_name} ({doc.name})" + (
         " (to CWIP)" if goes_to_cwip else ""
     )
+
+    # ITC-eligible tax lines each debit a GST input account — the row's own
+    # account_head override if set, else the category's default
+    # gst_input_account (validate_capitalization_setup already confirmed
+    # this exists when eligible tax is present). Grouped by account so two
+    # rows pointing at the same account net into a single GL line.
+    itc_by_account: dict[str, float] = {}
+    for row in (doc.taxes or []):
+        if not row.is_itc_eligible or not flt(row.amount):
+            continue
+        acct = row.account_head or accounts.get("gst_input_account")
+        itc_by_account[acct] = itc_by_account.get(acct, 0) + flt(row.amount)
+    total_itc = sum(itc_by_account.values())
+
     gl_map = [
         {
             "account": debit_account,
@@ -202,17 +243,32 @@ def post_asset_capitalization(doc) -> None:
             "company": doc.company,
             "remarks": remarks,
         },
+    ]
+    for acct, tax_amount in itc_by_account.items():
+        gl_map.append(
+            {
+                "account": acct,
+                "debit": round(tax_amount, 2),
+                "credit": 0,
+                "voucher_type": _VOUCHER_TYPE,
+                "voucher_no": doc.name,
+                "posting_date": doc.purchase_date,
+                "company": doc.company,
+                "remarks": f"{remarks} (Input GST)",
+            }
+        )
+    gl_map.append(
         {
             "account": doc.credit_account,
             "debit": 0,
-            "credit": amount,
+            "credit": round(amount + total_itc, 2),
             "voucher_type": _VOUCHER_TYPE,
             "voucher_no": doc.name,
             "posting_date": doc.purchase_date,
             "company": doc.company,
             "remarks": remarks,
-        },
-    ]
+        }
+    )
 
     make_gl_entries(gl_map)
     doc.db_set("capitalization_posted", 1, update_modified=False)

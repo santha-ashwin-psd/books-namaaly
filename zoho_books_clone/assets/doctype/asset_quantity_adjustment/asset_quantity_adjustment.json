@@ -1,0 +1,263 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "AST-QA-.YYYY.-.####",
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "asset",
+  "company",
+  "adjustment_date",
+  "damaged_qty",
+  "reason",
+  "qty_section",
+  "qty_before",
+  "qty_after",
+  "value_section",
+  "purchase_cost_before",
+  "current_value_before",
+  "column_break_value",
+  "write_off_purchase_cost",
+  "write_off_accumulated_depreciation",
+  "write_off_net_book_value",
+  "column_break_after",
+  "purchase_cost_after",
+  "current_value_after",
+  "loss_account",
+  "gl_posted",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "options": "Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1,
+   "description": "Stamped from the Asset on save."
+  },
+  {
+   "fieldname": "adjustment_date",
+   "fieldtype": "Date",
+   "label": "Adjustment Date",
+   "reqd": 1,
+   "default": "Today"
+  },
+  {
+   "fieldname": "damaged_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity Written Off",
+   "reqd": 1,
+   "description": "Number of units being written off (damaged, lost, stolen, or destroyed). Must be less than the asset's current Qty \u2014 use Asset Disposal instead if the entire remaining quantity is gone."
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "qty_section",
+   "fieldtype": "Section Break",
+   "label": "Quantity"
+  },
+  {
+   "fieldname": "qty_before",
+   "fieldtype": "Float",
+   "label": "Qty (Before)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "qty_after",
+   "fieldtype": "Float",
+   "label": "Qty (After)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "value_section",
+   "fieldtype": "Section Break",
+   "label": "Value Write-off"
+  },
+  {
+   "fieldname": "purchase_cost_before",
+   "fieldtype": "Currency",
+   "label": "Purchase Cost (Before)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "current_value_before",
+   "fieldtype": "Currency",
+   "label": "Current Value (Before)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_value",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "write_off_purchase_cost",
+   "fieldtype": "Currency",
+   "label": "Write-off: Purchase Cost",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Proportional share of original cost removed = Purchase Cost (Before) \u00d7 (Quantity Written Off / Qty Before)."
+  },
+  {
+   "fieldname": "write_off_accumulated_depreciation",
+   "fieldtype": "Currency",
+   "label": "Write-off: Accumulated Depreciation",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Proportional share of accumulated depreciation relieved."
+  },
+  {
+   "fieldname": "write_off_net_book_value",
+   "fieldtype": "Currency",
+   "label": "Loss Amount",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Write-off: Purchase Cost \u2212 Write-off: Accumulated Depreciation. Booked as a loss."
+  },
+  {
+   "fieldname": "column_break_after",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purchase_cost_after",
+   "fieldtype": "Currency",
+   "label": "Purchase Cost (After)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "current_value_after",
+   "fieldtype": "Currency",
+   "label": "Current Value (After)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "loss_account",
+   "fieldtype": "Link",
+   "label": "Loss on Damaged/Written-off Assets Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Debited (P&L) for the proportional net book value written off. Picked explicitly \u2014 no per-category or per-company default."
+  },
+  {
+   "default": "0",
+   "fieldname": "gl_posted",
+   "fieldtype": "Check",
+   "label": "GL Posted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Asset Quantity Adjustment",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Quantity Adjustment",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

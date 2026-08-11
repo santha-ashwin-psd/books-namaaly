@@ -9,7 +9,8 @@
   "fixed_asset_account",
   "accumulated_depreciation_account",
   "depreciation_expense_account",
-  "cwip_account"
+  "cwip_account",
+  "gst_input_account"
  ],
  "fields": [
   {
@@ -49,6 +50,13 @@
    "label": "Capital Work In Progress Account",
    "options": "Account",
    "description": "Used when an asset is capitalized before it is available for use. Optional \u2014 leave blank if this category never has assets under construction/installation."
+  },
+  {
+   "fieldname": "gst_input_account",
+   "fieldtype": "Link",
+   "label": "GST Input Account",
+   "options": "Account",
+   "description": "Used to post ITC-eligible tax lines on Asset capitalization (Asset Tax Detail rows with ITC Eligible checked). Required only if assets in this category ever carry ITC-eligible tax."
   }
  ],
  "grid_page_length": 50,

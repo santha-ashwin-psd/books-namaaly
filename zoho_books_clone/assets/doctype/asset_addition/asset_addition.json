@@ -1,0 +1,255 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "AST-ADD-.YYYY.-.####",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "original_asset",
+  "quantity_adjustment",
+  "addition_type",
+  "addition_date",
+  "company",
+  "qty",
+  "reason",
+  "paid_section",
+  "supplier",
+  "credit_account",
+  "column_break_paid",
+  "taxable_value",
+  "total_tax",
+  "purchase_cost",
+  "taxes_section",
+  "taxes",
+  "grand_total",
+  "outcome_section",
+  "new_asset",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "original_asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Original Asset",
+   "options": "Asset",
+   "reqd": 1,
+   "description": "The asset this replacement is for. Purely informational/audit-trail \u2014 this doctype never modifies the original Asset's own qty or value; the replacement is always created as its own new Asset record (see Result section)."
+  },
+  {
+   "fieldname": "quantity_adjustment",
+   "fieldtype": "Link",
+   "label": "Quantity Adjustment (if any)",
+   "options": "Asset Quantity Adjustment",
+   "description": "Optional link to the Asset Quantity Adjustment that necessitated this replacement, if any. Must reference the same Original Asset."
+  },
+  {
+   "fieldname": "addition_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Addition Type",
+   "options": "Paid Replacement\nFree Replacement (Warranty/Insurance)",
+   "reqd": 1,
+   "description": "Paid Replacement capitalizes the new unit(s) exactly like a fresh Asset purchase (tax handling included) and posts GL. Free Replacement (warranty honored in kind, insurance settlement in kind, supplier goodwill) creates the replacement Asset at zero cost with no GL impact \u2014 it only restores quantity."
+  },
+  {
+   "fieldname": "addition_date",
+   "fieldtype": "Date",
+   "label": "Addition Date",
+   "reqd": 1,
+   "default": "Today",
+   "description": "Used as both Purchase Date and Available for Use Date on the replacement Asset."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "Company",
+   "read_only": 1,
+   "description": "Stamped from the Original Asset on save."
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Replacement Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "paid_section",
+   "fieldtype": "Section Break",
+   "label": "Paid Replacement Details",
+   "depends_on": "eval:doc.addition_type=='Paid Replacement'"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "credit_account",
+   "fieldtype": "Link",
+   "label": "Credit Account (Payable / Bank / Cash)",
+   "options": "Account",
+   "description": "Required for a Paid Replacement \u2014 credited on capitalization, same role as Asset.credit_account for a fresh purchase."
+  },
+  {
+   "fieldname": "column_break_paid",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "taxable_value",
+   "fieldtype": "Currency",
+   "label": "Taxable Value",
+   "description": "Required, greater than zero, for a Paid Replacement."
+  },
+  {
+   "fieldname": "total_tax",
+   "fieldtype": "Currency",
+   "label": "Total Tax",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "purchase_cost",
+   "fieldtype": "Currency",
+   "label": "Purchase Cost",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Taxable Value + non-ITC-eligible tax \u2014 same formula as Asset.calculate_totals(). Zero for a Free Replacement."
+  },
+  {
+   "fieldname": "taxes_section",
+   "fieldtype": "Section Break",
+   "label": "Taxes",
+   "depends_on": "eval:doc.addition_type=='Paid Replacement'"
+  },
+  {
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Tax Details",
+   "options": "Asset Tax Detail"
+  },
+  {
+   "fieldname": "grand_total",
+   "fieldtype": "Currency",
+   "label": "Grand Total",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "outcome_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "new_asset",
+   "fieldtype": "Link",
+   "label": "Replacement Asset",
+   "options": "Asset",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The new Asset record created and submitted by this document. Also doubles as the idempotency guard \u2014 set once, never re-created on a repeat submit."
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Asset Addition",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Assets",
+ "name": "Asset Addition",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Books Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accountant",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "submit": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Books Viewer",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -324,6 +324,15 @@
                     @search="(q) => fetchRowAccounts(row, 'cwip', null, q)"
                   />
                 </div>
+                <div class="ac-field">
+                  <label class="ac-label">GST Input Account <span style="color:#94a3b8;font-weight:500">(optional)</span></label>
+                  <SearchableSelect
+                    v-model="row.gst_input_account"
+                    :options="row._opts.gst"
+                    placeholder="Required only if assets in this category carry ITC-eligible tax"
+                    @search="(q) => fetchRowAccounts(row, 'gst', 'Tax', q)"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -386,8 +395,9 @@ function blankAccountRow() {
     accumulated_depreciation_account: "",
     depreciation_expense_account: "",
     cwip_account: "",
+    gst_input_account: "",
     // UI-only, per-row dropdown option caches — stripped before save.
-    _opts: { fixed: [], accdep: [], depexp: [], cwip: [] },
+    _opts: { fixed: [], accdep: [], depexp: [], cwip: [], gst: [] },
   };
 }
 
@@ -514,7 +524,8 @@ async function enterEditMode() {
       accumulated_depreciation_account: r.accumulated_depreciation_account || "",
       depreciation_expense_account: r.depreciation_expense_account || "",
       cwip_account: r.cwip_account || "",
-      _opts: { fixed: [], accdep: [], depexp: [], cwip: [] },
+      gst_input_account: r.gst_input_account || "",
+      _opts: { fixed: [], accdep: [], depexp: [], cwip: [], gst: [] },
     }));
   } catch (e) {
     toast("Failed to load account setup: " + e.message, "error");
@@ -578,6 +589,7 @@ async function saveCategory() {
         accumulated_depreciation_account: r.accumulated_depreciation_account,
         depreciation_expense_account: r.depreciation_expense_account,
         cwip_account: r.cwip_account || "",
+        gst_input_account: r.gst_input_account || "",
       })),
     });
     if (isEdit) {

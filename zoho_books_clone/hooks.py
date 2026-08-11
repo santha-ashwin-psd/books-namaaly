@@ -201,6 +201,8 @@ permission_query_conditions = {
     "Asset Repair":           f"{_TN}.qc_asset_repair",
     "Asset Movement":         f"{_TN}.qc_asset_movement",
     "Asset Value Adjustment": f"{_TN}.qc_asset_value_adjustment",
+    "Asset Quantity Adjustment": f"{_TN}.qc_asset_quantity_adjustment",
+    "Asset Addition": f"{_TN}.qc_asset_addition",
     # Maintenance Log — no `company` field, scoped via subquery on its `asset` link
     "Maintenance Log":        f"{_TN}.qc_maintenance_log",
     # Asset Category — master record, scoped by `books_company` like Customer/Item
@@ -242,6 +244,8 @@ has_permission = {
     "Asset Repair":           f"{_TN}.hp_asset_repair",
     "Asset Movement":         f"{_TN}.hp_asset_movement",
     "Asset Value Adjustment": f"{_TN}.hp_asset_value_adjustment",
+    "Asset Quantity Adjustment": f"{_TN}.hp_asset_quantity_adjustment",
+    "Asset Addition": f"{_TN}.hp_asset_addition",
     # Maintenance Log — no `company` field, scoped via has_permission on its `asset` link
     "Maintenance Log":        f"{_TN}.hp_maintenance_log",
     # Asset Category — master record, scoped by `books_company` like Customer/Item

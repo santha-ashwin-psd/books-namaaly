@@ -75,6 +75,7 @@ export const NAV = [
   { path: "/assets/movements",              label: "Asset Movements",  icon: "truck",      module: "inventory"  },
   { path: "/assets/repairs",                label: "Asset Repairs",    icon: "gear",       module: "inventory"  },
   { path: "/assets/value-adjustments",      label: "Value Adjustments",icon: "balance",    module: "inventory"  },
+  { path: "/assets/quantity-adjustments",   label: "Quantity Write-offs", icon: "alert",   module: "inventory"  },
   { path: "/assets/reports",                label: "Asset Reports",    icon: "chart",      module: "inventory"  },
   { path: "/assets/department",             label: "Department",       icon: "users",      module: "inventory"  },
   { path: "/assets/depreciation-schedule",  label: "Depreciation Schedule", icon: "calendar", module: "inventory"  },

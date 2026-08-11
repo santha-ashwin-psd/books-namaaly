@@ -118,7 +118,7 @@ class TestCreateTdsEntry(unittest.TestCase):
         mock_get_value.side_effect = ["TDS Payable - VK", "Creditors - VK"]
         result = gst.create_tds_entry(
             company="VK Herbal", party="SUPP-1", expense_account="Professional Fees - VK",
-            amount="10000", tds_amount="1000",
+            amount="10000", tds_amount="1000", date="2026-08-01",
         )
         gl_map = mock_gl.call_args.args[0]
         rows = {r["account"]: r for r in gl_map}
@@ -148,7 +148,8 @@ class TestCreateTdsEntry(unittest.TestCase):
     def test_throws_when_no_tds_payable_account(self, mock_req, mock_co, mock_get_value, mock_fy):
         with self.assertRaises(frappe.ValidationError):
             gst.create_tds_entry(company="VK Herbal", party="SUPP-1",
-                                  expense_account="Expense - VK", amount="1000", tds_amount="100")
+                                  expense_account="Expense - VK", amount="1000", tds_amount="100",
+                                  date="2026-08-01")
 
 
 class TestGetTdsEntries(unittest.TestCase):

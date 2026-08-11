@@ -25,6 +25,7 @@ import AssetReports         from "./pages/AssetReports.vue";
 import AssetMovement        from "./pages/AssetMovement.vue";
 import AssetRepair          from "./pages/AssetRepair.vue";
 import AssetValueAdjustment from "./pages/AssetValueAdjustment.vue";
+import AssetQuantityAdjustment from "./pages/AssetQuantityAdjustment.vue";
 import Department           from "./pages/Department.vue";
 import DepreciationSchedule from "./pages/DepreciationSchedule.vue";
 import MaintenanceLog       from "./pages/MaintenanceLog.vue";
@@ -234,6 +235,12 @@ const routes = [
     path: "/assets/value-adjustments",
     name: "assets-value-adjustments",
     component: AssetValueAdjustment,
+    meta: { module: "inventory" },
+  },
+  {
+    path: "/assets/quantity-adjustments",
+    name: "assets-quantity-adjustments",
+    component: AssetQuantityAdjustment,
     meta: { module: "inventory" },
   },
   {

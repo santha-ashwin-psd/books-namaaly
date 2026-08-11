@@ -30,6 +30,7 @@ from zoho_books_clone.db.queries import (
     get_gst_summary,
     get_gstr1_data,
     get_gstr_summary,
+    get_itc_ledger,
 )
 from zoho_books_clone.reports.report.cash_flow_statement.cash_flow_statement import (
     execute as cash_flow_execute,
@@ -209,6 +210,84 @@ class TestGetGstrSummary(unittest.TestCase):
         self.assertEqual(result["taxable_value"], 10000)
 
 
+class TestGetGstrSummaryAssetItc(unittest.TestCase):
+    """
+    Phase 6: Asset ITC (Asset Tax Detail, ITC-eligible rows on a capitalized
+    Asset) has to reach GSTR-3B's ITC total the same as Purchase Invoice
+    ITC does -- it posts to the same GST Input account but lives in a
+    different child doctype, so it needed its own UNION branch rather than
+    just reusing the Tax Line query.
+    """
+
+    @patch.object(frappe.db, "sql")
+    def test_itc_query_unions_purchase_invoice_and_asset_tax_detail(self, mock_sql):
+        mock_sql.return_value = []
+        get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        itc_query = mock_sql.call_args_list[1].args[0]
+        self.assertIn("tabAsset Tax Detail", itc_query)
+        self.assertIn("tabPurchase Invoice", itc_query)
+        self.assertIn("UNION ALL", itc_query)
+
+    @patch.object(frappe.db, "sql")
+    def test_asset_branch_filters_itc_eligible_and_excludes_existing_assets(self, mock_sql):
+        mock_sql.return_value = []
+        get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        itc_query = mock_sql.call_args_list[1].args[0]
+        self.assertIn("atd.is_itc_eligible = 1", itc_query)
+        self.assertIn("a.is_existing_asset = 0", itc_query)
+
+    @patch.object(frappe.db, "sql")
+    def test_total_itc_sums_across_both_sources(self, mock_sql):
+        # The grouped UNION query itself is mocked out -- from the caller's
+        # side, one merged row per tax_type is indistinguishable from
+        # "everything from Purchase Invoices" vs "everything from Assets";
+        # what matters is the totals math downstream still just sums amount.
+        mock_sql.side_effect = [
+            [],
+            [
+                frappe._dict(tax_type="CGST", description="CGST", amount=300, invoice_count=2),
+                frappe._dict(tax_type="SGST", description="SGST", amount=300, invoice_count=2),
+            ],
+            [frappe._dict(taxable_value=0)],
+        ]
+        result = get_gstr_summary("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual(result["totals"]["total_itc"], 600)
+
+
+class TestGetItcLedger(unittest.TestCase):
+    """Phase 6: get_itc_ledger() now unions in Asset ITC lines, tagged with
+    a 'source' column so a caller can tell a capitalized-asset ITC line
+    apart from a regular Purchase Invoice ITC line."""
+
+    @patch.object(frappe.db, "sql")
+    def test_query_unions_purchase_invoice_and_asset_sources(self, mock_sql):
+        mock_sql.return_value = []
+        get_itc_ledger("VK Herbal", "2026-08-01", "2026-08-31")
+        query = mock_sql.call_args_list[0].args[0]
+        self.assertIn("tabAsset Tax Detail", query)
+        self.assertIn("'Purchase Invoice' AS source", query)
+        self.assertIn("AS source", query)
+        self.assertIn("'Asset'", query)
+
+    @patch.object(frappe.db, "sql")
+    def test_asset_rows_only_include_itc_eligible_lines_on_capitalized_assets(self, mock_sql):
+        mock_sql.return_value = []
+        get_itc_ledger("VK Herbal", "2026-08-01", "2026-08-31")
+        query = mock_sql.call_args_list[0].args[0]
+        self.assertIn("atd.is_itc_eligible = 1", query)
+        self.assertIn("a.is_existing_asset = 0", query)
+
+    @patch.object(frappe.db, "sql")
+    def test_returns_rows_from_both_sources_unchanged(self, mock_sql):
+        rows = [
+            frappe._dict(voucher_no="PINV-0001", source="Purchase Invoice", tax_amount=500),
+            frappe._dict(voucher_no="ASSET-0007", source="Asset", tax_amount=1200),
+        ]
+        mock_sql.return_value = rows
+        result = get_itc_ledger("VK Herbal", "2026-08-01", "2026-08-31")
+        self.assertEqual([r["source"] for r in result], ["Purchase Invoice", "Asset"])
+
+
 class TestGetGstr1Data(unittest.TestCase):
     """
     Regression tests for GSTR-1 tax-line contamination: the per-invoice and
@@ -314,7 +393,17 @@ class TestGetGstr1Data(unittest.TestCase):
                     grand_total=-1180, is_return=1, return_against="SINV-0004",
                 ),
             ],
-            [],
+            # get_gstr1_data overwrites each invoice's total_tax with the
+            # sum of its OWN GST-only tax_rows (see the function's own
+            # comment on why) -- so SINV-0004's 180 above is inert unless
+            # this second query mock actually carries a matching Tax Line
+            # row for it too. SINV-0005 (the return) deliberately gets none:
+            # its 12% CGST+SGST would double as a second, unwanted, 180 if
+            # it silently reused SINV-0004's row here.
+            [
+                frappe._dict(parent="SINV-0004", tax_type="CGST", description="CGST", rate=9, tax_amount=90),
+                frappe._dict(parent="SINV-0004", tax_type="SGST", description="SGST", rate=9, tax_amount=90),
+            ],
             [],
         ]
         result = get_gstr1_data("VK Herbal", "2026-08-01", "2026-08-31")

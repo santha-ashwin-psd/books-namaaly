@@ -44,7 +44,7 @@ SUBMITTABLE_DOCTYPES = {
     "Payment Entry", "Journal Entry", "Stock Entry", "Landed Cost Voucher",
     "Bank Transaction", "Material Request", "Work Order", "BOM",
     "Production Plan", "Asset", "Asset Movement", "Asset Repair",
-    "Asset Value Adjustment", "Asset Disposal", "QC Inspection",
+    "Asset Value Adjustment", "Asset Quantity Adjustment", "Asset Addition", "Asset Disposal", "QC Inspection",
 }
 
 # assert_can's `action` -> minimum lvl_<module> required. "cancel" and
@@ -95,6 +95,7 @@ DOCTYPE_MODULE = {
     # Assets (mapped to inventory to match Phase 4 frontend gating)
     "Asset": "inventory", "Asset Category": "inventory", "Asset Movement": "inventory",
     "Asset Repair": "inventory", "Asset Value Adjustment": "inventory",
+    "Asset Quantity Adjustment": "inventory", "Asset Addition": "inventory",
     "Asset Disposal": "inventory", "Department": "inventory", "Maintenance Log": "inventory",
     # Accounting
     "Account": "accounts", "Journal Entry": "accounts", "Cost Center": "accounts",

@@ -13,13 +13,21 @@
   "purchase_details_section",
   "purchase_date",
   "available_for_use_date",
+  "qty",
+  "taxable_value",
+  "column_break_taxable",
+  "total_tax",
   "purchase_cost",
+  "taxes_section",
+  "taxes",
+  "grand_total",
   "supplier",
   "company",
   "is_existing_asset",
   "credit_account",
   "capitalization_posted",
   "cwip_transferred",
+  "replacement_of",
   "location_section",
   "department",
   "location",
@@ -90,10 +98,57 @@
    "description": "When the asset actually went into service (e.g. after installation/CWIP). Depreciation is calculated from this date. Leave blank to use Purchase Date."
   },
   {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "description": "Number of identical units this asset record represents (e.g. 5 for a batch of 5 laptops bought together)."
+  },
+  {
+   "fieldname": "taxable_value",
+   "fieldtype": "Currency",
+   "label": "Taxable Value",
+   "reqd": 1,
+   "description": "The asset's price before tax (qty \u00d7 unit rate, or the invoice's taxable value for this line). This is what tax rates in the Taxes table below are calculated on."
+  },
+  {
+   "fieldname": "column_break_taxable",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_tax",
+   "fieldtype": "Currency",
+   "label": "Total Tax",
+   "read_only": 1,
+   "description": "Sum of all tax lines below. Split automatically on submit into ITC-eligible (posted to GST Input Account) vs non-eligible (added to capitalized cost) \u2014 see Purchase Cost."
+  },
+  {
    "fieldname": "purchase_cost",
    "fieldtype": "Currency",
    "label": "Purchase Cost",
-   "reqd": 1
+   "read_only": 1,
+   "reqd": 1,
+   "description": "Capitalized value = Taxable Value + non-ITC-eligible tax. This is the amount debited to the Fixed Asset Account and depreciated \u2014 it excludes any tax you're claiming as input credit."
+  },
+  {
+   "fieldname": "taxes_section",
+   "fieldtype": "Section Break",
+   "label": "Taxes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Tax Lines",
+   "options": "Asset Tax Detail"
+  },
+  {
+   "fieldname": "grand_total",
+   "fieldtype": "Currency",
+   "label": "Grand Total",
+   "read_only": 1,
+   "description": "Taxable Value + Total Tax = the amount credited to the Credit Account (Payable/Bank/Cash) on capitalization. May be more than Purchase Cost when tax is ITC-eligible, since that portion doesn't add to the asset's book value."
   },
   {
    "fieldname": "supplier",
@@ -141,6 +196,16 @@
    "print_hide": 1,
    "read_only": 1,
    "description": "Set once the Capital Work-in-Progress balance for this asset has been transferred to the Fixed Asset account. See assets/asset_gl.py."
+  },
+  {
+   "fieldname": "replacement_of",
+   "fieldtype": "Link",
+   "label": "Replacement Of",
+   "options": "Asset",
+   "read_only": 1,
+   "no_copy": 1,
+   "search_index": 1,
+   "description": "Set automatically when this Asset was created as a replacement (paid or free) for another Asset via Asset Addition."
   },
   {
    "fieldname": "location_section",
