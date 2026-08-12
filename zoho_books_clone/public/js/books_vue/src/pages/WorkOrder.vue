@@ -2544,9 +2544,18 @@ async function submitComplete() {
     loadList();
   } catch (e) {
     const raceGuardHit = /exceeds the remaining planned qty|exceed the planned qty/i.test(e.message || "");
+    const missingStock = /Cannot complete Work Order/i.test(e.message || "");
     if (raceGuardHit) {
       toast(`${e.message} Someone else may have just recorded a completion on this Work Order -- refreshing the current numbers.`, "error");
       await loadWO();
+    } else if (missingStock) {
+      await confirm({
+        title: "Could Not Complete",
+        body: esc(e.message),
+        okLabel: "OK",
+        okStyle: "primary",
+        hideCancel: true,
+      });
     } else {
       toast(e.message, "error");
     }
@@ -2564,7 +2573,18 @@ async function createPackingSlip() {
     toast(`Packing Slip ${psName} created`);
     router.push(`/manufacturing/packing-slip/${psName}`);
   } catch (e) {
-    toast(e.message, "error");
+    const missingStock = /Not enough stock/i.test(e.message || "") || /Cannot pack/i.test(e.message || "");
+    if (missingStock) {
+      await confirm({
+        title: "Could Not Create Packing Slip",
+        body: e.message,
+        okLabel: "OK",
+        okStyle: "primary",
+        hideCancel: true,
+      });
+    } else {
+      toast(e.message, "error");
+    }
   }
   actionLoading.value = false;
 }

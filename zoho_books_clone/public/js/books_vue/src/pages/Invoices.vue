@@ -809,6 +809,9 @@
               </button>
             </div>
           </div>
+          <button v-if="viewInv.shipping_address" @click="printShippingAddress(viewInv)" class="inv-ab-btn">
+            <span v-html="icon('printer',13)"></span> <span class="ab-label">Print Shipping</span>
+          </button>
           <button class="inv-ab-btn" @click="openEmail(viewInv)">
             <span v-html="icon('mail',13)"></span> <span class="ab-label">Send Email</span>
           </button>
@@ -1423,6 +1426,7 @@ import JournalTab from "../components/JournalTab.vue";
 import Pagination from "../components/Pagination.vue";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import { useReturnNote } from "../composables/useReturnNote.js";
+import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
 import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
@@ -1432,6 +1436,7 @@ import { computeTaxRows, computeDiscountAmount, applyDiscountToLines } from "../
 import { useBarcodeScanner } from "../composables/useBarcodeScanner.js";
 
 const { toast } = useToast();
+const { confirm } = useConfirm();
 const { canCreate, canEdit, canDelete } = usePermissions();
 const route = useRoute();
 const router = useRouter();
@@ -2031,6 +2036,46 @@ async function downloadInvoicePdf(mode = 'pdf') {
   }
 }
 
+function printShippingAddress(inv) {
+  showDownloadMenu.value = false;
+  const printWin = window.open('', '_blank');
+  if (!printWin) return toast("Popup blocked. Please allow popups to print.", "error");
+  
+  const content = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Shipping Label</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #111827; }
+          .label-box { border: 2px solid #374151; padding: 40px; max-width: 500px; margin: 0 auto; border-radius: 12px; }
+          .title { font-weight: 700; font-size: 14px; margin-bottom: 20px; text-transform: uppercase; color: #6b7280; letter-spacing: 1px; }
+          .name { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+          .address { font-size: 18px; line-height: 1.6; }
+          .phone { margin-top: 12px; font-size: 16px; font-weight: 700; }
+          @media print {
+            body { padding: 0; }
+            .label-box { max-width: 100%; padding: 20px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="label-box">
+          <div class="title">Shipping To</div>
+          <div class="name">${inv.customer_name || inv.customer || ''}</div>
+          <div class="address">${displayAddr(inv.shipping_address)}</div>
+          ${inv.customer_mobile ? '<div class="phone" style="margin-top: 12px; font-size: 16px; font-weight: 700;">Phone: ' + inv.customer_mobile + '</div>' : ''}
+        </div>
+        <script>
+          setTimeout(() => { window.print(); window.close(); }, 500);
+        <\/script>
+      </body>
+    </html>
+  `;
+  printWin.document.write(content);
+  printWin.document.close();
+}
+
 // close download menu when clicking outside
 function onDocClickForDownloadMenu(e) {
   if (!e.target.closest('.inv-ab-dropdown') && !e.target.closest('.inv-dl-menu-item')) {
@@ -2580,6 +2625,35 @@ async function saveInvoice(docstatus, andNew = false) {
     toast(`This period is locked up to ${lockedUpTo}. Unlock the period in Fiscal Years settings to save this invoice.`, "error");
     return;
   }
+  if (docstatus === 1 && form.update_stock) {
+    const itemsToCheck = lines.value.map(l => l.item_code).filter(Boolean);
+    if (itemsToCheck.length > 0) {
+      try {
+        const stockInfo = await apiGET("zoho_books_clone.api.inventory.get_stock_for_items", {
+          warehouse: form.set_warehouse,
+          item_codes: JSON.stringify(itemsToCheck)
+        });
+        const insufficient = [];
+        for (const l of lines.value) {
+          if (!l.item_code) continue;
+          const avail = flt(stockInfo[l.item_code]);
+          const req = flt(l.qty);
+          if (req > avail) {
+            insufficient.push(`- ${l.item_code} (Req: ${req}, Avail: ${avail})`);
+          }
+        }
+        if (insufficient.length > 0) {
+          const msg = `The following items have insufficient stock in warehouse ${form.set_warehouse}:\n\n${insufficient.join('\n')}\n\nDo you want to proceed anyway?`;
+          if (!await confirm({ title: "Insufficient Stock", body: msg, okLabel: "Proceed", okStyle: "danger" })) {
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Stock check failed", e);
+      }
+    }
+  }
+
   drawerSaving.value=true;
   try {
     const company=await resolveCompany();

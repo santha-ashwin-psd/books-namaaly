@@ -1,64 +1,189 @@
 <template>
 <div class="bomx-page">
-  <div class="bomx-two-col">
+    <div class="bomx-list-page">
 
-    <!-- ══════════ LEFT: BOM LIST ══════════ -->
-    <div class="bomx-list-panel">
-      <div class="bomx-panel-hdr">
-        <span class="bomx-panel-title">📋 All BOMs <span class="bomx-count">({{ sorted.length }})</span></span>
-        <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',12)"></span> New</button>
-      </div>
-      <select class="bomx-fi bomx-status-filter" v-model="filterStatus">
-        <option value="">All Status</option>
-        <option value="active">Active</option>
-        <option value="draft">Draft</option>
-        <option value="inactive">Inactive</option>
-        <option value="obsolete">Obsolete</option>
-      </select>
-      <input class="bomx-search" v-model="search" type="text" placeholder="Search BOM by item name or number…"/>
-      <div class="bomx-list">
-        <template v-if="loading">
-          <div v-for="n in 5" :key="n" class="bomx-item"><div class="shimmer" style="height:38px;border-radius:6px"></div></div>
-        </template>
-        <div v-else-if="!sorted.length" class="bomx-list-empty">No BOMs found</div>
-        <div v-else v-for="row in sorted" :key="row.name"
-             class="bomx-item" :class="{active: !isNew && bom.name && chainRoot(bom.name) === chainRoot(row.name)}"
-             @click="selectBOM(row.name)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div class="bomx-item-name">{{ row.item_name || row.item }}</div>
-            <span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
+
+      <div class="bomx-stat-grid">
+        <div class="bomx-stat-card">
+          <div class="bomx-stat-bar bomx-stat-bar-blue"></div>
+          <div class="bomx-stat-icon bomx-stat-icon-blue"><span v-html="icon('file',16)"></span></div>
+          <div class="bomx-stat-copy">
+            <div class="bomx-stat-label">Total BOMs</div>
+            <div class="bomx-stat-value">{{ bomSummary.total }}</div>
+            <div class="bomx-stat-sub">All visible BOMs</div>
           </div>
-          <div class="bomx-item-meta">
-            <span class="mono">{{ row.name }}</span>
-            <span>•</span>
-            <span v-if="row.bom_version">v{{ formatVersion(row.bom_version) }}</span>
-            <template v-if="row._versionCount > 1">
-              <span>•</span>
-              <span>{{ row._versionCount }} versions</span>
-            </template>
+        </div>
+        <div class="bomx-stat-card">
+          <div class="bomx-stat-bar bomx-stat-bar-amber"></div>
+          <div class="bomx-stat-icon bomx-stat-icon-amber"><span v-html="icon('clock',16)"></span></div>
+          <div class="bomx-stat-copy">
+            <div class="bomx-stat-label">Draft</div>
+            <div class="bomx-stat-value">{{ bomSummary.draft }}</div>
+            <div class="bomx-stat-sub">Unsubmitted BOMs</div>
           </div>
-          <div class="bomx-item-right">
-            <span style="font-size:12px;color:var(--bx-muted)">BOM Cost:</span>
-            <span class="mono" style="font-size:12.5px;font-weight:700;color:var(--bx-mfgB)">{{ INR(row.total_cost) }}</span>
-            <span v-if="row.is_default" class="bomx-default-tag">Default</span>
-            <span v-if="row.bom_type" class="bomx-default-tag" :style="bomTypeStyle(row.bom_type)">{{ row.bom_type }}</span>
+        </div>
+        <div class="bomx-stat-card">
+          <div class="bomx-stat-bar bomx-stat-bar-red"></div>
+          <div class="bomx-stat-icon bomx-stat-icon-red"><span v-html="icon('ban',16)"></span></div>
+          <div class="bomx-stat-copy">
+            <div class="bomx-stat-label">Inactive</div>
+            <div class="bomx-stat-value">{{ bomSummary.inactive }}</div>
+            <div class="bomx-stat-sub">Submitted but inactive</div>
+          </div>
+        </div>
+        <div class="bomx-stat-card">
+          <div class="bomx-stat-bar bomx-stat-bar-green"></div>
+          <div class="bomx-stat-icon bomx-stat-icon-green"><span v-html="icon('check',16)"></span></div>
+          <div class="bomx-stat-copy">
+            <div class="bomx-stat-label">Active</div>
+            <div class="bomx-stat-value">{{ bomSummary.active }}</div>
+            <div class="bomx-stat-sub">Ready for use</div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ══════════ RIGHT: BOM DETAIL ══════════ -->
-    <div class="bomx-detail-panel">
-
-      <!-- Empty state -->
-      <div v-if="!selectedName" class="bomx-empty-state">
-        <div class="bomx-empty-icon">📄</div>
-        <div class="bomx-empty-title">Select a BOM</div>
-        <div class="bomx-empty-sub">Choose a Bill of Materials from the list to view components, costs, and versions.</div>
-        <button class="bomx-btn bomx-btn-mfg" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd"><span v-html="icon('plus',13)"></span> Create BOM</button>
+      <div class="bomx-toolbar">
+        <div class="bomx-toolbar-left" style="display:flex; align-items:center; gap:12px;">
+          <div class="sales-search">
+            <span v-html="icon('search',13)" style="color:#9ca3af;flex-shrink:0"></span>
+            <input v-model="search" placeholder="Search BOM by name or number..." class="sales-search-input"/>
+          </div>
+          <select class="bomx-fi bomx-toolbar-select" v-model="filterStatus">
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+            <option value="inactive">Inactive</option>
+            <option value="obsolete">Obsolete</option>
+          </select>
+        </div>
+        <div class="bomx-toolbar-actions">
+          <button class="bomx-btn bomx-btn-mfg bomx-btn-sm" :disabled="!$canCreate('inventory')" :title="!$canCreate('inventory') ? 'Read-only access' : ''" @click="openAdd" style="margin-right: 8px;">
+            <span v-html="icon('plus',14)"></span> New BOM
+          </button>
+          <button class="bomx-toolbar-btn" @click="toggleGroupedView" :class="{active: showGroupedView}">
+            <span v-html="icon('list',14)"></span> Group
+          </button>
+          <button class="bomx-toolbar-btn" @click="showAdvancedFilters = !showAdvancedFilters" :class="{active: showAdvancedFilters}">
+            <span v-html="icon('filter',14)"></span> Filters
+          </button>
+          <button class="bomx-toolbar-btn" @click="exportCsv">
+            <span v-html="icon('download',14)"></span> CSV
+          </button>
+          <button class="bomx-toolbar-btn" @click="refreshList" title="Refresh">
+            <span v-html="icon('refresh',14)"></span>
+          </button>
+        </div>
       </div>
 
-      <template v-else>
+      <div v-if="showAdvancedFilters" class="bomx-advanced-filters">
+        <div>
+          <div class="bomx-hf-label">BOM Type</div>
+          <select class="bomx-fi" v-model="filterBomType">
+            <option value="">All Types</option>
+            <option value="Manufacturing">Manufacturing</option>
+            <option value="Packing">Packing</option>
+            <option value="Sub-Assembly">Sub-Assembly</option>
+          </select>
+        </div>
+        <div>
+          <div class="bomx-hf-label">Rows per page</div>
+          <select class="bomx-fi" v-model.number="pageSize">
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ── Bulk action bar ── -->
+      <BulkActionBar :count="selectedRows.size" @clear="selectedRows=new Set()">
+        <button v-if="hasDraftsSelected" @click="bulkSubmit" :disabled="!$canEdit('inventory')"><span v-html="icon('check',13)"></span> Submit Drafts</button>
+        <button v-if="hasSubmittedSelected" @click="bulkCancel" :disabled="!$canEdit('inventory')">Cancel Submitted</button>
+        <button @click="exportSelectedCSV"><span v-html="icon('download',13)"></span> Export Selected</button>
+        <button class="bab-danger" @click="bulkDelete" :disabled="!$canDelete('inventory')">Delete</button>
+      </BulkActionBar>
+
+      <div class="bomx-table-shell">
+        <table class="bomx-table">
+          <thead>
+            <tr>
+              <th style="width:34px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
+              <th>BOM Number</th>
+              <th>BOM Name</th>
+              <th>Status</th>
+              <th>BOM Type</th>
+              <th style="text-align:right">BOM Cost (₹)</th>
+              <th style="text-align:right">Quantity</th>
+              <th>Default</th>
+              <th>Last Updated</th>
+              <th style="text-align:center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-if="loading">
+              <tr v-for="n in 8" :key="n">
+                <td :colspan="10"><div class="shimmer" style="height:38px;border-radius:8px"></div></td>
+              </tr>
+            </template>
+            <tr v-else-if="!visibleRows.length">
+              <td colspan="10" class="bomx-empty-row">No BOMs found</td>
+            </tr>
+            <tr v-else v-for="row in visibleRows" :key="row.name + (row._level > 0 ? '-child-'+row._level : '')" class="bomx-table-row" :class="{ selected: selectedRows.has(row.name), 'is-child': row._level > 0 }" @click="selectBOM(row.name)">
+              <td><input type="checkbox" :checked="selectedRows.has(row.name)" @change="toggleRow(row.name)" @click.stop /></td>
+              <td>
+                <div style="display:flex; align-items:center; gap:8px;" :style="{ marginLeft: (row._level * 24) + 'px' }">
+                  <div v-if="row._level > 0" class="bomx-child-connector"></div>
+                  <button v-if="row._hasChildren" class="bomx-expand-btn" @click.stop="toggleBomGroup(row.name)">
+                    <span v-html="expandedGroups.has(row.name) ? icon('chevron-down', 14) : icon('chevron-right', 14)"></span>
+                  </button>
+                  <span class="bomx-link-bom">{{ row.name }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="bomx-name-cell">
+                  {{ row.item_name || row.item }}
+                  <span v-if="row._role === 'top BOM'" class="bomx-badge-top">top BOM <span v-if="expandedGroups.has(row.name)" style="opacity:0.7;margin-left:4px;">({{ row._childCount }} items)</span></span>
+                  <span v-if="row._role === 'assembly'" class="bomx-badge-assembly">assembly <span v-if="expandedGroups.has(row.name)" style="opacity:0.7;margin-left:4px;">({{ row._childCount }} sub)</span></span>
+                  <span v-if="row._role === 'sub-assembly'" class="bomx-badge-sub">sub-assembly</span>
+                </div>
+                <div class="bomx-name-sub">v{{ formatVersion(row.bom_version) }}</div>
+              </td>
+              <td><span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
+              <td><span class="bomx-type-tag" :style="bomTypeStyle(row._role === 'sub-assembly' ? 'Sub-Assembly' : row.bom_type)">{{ row._role === 'sub-assembly' ? 'Sub-assembly' : (row.bom_type || '—') }}</span></td>
+              <td class="mono bomx-num">{{ INR(row.total_cost) }}</td>
+              <td class="mono bomx-num">{{ row.quantity || 1 }}</td>
+              <td>
+                <span class="bomx-mini-pill" :class="row.is_default ? 'yes' : 'no'">{{ row.is_default ? 'Yes' : 'No' }}</span>
+              </td>
+              <td class="bomx-date-cell">{{ formatShortDate(row.modified) }}</td>
+              <td style="text-align:center;white-space:nowrap" @click.stop>
+                <button class="inv-act-btn" @click="selectBOM(row.name)" title="Edit">
+                  <span v-html="icon('edit',13)"></span>
+                </button>
+                <button class="inv-act-btn" @click="deleteBOMRow(row)" title="Delete" style="color:#dc2626">
+                  <span v-html="icon('trash',13)"></span>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bomx-table-footer">
+        <div>Showing {{ hierarchicalRows.length ? ((currentPage - 1) * pageSize + 1) : 0 }} to {{ Math.min(currentPage * pageSize, hierarchicalRows.length) }} of {{ hierarchicalRows.length }} entries</div>
+        <div class="bomx-pagination">
+          <button class="bomx-page-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">‹</button>
+          <button v-for="page in totalPages" :key="page" class="bomx-page-btn" :class="{active: page === currentPage}" @click="goToPage(page)">{{ page }}</button>
+          <button class="bomx-page-btn" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">›</button>
+        </div>
+      </div>
+    </div>
+  <!-- ══════════ DRAWER: BOM Detail ══════════ -->
+  <Transition name="bomx-drawer-fade">
+    <div v-if="selectedName" class="bomx-drawer-bg" @click="goBackToList">
+      <div class="bomx-drawer-panel" @click.stop>
+        <div class="bomx-detail-panel" style="border:none; border-radius:0; height:100%; box-shadow:none;">
+
         <div v-if="detailLoading" class="bomx-empty-state"><div class="shimmer" style="height:200px;border-radius:10px"></div></div>
 
         <template v-else>
@@ -208,6 +333,7 @@
               <div class="bomx-rm-cards">
                 <div v-if="!bom.items || !bom.items.length" class="bomx-tree-empty">No raw materials added.</div>
                 <div class="bomx-rm-card" v-for="(rm, idx) in bom.items" :key="'rm'+idx">
+                  <div class="bomx-rm-bar" :style="{ background: rm.is_substituted ? 'var(--bx-violet)' : 'var(--bx-mfg)' }"></div>
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">📦</span>
                     <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="rm.item_code" @change="onRmItemChange(rm)" :disabled="readOnly" :title="itemNameFor(rm.item_code) || rm.item_code">
@@ -275,6 +401,7 @@
               <div class="bomx-rm-cards">
                 <div v-if="!bom.packing_items || !bom.packing_items.length" class="bomx-tree-empty">No packing materials added.</div>
                 <div class="bomx-rm-card" v-for="(pi, idx) in bom.packing_items" :key="'pi'+idx">
+                  <div class="bomx-rm-bar" :style="{ background: 'var(--bx-violet)' }"></div>
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">🏷️</span>
                     <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="pi.item_code" @change="onPackingItemChange(pi)" :disabled="readOnly" :title="itemNameFor(pi.item_code) || pi.item_code">
@@ -410,6 +537,7 @@
               <div class="bomx-rm-cards">
                 <div v-if="!bom.scrap_items || !bom.scrap_items.length" class="bomx-tree-empty">No scrap items added.</div>
                 <div class="bomx-rm-card" v-for="(sc, idx) in bom.scrap_items" :key="idx">
+                  <div class="bomx-rm-bar" :style="{ background: 'var(--bx-green)' }"></div>
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">🗑️</span>
                     <select class="bomx-fi bomx-fi-inline bomx-rm-card-title" v-model="sc.item_code" :disabled="readOnly" :title="itemNameFor(sc.item_code) || sc.item_code">
@@ -571,7 +699,7 @@
 
           <!-- Footer -->
           <div class="bomx-footer">
-            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" @click="deleteFromDetail" v-if="!isNew && (bom.docstatus===0 || bom.docstatus===2)">Delete BOM</button>
+            <button class="bomx-btn bomx-btn-ghost-inv" style="color:var(--bx-red);border-color:rgba(201,42,42,.3)" :disabled="!$canDelete('inventory')" @click="deleteFromDetail" v-if="!isNew">Delete BOM</button>
             <div style="flex:1"></div>
             <button v-if="!readOnly" class="bomx-btn bomx-btn-mfg" @click="save" :disabled="saving || loading || !(isNew ? $canCreate('inventory') : $canEdit('inventory'))">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -579,10 +707,10 @@
             </button>
           </div>
         </template>
-      </template>
+        </div>
+      </div>
     </div>
-
-  </div>
+  </Transition>
 
   <!-- Scrap Reuse Eligibility Modal -->
   <div v-if="showScrapPanel" class="bomx-modal-overlay" @click.self="closeScrapPanel">
@@ -657,6 +785,7 @@
       </div>
     </div>
   </div>
+
 </div>
 </template>
 
@@ -667,6 +796,7 @@ import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { apiGet, apiList, apiSave, apiDelete, apiSubmit, apiCancel, apiAmend, apiCall } from "../api/client.js";
 import DocLink from "../components/DocLink.vue";
+import BulkActionBar from "../components/BulkActionBar.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -678,13 +808,94 @@ const loading = ref(false);
 const list = ref([]);
 const search = ref("");
 const filterStatus = ref("");
+const filterBomType = ref("");
+const showAdvancedFilters = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(25);
+
+const hasDraftsSelected = computed(() => {
+  if (!selectedRows.value.size) return false;
+  return list.value.some(r => selectedRows.value.has(r.name) && r.docstatus === 0);
+});
+
+const hasSubmittedSelected = computed(() => {
+  if (!selectedRows.value.size) return false;
+  return list.value.some(r => selectedRows.value.has(r.name) && r.docstatus === 1);
+});
+
+async function bulkSubmit() {
+  const rows = list.value.filter(r => selectedRows.value.has(r.name) && r.docstatus === 0);
+  if (!rows.length) return;
+  try {
+    let ok = 0;
+    for (const r of rows) {
+      await apiSubmit("BOM", r.name);
+      ok++;
+    }
+    toast(`Submitted ${ok} BOM(s)`);
+    selectedRows.value = new Set();
+    loadList();
+  } catch (e) { toast("Error submitting BOMs: " + e.message, "error"); }
+}
+
+async function bulkCancel() {
+  const rows = list.value.filter(r => selectedRows.value.has(r.name) && r.docstatus === 1);
+  if (!rows.length) return;
+  if (!await confirm({ title: "Cancel BOMs?", body: `Cancel ${rows.length} submitted BOM(s)?`, okLabel: "Cancel BOMs", okStyle: "danger" })) return;
+  try {
+    let ok = 0;
+    for (const r of rows) {
+      await apiCancel("BOM", r.name);
+      ok++;
+    }
+    toast(`Cancelled ${ok} BOM(s)`);
+    selectedRows.value = new Set();
+    loadList();
+  } catch (e) { toast("Error cancelling BOMs: " + e.message, "error"); }
+}
+
+async function bulkDelete() {
+  const names = [...selectedRows.value];
+  if (!names.length) return;
+  if (!await confirm({ title: "Delete BOMs?", body: `Delete ${names.length} BOM(s)? Submitted BOMs will be cancelled first.`, okLabel: "Delete", okStyle: "danger" })) return;
+  try {
+    let deleted = 0;
+    for (const name of names) {
+      const row = list.value.find(i => i.name === name);
+      if (row) {
+        if (row.docstatus === 1) await apiCancel("BOM", name);
+        await apiDelete("BOM", name);
+        deleted++;
+      }
+    }
+    toast(`Deleted ${deleted} BOM(s)`);
+    selectedRows.value = new Set();
+    loadList();
+  } catch (e) {
+    toast("Error deleting BOMs: " + e.message, "error");
+  }
+}
+
+function exportSelectedCSV() {
+  if (!selectedRows.value.size) return;
+  const rows = list.value.filter(i => selectedRows.value.has(i.name));
+  let csv = "BOM Number,Name,Type,Quantity,Cost,Status,Default\n";
+  for (const r of rows) {
+    csv += `"${r.name}","${r.item_name||r.item}","${r.bom_type||''}","${r.quantity||1}","${r.total_cost||0}","${statusLabel(r)}","${r.is_default?'Yes':'No'}"\n`;
+  }
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `boms_selected_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
 
 const selectedName = computed(() => (route.params.name && route.params.name !== "new") ? route.params.name : (route.params.name === "new" ? "new" : null));
 
 async function loadList() {
   loading.value = true;
   try {
-    const fields = ["name", "item", "bom_type", "is_active", "is_default", "docstatus", "bom_version", "amended_from", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost", "quantity"];
+    const fields = ["name", "item", "bom_type", "is_active", "is_default", "docstatus", "bom_version", "amended_from", "modified", "rm_cost", "op_cost", "scrap_value", "total_cost", "quantity", "bulk_item"];
     const r = await apiList("BOM", { fields, limit: 1000, order: "modified desc" });
     list.value = r || [];
     // Derived from the same fetch instead of a second BOM query — used by the
@@ -735,6 +946,7 @@ const sorted = computed(() => {
   if (filterStatus.value === "inactive") r = r.filter(i => !i.is_active && i.docstatus !== 2);
   if (filterStatus.value === "draft") r = r.filter(i => i.docstatus === 0);
   if (filterStatus.value === "obsolete") r = r.filter(i => i.docstatus === 2);
+  if (filterBomType.value) r = r.filter(i => i.bom_type === filterBomType.value);
   const q = search.value.toLowerCase().trim();
   if (q) r = r.filter(i => [i.item_name, i.item, i.name].filter(Boolean).join(" ").toLowerCase().includes(q));
 
@@ -753,6 +965,176 @@ const sorted = computed(() => {
     return { ...rep, _versionCount: rows.length };
   }).sort((a, b) => new Date(b.modified) - new Date(a.modified));
 });
+
+const showGroupedView = ref(false);
+const expandedGroups = ref(new Set());
+
+function toggleBomGroup(name) {
+  const s = new Set(expandedGroups.value);
+  if (s.has(name)) s.delete(name);
+  else s.add(name);
+  expandedGroups.value = s;
+}
+
+function toggleGroupedView() {
+  showGroupedView.value = !showGroupedView.value;
+  if (!showGroupedView.value) {
+    expandedGroups.value.clear();
+  }
+}
+
+const hierarchicalRows = computed(() => {
+  if (!showGroupedView.value) return sorted.value;
+  
+  const rootToRep = new Map();
+  for (const rep of sorted.value) {
+    rootToRep.set(chainRoot(rep.name), rep);
+  }
+  
+  const parentToChildren = new Map();
+  const activeChildRoots = new Set();
+  
+  // 1. Map sub-assembly children
+  for (const [parent, children] of Object.entries(subAssemblyEdges.value)) {
+    const pRoot = chainRoot(parent);
+    if (rootToRep.has(pRoot)) {
+      if (!parentToChildren.has(pRoot)) parentToChildren.set(pRoot, new Set());
+      for (const c of children) {
+        const cRoot = chainRoot(c);
+        if (rootToRep.has(cRoot)) {
+          parentToChildren.get(pRoot).add(cRoot);
+          activeChildRoots.add(cRoot);
+        }
+      }
+    }
+  }
+
+  // 2. Map packing children (bulk_item edges)
+  const itemToManufacturingRoots = new Map();
+  for (const rep of sorted.value) {
+    if (rep.bom_type === 'Manufacturing' || !rep.bom_type) {
+      const root = chainRoot(rep.name);
+      if (!itemToManufacturingRoots.has(rep.item)) itemToManufacturingRoots.set(rep.item, new Set());
+      itemToManufacturingRoots.get(rep.item).add(root);
+    }
+  }
+
+  for (const rep of sorted.value) {
+    if (rep.bom_type === 'Packing' && rep.bulk_item) {
+      const pRoot = chainRoot(rep.name);
+      const mfgRoots = itemToManufacturingRoots.get(rep.bulk_item) || new Set();
+      for (const cRoot of mfgRoots) {
+        if (!parentToChildren.has(pRoot)) parentToChildren.set(pRoot, new Set());
+        parentToChildren.get(pRoot).add(cRoot);
+        activeChildRoots.add(cRoot);
+      }
+    }
+  }
+
+  function buildTree(root, level) {
+    const rep = rootToRep.get(root);
+    if (!rep) return [];
+    const childrenRoots = parentToChildren.get(root) || new Set();
+    const hasChildren = childrenRoots.size > 0;
+    
+    let role = (level === 0 && hasChildren) ? 'top BOM' : (hasChildren ? 'assembly' : 'sub-assembly');
+    if (level === 0 && rep.bom_type === 'Packing') role = 'top BOM';
+    if (level > 0 && hasChildren) role = 'assembly';
+    
+    const result = [{ ...rep, _level: level, _hasChildren: hasChildren, _childCount: childrenRoots.size, _role: role }];
+    
+    if (hasChildren && expandedGroups.value.has(rep.name)) {
+      for (const cr of childrenRoots) {
+        result.push(...buildTree(cr, level + 1));
+      }
+    }
+    return result;
+  }
+  
+  const finalRows = [];
+  for (const rep of sorted.value) {
+    const root = chainRoot(rep.name);
+    if (!activeChildRoots.has(root)) {
+      finalRows.push(...buildTree(root, 0));
+    }
+  }
+  return finalRows;
+});
+
+const visibleRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return hierarchicalRows.value.slice(start, start + pageSize.value);
+});
+
+const selectedRows = ref(new Set());
+const allSelected = computed(() => visibleRows.value.length > 0 && visibleRows.value.every(r => selectedRows.value.has(r.name)));
+
+function toggleAll(e) {
+  if (e.target.checked) visibleRows.value.forEach(r => selectedRows.value.add(r.name));
+  else selectedRows.value.clear();
+  selectedRows.value = new Set(selectedRows.value);
+}
+
+function toggleRow(name) {
+  const s = new Set(selectedRows.value);
+  s.has(name) ? s.delete(name) : s.add(name);
+  selectedRows.value = s;
+}
+
+const totalPages = computed(() => Math.max(1, Math.ceil(hierarchicalRows.value.length / pageSize.value)));
+
+const bomSummary = computed(() => {
+  const rows = sorted.value;
+  return {
+    total: rows.length,
+    draft: rows.filter(r => statusLabel(r) === "Draft").length,
+    inactive: rows.filter(r => statusLabel(r) === "Inactive").length,
+    active: rows.filter(r => statusLabel(r) === "Active").length,
+  };
+});
+
+function goToPage(page) {
+  currentPage.value = Math.min(Math.max(1, page), totalPages.value);
+}
+
+function formatShortDate(value) {
+  if (!value) return "—";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function refreshList() {
+  loadList();
+}
+
+function exportCsv() {
+  const rows = sorted.value;
+  if (!rows.length) return toast("No BOM rows to export", "error");
+  const header = ["BOM Number", "BOM Name", "Status", "BOM Type", "BOM Cost", "Quantity", "Default", "Last Updated"];
+  const csv = [
+    header.join(","),
+    ...rows.map(row => [
+      row.name,
+      `"${String(row.item_name || row.item || "").replace(/"/g, '""')}"`,
+      statusLabel(row),
+      row.bom_type || "",
+      Number(row.total_cost || 0).toFixed(2),
+      row.quantity || 1,
+      row.is_default ? "Yes" : "No",
+      row.modified || "",
+    ].join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bom-list.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+watch([search, filterStatus, filterBomType, pageSize], () => { currentPage.value = 1; });
 
 function statusLabel(row) {
   if (row.docstatus === 2) return "Obsolete";
@@ -783,10 +1165,6 @@ function goBackToList() {
 }
 
 async function isBomDeletable(row) {
-  if (row.docstatus === 1) {
-    toast(`${row.name} is submitted and cannot be deleted. Cancel it first.`, "error");
-    return false;
-  }
   try {
     const inUse = await apiList("Work Order", { fields: ["name"], filters: [["bom", "=", row.name], ["docstatus", "!=", 2]], limit: 1 });
     if (inUse && inUse.length) {
@@ -803,11 +1181,26 @@ async function isBomDeletable(row) {
 async function deleteFromDetail() {
   const row = { name: bom.value.name, docstatus: bom.value.docstatus };
   if (!(await isBomDeletable(row))) return;
-  if (await confirm({ title: "Delete BOM?", body: `Are you sure you want to delete ${row.name}?`, okLabel: "Delete", okStyle: "danger" })) {
+  if (await confirm({ title: row.docstatus === 1 ? "Cancel & Delete BOM?" : "Delete BOM?", body: row.docstatus === 1 ? `Are you sure you want to cancel and delete ${row.name}?` : `Are you sure you want to delete ${row.name}?`, okLabel: "Delete", okStyle: "danger" })) {
     try {
+      if (row.docstatus === 1) await apiCancel("BOM", row.name);
       await apiDelete("BOM", row.name);
       toast("BOM deleted");
       goBackToList();
+      loadList();
+    } catch (e) {
+      toast("Could not delete BOM: " + e.message, "error");
+    }
+  }
+}
+
+async function deleteBOMRow(row) {
+  if (!(await isBomDeletable(row))) return;
+  if (await confirm({ title: row.docstatus === 1 ? "Cancel & Delete BOM?" : "Delete BOM?", body: row.docstatus === 1 ? `Are you sure you want to cancel and delete ${row.name}?` : `Are you sure you want to delete ${row.name}?`, okLabel: "Delete", okStyle: "danger" })) {
+    try {
+      if (row.docstatus === 1) await apiCancel("BOM", row.name);
+      await apiDelete("BOM", row.name);
+      toast("BOM deleted");
       loadList();
     } catch (e) {
       toast("Could not delete BOM: " + e.message, "error");
@@ -933,7 +1326,7 @@ onMounted(async () => {
       apiList("Operation", { fields: ["name"], limit: 1000, order: "name asc" }),
       apiList("Workstation", { fields: ["name", "hour_rate"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
       apiList("Routing", { fields: ["name"], filters: [["is_active", "=", 1]], limit: 1000, order: "name asc" }),
-      apiList("BOM Item", { fields: ["parent", "sub_assembly_bom"], filters: [["sub_assembly_bom", "!=", ""]], limit: 5000 }),
+      apiList("BOM Item", { fields: ["parent", "sub_assembly_bom"], filters: [["sub_assembly_bom", "is", "set"]], limit: 5000 }),
       apiCall("zoho_books_clone.manufacturing.doctype.manufacturing_settings.manufacturing_settings.get_manufacturing_defaults").catch(() => null),
     ]);
 
@@ -1280,6 +1673,11 @@ const scrap_value = computed(() => (bom.value.scrap_items || []).reduce((s, sc) 
 const total_cost = computed(() => rm_cost.value + op_cost.value - scrap_value.value);
 
 async function save() {
+  bom.value.items = (bom.value.items || []).filter(i => i.item_code);
+  bom.value.operations = (bom.value.operations || []).filter(o => o.operation);
+  bom.value.scrap_items = (bom.value.scrap_items || []).filter(s => s.item_code);
+  bom.value.packing_items = (bom.value.packing_items || []).filter(p => p.item_code);
+
   if (!bom.value.item) return toast("Please select a Production Item", "error");
   if (!bom.value.quantity || bom.value.quantity <= 0) return toast("Quantity must be greater than 0", "error");
   const pl = parseFloat(bom.value.process_loss) || 0;
@@ -1353,10 +1751,27 @@ async function newVersion() {
       target = await apiCancel("BOM", bom.value.name);
     }
     const doc = await apiAmend("BOM", target.name);
-    toast(`New revision ${doc.name} created — v${doc.bom_version}`);
-    router.push(`/manufacturing/bom/${doc.name}`);
+    
+    // Fallback if doc is a string or somehow has no name
+    const newName = (doc && doc.name) ? doc.name : doc;
+    
+    toast(`New revision ${newName} created — opening now`);
+    
+    // Explicitly update the route and force the component to load the new doc
+    if (newName && newName !== bom.value.name) {
+      await router.push(`/manufacturing/bom/${newName}`);
+      // Give the watcher a moment, but explicitly load to be safe
+      bom.value = doc; 
+      await loadBom();
+    } else {
+      await loadBom();
+    }
+    
     loadList();
-  } catch (e) { toast(e.message, "error"); }
+  } catch (e) { 
+    toast("Action failed: " + (e.message || String(e)), "error");
+    console.error(e);
+  }
   submitting.value = false;
 }
 
@@ -1545,8 +1960,22 @@ function INR(n) {
 }
 
 const ICONS = {
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
   printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
+  ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="8" x2="16" y2="16"></line></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+  filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12 10 19 14 21 14 12 22 3"></polygon></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+  "chevron-down": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>',
+  "chevron-right": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>',
 };
 function icon(name, size) {
   return (ICONS[name] || "").replace("<svg ", `<svg width="${size}" height="${size}" `);
@@ -1566,6 +1995,147 @@ function icon(name, size) {
   --bx-radius:10px; --bx-rsm:6px;
   padding: 16px;
 }
+.bomx-list-page { display:flex; flex-direction:column; gap:14px; }
+.bomx-list-hero {
+  background:linear-gradient(135deg, #ffffff, #f8fbff);
+  border:1px solid var(--bx-border);
+  border-radius:16px;
+  padding:18px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  box-shadow:0 10px 24px rgba(16,24,40,.04);
+}
+.bomx-list-kicker { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--bx-mfg); margin-bottom:6px; }
+.bomx-list-title { font-size:26px; font-weight:800; color:var(--bx-text); line-height:1.1; }
+.bomx-list-sub { margin-top:6px; font-size:13px; color:var(--bx-muted); }
+.bomx-btn-lg { padding:10px 18px; border-radius:12px; font-size:14px; }
+.bomx-stat-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; }
+.bomx-stat-card {
+  background:#fff;
+  border:1px solid var(--bx-border);
+  border-radius:14px;
+  padding:16px;
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  box-shadow:0 8px 18px rgba(16,24,40,.03);
+  position:relative;
+  overflow:hidden;
+}
+.bomx-stat-bar { position:absolute; left:0; top:0; bottom:0; width:4px; }
+.bomx-stat-bar-blue { background:var(--bx-blue); }
+.bomx-stat-bar-amber { background:var(--bx-amber); }
+.bomx-stat-bar-red { background:var(--bx-red); }
+.bomx-stat-bar-green { background:var(--bx-green); }
+.bomx-stat-icon {
+  width:42px; height:42px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.bomx-stat-icon svg { width:18px; height:18px; }
+.bomx-stat-icon-blue { background:#E7F5FF; color:#1971C2; }
+.bomx-stat-icon-amber { background:#FFF3BF; color:#E67700; }
+.bomx-stat-icon-red { background:#FFF5F5; color:#C92A2A; }
+.bomx-stat-icon-green { background:#EBFBEE; color:#2F9E44; }
+.bomx-stat-copy { min-width:0; }
+.bomx-stat-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--bx-muted); font-weight:800; }
+.bomx-stat-value { font-size:24px; font-weight:800; color:var(--bx-text); line-height:1.05; margin-top:6px; }
+.bomx-stat-sub { font-size:12px; color:var(--bx-muted); margin-top:4px; }
+.bomx-toolbar {
+  background:#fff;
+  border:1px solid var(--bx-border);
+  border-radius:14px;
+  padding:12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  box-shadow:0 8px 18px rgba(16,24,40,.03);
+}
+.bomx-toolbar-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+.bomx-search-wide { margin-top:0; border:1px solid var(--bx-border); border-radius:12px; background:#fff; min-width:280px; max-width:460px; padding:11px 14px; }
+.bomx-toolbar-select { min-width:160px; }
+.bomx-toolbar-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.bomx-toolbar-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:9px 12px; border-radius:12px; border:1px solid var(--bx-border);
+  background:#fff; color:var(--bx-text); font-size:13px; font-weight:700; cursor:pointer;
+}
+.bomx-toolbar-btn:hover { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
+.bomx-toolbar-btn.active { border-color:var(--bx-mfg); background:var(--bx-mfgS); color:var(--bx-mfg); }
+.bomx-toolbar-btn-lite { border-style:dashed; color:var(--bx-muted); }
+.bomx-advanced-filters {
+  background:#fff;
+  border:1px solid var(--bx-border);
+  border-radius:14px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns: 220px 160px 1fr;
+  gap:14px;
+  align-items:end;
+}
+.bomx-filter-note { font-size:13px; color:var(--bx-muted); background:var(--bx-surf2); border:1px dashed var(--bx-border); border-radius:12px; padding:12px 14px; }
+.bomx-table-shell {
+  background:#fff;
+  border:1px solid var(--bx-border);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 10px 24px rgba(16,24,40,.04);
+}
+.bomx-table { width:100%; border-collapse:collapse; }
+.bomx-table thead th {
+  background:#f8fafc;
+  color:#667085;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  font-weight:800;
+  padding:13px 14px;
+  text-align:left;
+  border-bottom:1px solid var(--bx-border);
+}
+.bomx-table tbody td {
+  padding:14px;
+  border-bottom:1px solid #EEF2F6;
+  vertical-align:middle;
+}
+.bomx-table-row { cursor:pointer; transition:background .12s ease; }
+.bomx-table-row:hover { background:#FAFCFF; }
+.bomx-table-row.selected td { background:#eaf1ff; }
+.bomx-empty-row { text-align:center; padding:28px 14px !important; color:var(--bx-muted); }
+.bomx-link-bom { color:var(--bx-mfg); font-weight:800; }
+.bomx-name-cell { font-weight:700; color:var(--bx-text); }
+.bomx-name-sub { font-size:11.5px; color:var(--bx-muted); margin-top:3px; }
+.bomx-type-tag, .bomx-mini-pill {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800;
+}
+.bomx-mini-pill.yes { background:#EBFBEE; color:#2F9E44; }
+.bomx-mini-pill.no { background:#F1F3F5; color:#667085; }
+.bomx-num { font-weight:800; color:var(--bx-mfgB); }
+.bomx-date-cell { color:var(--bx-muted); font-size:12px; white-space:nowrap; }
+.bomx-row-actions { display:flex; align-items:center; justify-content:flex-end; gap:6px; }
+.bomx-row-btn {
+  width:30px; height:30px; border-radius:8px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--bx-border); background:#fff; color:#667085; cursor:pointer;
+}
+.bomx-row-btn:hover { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
+.bomx-row-btn svg { width:14px; height:14px; }
+.bomx-table-footer {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:12px 16px; background:#fff; color:var(--bx-muted); font-size:12.5px;
+}
+.bomx-pagination { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.bomx-page-btn {
+  min-width:32px; height:32px; padding:0 10px; border-radius:8px; border:1px solid var(--bx-border);
+  background:#fff; color:var(--bx-text); cursor:pointer; font-weight:700;
+}
+.bomx-page-btn.active { background:var(--bx-mfg); color:#fff; border-color:var(--bx-mfg); }
+.bomx-page-btn:disabled { opacity:.5; cursor:not-allowed; }
+.bomx-page-btn:hover:not(:disabled) { border-color:var(--bx-mfg); color:var(--bx-mfg); background:var(--bx-mfgS); }
 .bomx-two-col { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:start; }
 @media (max-width:1000px) { .bomx-two-col { grid-template-columns: 1fr; } }
 
@@ -1628,8 +2198,10 @@ function icon(name, size) {
 .bomx-toggle-row { display:flex; gap:20px; padding:10px 22px 14px; flex-wrap:wrap; background:var(--bx-surf2); border-bottom:1px solid var(--bx-border); }
 .bomx-toggle { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--bx-text); }
 
-.bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0 22px; overflow-x:auto;overflow-y:hidden; }
+.bomx-tabs { display:flex; border-bottom:1px solid var(--bx-border); background:var(--bx-surf2); padding:0; overflow-x:auto;overflow-y:hidden; }
 .bomx-tab { padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--bx-muted); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+.bomx-tab:first-child { margin-left: 22px; }
+.bomx-tab:last-child { margin-right: 22px; }
 .bomx-tab.active { color:var(--bx-mfg); border-bottom-color:var(--bx-mfg); }
 .bomx-body { padding:20px 22px; overflow-y:auto; flex:1; }
 
@@ -1664,7 +2236,8 @@ function icon(name, size) {
 
 /* ── Raw material cards ── */
 .bomx-rm-cards { display:flex; flex-direction:column; gap:10px; }
-.bomx-rm-card { background:#fff; border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; box-shadow:0 1px 3px rgba(16,24,40,.04); }
+.bomx-rm-card { background:#fff; border:1px solid var(--bx-border); border-radius:var(--bx-radius); overflow:hidden; box-shadow:0 1px 3px rgba(16,24,40,.04); position:relative; }
+.bomx-rm-bar { position:absolute; left:0; top:0; bottom:0; width:4px; }
 .bomx-rm-card-hdr { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bx-mfgS); border-bottom:1px solid var(--bx-border); }
 .bomx-rm-card-title { flex:1; min-width:0; font-weight:600; }
 .bomx-rm-card-amt { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; gap:1px; }
@@ -1765,7 +2338,9 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
 
   .bomx-hdr-fields { grid-template-columns:1fr 1fr; padding:12px 16px; gap:10px; }
   .bomx-toggle-row { padding:10px 16px 12px; gap:12px; }
-  .bomx-tabs { padding:0 16px; }
+  .bomx-tabs { padding:0; }
+  .bomx-tab:first-child { margin-left: 16px; }
+  .bomx-tab:last-child { margin-right: 16px; }
   .bomx-body { padding:14px 16px; }
 
   .bomx-cost-grid { grid-template-columns:1fr 1fr; }
@@ -1790,5 +2365,104 @@ select.bomx-fi:disabled { background-image: none; padding-right: 9px; }
   .bomx-hdr-fields { grid-template-columns:1fr; }
   .bomx-cost-grid { grid-template-columns:1fr; }
   .bomx-rm-card-body { grid-template-columns:1fr; }
+}
+
+@media (max-width: 1024px) {
+  .bomx-stat-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .bomx-advanced-filters { grid-template-columns:1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  .bomx-list-hero, .bomx-toolbar, .bomx-table-footer { flex-direction:column; align-items:stretch; }
+  .bomx-stat-grid { grid-template-columns:1fr; }
+  .bomx-toolbar-left { flex-direction:column; align-items:stretch; }
+  .bomx-search-wide, .bomx-toolbar-select { min-width:0; max-width:none; width:100%; }
+  .bomx-toolbar-actions { justify-content:flex-start; flex-wrap:wrap; }
+  .bomx-advanced-filters { grid-template-columns:1fr; }
+  .bomx-table-shell { overflow-x:auto; }
+  .bomx-table { min-width:980px; }
+}
+
+/* ── Drawer Overlay ── */
+.bomx-drawer-bg {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(15,17,23,.45);
+  display: flex; justify-content: flex-end;
+}
+.bomx-drawer-panel {
+  width: 850px; max-width: 97vw; height: 100%;
+  background: var(--bx-surface);
+  display: flex; flex-direction: column;
+  box-shadow: -20px 0 60px rgba(0,0,0,.18);
+  transition: transform .22s ease; transform: translateX(0);
+}
+.bomx-drawer-fade-enter-active, .bomx-drawer-fade-leave-active { transition: background-color .22s ease; }
+.bomx-drawer-fade-enter-from, .bomx-drawer-fade-leave-to { background-color: rgba(15,17,23,0) !important; }
+.bomx-drawer-fade-enter-from .bomx-drawer-panel,
+.bomx-drawer-fade-leave-to .bomx-drawer-panel { transform: translateX(100%); }
+/* ── Grouping UI ── */
+.bomx-child-connector {
+  width: 14px;
+  height: 14px;
+  border-left: 2px solid var(--bx-border);
+  border-bottom: 2px solid var(--bx-border);
+  border-bottom-left-radius: 4px;
+  margin-left: 14px;
+  margin-right: 4px;
+  margin-bottom: 6px;
+}
+.bomx-table-row.is-child {
+  background-color: #F8FAFC;
+}
+.bomx-table-row.is-child:hover {
+  background-color: #F1F5F9;
+}
+.bomx-expand-btn {
+  background: #ffffff;
+  border: 1px solid var(--bx-border);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bx-text);
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.bomx-expand-btn:hover {
+  background: #F8FAFC;
+  border-color: #cbd5e1;
+}
+.bomx-badge-top {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #F3E8FF; /* Purple */
+  color: #6B21A8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+.bomx-badge-assembly {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #FFEDD5; /* Orange */
+  color: #C2410C;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+.bomx-badge-sub {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #E0F2FE; /* Blue */
+  color: #0369A1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
 }
 </style>

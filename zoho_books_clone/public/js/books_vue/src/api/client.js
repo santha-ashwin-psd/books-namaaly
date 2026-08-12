@@ -118,7 +118,15 @@ function _parseResponse(json, status, opts) {
         if (inner instanceof Error) throw inner;
       }
     }
-    throw new Error(json.message || json.exc_type || "Server error " + status);
+    let fallbackMsg = json.exc_type || "Server error " + status;
+    if (json.message) {
+      if (typeof json.message === 'object' && json.message.name && typeof json.message.docstatus !== 'undefined') {
+        console.warn("Server returned exception but also returned document. Proceeding with document.", excStr);
+        return json.message;
+      }
+      fallbackMsg = typeof json.message === 'string' ? json.message : JSON.stringify(json.message);
+    }
+    throw new Error(fallbackMsg);
   }
   if (json._server_messages) {
     try {

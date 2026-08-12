@@ -1002,6 +1002,28 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
     # auto-fill only ever rates outgoing/consumption rows, never incoming
     # ones, so without this the FG receipt has no cost basis to draw from.
     total_consumed_cost = 0.0
+    blockers = []
+    allow_negative = ms.get("allow_negative_stock")
+    
+    # Pre-check all rows for stock availability before failing on the first one
+    for row in wo.items:
+        consume_qty = _consume_qty_for_row(row, wo, consumption_ratio, ms)
+        if consume_qty <= 0:
+            continue
+        s_wh = wo.wip_warehouse or row.source_warehouse or wo.source_warehouse
+        if not s_wh:
+            continue
+        if not allow_negative:
+            available = get_stock_balance_bulk([row.item_code], s_wh).get(row.item_code, 0.0)
+            if flt(available) < consume_qty - 0.0001:
+                # Same format as issue_materials so the Vue frontend can parse it if needed
+                blockers.append(f"{row.item_code} (needs {consume_qty}, only {flt(available)} in stock)")
+
+    if blockers:
+        frappe.throw(_(
+            "Cannot complete Work Order — the following item(s) are not fully in stock in their source warehouse: {0}. "
+            "Either bring these items fully into stock, or enable negative stock."
+        ).format(", ".join(blockers)))
     for row in wo.items:
         consume_qty = _consume_qty_for_row(row, wo, consumption_ratio, ms)
         if consume_qty <= 0:
@@ -1013,25 +1035,9 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
                 "the Work Order's Default Source Warehouse, or a WIP Warehouse)."
             ).format(row.item_code))
         # Edge case (Phase 8): a scrap-split row's stock can have gone short
-        # between apply_partial_scrap_substitution (which only checked
-        # availability at split time -- it doesn't reserve stock) and this
-        # completion run, e.g. another Work Order drew from the same scrap
-        # warehouse first. Without this check the Stock Entry submission
-        # below still catches it, but via Frappe's generic negative-stock
-        # error naming only the item/warehouse -- this gives a scrap-reuse-
-        # specific message pointing at the actual shortfall and the fresh
-        # alternative, instead of leaving the person to work out why a
-        # "raw material" row is short on stock nobody told them to buy.
-        if row.is_scrap_row and not wo.wip_warehouse and not ms.get("allow_negative_stock"):
-            available = get_stock_balance_bulk([row.item_code], s_wh).get(row.item_code, 0.0)
-            if flt(available) < consume_qty - 0.0001:
-                frappe.throw(_(
-                    "Scrap reuse shortfall: only {0} of {1} is now available in {2} "
-                    "(needed {3} for this completion run). Scrap stock may have been "
-                    "drawn down elsewhere since it was reused on this Work Order. "
-                    "Reduce Qty Manufactured for this run, top up {1} in {2}, or "
-                    "reverse the scrap reuse on row {4} and fall back to fresh stock."
-                ).format(flt(available), row.item_code, s_wh, consume_qty, row.name))
+        # between apply_partial_scrap_substitution and this completion run.
+        # This is now covered by the generic bulk check above, but we keep
+        # this comment block for historical context.
         rm_rate = get_valuation_rate(row.item_code, s_wh)
         total_consumed_cost += consume_qty * rm_rate
         se.append("items", {

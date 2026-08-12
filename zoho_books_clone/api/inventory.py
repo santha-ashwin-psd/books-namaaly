@@ -1329,3 +1329,20 @@ def create_po_from_reorder(items=None, supplier=None, company=None):
     po.insert(ignore_permissions=True)
     frappe.db.commit()
     return {"name": po.name}
+@frappe.whitelist()
+def get_stock_for_items(warehouse, item_codes):
+    import json
+    if isinstance(item_codes, str):
+        item_codes = json.loads(item_codes)
+    if not item_codes:
+        return {}
+    
+    bins = frappe.get_all("Bin", filters={"warehouse": warehouse, "item_code": ["in", item_codes]}, fields=["item_code", "actual_qty"])
+    
+    res = {}
+    for b in bins:
+        res[b.item_code] = b.actual_qty
+    for i in item_codes:
+        if i not in res:
+            res[i] = 0.0
+    return res

@@ -3312,11 +3312,22 @@ def get_sales_order_fulfillment(sales_order):
             for x in frappe.get_all("Item", filters={"name": ["in", item_codes]},
                                     fields=["name", "has_batch_no"])
         }
+    so_warehouse = frappe.db.get_value("Sales Order", sales_order, "set_warehouse")
+
     for r in rows:
         r["remaining_to_deliver"] = max(0.0, flt(r["qty"]) - flt(r["delivered_qty"]))
         r["remaining_to_bill"]    = max(0.0, flt(r["qty"]) - flt(r["billed_qty"]))
         r["has_batch_no"] = 1 if batch_flags.get(r["item_code"]) else 0
-    return {"lines": rows, "computed_status": _so_status_from_fulfillment(sales_order)}
+        r["warehouse_qty"] = 0.0
+        if so_warehouse and r.get("item_code"):
+            bin_qty = frappe.db.get_value("Bin", {"item_code": r["item_code"], "warehouse": so_warehouse}, "actual_qty")
+            r["warehouse_qty"] = flt(bin_qty)
+
+    return {
+        "lines": rows, 
+        "computed_status": _so_status_from_fulfillment(sales_order),
+        "warehouse": so_warehouse
+    }
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])

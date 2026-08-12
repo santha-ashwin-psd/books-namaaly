@@ -273,10 +273,12 @@ import { useRoute, useRouter } from "vue-router";
 import { apiGet, apiList, apiSave, apiCall, resolveCompany } from "../api/client.js";
 import DocLink from "../components/DocLink.vue";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 
 const route = useRoute();
 const router = useRouter();
 const { toast } = useToast();
+const { confirm } = useConfirm();
 
 // ── LIST STATE ──────────────────────────────────────────────
 const loading = ref(false);
@@ -560,7 +562,18 @@ async function postStockConsumption() {
     await loadPS();
     loadList();
   } catch (e) {
-    toast(e.message, "error");
+    const missingStock = /Not enough stock/i.test(e.message || "") || /Cannot pack/i.test(e.message || "");
+    if (missingStock) {
+      await confirm({
+        title: "Could Not Pack",
+        body: e.message,
+        okLabel: "OK",
+        okStyle: "primary",
+        hideCancel: true,
+      });
+    } else {
+      toast(e.message, "error");
+    }
   }
   postingStock.value = false;
 }

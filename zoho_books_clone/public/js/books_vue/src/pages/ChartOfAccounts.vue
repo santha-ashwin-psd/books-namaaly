@@ -102,9 +102,9 @@
             <div style="display:flex;gap:8px">
             <div class="coa-detail-balance coa-detail-balance-opening" v-if="!selectedAccount.is_group">
             <div class="coa-detail-balance-lbl">Opening Balance</div>
-            <div class="coa-detail-balance-val" :class="selectedAccount.bal_type === 'Credit' ? 'coa-cr' : 'coa-dr'">
+            <div class="coa-detail-balance-val" :class="getBalType(selectedAccount.opening, selectedAccount.bal_type) === 'Credit' ? 'coa-cr' : 'coa-dr'">
               {{ fmtBal(selectedAccount.opening) }}
-              <span class="coa-detail-balance-tag">{{ selectedAccount.bal_type === 'Credit' ? '(Cr)' : '(Dr)' }}</span>
+              <span class="coa-detail-balance-tag">{{ getBalType(selectedAccount.opening, selectedAccount.bal_type) === 'Credit' ? '(Cr)' : '(Dr)' }}</span>
             </div>
           </div>
             <div class="coa-detail-balance" v-if="!selectedAccount.is_group">
@@ -155,8 +155,8 @@
                   <span class="coa-txn-detail" v-if="r.party_name || r.party" :title="r.party_name || r.party">{{ r.party_name || r.party }}</span>
                   <span class="coa-txn-detail" v-else :title="r.voucher_no"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></span>
                   <span class="coa-txn-type">{{ r.voucher_type }}</span>
-                  <span class="ta-r coa-txn-dr">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
-                  <span class="ta-r coa-txn-cr">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
+                  <span class="ta-r coa-txn-dr">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
+                  <span class="ta-r coa-txn-cr">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
                   <span class="ta-r coa-txn-bal" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
                 </div>
                 <div class="coa-detail-loadmore">
@@ -239,15 +239,15 @@
             </div>
             <div class="coa-mc-row">
               <span class="coa-mc-label">Opening</span>
-              <span class="coa-mc-value"
-                :class="row.opening > 0 ? (row.bal_type==='Debit' ? 'coa-dr' : 'coa-cr') : 'c-muted'">
-                {{fmtINR(row.opening)}}
-              </span>
+              <div class="coa-split-row-bal"
+                :class="row.opening ? (getBalType(row.opening, row.bal_type) === 'Credit' ? 'coa-cr' : 'coa-dr') : 'c-muted'">
+                {{ fmtBal(row.opening) }}
+              </div>
             </div>
             <div class="coa-mc-row">
               <span class="coa-mc-label">Current Balance</span>
               <span class="coa-mc-value"
-                :class="(balances[row.name]||0) > 0 ? 'coa-dr' : (balances[row.name]||0) < 0 ? 'coa-cr' : 'c-muted'">
+                :class="getBalType(balances[row.name], 'Debit') === 'Credit' ? 'coa-cr' : 'coa-dr'">
                 <template v-if="row.is_group">—</template>
                 <template v-else-if="balancesLoading && balances[row.name] === undefined">
                   <span style="color:#9ca3af;font-size:10px">…</span>
@@ -464,8 +464,8 @@
                   <td style="padding:8px 10px;color:#2563eb;font-weight:600"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" /></td>
                   <td style="padding:8px 10px;color:#6b7280">{{ r.voucher_type }}</td>
                   <td style="padding:8px 10px;color:#374151" :title="r.party || ''">{{ r.party_name || r.party || '—' }}</td>
-                  <td style="padding:8px 10px;text-align:right;color:#16a34a">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
-                  <td style="padding:8px 10px;text-align:right;color:#dc2626">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
+                  <td style="padding:8px 10px;text-align:right;color:#16a34a">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
+                  <td style="padding:8px 10px;text-align:right;color:#dc2626">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
                   <td style="padding:8px 10px;text-align:right;font-weight:700" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">
                     ₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}
                   </td>
@@ -501,11 +501,11 @@
                 <div class="ldg-card-strip">
                   <div class="ldg-strip-cell">
                     <span class="ldg-strip-lbl">Debit</span>
-                    <span class="ldg-strip-val ldg-strip-dr">{{ Number(r.debit||0) > 0 ? "₹"+Number(r.debit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
+                    <span class="ldg-strip-val ldg-strip-dr">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
                   </div>
                   <div class="ldg-strip-cell ldg-strip-cell--mid">
                     <span class="ldg-strip-lbl">Credit</span>
-                    <span class="ldg-strip-val ldg-strip-cr">{{ Number(r.credit||0) > 0 ? "₹"+Number(r.credit).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
+                    <span class="ldg-strip-val ldg-strip-cr">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
                   </div>
                   <div class="ldg-strip-cell">
                     <span class="ldg-strip-lbl">Balance</span>
@@ -892,7 +892,20 @@ const trialBalance = computed(() => {
 function fmtBal(v) {
   const n = Number(v || 0);
   if (Math.abs(n) < 0.005) return "—";
-  return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function getBalType(val, defaultType) {
+  const n = Number(val || 0);
+  if (n < 0) return defaultType === 'Credit' ? 'Debit' : 'Credit';
+  return defaultType || 'Debit';
+}
+function getRowDr(r) {
+  const dr = Number(r.debit || 0), cr = Number(r.credit || 0);
+  return dr > 0 ? dr : (cr < 0 ? -cr : 0);
+}
+function getRowCr(r) {
+  const dr = Number(r.debit || 0), cr = Number(r.credit || 0);
+  return cr > 0 ? cr : (dr < 0 ? -dr : 0);
 }
 async function loadBalances() {
   const ledger = allAccounts.value.filter(a => !a.is_group && a.source === "frappe");

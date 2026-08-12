@@ -2348,28 +2348,11 @@ def get_chart_of_accounts(company=None):
             )
         ]
 
-    # A Bank Account's opening balance is posted as a real GL Entry
-    # (voucher_type='Bank Account', see banking/doctype/bank_account/
-    # bank_account.py::_post_opening_gl). For those accounts the static
-    # `opening_balance` field is a leftover of how the balance was entered,
-    # not a separate un-posted amount — showing it here alongside a ledger
-    # view that (correctly) already reflects it via the GL entry would look
-    # like two different opening balances for the same account. Zero it out
-    # here so Chart of Accounts stays consistent with the ledger/balance
-    # calculations in api/banking.py and db/queries.py.
-    if "opening_balance" in fields and accounts:
-        bank_posted = {
-            r.account for r in frappe.db.sql(
-                """SELECT DISTINCT account FROM `tabGeneral Ledger Entry`
-                   WHERE voucher_type = 'Bank Account'""",
-                as_dict=True,
-            )
-        }
-        if bank_posted:
-            for a in accounts:
-                if a.get("name") in bank_posted:
-                    a["opening_balance"] = 0
-
+    # A Bank Account's opening balance is posted as a real GL Entry.
+    # We used to zero it out here, but users want to see the original opening
+    # balance they entered (and its Dr/Cr sign) in the Chart of Accounts view.
+    # (The balance calculation in queries.py still correctly deduplicates it).
+    
     return accounts
 
 

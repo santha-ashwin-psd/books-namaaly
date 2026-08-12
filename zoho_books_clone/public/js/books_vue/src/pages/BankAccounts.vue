@@ -175,7 +175,13 @@
           </div>
           <div class="ba-field">
             <label class="ba-label">Opening Balance</label>
-            <input v-model.number="form.opening_balance" type="number" step="0.01" class="ba-input" placeholder="0.00" :disabled="!!editingName" />
+            <div style="display:flex; gap:8px;">
+              <input v-model.number="form.opening_balance" type="number" step="0.01" class="ba-input" placeholder="0.00" :disabled="!!editingName" style="flex:1;" />
+              <select v-model="form.opening_balance_type" class="ba-select" style="width: 100px;" :disabled="!!editingName">
+                <option value="Debit">Debit</option>
+                <option value="Credit">Credit</option>
+              </select>
+            </div>
             <div v-if="editingName" class="ba-hint">Opening balance is locked after creation.</div>
           </div>
           <div class="ba-field" style="grid-column:1/-1">
@@ -356,7 +362,7 @@ function resetForm() {
   Object.assign(form, {
     account_name: "", bank_name: "", account_type: "Current", account_holder_name: "",
     account_number: "", ifsc_code: "", micr_code: "", branch: "",
-    gl_account: "", currency: "INR", opening_balance: 0, is_default: false,
+    gl_account: "", currency: "INR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
   });
 }
 
@@ -381,7 +387,9 @@ async function openEdit(a) {
     account_number: full.account_number || "", ifsc_code: full.ifsc_code || "",
     micr_code: full.micr_code || "", branch: full.branch || "",
     gl_account: full.gl_account || "", currency: full.currency || "INR",
-    opening_balance: flt(full.opening_balance), is_default: !!full.is_default,
+    opening_balance: Math.abs(flt(full.opening_balance)),
+    opening_balance_type: flt(full.opening_balance) < 0 ? 'Credit' : 'Debit',
+    is_default: !!full.is_default,
   });
   glAccounts.value = [];
   drawerOpen.value = true;
@@ -429,7 +437,7 @@ async function saveAccount() {
       micr_code: form.micr_code || "", branch: form.branch || "",
       gl_account: form.gl_account || "", currency: form.currency || "INR",
       is_default: form.is_default ? 1 : 0, company: co,
-      opening_balance: flt(form.opening_balance),
+      opening_balance: form.opening_balance_type === 'Credit' ? -Math.abs(flt(form.opening_balance)) : Math.abs(flt(form.opening_balance)),
     };
     if (editingName.value) payload.existing_name = editingName.value;
     const saved = await apiPOST("zoho_books_clone.api.banking.save_bank_account", payload,

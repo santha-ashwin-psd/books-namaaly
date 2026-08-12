@@ -1011,30 +1011,38 @@
             <button class="rp-close-btn" @click="invModal.open=false">✕</button>
           </div>
           <div class="rp-body">
-            <div style="font-size:12.5px;color:#374151;margin-bottom:12px">Enter the quantity to invoice for each line:</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px">
+              <div style="font-size:12.5px;color:#374151;">Enter the quantity to invoice for each line:</div>
+              <div v-if="invModal.warehouse" style="display:inline-flex; align-items:center; background:#eff6ff; color:#2563eb; border: 1px solid #bfdbfe; padding: 4px 8px; font-weight: 500; font-size: 12px; border-radius: 6px;">
+                <span v-html="icon('warehouse', 14)" style="margin-right: 6px;"></span>{{ invModal.warehouse }}
+              </div>
+            </div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
               <!-- Header -->
-              <div class="inv-ci-grid inv-ci-header" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
+              <div class="inv-ci-grid inv-ci-header" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <span>Item Code</span>
                 <span>Item Name</span>
+                <span class="ta-r">WH QTY</span>
                 <span class="ta-r">Remaining</span>
                 <span class="ta-r">Invoice Qty</span>
                 <span v-if="invModalNeedsBatch">Batch No</span>
               </div>
               <!-- Fully-invoiced lines (read-only) -->
               <div v-for="l in invModal.allLines.filter(l => l.remaining_to_bill <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
+                class="inv-ci-grid inv-ci-row inv-ci-done" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
                 <span v-if="invModalNeedsBatch"></span>
               </div>
               <!-- Pending lines (editable) -->
               <template v-for="l in invModal.lines" :key="l.name">
-                <div class="inv-ci-grid inv-ci-row" :class="{'inv-ci-grid-batch': invModalNeedsBatch}">
+                <div class="inv-ci-grid inv-ci-row" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                   <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
                   <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                  <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
                   <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
                   <input v-model.number="l.toInvoice" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
                     class="inv-ci" style="width:100%;text-align:right"/>
@@ -1078,24 +1086,32 @@
             <button class="rp-close-btn" @click="deliverModal.open=false">✕</button>
           </div>
           <div class="rp-body">
-            <div style="font-size:12.5px;color:#374151;margin-bottom:12px">Enter the quantity to deliver for each line:</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px">
+              <div style="font-size:12.5px;color:#374151;">Enter the quantity to deliver for each line:</div>
+              <div v-if="deliverModal.warehouse" style="display:inline-flex; align-items:center; background:#eff6ff; color:#2563eb; border: 1px solid #bfdbfe; padding: 4px 8px; font-weight: 500; font-size: 12px; border-radius: 6px;">
+                <span v-html="icon('warehouse', 14)" style="margin-right: 6px;"></span>{{ deliverModal.warehouse }}
+              </div>
+            </div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
-              <div class="inv-ci-grid inv-ci-header">
+              <div class="inv-ci-grid inv-ci-header" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
                 <span>Item Code</span>
                 <span>Item Name</span>
+                <span class="ta-r">WH QTY</span>
                 <span class="ta-r">Remaining</span>
                 <span class="ta-r">Deliver Qty</span>
               </div>
               <div v-for="l in deliverModal.allLines.filter(l => l.remaining_to_deliver <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done">
+                class="inv-ci-grid inv-ci-row inv-ci-done" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
               </div>
-              <div v-for="l in deliverModal.lines" :key="l.name" class="inv-ci-grid inv-ci-row">
+              <div v-for="l in deliverModal.lines" :key="l.name" class="inv-ci-grid inv-ci-row" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
                 <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
                 <span class="ta-r mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
                 <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
                   class="inv-ci" style="width:100%;text-align:right"/>
@@ -1252,7 +1268,7 @@ async function fetchWarehouses(q = "") {
 }
 
 const invModal = reactive({ open: false, saving: false, soName: "", lines: [], allLines: [], dueDate: "" });
-const deliverModal = reactive({ open: false, saving: false, soName: "", lines: [], allLines: [], lrNo: "", transporterName: "" });
+const deliverModal = reactive({ open: false, saving: false, soName: "", warehouse: "", lines: [], allLines: [], lrNo: "", transporterName: "" });
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function deliveryDefault() { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().slice(0, 10); }
@@ -1805,9 +1821,15 @@ function openInvoiceModal(o) {
     .then(async (r) => {
       const ful = r?.lines || [];
       const pending = ful.filter(l => l.remaining_to_bill > 0)
-                        .map(l => ({ ...l, toInvoice: l.remaining_to_bill, batch_no: "", batchOptions: [] }));
+                        .map(l => ({
+                          ...l,
+                          toInvoice: (r.warehouse && l.warehouse_qty !== undefined) ? Math.max(0, Math.min(l.remaining_to_bill, l.warehouse_qty)) : l.remaining_to_bill,
+                          batch_no: "",
+                          batchOptions: []
+                        }));
       Object.assign(invModal, {
         open: true, saving: false, soName: o.name,
+        warehouse: r?.warehouse || "",
         allLines: ful,
         lines: pending,
         dueDate: o.delivery_date || todayStr(),
@@ -1822,13 +1844,26 @@ async function submitInvoice() {
   if (!canCreate("invoices")) { toast.error("Read-only access"); return; }
   const lineMap = {};
   const batchMap = {};
+  const insufficientItems = [];
   for (const l of invModal.lines) {
-    if (flt(l.toInvoice) > 0) {
-      lineMap[l.name] = flt(l.toInvoice);
+    const qty = flt(l.toInvoice);
+    if (qty > 0) {
+      lineMap[l.name] = qty;
       if (l.has_batch_no && l.batch_no) batchMap[l.name] = l.batch_no;
+      if (l.warehouse_qty !== undefined && qty > flt(l.warehouse_qty)) {
+        insufficientItems.push(`- ${l.item_code} (Req: ${qty}, Avail: ${flt(l.warehouse_qty)})`);
+      }
     }
   }
   if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to invoice"); return; }
+  
+  if (insufficientItems.length > 0 && invModal.warehouse) {
+    const msg = `The following items have insufficient stock in warehouse ${invModal.warehouse}:\n\n${insufficientItems.join('\n')}\n\nDo you want to proceed anyway?`;
+    if (!await confirm({ title: "Insufficient Stock", body: msg, okLabel: "Proceed", okStyle: "danger" })) {
+      return;
+    }
+  }
+
   invModal.saving = true;
   try {
     const r = await apiPOST("zoho_books_clone.api.docs.convert_sales_order_to_invoice", {
@@ -1850,9 +1885,13 @@ function openDeliverModal(o) {
     .then(r => {
       const ful = r?.lines || [];
       const pending = ful.filter(l => l.remaining_to_deliver > 0)
-                        .map(l => ({ ...l, toDeliver: l.remaining_to_deliver }));
+                        .map(l => ({
+                          ...l,
+                          toDeliver: (r.warehouse && l.warehouse_qty !== undefined) ? Math.max(0, Math.min(l.remaining_to_deliver, l.warehouse_qty)) : l.remaining_to_deliver
+                        }));
       Object.assign(deliverModal, {
         open: true, saving: false, soName: o.name,
+        warehouse: r?.warehouse || "",
         allLines: ful,
         lines: pending,
         lrNo: "", transporterName: "",
@@ -1864,10 +1903,25 @@ function openDeliverModal(o) {
 async function submitDeliver() {
   if (!canCreate("invoices")) { toast.error("Read-only access"); return; }
   const lineMap = {};
+  const insufficientItems = [];
   for (const l of deliverModal.lines) {
-    if (flt(l.toDeliver) > 0) lineMap[l.name] = flt(l.toDeliver);
+    const qty = flt(l.toDeliver);
+    if (qty > 0) {
+      lineMap[l.name] = qty;
+      if (l.warehouse_qty !== undefined && qty > flt(l.warehouse_qty)) {
+        insufficientItems.push(`- ${l.item_code} (Req: ${qty}, Avail: ${flt(l.warehouse_qty)})`);
+      }
+    }
   }
   if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to deliver"); return; }
+  
+  if (insufficientItems.length > 0 && deliverModal.warehouse) {
+    const msg = `The following items have insufficient stock in warehouse ${deliverModal.warehouse}:\n\n${insufficientItems.join('\n')}\n\nDo you want to proceed anyway?`;
+    if (!await confirm({ title: "Insufficient Stock", body: msg, okLabel: "Proceed", okStyle: "danger" })) {
+      return;
+    }
+  }
+
   deliverModal.saving = true;
   try {
     const r = await apiPOST("zoho_books_clone.api.docs.create_delivery_note_from_so", {
