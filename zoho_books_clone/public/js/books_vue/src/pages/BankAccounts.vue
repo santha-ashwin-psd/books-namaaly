@@ -556,7 +556,7 @@ onMounted(load);
 </script>
 
 <style scoped>
-.ba-page{display:flex;flex-direction:column;gap:16px;padding:24px;}
+.ba-page{display:flex;flex-direction:column;gap:16px;padding:24px;overflow-y:auto;}
 .ba-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .ba-search-wrap{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;min-width:240px;}
 .ba-search-input{border:none;background:transparent;outline:none;font:inherit;color:#111827;width:100%;font-size:13px;}

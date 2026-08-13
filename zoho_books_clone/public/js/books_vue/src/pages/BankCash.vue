@@ -342,8 +342,8 @@
             </select>
           </div>
 
-          <div class="cash-ledger-table-wrap">
-            <table class="cash-table cash-ledger-table cash-desktop-table" style="width:100%">
+          <div class="cash-ledger-table-wrap cash-desktop-only">
+            <table class="cash-table cash-ledger-table" style="width:100%">
               <thead><tr>
                 <th>Date</th>
                 <th>Voucher</th>
@@ -377,6 +377,32 @@
                 </tr>
               </tfoot>
             </table>
+          </div>
+
+          <div class="cash-mobile-cards" style="margin-top:10px; border-radius:10px; overflow:hidden; border:1px solid #e5e7eb;">
+            <div v-if="!ledgerFilteredEntries.length" class="cash-empty">No entries match this filter</div>
+            <div v-for="(e,i) in ledgerVisibleEntries" :key="i" class="cash-mobile-card">
+              <div class="cash-mc-top">
+                <div class="cash-mc-docno" style="display:flex;align-items:center;gap:6px">
+                  <span class="cash-ledger-voucher-chip" :class="'vt-'+(e.voucher_type||'').toLowerCase().replace(/[^a-z]/g,'')">{{ e.voucher_type }}</span>
+                  <DocLink :doctype="e.voucher_type" :name="e.voucher_no" :mono-style="false" />
+                </div>
+                <div class="cash-mc-meta">{{ fmtDate(e.posting_date) }}</div>
+              </div>
+              <div class="cash-mc-mid">{{ e.party || e.remarks || '—' }}</div>
+              <div class="cash-mc-meta">
+                <span class="cash-mc-pos" v-if="e.debit>0">Dr: {{ fmtCur(e.debit) }}</span>
+                <span class="cash-mc-neg" v-if="e.credit>0">Cr: {{ fmtCur(e.credit) }}</span>
+                <span style="margin-left:auto;font-weight:700">Bal: <span :class="{neg: e.balance<0}">{{ fmtCur(e.balance) }}</span></span>
+              </div>
+            </div>
+            <div v-if="ledgerFilteredEntries.length" class="cash-mobile-card" style="background:#f8fafc; border-top:1px solid #e5e7eb;">
+              <div class="cash-mc-mid" style="font-size:12px; margin-bottom:8px">Total ({{ ledgerFilteredEntries.length }} entries)</div>
+              <div class="cash-mc-meta">
+                <span class="cash-mc-pos">Dr: {{ fmtCur(ledgerFilteredTotals.debit) }}</span>
+                <span class="cash-mc-neg" style="margin-left:12px">Cr: {{ fmtCur(ledgerFilteredTotals.credit) }}</span>
+              </div>
+            </div>
           </div>
           <div class="cash-ledger-loadmore-wrap" v-if="ledgerVisible < ledgerFilteredEntries.length">
             <button class="cash-btn-ghost" @click="loadMoreLedger">
@@ -733,7 +759,7 @@ async function saveDeposit(){
 onMounted(()=>{load();loadAccounts();refreshUndepositedCount();loadCashSummary();});
 </script>
 <style scoped>
-.cash-page{display:flex;flex-direction:column;gap:16px;padding:24px;}
+.cash-page{display:flex;flex-direction:column;gap:16px;padding:24px;overflow-y:auto;}
 .cash-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .cash-search-wrap{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;min-width:240px;}
 .cash-search-input{border:none;background:transparent;outline:none;font:inherit;color:#111827;width:100%;font-size:13px;}
@@ -849,7 +875,7 @@ textarea.cash-input{resize:vertical;}
 .cash-ledger-sum-val--main{font-size:19px;color:#2563eb;}
 .cash-ledger-sum-val.neg{color:#dc2626;}
 
-.cash-ledger-table-wrap{border:1px solid #e5e7eb;border-radius:10px;}
+.cash-ledger-table-wrap{border:1px solid #e5e7eb;border-radius:10px;overflow-x:auto;}
 .cash-ledger-table{font-size:12.5px;}
 .cash-ledger-table thead th{position:sticky;top:0;z-index:1;background:#f8fafc;}
 .cash-ledger-table .cash-ledger-row td{padding:11px 12px;cursor:default;}
@@ -884,8 +910,9 @@ textarea.cash-input{resize:vertical;}
   .cash-ledger-drawer { width: 100% !important; right: -100% !important; max-width: 100%; }
   .cash-drawer.open,
   .cash-view-drawer.open { right: 0 !important; }
-  .cash-desktop-table { display: none !important; }
-  .cash-mobile-cards { display: flex; flex-direction: column; gap: 0; background: #f8fafc; }
+  .cash-dbody { padding-bottom: 80px !important; }
+  .cash-desktop-table, .cash-desktop-only { display: none !important; }
+  .cash-mobile-cards { display: flex; flex-direction: column; gap: 0; background: #f8fafc; flex-shrink: 0; }
   .cash-mobile-card { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 14px; cursor: pointer; transition: background .12s; }
   .cash-mobile-card:active { background: #f8f9fc; }
   .cash-mc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }

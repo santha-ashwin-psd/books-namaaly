@@ -1734,7 +1734,31 @@ onMounted(async () => {
   document.addEventListener('click', onDocClickForDownloadMenu);
   await load();
   loadTaxAccount();
-  useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(o => o.name === n) || { name: n }) });
+  if (route.query.new_from_mr) {
+    try {
+      const draft = await apiPOST("zoho_books_clone.api.inventory.create_po_from_mr", { material_request: route.query.new_from_mr });
+      if (draft) {
+        editingName.value = "";
+        form.supplier = "";
+        form.transaction_date = draft.transaction_date;
+        lines.value = (draft.items || []).map(r => ({
+          id: _id++,
+          item_code: r.item_code,
+          description: r.description,
+          qty: r.qty,
+          rate: r.rate,
+          amount: r.amount,
+          tax_code: "",
+          collapsed: false
+        }));
+        drawerOpen.value = true;
+        // Strip the query param to avoid re-triggering on refresh
+        window.history.replaceState(null, "", "/purchase-orders");
+      }
+    } catch (e) { toast(e.message, "error"); }
+  } else {
+    useOpenFromQuery({ route, openByName: (n) => openView(list.value.find(o => o.name === n) || { name: n }) });
+  }
 });
 onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMenu));
 

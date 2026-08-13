@@ -2069,15 +2069,17 @@ function printShippingAddress(inv) {
       <head>
         <title>Shipping Label</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #111827; }
-          .label-box { border: 2px solid #374151; padding: 40px; max-width: 500px; margin: 0 auto; border-radius: 12px; }
-          .title { font-weight: 700; font-size: 14px; margin-bottom: 20px; text-transform: uppercase; color: #6b7280; letter-spacing: 1px; }
-          .name { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
-          .address { font-size: 18px; line-height: 1.6; }
-          .phone { margin-top: 12px; font-size: 16px; font-weight: 700; }
+          html, body { height: 100vh; margin: 0; padding: 0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; display: flex; align-items: center; justify-content: center; }
+          .label-box { border: 2px solid #374151; padding: 50px; width: 100%; max-width: 600px; border-radius: 12px; box-sizing: border-box; }
+          .title { font-weight: 700; font-size: 18px; margin-bottom: 24px; text-transform: uppercase; color: #6b7280; letter-spacing: 1px; }
+          .name { font-size: 32px; font-weight: 700; margin-bottom: 16px; }
+          .address { font-size: 24px; line-height: 1.6; }
+          .phone { margin-top: 16px; font-size: 22px; font-weight: 700; }
+          @page { margin: 0; }
           @media print {
-            body { padding: 0; }
-            .label-box { max-width: 100%; padding: 20px; }
+            body { height: 100vh; display: flex; align-items: center; justify-content: center; }
+            .label-box { max-width: 90%; }
           }
         </style>
       </head>

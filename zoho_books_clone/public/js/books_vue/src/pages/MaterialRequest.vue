@@ -73,6 +73,9 @@
                 <button v-if="!isNew && mr.docstatus===1" class="bomx-btn" style="background:var(--bx-redS);color:var(--bx-red)" @click="cancelMR" :disabled="submitting || !$canDelete('inventory')">
                   {{ submitting ? 'Cancelling…' : 'Cancel' }}
                 </button>
+                <button v-if="!isNew && mr.docstatus===1 && mr.material_request_type==='Purchase'" class="bomx-btn" style="background:var(--bx-blueS);color:var(--bx-blue)" @click="createPurchaseOrder" :disabled="actionLoading==='po' || !$canCreate('inventory')">
+                  {{ actionLoading === 'po' ? 'Creating…' : 'Create Purchase Order' }}
+                </button>
                 <button v-if="!isNew && mr.docstatus===0" class="bomx-btn bomx-btn-light" @click="submitMR" :disabled="submitting || saving || !$canEdit('inventory')">
                   {{ submitting ? 'Submitting…' : 'Submit' }}
                 </button>
@@ -225,6 +228,7 @@ function goBackToList() {
 const isNew = computed(() => route.params.name === "new");
 const saving = ref(false);
 const submitting = ref(false);
+const actionLoading = ref(false);
 
 function emptyMR() {
   return {
@@ -372,6 +376,10 @@ async function amendMR() {
     toast(e.message, "error");
   }
   submitting.value = false;
+}
+
+async function createPurchaseOrder() {
+  router.push(`/purchase-orders?new_from_mr=${mr.value.name}`);
 }
 
 function fmtDate(d) {

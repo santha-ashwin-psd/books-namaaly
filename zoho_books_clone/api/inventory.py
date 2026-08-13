@@ -1346,3 +1346,41 @@ def get_stock_for_items(warehouse, item_codes):
         if i not in res:
             res[i] = 0.0
     return res
+
+# ── Material Request → Purchase Order ─────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def create_po_from_mr(material_request):
+    from frappe.utils import flt, today
+    from zoho_books_clone.utils.access import assert_can
+
+    assert_can("Purchase Order", "create")
+    mr = frappe.get_doc("Material Request", material_request)
+    
+    if mr.docstatus != 1:
+        frappe.throw("Material Request must be submitted")
+    if mr.material_request_type != "Purchase":
+        frappe.throw("Only Purchase Material Requests can be converted to Purchase Orders")
+
+    po_items = []
+    for row in mr.items:
+        item_doc = frappe.get_cached_doc("Item", row.item_code)
+        rate = flt(item_doc.get("standard_buying_rate") or item_doc.get("standard_rate") or 0)
+        po_items.append({
+            "item_code":   row.item_code,
+            "item_name":   item_doc.item_name,
+            "description": item_doc.description or item_doc.item_name,
+            "qty":         row.required_qty,
+            "uom":         row.uom or item_doc.stock_uom or "Nos",
+            "rate":        rate,
+            "amount":      row.required_qty * rate,
+        })
+
+    po = {
+        "doctype":          "Purchase Order",
+        "supplier":         "",
+        "transaction_date": today(),
+        "company":          mr.company,
+        "items":            po_items,
+    }
+    return po
