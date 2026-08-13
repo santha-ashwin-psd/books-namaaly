@@ -237,6 +237,7 @@
   border-bottom: 1px solid #e5e7eb;
   flex-wrap: wrap;
   background: #fafafa;
+  overflow: visible;
 }
 
 /* Base ghost button */

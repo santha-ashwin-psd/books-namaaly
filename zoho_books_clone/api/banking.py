@@ -222,13 +222,20 @@ def save_bank_account(
         doc.is_default           = int(is_default or 0)
         doc.company              = company
         doc.opening_balance      = flt(opening_balance)
-        doc.current_balance      = flt(current_balance)
+        # current_balance will be recomputed below; pass through for now
+        doc.current_balance      = flt(current_balance) if current_balance else doc.current_balance
 
         doc.save(ignore_permissions=True)
         if doc.is_default:
             _clear_other_defaults(company, doc.name)
+
+        # Recompute current_balance so a Credit↔Debit type change is immediately
+        # reflected in the running balance (opening_balance + net transactions).
+        _recalc_balance(doc.name)
+
         frappe.db.commit()
-        return doc.as_dict()
+        return frappe.get_doc("Bank Account", doc.name).as_dict()
+
 
     # ── CREATE new document ────────────────────────────────────────────────────
     # If the user entered a starting balance in the "Current Balance" field but

@@ -783,9 +783,29 @@
           <button v-if="viewInv.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitInv(viewInv)">
             <span v-html="icon('check',13)"></span> <span class="ab-label">Submit</span>
           </button>
-          <button class="inv-ab-btn" :disabled="!$canCreate('invoices')" :title="!$canCreate('invoices') ? 'Read-only access' : ''" @click="duplicateInvoice(viewInv)">
-            <span v-html="icon('copy',13)"></span> <span class="ab-label">Duplicate</span>
-          </button>
+          <div style="position:relative;display:inline-flex">
+            <button class="inv-ab-btn inv-ab-dropdown inv-ab-dropdown2" @click="showDownloadMenu2=!showDownloadMenu2">
+              <span v-html="icon('download',13)"></span> <span class="ab-label">Duplicate</span>
+              <span class="inv-ab-caret">▾</span>
+            </button>
+            <div v-if="showDownloadMenu2" class="inv-dl-menu inv-dl-menu-left">
+              <div class="inv-dl-menu-header">Export Invoice</div>
+              <button @click="downloadInvoicePdf('pdf')" class="inv-dl-menu-item">
+                <span class="inv-dl-menu-icon" v-html="icon('download',14)"></span>
+                <span class="inv-dl-menu-text">
+                  <span class="inv-dl-menu-label">Download PDF</span>
+                  <span class="inv-dl-menu-sub">Custom template · Save to device</span>
+                </span>
+              </button>
+              <button @click="downloadInvoicePdf('print')" class="inv-dl-menu-item">
+                <span class="inv-dl-menu-icon" v-html="icon('printer',14)"></span>
+                <span class="inv-dl-menu-text">
+                  <span class="inv-dl-menu-label">Open &amp; Print</span>
+                  <span class="inv-dl-menu-sub">Custom template · New tab</span>
+                </span>
+              </button>
+            </div>
+          </div>
           <div style="position:relative;display:inline-flex">
             <button class="inv-ab-btn inv-ab-dropdown" @click="showDownloadMenu=!showDownloadMenu">
               <span v-html="icon('download',13)"></span> <span class="ab-label">Download</span>
@@ -1961,9 +1981,11 @@ const tlProgressWidth = computed(()=>{
 });
 
 const showDownloadMenu = ref(false);
+const showDownloadMenu2 = ref(false);
 
 async function downloadInvoicePdf(mode = 'pdf') {
   showDownloadMenu.value = false;
+  showDownloadMenu2.value = false;
   const inv = viewInv.value;
   if (!inv) return;
 
@@ -2079,6 +2101,14 @@ function printShippingAddress(inv) {
 // close download menu when clicking outside
 function onDocClickForDownloadMenu(e) {
   if (!e.target.closest('.inv-ab-dropdown') && !e.target.closest('.inv-dl-menu-item')) {
+    showDownloadMenu.value = false;
+    showDownloadMenu2.value = false;
+  }
+  // Close second menu if clicking on first dropdown and vice-versa
+  if (e.target.closest('.inv-ab-dropdown') && !e.target.closest('.inv-ab-dropdown2')) {
+    showDownloadMenu2.value = false;
+  }
+  if (e.target.closest('.inv-ab-dropdown2')) {
     showDownloadMenu.value = false;
   }
 }
@@ -3495,7 +3525,7 @@ watch(() => route.query, (q) => {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 999;
+  z-index: 9999;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -3503,6 +3533,10 @@ watch(() => route.query, (q) => {
   min-width: 210px;
   padding: 6px;
   animation: dl-menu-in .12s ease;
+}
+.inv-dl-menu-left {
+  right: auto;
+  left: 0;
 }
 @keyframes dl-menu-in {
   from { opacity: 0; transform: translateY(-4px); }

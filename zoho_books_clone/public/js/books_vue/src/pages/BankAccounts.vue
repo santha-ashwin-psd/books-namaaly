@@ -177,12 +177,37 @@
             <label class="ba-label">Opening Balance</label>
             <div style="display:flex; gap:8px;">
               <input v-model.number="form.opening_balance" type="number" step="0.01" class="ba-input" placeholder="0.00" :disabled="!!editingName" style="flex:1;" />
-              <select v-model="form.opening_balance_type" class="ba-select" style="width: 100px;" :disabled="!!editingName">
+              <select v-model="form.opening_balance_type" class="ba-select" style="width: 100px;">
                 <option value="Debit">Debit</option>
                 <option value="Credit">Credit</option>
               </select>
             </div>
             <div v-if="editingName" class="ba-hint">Opening balance is locked after creation.</div>
+          </div>
+          <!-- Live Accounting Preview -->
+          <div class="ba-field" style="grid-column:1/-1" v-if="form.opening_balance > 0 || editingName">
+            <label class="ba-label">Accounting Preview</label>
+            <div class="ba-acct-preview">
+              <div class="ba-acct-preview-block">
+                <div class="ba-acct-preview-lbl">OPENING BALANCE</div>
+                <div class="ba-acct-preview-val" :class="accountingPreview.openingClass">
+                  {{ accountingPreview.openingFormatted }}
+                  <span class="ba-acct-dr-cr">{{ accountingPreview.openingDrCr }}</span>
+                </div>
+              </div>
+              <div class="ba-acct-preview-divider"></div>
+              <div class="ba-acct-preview-block">
+                <div class="ba-acct-preview-lbl">CLOSING BALANCE</div>
+                <div class="ba-acct-preview-val" :class="accountingPreview.closingClass">
+                  {{ accountingPreview.closingFormatted }}
+                  <span class="ba-acct-dr-cr">{{ accountingPreview.closingDrCr }}</span>
+                </div>
+              </div>
+              <div v-if="editingName" class="ba-acct-preview-note">
+                <span v-html="icon('info',11)"></span>
+                Changing Credit ↔ Debit flips the balance sign in accounting.
+              </div>
+            </div>
           </div>
           <div class="ba-field" style="grid-column:1/-1">
             <label class="ba-check"><input type="checkbox" v-model="form.is_default" /> Set as default account</label>
@@ -293,8 +318,34 @@ const openMenuName = ref("");
 const form = reactive({
   account_name: "", bank_name: "", account_type: "Current", account_holder_name: "",
   account_number: "", ifsc_code: "", micr_code: "", branch: "",
-  gl_account: "", currency: "INR", opening_balance: 0, is_default: false,
+  gl_account: "", currency: "INR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
 });
+
+// Live accounting preview — shows Dr/Cr labels like Chart of Accounts
+const accountingPreview = computed(() => {
+  const amt = Math.abs(flt(form.opening_balance) || 0);
+  const isCredit = form.opening_balance_type === 'Credit';
+  // Debit = positive (asset), Credit = negative (liability/contra)
+  const signedOpening = isCredit ? -amt : amt;
+  // Net transactions = currentBalance - originalOpening (both already signed in DB)
+  const netTxns = flt(editingCurrentBalance.value) - flt(editingOriginalOpening.value);
+  // Closing = new opening + same net transaction movement
+  const closingAmt = signedOpening + netTxns;
+  const cur = form.currency || 'INR';
+  const fmt = (v) => new Intl.NumberFormat('en-IN', { style:'currency', currency: cur, minimumFractionDigits:2 }).format(Math.abs(v));
+  const drCr = (v) => v >= 0 ? '(Dr)' : '(Cr)';
+  const cls  = (v) => v >= 0 ? 'ba-acct-pos' : 'ba-acct-neg';
+  return {
+    openingFormatted: amt === 0 ? '—' : fmt(signedOpening),
+    openingDrCr: amt === 0 ? '' : drCr(signedOpening),
+    openingClass: amt === 0 ? '' : cls(signedOpening),
+    closingFormatted: fmt(closingAmt),
+    closingDrCr: drCr(closingAmt),
+    closingClass: cls(closingAmt),
+  };
+});
+const editingCurrentBalance = ref(0);
+const editingOriginalOpening = ref(0);
 
 async function load() {
   loading.value = true;
@@ -391,6 +442,9 @@ async function openEdit(a) {
     opening_balance_type: flt(full.opening_balance) < 0 ? 'Credit' : 'Debit',
     is_default: !!full.is_default,
   });
+  // Store for accounting preview: current_balance from the list item (a) has live balance
+  editingCurrentBalance.value = flt(a.balance ?? full.current_balance ?? full.opening_balance);
+  editingOriginalOpening.value = flt(full.opening_balance);
   glAccounts.value = [];
   drawerOpen.value = true;
   fetchGLAccounts();
@@ -602,6 +656,16 @@ onMounted(load);
 .ba-field{display:flex;flex-direction:column;gap:4px;}
 .ba-label{font-size:12px;font-weight:600;color:#334155;}.req{color:#dc2626;}
 .ba-hint{font-size:11px;color:#94a3b8;}
+/* ── Accounting Preview Panel ── */
+.ba-acct-preview{display:flex;align-items:stretch;gap:0;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:#f8fafc;}
+.ba-acct-preview-block{flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:4px;}
+.ba-acct-preview-divider{width:1px;background:#e2e8f0;flex-shrink:0;}
+.ba-acct-preview-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;}
+.ba-acct-preview-val{font-size:15px;font-weight:700;display:flex;align-items:baseline;gap:5px;}
+.ba-acct-dr-cr{font-size:11px;font-weight:600;opacity:.75;}
+.ba-acct-pos{color:#16a34a;}
+.ba-acct-neg{color:#dc2626;}
+.ba-acct-preview-note{width:100%;padding:8px 16px;font-size:11px;color:#64748b;display:flex;align-items:center;gap:5px;border-top:1px solid #e2e8f0;background:#fff;}
 .ba-input,.ba-select{border:1px solid #e2e8f0;border-radius:8px;padding:8px 11px;font:inherit;font-size:13px;outline:none;background:#fff;color:#0f172a;transition:border-color .15s,box-shadow .15s;}
 .ba-input:focus,.ba-select:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1);}
 .ba-input:disabled{background:#f8fafc;color:#94a3b8;cursor:not-allowed;}
