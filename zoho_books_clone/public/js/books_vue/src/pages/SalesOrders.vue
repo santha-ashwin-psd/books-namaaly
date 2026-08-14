@@ -1306,20 +1306,23 @@ function headerBg(o) {
   if (s === "delivered") return "linear-gradient(135deg,#1e3a5f,#1a6ef7)";
   return "linear-gradient(135deg,#374151,#6b7280)";
 }
+// NOTE: Sales Order is is_submittable=0 (see sales_order.json), so docstatus
+// stays 0 for every SO regardless of status — it is NOT a valid signal for
+// "has this order been confirmed". Use `status !== "Draft"` instead.
 function canInvoice(o) {
-  if (o?.docstatus !== 1) return false;
   const s = (o?.status||"").toLowerCase();
+  if (!s || s === "draft") return false;
   return s !== "cancelled" && s !== "closed" && s !== "invoiced";
 }
 function canDeliver(o) {
-  if (o?.docstatus !== 1) return false;
   const s = (o?.status||"").toLowerCase();
+  if (!s || s === "draft") return false;
   return s !== "cancelled" && s !== "closed" && s !== "delivered";
 }
 function canCancel(o) {
-  if (o?.docstatus !== 1) return false;
   const s = (o?.status||"").toLowerCase();
-  // Only cancel submitted orders that are not already terminal
+  if (!s || s === "draft") return false;
+  // Only cancel confirmed orders that are not already terminal
   return s !== "cancelled" && s !== "closed" && s !== "invoiced";
 }
 function canDelete(o) {
@@ -1337,7 +1340,7 @@ async function load() {
   try {
     const co = await resolveCompany();
     list.value = await apiList("Sales Order", {
-      fields: ["name", "customer", "customer_name", "transaction_date", "delivery_date", "status", "grand_total", "billed_amount", "ref_quote", "po_number"],
+      fields: ["name", "customer", "customer_name", "transaction_date", "delivery_date", "status", "docstatus", "grand_total", "billed_amount", "ref_quote", "po_number"],
       filters: [["company", "=", co]],
       limit: 100000,
       order: "transaction_date desc, creation desc",
@@ -1386,8 +1389,8 @@ const _soTr  = (a,b) => { if(!b&&!a) return {pct:0,up:true}; if(!b) return {pct:
 const soThisMonth = computed(()=>{ const ym=_soYM(); const r=list.value.filter(o=>(o.transaction_date||'').startsWith(ym)); return {count:r.length,value:r.reduce((s,o)=>s+flt(o.grand_total),0)}; });
 const soTrends = computed(()=>({
   total:     _soTr(soThisMonth.value.count, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())).length),
-  draft:     _soTr(counts.value.draft, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())&&o.docstatus===0).length),
-  deliver:   _soTr(counts.value.toDeliver, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())&&(o.status||'').toLowerCase()!=='cancelled'&&(o.status||'').toLowerCase()!=='closed'&&o.docstatus===1).length),
+  draft:     _soTr(counts.value.draft, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())&&(!o.status||(o.status||'').toLowerCase()==='draft')).length),
+  deliver:   _soTr(counts.value.toDeliver, list.value.filter(o=>{ if(!(o.transaction_date||'').startsWith(_soLYM())) return false; const s=(o.status||'draft').toLowerCase(); return s!=='cancelled'&&s!=='closed'&&s!=='invoiced'&&s!=='draft'&&s!=='delivered'; }).length),
   closed:    _soTr(counts.value.closed, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())&&((o.status||'').toLowerCase()==='closed'||(o.status||'').toLowerCase()==='invoiced')).length),
   cancelled: _soTr(counts.value.cancelled, list.value.filter(o=>(o.transaction_date||'').startsWith(_soLYM())&&(o.status||'').toLowerCase()==='cancelled').length),
 }));
@@ -1570,7 +1573,9 @@ async function openView(o) {
     viewDoc.value = { ...o, ...doc };
     if (ful) { fulfill.lines = ful.lines || []; fulfill.computed_status = ful.computed_status || ""; }
     if (lnk) { links.sales_invoices = lnk.sales_invoices || []; }
-  } catch {}
+  } catch (e) {
+    toast.error(e.message || "Failed to load Sales Order details");
+  }
   viewLoading.value = false;
 }
 
@@ -1770,7 +1775,8 @@ async function saveSO(newStatus) {
       shipping_address: form.shipping_address || "", shipping_address_name: form.shipping_address_name || "",
       set_warehouse: form.set_warehouse || "",
       status: newStatus || "Draft",
-      docstatus: newStatus === "Draft" ? 0 : 1,
+      // Sales Order is is_submittable=0 — docstatus is never settable here
+      // and Frappe silently drops it; status is the only confirm signal.
       terms: form.terms || "",
       currency: form.currency || "INR",
       exchange_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
