@@ -1033,9 +1033,9 @@
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
+                <span class="ta-r mono-sm" style="color:#9ca3af">0</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
-                <span v-if="invModalNeedsBatch"></span>
+                <span v-if="invModalNeedsBatch" style="font-size:12px;color:#6b7280">{{ (l.invoiced_batches && l.invoiced_batches.length) ? l.invoiced_batches.map(b => b.batch_no).join(', ') : '' }}</span>
               </div>
               <!-- Pending lines (editable) -->
               <template v-for="l in invModal.lines" :key="l.name">
@@ -1106,9 +1106,9 @@
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
+                <span class="ta-r mono-sm" style="color:#9ca3af">0</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
-                <span v-if="deliverModalNeedsBatch"></span>
+                <span v-if="deliverModalNeedsBatch" style="font-size:12px;color:#6b7280">{{ (l.delivered_batches && l.delivered_batches.length) ? l.delivered_batches.map(b => b.batch_no).join(', ') : '' }}</span>
               </div>
               <template v-for="l in deliverModal.lines" :key="l.name">
                 <div class="inv-ci-grid inv-ci-row" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
@@ -1857,20 +1857,38 @@ function onInvBatchSelect(line, opt) {
 // issue from it. get_warehouse_batches returns qty per item for a single
 // warehouse in one call, so this fetches once per modal-open rather than
 // once per line.
+//
+// EXCEPTION: if this SO line was already delivered under a batch (an
+// earlier partial Delivery Note against the same row — see
+// get_sales_order_fulfillment's delivered_batches), a later delivery of
+// the remaining qty should stick to that SAME batch rather than let the
+// user pick a different one from the whole warehouse — a split delivery
+// across batches for one SO line is confusing for traceability and for
+// the invoice, which now sources its own batch options from what was
+// actually delivered. So those lines skip the warehouse-wide fetch and
+// use delivered_batches directly (auto-filled when there's just one).
 async function fetchDeliverModalBatches(warehouse, lines) {
   const batchLines = lines.filter(l => l.has_batch_no);
-  if (!warehouse || !batchLines.length) {
-    batchLines.forEach(l => { l.batchOptions = []; });
+  const alreadyDelivered = batchLines.filter(l => Array.isArray(l.delivered_batches) && l.delivered_batches.length);
+  const needsFetch = batchLines.filter(l => !(Array.isArray(l.delivered_batches) && l.delivered_batches.length));
+
+  for (const l of alreadyDelivered) {
+    l.batchOptions = l.delivered_batches.map(b => ({ value: b.batch_no, label: `${b.batch_no} (delivered:${flt(b.qty)})` }));
+    if (l.delivered_batches.length === 1) l.batch_no = l.delivered_batches[0].batch_no;
+  }
+
+  if (!warehouse || !needsFetch.length) {
+    needsFetch.forEach(l => { l.batchOptions = []; });
     return;
   }
   try {
     const byItem = await apiGET("zoho_books_clone.api.inventory.get_warehouse_batches", { warehouse }) || {};
-    for (const l of batchLines) {
+    for (const l of needsFetch) {
       const rows = byItem[l.item_code] || [];
       l.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
     }
   } catch {
-    batchLines.forEach(l => { l.batchOptions = []; });
+    needsFetch.forEach(l => { l.batchOptions = []; });
   }
 }
 function onDeliverBatchSelect(line, opt) {

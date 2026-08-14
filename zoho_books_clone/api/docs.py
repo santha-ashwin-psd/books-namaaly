@@ -3344,12 +3344,37 @@ def get_sales_order_fulfillment(sales_order):
                 {"batch_no": d.batch_no, "qty": flt(d.qty)}
             )
 
+    # Same idea for what's actually been INVOICED so far (Sales Invoice
+    # Item also carries so_item — see convert_sales_order_to_invoice).
+    # Used to show which batch a fully-invoiced line was billed under,
+    # since that can in principle differ from delivered_batches (e.g. a
+    # direct invoice with update_stock that never went through a DN at
+    # all) — don't assume delivery batch == invoiced batch.
+    invoiced_batches = {}
+    if so_item_ids:
+        si_batch_rows = frappe.db.sql("""
+            SELECT sii.so_item, sii.batch_no, SUM(sii.qty) AS qty
+            FROM `tabSales Invoice Item` sii
+            INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+            WHERE si.docstatus = 1
+              AND si.sales_order = %(so)s
+              AND sii.so_item IN %(so_items)s
+              AND sii.batch_no IS NOT NULL AND sii.batch_no != ''
+            GROUP BY sii.so_item, sii.batch_no
+            ORDER BY sii.batch_no
+        """, {"so": sales_order, "so_items": [int(x) for x in so_item_ids]}, as_dict=True)
+        for d in si_batch_rows:
+            invoiced_batches.setdefault(str(d.so_item), []).append(
+                {"batch_no": d.batch_no, "qty": flt(d.qty)}
+            )
+
     for r in rows:
         r["remaining_to_deliver"] = max(0.0, flt(r["qty"]) - flt(r["delivered_qty"]))
         r["remaining_to_bill"]    = max(0.0, flt(r["qty"]) - flt(r["billed_qty"]))
         r["has_batch_no"] = 1 if batch_flags.get(r["item_code"]) else 0
         r["warehouse_qty"] = 0.0
         r["delivered_batches"] = delivered_batches.get(str(r["name"]), [])
+        r["invoiced_batches"] = invoiced_batches.get(str(r["name"]), [])
         if so_warehouse and r.get("item_code"):
             bin_qty = frappe.db.get_value("Bin", {"item_code": r["item_code"], "warehouse": so_warehouse}, "actual_qty")
             r["warehouse_qty"] = flt(bin_qty)
