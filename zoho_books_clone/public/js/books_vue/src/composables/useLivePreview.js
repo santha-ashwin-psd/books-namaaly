@@ -305,7 +305,10 @@ function _renderClassic(doc, cfg) {
         ${_state.companyEmail ? `<span class="ci"><svg viewBox="0 0 24 24" fill="${_esc(brand)}"><path d="M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zm2.4.2 7.1 6.2a.8.8 0 0 0 1 0l7.1-6.2a.6.6 0 0 0-.4-1H4.8a.6.6 0 0 0-.4 1"/></svg>${_esc(_state.companyEmail)}</span>` : ""}
       </div>` : ""}
     </div>
-    ${logo ? `<div class="hdr-r"><img src="${_esc(logo)}"/></div>` : ""}
+    <div class="hdr-r">
+      <div class="print-copy-text" style="font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#111;text-align:right;margin-bottom:8px">${_esc(cfg.copyText || "")}</div>
+      ${logo ? `<img src="${_esc(logo)}"/>` : ""}
+    </div>
   </div>
   <div class="title">${_esc(cfg.title)}</div>
   <div class="hdr-bot" style="border-bottom:none">
@@ -502,6 +505,7 @@ function _renderModern(doc, cfg) {
       ${doc.company_gstin || doc.gstin ? `<div class="gst">GSTIN: ${_esc(doc.company_gstin || doc.gstin)}</div>` : ""}
     </div>
     <div class="rt">
+      <div class="print-copy-text" style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fff;text-align:right;margin-bottom:6px">${_esc(cfg.copyText || "")}</div>
       <div class="badge">${_esc(cfg.title)}</div>
       <div class="num">${_esc(doc.name || "")}</div>
       <div class="dt">${_esc(docDate)}${doc.status ? " · " + _esc(doc.status) : ""}</div>
@@ -617,7 +621,7 @@ function _renderMinimal(doc, cfg) {
       <div class="co">${logo ? `<img src="${_esc(logo)}"/>` : ""}${_esc(doc.company || cfg.companyName || "")}</div>
       ${doc.company_gstin || doc.gstin ? `<div class="gst">GSTIN ${_esc(doc.company_gstin || doc.gstin)}</div>` : ""}
     </div>
-    <div class="rt"><div class="t">${_esc(cfg.title)}</div><div class="num mono">${_esc(doc.name || "")}</div></div>
+    <div class="rt"><div class="print-copy-text" style="font-size:10px;font-weight:700;color:#111;text-transform:uppercase;margin-bottom:6px;letter-spacing:.05em;text-align:right">${_esc(cfg.copyText || "")}</div><div class="t">${_esc(cfg.title)}</div><div class="num mono">${_esc(doc.name || "")}</div></div>
   </div>
   <div class="meta">
     <div class="m" style="grid-column:span 2"><div class="l">${_esc(cfg.partyLabel)}</div><div class="v">${_esc(party)}</div>${doc.address_display ? `<div class="v sub">${_esc(doc.address_display)}</div>` : ""}${doc.customer_gstin || doc.supplier_gstin ? `<div class="v sub">GSTIN ${_esc(doc.customer_gstin || doc.supplier_gstin)}</div>` : ""}</div>
@@ -706,6 +710,13 @@ export function useLivePreview() {
   <button class="tbtn ${_state.template === "classic" ? "active" : ""}" data-t="classic">Classic</button>
   <button class="tbtn ${_state.template === "modern"  ? "active" : ""}" data-t="modern">Modern</button>
   <button class="tbtn ${_state.template === "minimal" ? "active" : ""}" data-t="minimal">Minimal</button>
+  <div class="sep"></div>
+  <select class="tbtn" id="copy-sel" style="padding-right:8px;appearance:auto;outline:none">
+    <option value="" ${!config.copyText ? 'selected' : ''}>Original Copy</option>
+    <option value="DUPLICATE COPY" ${config.copyText === 'DUPLICATE COPY' ? 'selected' : ''}>Duplicate Copy</option>
+    <option value="TRIPLICATE COPY" ${config.copyText === 'TRIPLICATE COPY' ? 'selected' : ''}>Triplicate Copy</option>
+    <option value="EXTRA COPY" ${config.copyText === 'EXTRA COPY' ? 'selected' : ''}>Extra Copy</option>
+  </select>
   <button class="print-btn" onclick="window.print()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -716,15 +727,23 @@ export function useLivePreview() {
 </div>
 <div class="doc-wrap"><iframe id="frm" srcdoc="${safeHtml}"></iframe></div>
 <script>
-  document.querySelectorAll('.tbtn').forEach(b => b.onclick = () => {
-    document.querySelectorAll('.tbtn').forEach(x => x.classList.remove('active'));
+  document.getElementById('copy-sel').onchange = (e) => {
+    try {
+      const txt = e.target.value;
+      const f = document.getElementById('frm');
+      const el = f.contentDocument.querySelector('.print-copy-text');
+      if (el) el.textContent = txt;
+    } catch {}
+  };
+  document.querySelectorAll('button.tbtn').forEach(b => b.onclick = () => {
+    document.querySelectorAll('button.tbtn').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     if (window.opener && !window.opener.closed) {
       window.opener.postMessage({
         kind: 'switch-template',
         template: b.dataset.t,
         doc: ${JSON.stringify(doc || {})},
-        config: ${JSON.stringify(config || {})}
+        config: Object.assign(${JSON.stringify(config || {})}, { copyText: document.getElementById('copy-sel').value })
       }, '*');
     }
   });

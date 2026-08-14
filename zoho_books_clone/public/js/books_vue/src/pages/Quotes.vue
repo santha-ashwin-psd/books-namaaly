@@ -1043,23 +1043,26 @@
           <div v-if="convertModal.target==='Invoice'" style="margin-top:14px">
             <label class="inv-lbl">Dispatch Warehouse</label>
             <SearchableSelect v-model="convertModal.warehouse" :options="warehouses"
-              placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
+              placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" @update:modelValue="fetchConvertModalBatches" />
           </div>
           <div v-if="convertModal.target==='Invoice' && convertModal.needsBatch" style="margin-top:14px">
             <div style="font-size:12.5px;color:#374151;margin-bottom:8px">Select a batch for each batch-tracked item:</div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden">
               <div class="inv-ci-grid inv-ci-header inv-ci-grid-batch">
-                <span>Item Code</span><span>Item Name</span><span class="ta-r">Qty</span><span>Batch No</span>
+                <span>Item Code</span><span>Item Name</span><span class="ta-c">QTY</span><span class="ta-c">BATCH</span>
               </div>
               <template v-for="l in convertModal.lines" :key="l.name">
                 <div class="inv-ci-grid inv-ci-row inv-ci-grid-batch">
                   <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
                   <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                  <span class="ta-r mono-sm">{{ l.qty }}</span>
-                  <SearchableSelect v-if="l.has_batch_no" v-model="l.batch_no"
-                    :options="l.batchOptions" placeholder="Select batch"
-                    @update:modelValue="onConvertBatchSelect(l, $event)"
-                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                  <span class="ta-c mono-sm">{{ l.qty }}</span>
+                  <div v-if="l.has_batch_no" style="text-align:center">
+                    <SearchableSelect v-model="l.batch_no"
+                      :options="l.batchOptions" placeholder="Select"
+                      @update:modelValue="onConvertBatchSelect(l, $event)"
+                      :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"
+                      style="width:70px; margin:0 auto; text-align:left"/>
+                  </div>
                   <span v-else></span>
                 </div>
                 <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
@@ -2022,12 +2025,24 @@ async function markStatus(q, status) {
   } catch (e) { toast.error(e.message || "Update failed"); }
 }
 
-async function fetchConvertLineBatches(line) {
-  if (!line.item_code) { line.batchOptions = []; return; }
+async function fetchConvertModalBatches() {
+  const warehouse = convertModal.warehouse;
+  const lines = convertModal.lines;
+  const batchLines = lines.filter(l => l.has_batch_no);
+  if (!warehouse || !batchLines.length) {
+    batchLines.forEach(l => { l.batchOptions = []; l.batch_no = ""; });
+    return;
+  }
   try {
-    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: line.item_code }) || [];
-    line.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
-  } catch { line.batchOptions = []; }
+    const byItem = await apiGET("zoho_books_clone.api.inventory.get_warehouse_batches", { warehouse }) || {};
+    for (const l of batchLines) {
+      const rows = byItem[l.item_code] || [];
+      l.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
+      if (!l.batchOptions.find(o => o.value === l.batch_no)) l.batch_no = "";
+    }
+  } catch {
+    batchLines.forEach(l => { l.batchOptions = []; l.batch_no = ""; });
+  }
 }
 function onConvertBatchSelect(line, opt) {
   line.batch_no = opt?.value ?? opt;
@@ -2059,7 +2074,7 @@ async function openConvertModal(q) {
     }));
     convertModal.lines = lines;
     convertModal.needsBatch = lines.some(l => l.has_batch_no);
-    await Promise.all(lines.filter(l => l.has_batch_no).map(l => fetchConvertLineBatches(l)));
+    await fetchConvertModalBatches();
   } catch (e) { toast.error(e.message || "Failed to load quotation items"); }
 }
 async function submitConvert() {
@@ -2457,7 +2472,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClickForDownloadMen
   align-items: center;
 }
 .inv-ci-grid-batch {
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 90px 100px 150px;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) 90px 150px;
 }
 .inv-ci-header {
   background: #f8fafc;

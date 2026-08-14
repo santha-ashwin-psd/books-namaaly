@@ -1019,37 +1019,40 @@
             </div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
               <!-- Header -->
-              <div class="inv-ci-grid inv-ci-header" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+              <div class="inv-ci-grid inv-ci-header" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <span>Item Code</span>
                 <span>Item Name</span>
-                <span class="ta-r">WH QTY</span>
-                <span class="ta-r">Remaining</span>
-                <span class="ta-r">Invoice Qty</span>
-                <span v-if="invModalNeedsBatch">Batch No</span>
+                <span class="ta-c">WH QTY</span>
+                <span class="ta-c">REMAINING</span>
+                <span class="ta-c">INVOICE QTY</span>
+                <span v-if="invModalNeedsBatch" class="ta-c">BATCH</span>
               </div>
               <!-- Fully-invoiced lines (read-only) -->
               <div v-for="l in invModal.allLines.filter(l => l.remaining_to_bill <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+                class="inv-ci-grid inv-ci-row inv-ci-done" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">0</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
-                <span v-if="invModalNeedsBatch" style="font-size:12px;color:#6b7280">{{ (l.invoiced_batches && l.invoiced_batches.length) ? l.invoiced_batches.map(b => b.batch_no).join(', ') : '' }}</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">0</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">—</span>
+                <span v-if="invModalNeedsBatch" class="ta-c" style="font-size:12px;color:#6b7280">{{ (l.invoiced_batches && l.invoiced_batches.length) ? l.invoiced_batches.map(b => b.batch_no).join(', ') : '' }}</span>
               </div>
               <!-- Pending lines (editable) -->
               <template v-for="l in invModal.lines" :key="l.name">
-                <div class="inv-ci-grid inv-ci-row" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+                <div class="inv-ci-grid inv-ci-row" :style="invModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                   <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
                   <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                  <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
-                  <span class="ta-r mono-sm text-muted">{{ l.remaining_to_bill }}</span>
-                  <input v-model.number="l.toInvoice" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
-                    class="inv-ci" style="width:100%;text-align:right"/>
+                  <span class="ta-c mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
+                  <span class="ta-c mono-sm text-muted">{{ l.remaining_to_bill }}</span>
+                  <div style="text-align:center">
+                    <input v-model.number="l.toInvoice" type="number" min="0" :max="l.remaining_to_bill" step="0.001"
+                      class="inv-ci" style="width:70px;text-align:center"/>
+                  </div>
                   <SearchableSelect v-if="invModalNeedsBatch && l.has_batch_no" v-model="l.batch_no"
-                    :options="l.batchOptions" placeholder="Select batch"
+                    :options="l.batchOptions" placeholder="Select"
                     @update:modelValue="onInvBatchSelect(l, $event)"
-                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"
+                    style="width:70px; margin:0 auto; text-align:left"/>
                   <span v-else-if="invModalNeedsBatch"></span>
                 </div>
                 <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
@@ -1093,35 +1096,38 @@
               </div>
             </div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
-              <div class="inv-ci-grid inv-ci-header" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+              <div class="inv-ci-grid inv-ci-header" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <span>Item Code</span>
                 <span>Item Name</span>
-                <span class="ta-r">WH QTY</span>
-                <span class="ta-r">Remaining</span>
-                <span class="ta-r">Deliver Qty</span>
-                <span v-if="deliverModalNeedsBatch">Batch</span>
+                <span class="ta-c">WH QTY</span>
+                <span class="ta-c">REMAINING</span>
+                <span class="ta-c">DELIVER QTY</span>
+                <span v-if="deliverModalNeedsBatch" class="ta-c">BATCH</span>
               </div>
               <div v-for="l in deliverModal.allLines.filter(l => l.remaining_to_deliver <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+                class="inv-ci-grid inv-ci-row inv-ci-done" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">0</span>
-                <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
-                <span v-if="deliverModalNeedsBatch" style="font-size:12px;color:#6b7280">{{ (l.delivered_batches && l.delivered_batches.length) ? l.delivered_batches.map(b => b.batch_no).join(', ') : '' }}</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">0</span>
+                <span class="ta-c mono-sm" style="color:#9ca3af">—</span>
+                <span v-if="deliverModalNeedsBatch" class="ta-c" style="font-size:12px;color:#6b7280">{{ (l.delivered_batches && l.delivered_batches.length) ? l.delivered_batches.map(b => b.batch_no).join(', ') : '' }}</span>
               </div>
               <template v-for="l in deliverModal.lines" :key="l.name">
-                <div class="inv-ci-grid inv-ci-row" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+                <div class="inv-ci-grid inv-ci-row" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.8fr 1.8fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                   <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
                   <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                  <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
-                  <span class="ta-r mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
-                  <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
-                    class="inv-ci" style="width:100%;text-align:right"/>
+                  <span class="ta-c mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
+                  <span class="ta-c mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
+                  <div style="text-align:center">
+                    <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
+                      class="inv-ci" style="width:70px;text-align:center"/>
+                  </div>
                   <SearchableSelect v-if="deliverModalNeedsBatch && l.has_batch_no" v-model="l.batch_no"
-                    :options="l.batchOptions" placeholder="Select batch"
+                    :options="l.batchOptions" placeholder="Select"
                     @update:modelValue="onDeliverBatchSelect(l, $event)"
-                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"
+                    style="width:70px; margin:0 auto; text-align:left"/>
                   <span v-else-if="deliverModalNeedsBatch"></span>
                 </div>
                 <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
@@ -1827,27 +1833,7 @@ async function emailSO(o) {
   });
 }
 
-async function fetchInvLineBatches(line) {
-  // If this SO line was already delivered via a Delivery Note, it MUST be
-  // invoiced against the same batch(es) that physically shipped — offering
-  // the full global item stock (get_batches_for_item) here let a user pick
-  // a batch that was never actually delivered on this order, which is
-  // wrong for batch traceability. get_sales_order_fulfillment now returns
-  // delivered_batches per line; use that instead when it's non-empty, and
-  // only fall back to the global picker for lines with no delivery yet
-  // (the direct-invoice-with-stock-deduction path, which hasn't shipped
-  // anything so there's nothing to match against).
-  if (Array.isArray(line.delivered_batches) && line.delivered_batches.length) {
-    line.batchOptions = line.delivered_batches.map(b => ({ value: b.batch_no, label: `${b.batch_no} (delivered:${flt(b.qty)})` }));
-    if (line.delivered_batches.length === 1) line.batch_no = line.delivered_batches[0].batch_no;
-    return;
-  }
-  if (!line.item_code) { line.batchOptions = []; return; }
-  try {
-    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: line.item_code }) || [];
-    line.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
-  } catch { line.batchOptions = []; }
-}
+
 function onInvBatchSelect(line, opt) {
   line.batch_no = opt?.value ?? opt;
 }
@@ -1867,7 +1853,7 @@ function onInvBatchSelect(line, opt) {
 // the invoice, which now sources its own batch options from what was
 // actually delivered. So those lines skip the warehouse-wide fetch and
 // use delivered_batches directly (auto-filled when there's just one).
-async function fetchDeliverModalBatches(warehouse, lines) {
+async function fetchModalBatches(warehouse, lines) {
   const batchLines = lines.filter(l => l.has_batch_no);
   const alreadyDelivered = batchLines.filter(l => Array.isArray(l.delivered_batches) && l.delivered_batches.length);
   const needsFetch = batchLines.filter(l => !(Array.isArray(l.delivered_batches) && l.delivered_batches.length));
@@ -1922,7 +1908,7 @@ function openInvoiceModal(o) {
       // in memory, but no reactivity trigger fires, so the dropdown never
       // re-renders. Reading through invModal.lines gives back the proxied
       // (reactive) line objects, so the same mutation is tracked correctly.
-      await Promise.all(invModal.lines.filter(l => l.has_batch_no).map(l => fetchInvLineBatches(l)));
+      await fetchModalBatches(invModal.warehouse, invModal.lines);
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }
@@ -1988,7 +1974,7 @@ function openDeliverModal(o) {
       // Same reactivity gotcha as openInvoiceModal above — pass
       // deliverModal.lines (the reactive proxy), not the raw `pending`
       // array, so batchOptions mutations actually trigger a re-render.
-      await fetchDeliverModalBatches(deliverModal.warehouse, deliverModal.lines);
+      await fetchModalBatches(deliverModal.warehouse, deliverModal.lines);
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }

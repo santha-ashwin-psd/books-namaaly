@@ -790,14 +790,14 @@
             </button>
             <div v-if="showDownloadMenu2" class="inv-dl-menu inv-dl-menu-left">
               <div class="inv-dl-menu-header">Export Invoice</div>
-              <button @click="downloadInvoicePdf('pdf')" class="inv-dl-menu-item">
+              <button @click="downloadInvoicePdf('pdf', 'DUPLICATE COPY')" class="inv-dl-menu-item">
                 <span class="inv-dl-menu-icon" v-html="icon('download',14)"></span>
                 <span class="inv-dl-menu-text">
                   <span class="inv-dl-menu-label">Download PDF</span>
                   <span class="inv-dl-menu-sub">Custom template · Save to device</span>
                 </span>
               </button>
-              <button @click="downloadInvoicePdf('print')" class="inv-dl-menu-item">
+              <button @click="downloadInvoicePdf('print', 'DUPLICATE COPY')" class="inv-dl-menu-item">
                 <span class="inv-dl-menu-icon" v-html="icon('printer',14)"></span>
                 <span class="inv-dl-menu-text">
                   <span class="inv-dl-menu-label">Open &amp; Print</span>
@@ -813,14 +813,14 @@
             </button>
             <div v-if="showDownloadMenu" class="inv-dl-menu">
               <div class="inv-dl-menu-header">Export Invoice</div>
-              <button @click="downloadInvoicePdf('pdf')" class="inv-dl-menu-item">
+              <button @click="downloadInvoicePdf('pdf', 'ORIGINAL COPY')" class="inv-dl-menu-item">
                 <span class="inv-dl-menu-icon" v-html="icon('download',14)"></span>
                 <span class="inv-dl-menu-text">
                   <span class="inv-dl-menu-label">Download PDF</span>
                   <span class="inv-dl-menu-sub">Custom template · Save to device</span>
                 </span>
               </button>
-              <button @click="downloadInvoicePdf('print')" class="inv-dl-menu-item">
+              <button @click="downloadInvoicePdf('print', 'ORIGINAL COPY')" class="inv-dl-menu-item">
                 <span class="inv-dl-menu-icon" v-html="icon('printer',14)"></span>
                 <span class="inv-dl-menu-text">
                   <span class="inv-dl-menu-label">Open &amp; Print</span>
@@ -1983,7 +1983,7 @@ const tlProgressWidth = computed(()=>{
 const showDownloadMenu = ref(false);
 const showDownloadMenu2 = ref(false);
 
-async function downloadInvoicePdf(mode = 'pdf') {
+async function downloadInvoicePdf(mode = 'pdf', copyText = '') {
   showDownloadMenu.value = false;
   showDownloadMenu2.value = false;
   const inv = viewInv.value;
@@ -2020,7 +2020,9 @@ async function downloadInvoicePdf(mode = 'pdf') {
   };
 
   // Render using the same template + branding as the live preview
-  const html = renderDocument(_toPrintDoc(data), _invCfg(data));
+  const cfg = _invCfg(data);
+  if (copyText) cfg.copyText = copyText;
+  const html = renderDocument(_toPrintDoc(data), cfg);
 
   if (mode === 'print') {
     // Open rendered HTML in a new window and trigger print dialog

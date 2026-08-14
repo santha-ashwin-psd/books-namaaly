@@ -1,3 +1,5 @@
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -18,6 +20,13 @@ class Batch(Document):
 			return
 
 		item_code = self.item or "BATCH"
+		# Naming series only permits '-', '#', '.', '/', '{', '}' -- item
+		# codes/names routinely contain spaces, parentheses, commas etc.
+		# (e.g. "Kaisore Guggulu 60Nos (500mg)"), which previously blew
+		# up make_autoname() with InvalidNamingSeriesError. Strip anything
+		# not in that allowed set so any item name is safe to use as the
+		# series prefix.
+		item_code = re.sub(r"[^A-Za-z0-9\-#./{}]", "", item_code) or "BATCH"
 		year = getdate(self.manufacturing_date or nowdate()).year
 		key = f"{item_code}-{year}-.####"
 		self.name = self.batch_no = make_autoname(key, doctype="Batch", doc=self)
