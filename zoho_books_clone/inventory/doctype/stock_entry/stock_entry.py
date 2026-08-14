@@ -242,9 +242,12 @@ class StockEntry(Document):
             # batch rows go negative underneath it.
             if direction.get("s") and row.s_warehouse and not _allow_negative_stock():
                 if row.batch_no:
-                    available = flt(frappe.db.get_value(
-                        "Batch", row.batch_no, "batch_qty"
-                    ) or 0)
+                    # Batch.batch_qty is a global cache (see get_batch_qty_in_warehouse's
+                    # docstring) -- checking it here without a warehouse filter let a
+                    # batch split across warehouses pass this guard using stock that
+                    # physically sits somewhere else, posting this warehouse negative.
+                    from zoho_books_clone.inventory.utils import get_batch_qty_in_warehouse
+                    available = get_batch_qty_in_warehouse(row.batch_no, row.s_warehouse)
                     if available < stock_qty:
                         frappe.throw(_(
                             "Row {0}: Insufficient stock for item <b>{1}</b> in batch <b>{2}</b> "
@@ -289,10 +292,14 @@ class StockEntry(Document):
                     ).format(i, row.batch_no, batch_item, row.item_code))
 
                 # Outgoing batch-tracked movements must not exceed that batch's
-                # own remaining qty (separate from the item's overall Bin qty,
-                # since a warehouse can hold several batches of the same item).
+                # own remaining qty IN THIS WAREHOUSE (separate from the item's
+                # overall Bin qty, since a warehouse can hold several batches of
+                # the same item -- and separate from the batch's global qty,
+                # since the same batch can itself be split across warehouses;
+                # see get_batch_qty_in_warehouse's docstring).
                 if direction.get("s") and row.s_warehouse:
-                    batch_qty = flt(frappe.db.get_value("Batch", row.batch_no, "batch_qty") or 0)
+                    from zoho_books_clone.inventory.utils import get_batch_qty_in_warehouse
+                    batch_qty = get_batch_qty_in_warehouse(row.batch_no, row.s_warehouse)
                     if batch_qty < stock_qty:
                         frappe.throw(_(
                             "Row {0}: Insufficient stock in batch <b>{1}</b>. "

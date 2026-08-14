@@ -132,6 +132,33 @@ def get_batches_for_outgoing(item_code: str, warehouse: str, qty: float,
     return allocations
 
 
+def get_batch_qty_in_warehouse(batch_no: str, warehouse: str) -> float:
+    """
+    Live balance of `batch_no` inside `warehouse` specifically, read straight
+    from the Stock Ledger Entry -- deliberately NOT Batch.batch_qty.
+
+    Batch.batch_qty is a single global cache incrementally adjusted by every
+    Stock Entry regardless of which warehouse it posted to (see
+    stock_entry.py._adjust_batch_qty), so it only ever reflects the batch's
+    TOTAL remaining qty across every warehouse combined. Any batch actually
+    split across more than one warehouse -- e.g. some units already
+    dispatched out of Finished Goods Store while the rest still sit in
+    Dispatch Store -- makes that cache silently wrong for "is there enough
+    of this batch in THIS warehouse" questions: the global total can look
+    perfectly sufficient while the specific warehouse being drawn from has
+    little or nothing, letting an outgoing entry post negative Bin stock in
+    that warehouse despite passing a batch_qty check. Used by
+    Stock Entry.validate()'s negative-stock guard and Sales Invoice's
+    validate_batches() so both check the right number.
+    """
+    if not batch_no or not warehouse:
+        return 0.0
+    return flt(frappe.db.sql("""
+        SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
+        WHERE batch_no = %s AND warehouse = %s AND is_cancelled = 0
+    """, (batch_no, warehouse))[0][0] or 0)
+
+
 def assert_batch_deletable(batch_no: str) -> None:
     """
     Block deleting a Batch master that still represents real stock or has

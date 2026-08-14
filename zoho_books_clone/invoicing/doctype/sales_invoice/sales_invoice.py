@@ -111,10 +111,34 @@ class SalesInvoice(Document):
 
             item.batch_expiry_date = batch.expiry_date
 
-            available_qty = flt(frappe.db.sql("""
-                SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
-                WHERE item_code = %s AND batch_no = %s AND is_cancelled = 0
-            """, (item.item_code, item.batch_no))[0][0] or 0)
+            # Scoped to the row's actual warehouse (not a global item+batch sum
+            # across every warehouse) -- a batch split across warehouses could
+            # otherwise pass this check using stock that physically sits
+            # elsewhere, letting the invoice submit and then post the
+            # warehouse it actually draws from negative. See
+            # inventory.utils.get_batch_qty_in_warehouse for the same fix
+            # applied to Stock Entry's own guard.
+            #
+            # Sales Invoice Item has no warehouse field of its own -- reuse
+            # stock_link.resolve_intended_warehouse(), the same set_warehouse >
+            # item default_warehouse > Books default chain stock_link.py's
+            # on_sales_invoice_submit() will actually deduct from, so this
+            # check and the real deduction always agree on which warehouse.
+            from zoho_books_clone.inventory.utils import get_batch_qty_in_warehouse
+            from zoho_books_clone.inventory.stock_link import resolve_intended_warehouse
+            warehouse = resolve_intended_warehouse(self, item)
+            if warehouse:
+                available_qty = get_batch_qty_in_warehouse(item.batch_no, warehouse)
+            else:
+                # No warehouse resolved yet on this row -- fall back to the old
+                # global check rather than blocking on an unrelated warehouse
+                # resolution gap; stock_link.py resolves the real warehouse at
+                # submit time and Stock Entry's own (now warehouse-scoped)
+                # guard is the final backstop either way.
+                available_qty = flt(frappe.db.sql("""
+                    SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
+                    WHERE item_code = %s AND batch_no = %s AND is_cancelled = 0
+                """, (item.item_code, item.batch_no))[0][0] or 0)
 
             if flt(item.qty) > available_qty:
                 frappe.throw(_(
