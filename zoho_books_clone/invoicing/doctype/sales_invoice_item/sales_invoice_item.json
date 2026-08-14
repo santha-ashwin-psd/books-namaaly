@@ -19,7 +19,8 @@
   "discount_percentage",
   "discount_amount",
   "batch_no",
-  "batch_expiry_date"
+  "batch_expiry_date",
+  "so_item"
  ],
  "fields": [
   {
@@ -129,6 +130,15 @@
    "no_copy": 1,
    "in_list_view": 0,
    "description": "Auto-stamped: the QC Inspection covering this specific row (item + batch), if any. Row-level so the same item across multiple rows/batches on one document is tracked independently."
+  },
+  {
+   "fieldname": "so_item",
+   "fieldtype": "Int",
+   "label": "Source SO Item Row",
+   "read_only": 1,
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Auto-stamped: the exact Sales Order Item row this line was billed against, so cancelling this invoice reverses billed_qty on the correct row even when the SO has multiple rows for the same item_code."
   }
  ],
  "istable": 1,

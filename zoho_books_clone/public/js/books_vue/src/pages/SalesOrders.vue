@@ -1093,29 +1093,41 @@
               </div>
             </div>
             <div style="border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:14px">
-              <div class="inv-ci-grid inv-ci-header" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
+              <div class="inv-ci-grid inv-ci-header" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <span>Item Code</span>
                 <span>Item Name</span>
                 <span class="ta-r">WH QTY</span>
                 <span class="ta-r">Remaining</span>
                 <span class="ta-r">Deliver Qty</span>
+                <span v-if="deliverModalNeedsBatch">Batch</span>
               </div>
               <div v-for="l in deliverModal.allLines.filter(l => l.remaining_to_deliver <= 0)" :key="'done-'+l.name"
-                class="inv-ci-grid inv-ci-row inv-ci-done" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
+                class="inv-ci-grid inv-ci-row inv-ci-done" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
                 <div style="font-weight:600;color:#374151;font-size:12.5px">{{ l.item_code }}</div>
                 <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.warehouse_qty || 0 }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">{{ l.qty }}</span>
                 <span class="ta-r mono-sm" style="color:#9ca3af">—</span>
+                <span v-if="deliverModalNeedsBatch"></span>
               </div>
-              <div v-for="l in deliverModal.lines" :key="l.name" class="inv-ci-grid inv-ci-row" style="grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;">
-                <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
-                <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
-                <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
-                <span class="ta-r mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
-                <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
-                  class="inv-ci" style="width:100%;text-align:right"/>
-              </div>
+              <template v-for="l in deliverModal.lines" :key="l.name">
+                <div class="inv-ci-grid inv-ci-row" :style="deliverModalNeedsBatch ? 'grid-template-columns: 2fr 2.5fr 1.2fr 1.2fr 1.5fr 2fr;' : 'grid-template-columns: 2fr 3fr 1.5fr 1.5fr 2fr;'">
+                  <div style="font-weight:600;color:#111827;font-size:12.5px">{{ l.item_code }}</div>
+                  <div style="font-size:12.5px;color:#6b7280">{{ l.item_name || '—' }}</div>
+                  <span class="ta-r mono-sm text-muted">{{ l.warehouse_qty || 0 }}</span>
+                  <span class="ta-r mono-sm text-muted">{{ l.remaining_to_deliver }}</span>
+                  <input v-model.number="l.toDeliver" type="number" min="0" :max="l.remaining_to_deliver" step="0.001"
+                    class="inv-ci" style="width:100%;text-align:right"/>
+                  <SearchableSelect v-if="deliverModalNeedsBatch && l.has_batch_no" v-model="l.batch_no"
+                    :options="l.batchOptions" placeholder="Select batch"
+                    @update:modelValue="onDeliverBatchSelect(l, $event)"
+                    :title="!l.batchOptions.length ? 'No batches with stock yet' : ''"/>
+                  <span v-else-if="deliverModalNeedsBatch"></span>
+                </div>
+                <div v-if="l.has_batch_no && !l.batch_no" class="po-items-error-row" style="padding:4px 10px;font-size:11.5px;color:#b91c1c;background:#fef2f2">
+                  <span v-html="icon('alert-circle',12)"></span> {{ l.item_name || l.item_code }} is batch-tracked — select a Batch No
+                </div>
+              </template>
             </div>
             <div class="inv-fg inv-fg2">
               <div>
@@ -1490,6 +1502,9 @@ const invModalTotal = computed(() =>
 const invModalNeedsBatch = computed(() =>
   (invModal.lines || []).some(l => l.has_batch_no)
 );
+const deliverModalNeedsBatch = computed(() =>
+  (deliverModal.lines || []).some(l => l.has_batch_no)
+);
 const deliverModalQty = computed(() =>
   (deliverModal.lines || []).reduce((s, l) => s + flt(l.toDeliver), 0)
 );
@@ -1813,6 +1828,20 @@ async function emailSO(o) {
 }
 
 async function fetchInvLineBatches(line) {
+  // If this SO line was already delivered via a Delivery Note, it MUST be
+  // invoiced against the same batch(es) that physically shipped — offering
+  // the full global item stock (get_batches_for_item) here let a user pick
+  // a batch that was never actually delivered on this order, which is
+  // wrong for batch traceability. get_sales_order_fulfillment now returns
+  // delivered_batches per line; use that instead when it's non-empty, and
+  // only fall back to the global picker for lines with no delivery yet
+  // (the direct-invoice-with-stock-deduction path, which hasn't shipped
+  // anything so there's nothing to match against).
+  if (Array.isArray(line.delivered_batches) && line.delivered_batches.length) {
+    line.batchOptions = line.delivered_batches.map(b => ({ value: b.batch_no, label: `${b.batch_no} (delivered:${flt(b.qty)})` }));
+    if (line.delivered_batches.length === 1) line.batch_no = line.delivered_batches[0].batch_no;
+    return;
+  }
   if (!line.item_code) { line.batchOptions = []; return; }
   try {
     const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: line.item_code }) || [];
@@ -1820,6 +1849,31 @@ async function fetchInvLineBatches(line) {
   } catch { line.batchOptions = []; }
 }
 function onInvBatchSelect(line, opt) {
+  line.batch_no = opt?.value ?? opt;
+}
+// Delivery Note batches are scoped to the SO's dispatch warehouse (not the
+// item globally) — a batch with zero stock in that warehouse would let the
+// user pick it here but fail downstream when the auto Stock Entry tries to
+// issue from it. get_warehouse_batches returns qty per item for a single
+// warehouse in one call, so this fetches once per modal-open rather than
+// once per line.
+async function fetchDeliverModalBatches(warehouse, lines) {
+  const batchLines = lines.filter(l => l.has_batch_no);
+  if (!warehouse || !batchLines.length) {
+    batchLines.forEach(l => { l.batchOptions = []; });
+    return;
+  }
+  try {
+    const byItem = await apiGET("zoho_books_clone.api.inventory.get_warehouse_batches", { warehouse }) || {};
+    for (const l of batchLines) {
+      const rows = byItem[l.item_code] || [];
+      l.batchOptions = rows.map(b => ({ value: b.batch_no, label: `${b.batch_no} (qty:${flt(b.qty)})` }));
+    }
+  } catch {
+    batchLines.forEach(l => { l.batchOptions = []; });
+  }
+}
+function onDeliverBatchSelect(line, opt) {
   line.batch_no = opt?.value ?? opt;
 }
 function openInvoiceModal(o) {
@@ -1841,8 +1895,16 @@ function openInvoiceModal(o) {
         dueDate: o.delivery_date || todayStr(),
       });
       if (!invModal.lines.length) { invModal.open = false; toast.info("Nothing left to invoice"); return; }
-      // Load batch options for batch-tracked pending lines.
-      await Promise.all(pending.filter(l => l.has_batch_no).map(l => fetchInvLineBatches(l)));
+      // Load batch options for batch-tracked pending lines. IMPORTANT: iterate
+      // invModal.lines (the reactive proxy), not the raw `pending` array —
+      // `pending` still points at the plain objects created above, and
+      // Vue's reactive() only wraps a value when it's *read* through the
+      // proxy. Mutating l.batchOptions on the raw `pending` elements bypasses
+      // the proxy's set trap entirely: the fetch succeeds and the data lands
+      // in memory, but no reactivity trigger fires, so the dropdown never
+      // re-renders. Reading through invModal.lines gives back the proxied
+      // (reactive) line objects, so the same mutation is tracked correctly.
+      await Promise.all(invModal.lines.filter(l => l.has_batch_no).map(l => fetchInvLineBatches(l)));
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }
@@ -1888,12 +1950,14 @@ async function submitInvoice() {
 
 function openDeliverModal(o) {
   apiGET("zoho_books_clone.api.docs.get_sales_order_fulfillment", { sales_order: o.name })
-    .then(r => {
+    .then(async (r) => {
       const ful = r?.lines || [];
       const pending = ful.filter(l => l.remaining_to_deliver > 0)
                         .map(l => ({
                           ...l,
-                          toDeliver: (r.warehouse && l.warehouse_qty !== undefined) ? Math.max(0, Math.min(l.remaining_to_deliver, l.warehouse_qty)) : l.remaining_to_deliver
+                          toDeliver: (r.warehouse && l.warehouse_qty !== undefined) ? Math.max(0, Math.min(l.remaining_to_deliver, l.warehouse_qty)) : l.remaining_to_deliver,
+                          batch_no: "",
+                          batchOptions: []
                         }));
       Object.assign(deliverModal, {
         open: true, saving: false, soName: o.name,
@@ -1902,25 +1966,33 @@ function openDeliverModal(o) {
         lines: pending,
         lrNo: "", transporterName: "",
       });
-      if (!deliverModal.lines.length) { deliverModal.open = false; toast.info("Nothing left to deliver"); }
+      if (!deliverModal.lines.length) { deliverModal.open = false; toast.info("Nothing left to deliver"); return; }
+      // Same reactivity gotcha as openInvoiceModal above — pass
+      // deliverModal.lines (the reactive proxy), not the raw `pending`
+      // array, so batchOptions mutations actually trigger a re-render.
+      await fetchDeliverModalBatches(deliverModal.warehouse, deliverModal.lines);
     })
     .catch(e => toast.error(e.message || "Failed to load fulfillment"));
 }
 async function submitDeliver() {
   if (!canCreate("invoices")) { toast.error("Read-only access"); return; }
   const lineMap = {};
+  const batchMap = {};
   const insufficientItems = [];
   for (const l of deliverModal.lines) {
     const qty = flt(l.toDeliver);
     if (qty > 0) {
       lineMap[l.name] = qty;
+      if (l.has_batch_no && l.batch_no) batchMap[l.name] = l.batch_no;
       if (l.warehouse_qty !== undefined && qty > flt(l.warehouse_qty)) {
         insufficientItems.push(`- ${l.item_code} (Req: ${qty}, Avail: ${flt(l.warehouse_qty)})`);
       }
     }
   }
   if (!Object.keys(lineMap).length) { toast.error("Enter at least one qty to deliver"); return; }
-  
+  const missingBatch = deliverModal.lines.find(l => flt(l.toDeliver) > 0 && l.has_batch_no && !l.batch_no);
+  if (missingBatch) { toast.error(`Select a Batch No for ${missingBatch.item_name || missingBatch.item_code}`); return; }
+
   if (insufficientItems.length > 0 && deliverModal.warehouse) {
     const msg = `The following items have insufficient stock in warehouse ${deliverModal.warehouse}:\n\n${insufficientItems.join('\n')}\n\nDo you want to proceed anyway?`;
     if (!await confirm({ title: "Insufficient Stock", body: msg, okLabel: "Proceed", okStyle: "danger" })) {
@@ -1933,6 +2005,7 @@ async function submitDeliver() {
     const r = await apiPOST("zoho_books_clone.api.docs.create_delivery_note_from_so", {
       sales_order: deliverModal.soName,
       line_qtys: JSON.stringify(lineMap),
+      batch_nos: JSON.stringify(batchMap),
       lr_no: deliverModal.lrNo || "",
       transporter_name: deliverModal.transporterName || "",
     });

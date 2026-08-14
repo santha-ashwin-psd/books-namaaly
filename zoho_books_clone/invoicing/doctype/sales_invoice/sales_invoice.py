@@ -306,11 +306,31 @@ class SalesInvoice(Document):
             )
 
     def _reverse_billed_qty(self):
-        """Decrement billed_qty on the linked Sales Order lines and refresh SO status."""
+        """Decrement billed_qty on the linked Sales Order lines and refresh SO status.
+
+        Matches by the exact SO Item row (row.so_item) when present — this is
+        the correct path for every invoice created after so_item was added to
+        Sales Invoice Item. Falls back to item_code-based matching only for
+        older invoices that predate that field (so_item will be 0/unset on
+        those rows), preserving the previous behaviour for historical data.
+        """
         so_name = self.sales_order
         for row in (self.items or []):
             if not row.item_code or flt(row.qty) <= 0:
                 continue
+            so_item_id = getattr(row, "so_item", None)
+            if so_item_id:
+                cur = flt(frappe.db.get_value("Sales Order Item", so_item_id, "billed_qty"))
+                take = min(cur, flt(row.qty))
+                if take > 0:
+                    frappe.db.set_value(
+                        "Sales Order Item", so_item_id, "billed_qty",
+                        max(0.0, cur - take), update_modified=False,
+                    )
+                continue
+            # Legacy fallback: no so_item stored on this row — match by
+            # item_code across the SO's rows (may misattribute across
+            # multiple rows of the same item, same as before this fix).
             so_rows = frappe.db.sql("""
                 SELECT name, billed_qty FROM `tabSales Order Item`
                 WHERE parent = %s AND item_code = %s

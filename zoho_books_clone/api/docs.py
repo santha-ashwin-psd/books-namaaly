@@ -3314,11 +3314,42 @@ def get_sales_order_fulfillment(sales_order):
         }
     so_warehouse = frappe.db.get_value("Sales Order", sales_order, "set_warehouse")
 
+    # Batches this SO line was actually DISPATCHED under, per submitted
+    # Delivery Note (Delivery Note Item.so_item was stamped with the SO Item
+    # row's name by create_delivery_note_from_so). The invoice must bill
+    # against the SAME batch that physically left the warehouse — letting
+    # the Convert-to-Invoice picker offer any in-stock batch (the old
+    # get_batches_for_item global list) meant a user could invoice a
+    # different batch than what was actually delivered, which is wrong for
+    # batch/lot traceability (and for COGS if batches are valued
+    # differently). So: for rows with at least one delivered batch, the
+    # frontend restricts the picker to just these (and auto-fills when
+    # there's only one), instead of falling back to the global item list.
+    so_item_ids = [r["name"] for r in rows if batch_flags.get(r["item_code"])]
+    delivered_batches = {}
+    if so_item_ids:
+        dn_batch_rows = frappe.db.sql("""
+            SELECT dni.so_item, dni.batch_no, SUM(dni.qty) AS qty
+            FROM `tabDelivery Note Item` dni
+            INNER JOIN `tabDelivery Note` dn ON dn.name = dni.parent
+            WHERE dn.docstatus = 1
+              AND dn.sales_order = %(so)s
+              AND dni.so_item IN %(so_items)s
+              AND dni.batch_no IS NOT NULL AND dni.batch_no != ''
+            GROUP BY dni.so_item, dni.batch_no
+            ORDER BY dni.batch_no
+        """, {"so": sales_order, "so_items": [int(x) for x in so_item_ids]}, as_dict=True)
+        for d in dn_batch_rows:
+            delivered_batches.setdefault(str(d.so_item), []).append(
+                {"batch_no": d.batch_no, "qty": flt(d.qty)}
+            )
+
     for r in rows:
         r["remaining_to_deliver"] = max(0.0, flt(r["qty"]) - flt(r["delivered_qty"]))
         r["remaining_to_bill"]    = max(0.0, flt(r["qty"]) - flt(r["billed_qty"]))
         r["has_batch_no"] = 1 if batch_flags.get(r["item_code"]) else 0
         r["warehouse_qty"] = 0.0
+        r["delivered_batches"] = delivered_batches.get(str(r["name"]), [])
         if so_warehouse and r.get("item_code"):
             bin_qty = frappe.db.get_value("Bin", {"item_code": r["item_code"], "warehouse": so_warehouse}, "actual_qty")
             r["warehouse_qty"] = flt(bin_qty)
@@ -3472,6 +3503,7 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, batch_nos=None, 
             "discount_percentage": getattr(it, "discount_percentage", "") or "",
             "tax_code":            getattr(it, "tax_code", "") or "",
             "batch_no":            batch_no,
+            "so_item":             int(it.name) if str(it.name).isdigit() else 0,
         })
         line_updates.append((it.name, qty_bill))
 
@@ -5462,9 +5494,15 @@ def import_bank_statement_csv(bank_account, csv_data):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transporter_name="", remarks=""):
+def create_delivery_note_from_so(sales_order, line_qtys=None, batch_nos=None, lr_no="", transporter_name="", remarks=""):
     """Create + submit a Delivery Note from a Sales Order.
     line_qtys = {sales_order_item_row_name: qty_to_deliver}; null → all remaining.
+    batch_nos = {sales_order_item_row_name: batch_no}; required for batch-tracked
+    items — the Delivery Note is what actually deducts stock (via
+    stock_link.on_delivery_note_submit's auto Stock Entry), so Stock Entry's
+    own "Batch No is required" validation will otherwise fail the submit with
+    no clear indication why. Mirrors convert_sales_order_to_invoice's batch
+    handling for the direct-invoice-with-stock-deduction path.
     """
     from zoho_books_clone.utils.access import require_module
     require_module("invoices", write=True)
@@ -5475,6 +5513,10 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
         except json.JSONDecodeError: line_qtys = None
     if line_qtys:
         line_qtys = {str(k): v for k, v in line_qtys.items()}
+    if isinstance(batch_nos, str):
+        try: batch_nos = json.loads(batch_nos) if batch_nos else None
+        except json.JSONDecodeError: batch_nos = None
+    batch_nos = {str(k): v for k, v in (batch_nos or {}).items()}
 
     so = frappe.get_doc("Sales Order", sales_order)
 
@@ -5491,6 +5533,16 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
     # default warehouse and the global fallback — previously this was ignored
     # entirely, so every DN silently reverted to the global default warehouse.
     so_wh = getattr(so, "set_warehouse", None) or None
+
+    item_codes = list({it.item_code for it in (so.items or []) if it.item_code})
+    batch_flags = {}
+    if item_codes:
+        batch_flags = {
+            x["name"]: x["has_batch_no"]
+            for x in frappe.get_all("Item", filters={"name": ["in", item_codes]},
+                                    fields=["name", "has_batch_no"])
+        }
+
     dn_items = []
     for it in (so.items or []):
         remaining = max(0.0, flt(it.qty) - flt(it.delivered_qty))
@@ -5506,6 +5558,19 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
         except (TypeError, ValueError):
             so_item_id = 0
         item_wh = so_wh or frappe.db.get_value("Item", it.item_code, "default_warehouse") or _default_wh
+
+        # Delivery Note is what actually deducts stock (stock_link.py's auto
+        # Stock Entry) — batch-tracked items MUST carry a batch here, or the
+        # auto Stock Entry's own submit fails with "Batch No is required"
+        # and rolls back the whole Delivery Note with no clear error.
+        batch_no = ""
+        if batch_flags.get(it.item_code):
+            batch_no = (batch_nos.get(str(it.name)) or "").strip()
+            if not batch_no:
+                frappe.throw(_(
+                    "Row #{0}: {1} is a batch-tracked item - select a Batch No before delivering"
+                ).format(it.idx, it.item_name or it.item_code))
+
         dn_items.append({
             "doctype": "Delivery Note Item",
             "item_code":   it.item_code,
@@ -5517,6 +5582,7 @@ def create_delivery_note_from_so(sales_order, line_qtys=None, lr_no="", transpor
             "amount":      flt(it.rate) * q,
             "so_item":     so_item_id,
             "warehouse":   item_wh or "",
+            "batch_no":    batch_no,
         })
     if not dn_items:
         frappe.throw("Nothing left to deliver on this Sales Order")
