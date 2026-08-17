@@ -819,16 +819,49 @@ def get_default_adjustment_account(company=None):
 # ── Stock Ledger ──────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False)
-def get_stock_ledger_entries(item_code=None, warehouse=None,
-                              from_date=None, to_date=None, limit=200):
-    """Paginated stock movement history."""
+def get_stock_ledger_entries(
+    item_code=None,
+    warehouse=None,
+    from_date=None,
+    to_date=None,
+    limit=200,
+    include_cancelled=0,
+):
+    """Return paginated stock movement history.
+
+    include_cancelled=0:
+        Return only active stock ledger entries.
+
+    include_cancelled=1:
+        Return both active and cancelled stock ledger entries.
+    """
+
     return get_stock_ledger(
         item_code=item_code or None,
         warehouse=warehouse or None,
         from_date=from_date or None,
         to_date=to_date or None,
         limit=int(limit),
+        include_cancelled=bool(int(include_cancelled)),
     )
+
+
+@frappe.whitelist(allow_guest=False)
+def delete_cancelled_stock_ledger_entry(name):
+    """
+    Hard-delete a single cancelled Stock Ledger Entry row.
+
+    Cleanup-only: only rows already flagged is_cancelled=1 may be removed
+    this way, so this can never touch a live/active balance — active
+    entries must go through the normal cancel flow instead.
+    """
+    is_cancelled = frappe.db.get_value("Stock Ledger Entry", name, "is_cancelled")
+    if is_cancelled is None:
+        frappe.throw(_("Stock Ledger Entry not found"))
+    if not is_cancelled:
+        frappe.throw(_("Only cancelled entries can be deleted"))
+    frappe.delete_doc("Stock Ledger Entry", name, ignore_permissions=True, force=True)
+    return {"deleted": name}
 
 
 @frappe.whitelist(allow_guest=False)

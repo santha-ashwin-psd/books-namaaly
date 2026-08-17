@@ -670,7 +670,7 @@ def save_doc(doc):
     # Uses the shared _find_account / _default_income_account / _default_expense_account
     # helpers (module level, above) so "Sales Revenue" / "Cost of Goods Sold" are
     # preferred deterministically instead of an arbitrary same-type account.
-    _company = doc.get("company") or frappe.db.get_value("Global Defaults", None, "default_company")
+    _company = doc.get("company")
 
     if doctype == "Sales Invoice":
         if not doc.get("debit_to"):

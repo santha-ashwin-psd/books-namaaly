@@ -609,37 +609,63 @@ def get_stock_ledger(
     from_date: str | None = None,
     to_date: str | None = None,
     limit: int = 500,
+    include_cancelled: bool = False,
 ) -> list[dict]:
     """Paginated stock ledger history with optional filters."""
-    conditions = ["is_cancelled = 0"]
+
+    conditions = []
     params: dict = {}
+
+    # Show only non-cancelled entries by default.
+    # When include_cancelled=True, both cancelled and
+    # non-cancelled entries will be returned.
+    if not include_cancelled:
+        conditions.append("is_cancelled = 0")
 
     if item_code:
         conditions.append("item_code = %(item_code)s")
         params["item_code"] = item_code
+
     if warehouse:
         conditions.append("warehouse = %(warehouse)s")
         params["warehouse"] = warehouse
+
     if from_date:
         conditions.append("posting_date >= %(from_date)s")
         params["from_date"] = from_date
+
     if to_date:
         conditions.append("posting_date <= %(to_date)s")
         params["to_date"] = to_date
 
-    where = " AND ".join(conditions)
+    where = " AND ".join(conditions) if conditions else "1=1"
+
     params["limit"] = int(limit)
 
-    return frappe.db.sql(f"""
+    return frappe.db.sql(
+        f"""
         SELECT
-            name, item_code, warehouse, posting_date, voucher_type, voucher_no,
-            actual_qty, qty_after_transaction, incoming_rate, valuation_rate,
-            stock_value, stock_value_difference
+            name,
+            item_code,
+            warehouse,
+            posting_date,
+            voucher_type,
+            voucher_no,
+            actual_qty,
+            qty_after_transaction,
+            incoming_rate,
+            valuation_rate,
+            stock_value,
+            stock_value_difference,
+            is_cancelled
         FROM `tabStock Ledger Entry`
         WHERE {where}
         ORDER BY posting_date DESC, creation DESC
         LIMIT %(limit)s
-    """, params, as_dict=True)
+        """,
+        params,
+        as_dict=True,
+    )
 
 
 # ── Bin Recalculation (Audit-5) ───────────────────────────────────────────────

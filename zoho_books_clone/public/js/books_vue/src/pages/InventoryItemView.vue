@@ -283,9 +283,14 @@
         <div class="iv-card-title">
           Stock Ledger
           <span class="iv-total-chip" style="background:#f0fdf4;color:#16a34a">Last 30 entries</span>
+          <label v-if="cancelledCount" class="iv-show-cancelled">
+            <input type="checkbox" v-model="showCancelled" />
+            Show cancelled ({{ cancelledCount }})
+          </label>
         </div>
         <div v-if="!item.is_stock_item" class="iv-no-stock">Service item — no stock ledger</div>
         <div v-else-if="!ledger.length" class="iv-no-stock">No stock movements yet</div>
+        <div v-else-if="!visibleLedger.length" class="iv-no-stock">No active stock movements — check "Show cancelled" above</div>
         <template v-else>
           <!-- Desktop/tablet: table -->
           <div class="iv-ledger-wrap iv-ledger-table-view">
@@ -299,15 +304,17 @@
                   <th class="ta-r">Qty</th>
                   <th class="ta-r">Balance</th>
                   <th class="ta-r">Rate</th>
+                  <th v-if="showCancelled"></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in ledger" :key="row.name">
+                <tr v-for="row in visibleLedger" :key="row.name" :class="{ 'iv-row-cancelled': isCancelled(row) }">
                   <td class="clr-muted" style="white-space:nowrap">{{ row.posting_date }}</td>
                   <td>
                     <span class="iv-ledger-type-badge" :class="row.actual_qty > 0 ? 'badge-in' : 'badge-out'">
                       {{ row.voucher_type || '—' }}
                     </span>
+                    <span v-if="isCancelled(row)" class="iv-ledger-type-badge badge-cancelled" > Cancelled </span>
                   </td>
                   <td class="iv-mono" style="font-size:11.5px"><DocLink :doctype="row.voucher_type" :name="row.voucher_no" /></td>
                   <td class="clr-muted" style="font-size:12px">{{ row.warehouse }}</td>
@@ -316,17 +323,35 @@
                   </td>
                   <td class="ta-r clr-muted">{{ fmtQty(row.qty_after_transaction) }}</td>
                   <td class="ta-r clr-muted">{{ fmt(row.incoming_rate || row.valuation_rate) }}</td>
+                  <td v-if="showCancelled" class="ta-r">
+                   <button v-if="isCancelled(row)" class="iv-btn-ghost iv-btn-danger" :disabled="!$canEdit('inventory') || deletingName === row.name"
+                      :title="!$canEdit('inventory') ? 'Read-only access' : 'Delete this cancelled entry'"
+                      @click="deleteLedgerEntry(row)">
+                      <span v-html="icon('trash', 12)"></span>
+                    </button>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <!-- Mobile: cards -->
           <div class="iv-ledger-cards-view">
-            <div v-for="row in ledger" :key="row.name" class="iv-ledger-card">
+           <div
+    v-for="row in visibleLedger"
+    :key="row.name"
+    class="iv-ledger-card"
+    :class="{ 'iv-row-cancelled': isCancelled(row) }"
+>
               <div class="iv-lc-top">
                 <span class="iv-ledger-type-badge" :class="row.actual_qty > 0 ? 'badge-in' : 'badge-out'">
                   {{ row.voucher_type || '—' }}
                 </span>
+                <span
+    v-if="isCancelled(row)"
+    class="iv-ledger-type-badge badge-cancelled"
+>
+    Cancelled
+</span>
                 <span class="iv-lc-qty" :class="row.actual_qty > 0 ? 'clr-green' : 'clr-red'">
                   {{ row.actual_qty > 0 ? '+' : '' }}{{ fmtQty(row.actual_qty) }}
                 </span>
@@ -339,6 +364,11 @@
                 <span class="iv-sep">·</span>
                 <span class="clr-muted">{{ row.warehouse }}</span>
               </div>
+              <button v-if="isCancelled(row)" class="iv-btn-ghost iv-btn-danger" style="align-self:flex-start;margin-top:4px"
+                :disabled="!$canEdit('inventory') || deletingName === row.name"
+                @click="deleteLedgerEntry(row)">
+                <span v-html="icon('trash', 12)"></span> Delete
+              </button>
             </div>
           </div>
         </template>
@@ -354,14 +384,16 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { apiGET, apiList } from "../api/client.js";
+import { apiGET, apiPOST, apiList } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
+import { useConfirm } from "../composables/useConfirm.js";
 import { fmt, flt } from "../utils/format.js";
 import { icon } from "../utils/icons.js";
 import ItemEditDrawer from "../components/ItemEditDrawer.vue";
 import DocLink from "../components/DocLink.vue";
 
-const { toast } = useToast();
+const { toast }   = useToast();
+const { confirm } = useConfirm();
 const route     = useRoute();
 const itemCode  = computed(() => route.params.itemCode);
 const itemDrawer = ref(null);
@@ -369,11 +401,27 @@ const itemDrawer = ref(null);
 // ── Data ───────────────────────────────────────────────────────────────────
 const item        = ref(null);
 const stockDetail = ref({ warehouses: [], total_qty: 0, total_value: 0 });
-const ledger      = ref([]);
+const ledger        = ref([]);
+const showCancelled = ref(false);           // toggle: also show cancelled SLEs in the ledger
+const deletingName  = ref("");              // name of the row currently being deleted (button spinner)
 const priceLists  = ref([]);
 const partyTxns   = ref({ rows: [], total_purchased_qty: 0, total_sold_qty: 0 });
 const loading     = ref(true);
 const expenseAccountName = ref("");
+
+const isCancelled = (row) => Number(row.is_cancelled) === 1;
+
+const visibleLedger = computed(() => {
+    if (showCancelled.value) {
+        return ledger.value;
+    }
+
+    return ledger.value.filter(row => !isCancelled(row));
+});
+
+const cancelledCount = computed(() => {
+    return ledger.value.filter(row => isCancelled(row)).length;
+});
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
@@ -383,7 +431,7 @@ async function load() {
     const [full, stock, sled, pl, ptx] = await Promise.all([
       apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Item", name: itemCode.value }),
       apiGET("zoho_books_clone.api.inventory.get_item_stock_detail", { item_code: itemCode.value }),
-      apiGET("zoho_books_clone.api.inventory.get_stock_ledger_entries", { item_code: itemCode.value, limit: 30 }),
+      apiGET("zoho_books_clone.api.inventory.get_stock_ledger_entries", { item_code: itemCode.value, limit: 30, include_cancelled: 1 }),
       apiGET("zoho_books_clone.api.inventory.get_item_price_list", { item_code: itemCode.value }).catch(() => []),
       apiGET("zoho_books_clone.api.inventory.get_item_party_transactions", { item_code: itemCode.value, limit: 50 })
         .catch(() => ({ rows: [], total_purchased_qty: 0, total_sold_qty: 0 })),
@@ -413,6 +461,31 @@ async function load() {
 function openEdit() {
   if (!item.value) return;
   itemDrawer.value?.openEdit(item.value);
+}
+
+// ── Delete a cancelled stock ledger entry ────────────────────────────────────
+async function deleteLedgerEntry(row) {
+  const ok = await confirm({
+    title: "Delete Cancelled Entry",
+    body: `Permanently delete this cancelled stock ledger entry (${row.voucher_type} ${row.voucher_no})? This cannot be undone.`,
+    okLabel: "Delete",
+    okStyle: "danger",
+  });
+  if (!ok) return;
+  deletingName.value = row.name;
+  try {
+    await apiPOST(
+      "zoho_books_clone.api.inventory.delete_cancelled_stock_ledger_entry",
+      { name: row.name },
+      { module: "inventory", action: "delete" }
+    );
+    ledger.value = ledger.value.filter(r => r.name !== row.name);
+    toast("Cancelled entry deleted", "success");
+  } catch (e) {
+    toast(e.message || "Failed to delete entry", "error");
+  } finally {
+    deletingName.value = "";
+  }
 }
 
 function fmtQty(v) {
@@ -623,6 +696,20 @@ onMounted(load);
 }
 .badge-in  { background: #dcfce7; color: #16a34a; }
 .badge-out { background: #fee2e2; color: #dc2626; }
+.badge-cancelled { background: #f3f4f6; color: #6b7280; margin-left: 5px; }
+
+.iv-show-cancelled {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 12px; font-size: 12px; font-weight: 500; color: #6b7280;
+  cursor: pointer; text-transform: none; letter-spacing: 0;
+}
+.iv-show-cancelled input { cursor: pointer; }
+
+.iv-row-cancelled td, .iv-row-cancelled.iv-ledger-card { opacity: .55; }
+
+.iv-btn-danger { padding: 5px 8px; color: #dc2626; border-color: #fecaca; }
+.iv-btn-danger:hover:not(:disabled) { background: #fef2f2; }
+.iv-btn-danger:disabled { opacity: .4; cursor: not-allowed; }
 
 /* Ledger card view (mobile only — hidden by default) */
 .iv-ledger-cards-view { display: none; }
