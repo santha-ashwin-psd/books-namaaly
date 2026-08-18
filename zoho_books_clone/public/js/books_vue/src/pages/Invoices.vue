@@ -2097,42 +2097,139 @@ async function downloadBothInvoicePdf() {
 
 function printShippingAddress(inv) {
   showDownloadMenu.value = false;
+
   const printWin = window.open('', '_blank');
-  if (!printWin) return toast("Popup blocked. Please allow popups to print.", "error");
-  
+  if (!printWin) {
+    return toast("Popup blocked. Please allow popups to print.", "error");
+  }
+
+  const label = `
+    <div class="label-box">
+      <div class="title">Shipping To</div>
+      <div class="name">${inv.customer_name || inv.customer || ''}</div>
+      <div class="address">${displayAddr(inv.shipping_address)}</div>
+      ${
+        inv.customer_mobile
+          ? '<div class="phone">Phone: ' + inv.customer_mobile + '</div>'
+          : ''
+      }
+    </div>
+  `;
+
   const content = `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Shipping Label</title>
+        <title>Shipping Labels</title>
+
         <style>
-          html, body { height: 100vh; margin: 0; padding: 0; }
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; display: flex; align-items: center; justify-content: center; }
-          .label-box { border: 2px solid #374151; padding: 50px; width: 100%; max-width: 600px; border-radius: 12px; box-sizing: border-box; }
-          .title { font-weight: 700; font-size: 18px; margin-bottom: 24px; text-transform: uppercase; color: #6b7280; letter-spacing: 1px; }
-          .name { font-size: 32px; font-weight: 700; margin-bottom: 16px; }
-          .address { font-size: 24px; line-height: 1.6; }
-          .phone { margin-top: 16px; font-size: 22px; font-weight: 700; }
-          @page { margin: 0; }
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            width: 210mm;
+            height: 297mm;
+          }
+
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+              Roboto, Helvetica, Arial, sans-serif;
+            color: #111827;
+          }
+
+          .page {
+  width: 210mm;
+  height: 297mm;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+          .label-box {
+  width: calc(100% - 20mm);
+  height: 89mm;
+  margin: 5mm 10mm;
+
+  box-sizing: border-box;
+  border: 2px solid #374151;
+  border-radius: 8px;
+
+  padding: 18mm 15mm;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+          .title {
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 8mm;
+            text-transform: uppercase;
+            color: #6b7280;
+            letter-spacing: 1px;
+          }
+
+          .name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 5mm;
+          }
+
+          .address {
+            font-size: 16px;
+            line-height: 1.5;
+          }
+
+          .phone {
+            margin-top: 5mm;
+            font-size: 15px;
+            font-weight: 700;
+          }
+
           @media print {
-            body { height: 100vh; display: flex; align-items: center; justify-content: center; }
-            .label-box { max-width: 90%; }
+            html,
+            body {
+              width: 210mm;
+              height: 297mm;
+            }
+
+            .page {
+              width: 210mm;
+              height: 297mm;
+            }
+
+            .label-box {
+              height: 99mm;
+            }
           }
         </style>
       </head>
+
       <body>
-        <div class="label-box">
-          <div class="title">Shipping To</div>
-          <div class="name">${inv.customer_name || inv.customer || ''}</div>
-          <div class="address">${displayAddr(inv.shipping_address)}</div>
-          ${inv.customer_mobile ? '<div class="phone" style="margin-top: 12px; font-size: 16px; font-weight: 700;">Phone: ' + inv.customer_mobile + '</div>' : ''}
+        <div class="page">
+          ${label}
+          ${label}
+          ${label}
         </div>
+
         <script>
-          setTimeout(() => { window.print(); window.close(); }, 500);
+          setTimeout(() => {
+            window.print();
+            window.close();
+          }, 500);
         <\/script>
       </body>
     </html>
   `;
+
   printWin.document.write(content);
   printWin.document.close();
 }
