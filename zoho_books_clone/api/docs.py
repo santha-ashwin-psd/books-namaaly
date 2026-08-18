@@ -3904,11 +3904,24 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
             "amount":      flt(it.rate) * qty_bill,
             "expense_account": exp,
             "batch_no":    batch_no,
+            "tax_code":    getattr(it, "tax_code", None),
         })
         line_updates.append((it.name, qty_bill))
 
     if not pi_items:
         frappe.throw("Nothing left to bill on this Purchase Order")
+    pi_taxes = []
+
+    for tax in po.taxes:
+        pi_taxes.append({
+            "doctype": "Tax Line",
+            "tax_type": tax.tax_type,
+            "description": tax.description,
+            "rate": flt(tax.rate),
+            "tax_amount": flt(tax.tax_amount),
+            "account_head": tax.account_head,
+            "included_in_print_rate": tax.included_in_print_rate,
+        })
 
     pi = frappe.get_doc({
         "doctype":         "Purchase Invoice",
@@ -3925,6 +3938,7 @@ def convert_purchase_order_to_bill(purchase_order, line_qtys=None, bill_no="",
         "update_stock":    1,
         "set_warehouse":   getattr(po, "set_warehouse", "") or "",
         "items":           pi_items,
+        "taxes": pi_taxes,
     })
     pi.flags.ignore_permissions = True
     pi.flags.ignore_mandatory = True
