@@ -65,56 +65,79 @@ def get_item_by_barcode(barcode):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_batches_for_item(item_code, search=None):
+def get_batches_for_item(item_code, warehouse=None, search=None):
     """
-    Return existing, non-disabled batches for a single item with LIVE qty
-    computed from Stock Ledger Entries (across all warehouses).
+    Return existing, non-disabled batches for a single item
+    in the selected warehouse with LIVE available qty.
 
-    Batch.batch_qty is only an incrementally-adjusted cache (see
-    stock_entry.py._adjust_batch_qty) and can drift from the real ledger
-    over time. Batch pickers (Bill / Purchase Receipt / PO-to-Bill / Stock
-    Entry) should show the true remaining qty, not the cached field, so
-    this mirrors get_warehouse_batches's SLE aggregation but scoped to one
-    item across all warehouses.
+    Batch qty is calculated from Stock Ledger Entries so the
+    picker always shows the actual remaining stock for the
+    selected warehouse.
     """
+
     if not item_code:
         return []
+
+    if not warehouse:
+        return []
+
     rows = frappe.db.sql("""
-        SELECT sle.batch_no, SUM(sle.actual_qty) AS qty
+        SELECT
+            sle.batch_no,
+            SUM(sle.actual_qty) AS qty
         FROM `tabStock Ledger Entry` sle
         WHERE sle.item_code = %(item_code)s
-          AND sle.batch_no IS NOT NULL AND sle.batch_no != ''
+          AND sle.warehouse = %(warehouse)s
+          AND sle.batch_no IS NOT NULL
+          AND sle.batch_no != ''
           AND sle.is_cancelled = 0
         GROUP BY sle.batch_no
         HAVING qty > 0
         ORDER BY sle.batch_no
-    """, {"item_code": item_code}, as_dict=True)
+    """, {
+        "item_code": item_code,
+        "warehouse": warehouse
+    }, as_dict=True)
 
     if not rows:
         return []
 
     batch_nos = [r.batch_no for r in rows]
+
     meta = {
-        b.name: b for b in frappe.get_all(
-            "Batch", filters={"name": ["in", batch_nos]},
-            fields=["name", "manufacturing_date", "expiry_date", "disabled"],
+        b.name: b
+        for b in frappe.get_all(
+            "Batch",
+            filters={"name": ["in", batch_nos]},
+            fields=[
+                "name",
+                "manufacturing_date",
+                "expiry_date",
+                "disabled"
+            ],
         )
     }
 
     q = (search or "").lower().strip()
+
     out = []
+
     for r in rows:
         m = meta.get(r.batch_no) or {}
+
         if m.get("disabled"):
             continue
+
         if q and q not in r.batch_no.lower():
             continue
+
         out.append({
-            "batch_no":           r.batch_no,
-            "qty":                flt(r.qty),
+            "batch_no": r.batch_no,
+            "qty": flt(r.qty),
             "manufacturing_date": m.get("manufacturing_date"),
-            "expiry_date":        m.get("expiry_date"),
+            "expiry_date": m.get("expiry_date"),
         })
+
     return out
 
 

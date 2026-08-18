@@ -396,7 +396,13 @@
                     </div>
                     <div class="inv-inv-wh-row">
                       <label class="inv-lbl" style="margin-bottom:6px">Dispatch Warehouse <span style="color:#dc2626">*</span></label>
-                      <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse stock will be dispatched from…" @search="fetchWarehouses" />
+                      <SearchableSelect
+  v-model="form.set_warehouse"
+  :options="warehouses"
+  placeholder="Select warehouse stock will be dispatched from…"
+  @search="fetchWarehouses"
+  @update:modelValue="onWarehouseChange"
+/>
                     </div>
                   </div>
                 </div>
@@ -2237,30 +2243,96 @@ async function onLineQtyChange(line) {
     calcLine(line);
   }
 }
+
+// Reload batch options whenever the dispatch warehouse changes.
+async function onWarehouseChange(warehouse) {
+  // Warehouse changed, so previously selected batches may no longer
+  // belong to the selected warehouse.
+  for (const line of lines.value) {
+    line.batch_no = "";
+    line.batch_expiry_date = "";
+    line.batchOptions = [];
+    line._batchQty = null;
+
+    if (warehouse && line.item_code && line.has_batch_no) {
+      await fetchLineBatches(line, "");
+    }
+  }
+}
 // ── Batch picker (batch-tracked items only) ─────────────────────────────
 // Mirrors the Bills.vue pattern: search existing batches for the item, show
 // each option's live available Qty, and let the row track the currently
 // selected batch's Qty/expiry so batchQtyError() can enforce it client-side
 // (the same check is re-run server-side in Sales Invoice.validate_batches).
 async function fetchLineBatches(line, q = "") {
-  if (!line.item_code) { line.batchOptions = []; return; }
+  if (!line.item_code || !form.set_warehouse) {
+    line.batchOptions = [];
+    line.batch_no = "";
+    line.batch_expiry_date = "";
+    line._batchQty = null;
+    return;
+  }
+
   const itemCode = line.item_code;
+  const warehouse = form.set_warehouse;
+
   try {
-    const rows = await apiGET("zoho_books_clone.api.inventory.get_batches_for_item", { item_code: itemCode, search: q || "" }) || [];
-    if (line.item_code !== itemCode) return; // item changed again while awaiting
+    const rows = await apiGET(
+      "zoho_books_clone.api.inventory.get_batches_for_item",
+      {
+        item_code: itemCode,
+        warehouse: warehouse,
+        search: q || ""
+      }
+    ) || [];
+
+    // Item or warehouse changed while API request was running
+    if (
+      line.item_code !== itemCode ||
+      form.set_warehouse !== warehouse
+    ) {
+      return;
+    }
+
     line.batchOptions = rows.map(b => ({
       value: b.batch_no,
       label: `${b.batch_no}(qty:${flt(b.qty)})`,
       qty: flt(b.qty),
       expiry_date: b.expiry_date || "",
     }));
-    // Keep the already-selected batch's Qty/expiry in sync with fresh data.
+
+    // Keep selected batch quantity/expiry synchronized
     if (line.batch_no) {
-      const m = line.batchOptions.find(o => o.value === line.batch_no);
-      if (m) { line._batchQty = m.qty; line.batch_expiry_date = m.expiry_date; }
+      const m = line.batchOptions.find(
+        o => o.value === line.batch_no
+      );
+
+      if (m) {
+        line._batchQty = m.qty;
+        line.batch_expiry_date = m.expiry_date;
+      } else {
+        // Selected batch is not available in this warehouse
+        line.batch_no = "";
+        line._batchQty = null;
+        line.batch_expiry_date = "";
+      }
     }
-  } catch { if (line.item_code === itemCode) line.batchOptions = []; }
+
+  } catch {
+    if (
+      line.item_code === itemCode &&
+      form.set_warehouse === warehouse
+    ) {
+      line.batchOptions = [];
+      line.batch_no = "";
+      line.batch_expiry_date = "";
+      line._batchQty = null;
+    }
+  }
 }
+
+    
+
 function onLineBatchSelect(line, opt) {
   line.batch_no = opt?.value ?? opt;
   const m = line.batchOptions.find(o => o.value === line.batch_no);
@@ -2381,7 +2453,9 @@ function calcLine(line) {
 async function onItemChange(line) {
   // Item changed — any previously selected batch no longer applies.
   line.batch_no=""; line.batch_expiry_date=""; line.batchOptions=[]; line._batchQty=null; line.has_batch_no=0;
+  
   const it=items.value.find(i=>i.name===line.item_code);
+
   if (it) {
     line.item_name=it.item_name||it.name;
     line.rate=flt(it.standard_rate);
