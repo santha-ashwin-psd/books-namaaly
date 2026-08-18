@@ -2433,9 +2433,47 @@ def save_account(op, name=None, account_name=None, account_number=None,
     elif op == "delete":
         if not name:
             frappe.throw("Account name is required for delete")
-        frappe.delete_doc("Account", name, ignore_permissions=True)
+
+        # Make sure the account exists
+        if not frappe.db.exists("Account", name):
+            frappe.throw(f"Account '{name}' does not exist.")
+
+        # Group accounts should not be deleted
+        is_group = frappe.db.get_value("Account", name, "is_group")
+        if is_group:
+            frappe.throw("Group accounts cannot be deleted.")
+
+        # Check whether this account has any active accounting transactions.
+        # Cancelled GL entries are ignored.
+        transaction_count = frappe.db.count(
+            "General Ledger Entry",
+            {
+                "account": name,
+                "is_cancelled": 0,
+            }
+        )
+
+        if transaction_count:
+            frappe.throw(
+                f"Account '{name}' cannot be deleted because it has "
+                f"{transaction_count} transaction(s) in the General Ledger. "
+                "Accounts with transactions cannot be deleted."
+            )
+
+        # No transactions -> account can be deleted
+        frappe.delete_doc(
+            "Account",
+            name,
+            ignore_permissions=True
+        )
+
         frappe.db.commit()
-        return {"status": "deleted"}
+
+        return {
+            "status": "deleted",
+            "name": name
+        }
+        
 
 
 # ── GSTR / ITC Report endpoints (P3/Issue 9) ──────────────────────────────────

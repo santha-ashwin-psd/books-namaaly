@@ -122,7 +122,12 @@
             <div style="align-content: center;">
               <button v-if="!selectedAccount.is_group && selectedAccount.source==='frappe'" class="b-icon-btn" @click="openLedger(selectedAccount)" title="View Full Ledger" style="color:#2563eb"><span v-html="icon('book',15)"></span></button>
               <button class="b-icon-btn" style="margin-left:2px" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Edit'" @click="openEdit(selectedAccount.name)"><span v-html="icon('edit',15)"></span></button>
-              <button v-if="selectedAccount.source!=='frappe'" class="b-icon-btn danger" :disabled="!$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'" @click="confirmDelete(selectedAccount.name)"><span v-html="icon('trash',15)"></span></button>
+              <button v-if="canDeleteAccount(selectedAccount)" class="b-icon-btn danger"
+  :disabled="!$canDelete('accounts')"
+  :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'"
+  @click="confirmDelete(selectedAccount.name)">
+  <span v-html="icon('trash',15)"></span>
+</button>
             </div>
             </div>
           </div>
@@ -853,6 +858,22 @@ async function saveAccount() {
     drawerSaving.value = false;
   }
 }
+function canDeleteAccount(account) {
+  if (!account) return false;
+  if (account.is_group) return false;
+  if (!canDelete("accounts")) return false;
+
+  // Local accounts have no Frappe ledger
+  if (account.source !== "frappe") return true;
+
+  // Don't show Delete until ledger check is completed
+  const ledger = inlineLedger[account.name];
+
+  if (!ledger || ledger.loading) return false;
+
+  // Delete is allowed only when there are no transactions
+  return ledger.rows.length === 0;
+}
 
 function confirmDelete(name) {
   if (!canDelete("accounts")) { toast("Not permitted", "error"); return; }
@@ -860,18 +881,49 @@ function confirmDelete(name) {
 }
 
 async function doDelete() {
-  if (!canDelete("accounts")) { toast("Not permitted", "error"); showDel.value = false; return; }
-  const name = deleteTarget.value;
-  try {
-    await apiPOST("zoho_books_clone.api.books_data.save_account", { op: "delete", name });
-  } catch (e) {
-    toast(e.message || "Delete failed in Frappe", "error");
+  if (!canDelete("accounts")) {
+    toast("Not permitted", "error");
+    showDel.value = false;
+    return;
   }
-  allAccounts.value = allAccounts.value.filter((a) => a.name !== name && a.parent !== name);
-  showDel.value = false;
-  deleteTarget.value = null;
-  toast("Account deleted", "success");
-  await load();
+
+  const name = deleteTarget.value;
+
+  if (!name) {
+    showDel.value = false;
+    return;
+  }
+
+  try {
+    await apiPOST(
+      "zoho_books_clone.api.books_data.save_account",
+      {
+        op: "delete",
+        name: name
+      }
+    );
+
+    // Only update the UI after the backend confirms deletion
+    allAccounts.value = allAccounts.value.filter(
+      (a) => a.name !== name && a.parent !== name
+    );
+
+    if (selectedAccount.value?.name === name) {
+      selectedAccount.value = null;
+    }
+
+    showDel.value = false;
+    deleteTarget.value = null;
+
+    toast("Account deleted", "success");
+
+    await load();
+
+  } catch (e) {
+    // Backend rejected the deletion.
+    // Keep the account in the UI.
+    toast(e.message || "Delete failed", "error");
+  }
 }
 
 // ── Live account balances (from GL) ───────────────────────────────────────
