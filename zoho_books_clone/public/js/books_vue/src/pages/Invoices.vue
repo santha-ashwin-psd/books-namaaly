@@ -826,6 +826,14 @@
                   <span class="inv-dl-menu-sub">Custom template · Save to device</span>
                 </span>
               </button>
+           <button @click="downloadBothInvoicePdf()" class="inv-dl-menu-item">
+  <span class="inv-dl-menu-icon" v-html="icon('download',14)"></span>
+  <span class="inv-dl-menu-text">
+    <span class="inv-dl-menu-label">Download Both</span>
+    <span class="inv-dl-menu-sub">Original + Duplicate copies · Save to device</span>
+  </span>
+</button>
+
               <button @click="downloadInvoicePdf('print', 'ORIGINAL COPY')" class="inv-dl-menu-item">
                 <span class="inv-dl-menu-icon" v-html="icon('printer',14)"></span>
                 <span class="inv-dl-menu-text">
@@ -833,6 +841,8 @@
                   <span class="inv-dl-menu-sub">Custom template · New tab</span>
                 </span>
               </button>
+
+
             </div>
           </div>
           <button v-if="viewInv.shipping_address" @click="printShippingAddress(viewInv)" class="inv-ab-btn">
@@ -2063,6 +2073,25 @@ async function downloadInvoicePdf(mode = 'pdf', copyText = '') {
     } catch (e) {
       toast('Failed to generate PDF', 'error');
     }
+  }
+}
+async function downloadBothInvoicePdf() {
+  const inv = viewInv.value;
+  if (!inv) return;
+
+  try {
+    // Download Original Copy
+    await downloadInvoicePdf('pdf', 'ORIGINAL COPY');
+
+    // Small delay so the browser handles the first download
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Download Duplicate Copy
+    await downloadInvoicePdf('pdf', 'DUPLICATE COPY');
+
+  } catch (e) {
+    console.error('Download Both failed:', e);
+    toast('Failed to download both invoice copies', 'error');
   }
 }
 
