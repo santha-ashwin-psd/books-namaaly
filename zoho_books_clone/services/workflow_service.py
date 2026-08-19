@@ -176,35 +176,79 @@ def create_delivery_from_order(
 def create_invoice_from_order(sales_order: str) -> dict:
     """
     Create a Sales Invoice from a confirmed/delivered Sales Order.
-    Copies customer, items, and totals.  Returns the new invoice name.
+    Copies customer, items, HSN/SAC, MRP, and totals.
+    Returns the new invoice name.
     """
-    so = _get_doc("Sales Order", sales_order)
-    if so.status in ("Cancelled", "Draft"):
-        frappe.throw(_("Sales Order {0} must be Confirmed before invoicing.").format(sales_order))
 
+    so = _get_doc("Sales Order", sales_order)
+
+    if so.status in ("Cancelled", "Draft"):
+        frappe.throw(
+            _("Sales Order {0} must be Confirmed before invoicing.")
+            .format(sales_order)
+        )
+
+    # Build invoice items
+    items = []
+
+    for row in (so.items or []):
+        print("========== INVOICE ITEM DEBUG ==========")
+        print("ITEM CODE:", row.item_code)
+
+        item_data = frappe.db.get_value(
+            "Item",
+            row.item_code,
+            ["hsn_code", "mrp"],
+            as_dict=True
+        ) or {}
+
+        print("ITEM DATA:", item_data)
+        print("HSN:", item_data.get("hsn_code"))
+        print("MRP:", item_data.get("mrp"))
+        print("========================================")
+
+       
+
+        items.append({
+            "item_code": row.item_code,
+            "item_name": row.item_name or row.item_code,
+            "description": getattr(row, "description", "") or "",
+
+            # Fetch from Item master
+            "hsn_code": item_data.get("hsn_code") or "",
+            "mrp": flt(item_data.get("mrp") or 0),
+
+            "qty": flt(row.qty),
+            "rate": flt(row.rate),
+            "amount": flt(row.qty) * flt(row.rate),
+        })
+
+    # Create Sales Invoice
     inv = frappe.get_doc({
-        "doctype":        "Sales Invoice",
-        "customer":       so.customer,
-        "posting_date":   today(),
-        "company":        so.company,
-        "currency":       getattr(so, "currency", "INR"),
-        "sales_order":    sales_order,
-        "items": [
-            {
-                "item_code":  row.item_code,
-                "item_name":  row.item_name or row.item_code,
-                "qty":        flt(row.qty),
-                "rate":       flt(row.rate),
-                "amount":     flt(row.qty) * flt(row.rate),
-            }
-            for row in (so.items or [])
-        ],
+        "doctype": "Sales Invoice",
+        "customer": so.customer,
+        "posting_date": today(),
+        "company": so.company,
+        "currency": getattr(so, "currency", "INR"),
+        "sales_order": sales_order,
+        "items": items,
     })
+
     inv.flags.ignore_permissions = True
     inv.insert()
 
-    frappe.db.set_value("Sales Order", sales_order, "status", "Invoiced", update_modified=True)
-    return {"sales_invoice": inv.name, "sales_order": sales_order}
+    frappe.db.set_value(
+        "Sales Order",
+        sales_order,
+        "status",
+        "Invoiced",
+        update_modified=True
+    )
+
+    return {
+        "sales_invoice": inv.name,
+        "sales_order": sales_order
+    }
 
 
 # ─── Purchase Workflow ────────────────────────────────────────────────────────

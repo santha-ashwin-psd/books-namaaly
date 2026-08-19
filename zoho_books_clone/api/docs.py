@@ -3513,6 +3513,12 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, batch_nos=None, 
                 frappe.throw(_(
                     "Row #{0}: {1} is a batch-tracked item — select a Batch No before invoicing"
                 ).format(it.idx, it.item_name or it.item_code))
+        item_data = frappe.db.get_value(
+            "Item",
+            it.item_code,
+            ["hsn_code", "mrp"],
+            as_dict=True
+        ) or {}
 
         si_items.append({
             "doctype": "Sales Invoice Item",
@@ -3524,7 +3530,8 @@ def convert_sales_order_to_invoice(sales_order, line_qtys=None, batch_nos=None, 
             "rate":                flt(it.rate),
             "amount":              flt(it.rate) * qty_bill,
             "income_account":      inc,
-            "hsn_code":            getattr(it, "hsn_code", "") or "",
+            "hsn_code": item_data.get("hsn_code") or "",
+            "mrp": flt(item_data.get("mrp") or 0),
             "discount_percentage": getattr(it, "discount_percentage", "") or "",
             "tax_code":            getattr(it, "tax_code", "") or "",
             "batch_no":            batch_no,
