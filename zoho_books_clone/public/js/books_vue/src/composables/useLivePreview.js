@@ -388,7 +388,9 @@ function _renderClassic(doc, cfg) {
   ${notesHtml ? `<div class="bf-row"><div class="bf-cell">${notesHtml}</div></div>` : ""}
   <div class="bf-row bf-row-sign">
     <div class="bf-cell sign-note-cell">This is a computer-generated invoice. E. &amp; O. E.</div>
-    ${doc.qr_image ? `<div class="bf-cell sign-qr-cell"><img src="${_esc(doc.qr_image)}"/></div>` : ""}
+    <div class="bf-cell sign-qr-cell">
+  <img src="/assets/zoho_books_clone/img/upi.png" alt="UPI QR Code"/>
+</div>
     <div class="bf-cell sign-for-cell">
       <div>For, ${_esc(doc.company || cfg.companyName || "")}</div>
       <b>Authorised Signatory</b>
@@ -748,13 +750,32 @@ export function useLivePreview() {
     }
   });
   // Auto-resize iframe to content height
-  const frm = document.getElementById('frm');
-  frm.onload = () => {
-    try {
-      const h = frm.contentDocument.documentElement.scrollHeight;
+  // Wait for iframe and all images (including QR) to load
+const frm = document.getElementById('frm');
+
+frm.onload = () => {
+  try {
+    const doc = frm.contentDocument;
+
+    const images = Array.from(doc.images || []);
+
+    Promise.all(
+      images.map(img => {
+        if (img.complete) {
+          return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+        }
+
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      })
+    ).then(() => {
+      const h = doc.documentElement.scrollHeight;
       if (h > 400) frm.style.minHeight = h + 'px';
-    } catch {}
-  };
+    });
+  } catch {}
+};
 <\/script>
 </body></html>`;
     const w = window.open("", "_blank");
