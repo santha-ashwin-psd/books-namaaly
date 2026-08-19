@@ -54,6 +54,7 @@ class JournalEntry(Document):
 
     def on_trash(self):
         self._cleanup_mirror_bank_transactions()
+        self._cleanup_cancelled_gl_entries()
 
     def _cleanup_mirror_bank_transactions(self):
         """Cancel + delete any Bank Transaction rows that only mirror this
@@ -80,3 +81,26 @@ class JournalEntry(Document):
                     title="Journal Entry: mirror Bank Transaction cleanup failed",
                     message=frappe.get_traceback(),
                 )
+
+    def _cleanup_cancelled_gl_entries(self):
+        """Remove cancelled GL entries when deleting a cancelled Journal Entry."""
+        if self.docstatus != 2:
+            return
+
+        gl_entries = frappe.get_all(
+            "General Ledger Entry",
+            filters={
+                "voucher_type": self.doctype,
+                "voucher_no": self.name,
+                "is_cancelled": 1,
+            },
+            pluck="name",
+        )
+
+        for gl_name in gl_entries:
+            frappe.delete_doc(
+                "General Ledger Entry",
+                gl_name,
+                ignore_permissions=True,
+                force=True,
+            )

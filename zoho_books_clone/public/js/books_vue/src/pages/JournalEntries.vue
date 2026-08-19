@@ -139,6 +139,13 @@
                 <button v-if="e.status==='Draft'" class="b-icon-btn" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(e.name)"><span v-html="icon('edit',14)"></span></button>
                 <button v-if="e.status==='Draft'" class="b-icon-btn danger" :disabled="!$canDelete('accounts')" :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction(e.name,'delete')"><span v-html="icon('trash',14)"></span></button>
                 <button v-if="e.status==='Submitted'" class="b-icon-btn danger" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : 'Cancel'" @click.stop="confirmAction(e.name,'cancel')"><span v-html="icon('cancel',14)"></span></button>
+                <button v-if="e.status==='Cancelled'"
+  class="b-icon-btn danger"
+  :disabled="!$canDelete('accounts')"
+  :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'"
+  @click.stop="confirmAction(e.name,'delete')">
+  <span v-html="icon('trash',14)"></span>
+</button>
               </div>
             </td>
           </tr>
@@ -237,6 +244,14 @@
               <span v-html="icon('cancel',13)"></span>
               <span class="jen-mc-action-lbl">Cancel</span>
             </button>
+            <button v-if="e.status==='Cancelled'"
+  class="jen-mc-action-btn jen-mc-action-btn--danger"
+  :disabled="!$canDelete('accounts')"
+  @click.stop="confirmAction(e.name,'delete')"
+  title="Delete">
+  <span v-html="icon('trash',13)"></span>
+  <span class="jen-mc-action-lbl">Delete</span>
+</button>
           </div>
         </div>
       </template>
@@ -560,6 +575,16 @@
           <div style="display:flex;gap:10px">
             <button v-if="viewEntry.status==='Draft'" class="b-btn b-btn-ghost" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewEntry.name)"><span v-html="icon('edit',13)"></span> Edit</button>
             <button v-if="viewEntry.status==='Submitted'" class="b-btn b-btn-ghost" style="border-color:rgba(201,42,42,.4);color:#c92a2a" :disabled="!$canEdit('accounts')" :title="!$canEdit('accounts') ? 'Read-only access' : ''" @click="viewOpen=false;confirmAction(viewEntry.name,'cancel')"><span v-html="icon('cancel',13)"></span> Cancel</button>
+            <button
+  v-if="viewEntry.status==='Cancelled'"
+  class="b-btn b-btn-ghost"
+  style="border-color:rgba(201,42,42,.4);color:#c92a2a"
+  :disabled="!$canDelete('accounts')"
+  :title="!$canDelete('accounts') ? 'Not permitted' : 'Delete'"
+  @click="confirmAction(viewEntry.name,'delete')"
+>
+  <span v-html="icon('trash',13)"></span> Delete
+</button>
             <button class="b-btn b-btn-ghost" @click="viewOpen=false">Close</button>
           </div>
         </div>
@@ -821,6 +846,7 @@ async function doAction() {
     if (confType.value === "delete") {
       await apiDelete("Journal Entry", name, { module: "accounts", action: "delete" });
       allEntries.value = allEntries.value.filter((e) => e.name !== name);
+      viewOpen.value = false;
       toast("Entry deleted", "success");
     } else if (confType.value === "cancel") {
       await apiPOST("frappe.client.cancel", { doctype: "Journal Entry", name }, { module: "accounts", action: "cancel" });

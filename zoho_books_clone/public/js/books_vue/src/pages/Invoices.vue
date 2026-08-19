@@ -525,7 +525,7 @@
                     <tr class="po-items-row">
                       <td class="td-num"><span class="po-row-num">#{{ idx + 1 }}</span></td>
                       <td class="td-item">
-                        <SearchableSelect v-model="line.item_code" :options="items"
+                        <SearchableSelect v-model="line.item_code" :options="warehouseItemOptions"
                           placeholder="Search item or service"
                           :createable="true" createDoctype="Item"
                           @update:modelValue="onItemChange(line)"/>
@@ -1677,7 +1677,32 @@ const selectedBillingAddr  = computed(() => customerAddresses.value.find(a => a.
 const selectedShippingAddr = computed(() => customerAddresses.value.find(a => a.name === form.shipping_address_name) || null);
 const lines   = ref([]);
 const warehouses = ref([]);
+const warehouseStock = ref({});
 async function fetchWarehouses(q=""){try{const co=await resolveCompany();const r=await apiList("Warehouse",{fields:["name","parent_warehouse"],filters:[["company","=",co],["is_group","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30});warehouses.value=r.map(x=>({label:x.parent_warehouse?`${x.parent_warehouse} / ${x.name}`:x.name,value:x.name}));}catch{warehouses.value=[];}}
+async function fetchWarehouseStock(warehouse) {
+  warehouseStock.value = {};
+
+  if (!warehouse) return;
+
+  try {
+    const rows = await apiList("Bin", {
+      fields: ["item_code", "actual_qty"],
+      filters: [["warehouse", "=", warehouse]],
+      limit: 100000,
+    }) || [];
+
+    const stockMap = {};
+
+    rows.forEach(row => {
+      stockMap[row.item_code] = flt(row.actual_qty);
+    });
+
+    warehouseStock.value = stockMap;
+  } catch (e) {
+    console.warn("Failed to fetch warehouse stock:", e);
+    warehouseStock.value = {};
+  }
+}
 const costCenters = ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
 const taxTemplates = ref([]);
@@ -2374,6 +2399,7 @@ async function onLineQtyChange(line) {
 async function onWarehouseChange(warehouse) {
   // Warehouse changed, so previously selected batches may no longer
   // belong to the selected warehouse.
+  await fetchWarehouseStock(warehouse);
   for (const line of lines.value) {
     line.batch_no = "";
     line.batch_expiry_date = "";
@@ -2489,6 +2515,16 @@ function salesPersonLabel(id) {
 async function loadItems() {
   try { const r=await apiList("Item",{fields:["name","item_name","barcode","standard_rate","mrp","stock_uom","description","hsn_code","income_account"],filters:[["disabled","=",0],["has_variants","=",0],["is_sales_item","=",1]],limit:100000,order:"item_name asc"})||[]; items.value=r.map(x=>({...x,value:x.name,label:x.item_name||x.name})); } catch {}
 }
+const warehouseItemOptions = computed(() => {
+  return items.value.map(item => {
+    const qty = warehouseStock.value[item.name] ?? 0;
+
+    return {
+      ...item,
+      label: `${item.item_name || item.name} (${qty})`
+    };
+  });
+});
 async function loadTaxAccount() {
   try {
     const co=await resolveCompany();
@@ -2764,6 +2800,7 @@ function openAdd() {
 async function openEdit(inv) {
   editingName.value=inv.name;
   Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:1,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
   fetchWarehouses("");
@@ -2787,6 +2824,9 @@ async function openEdit(inv) {
       additional_discount_percentage:flt(doc.additional_discount_percentage)||0,
       additional_discount_amount:flt(doc.additional_discount_amount)||0,
     });
+      if (form.set_warehouse) {
+  await fetchWarehouseStock(form.set_warehouse);
+}
     lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false,has_batch_no:0,batch_no:it.batch_no||"",batch_expiry_date:it.batch_expiry_date||"",batchOptions:[],_batchQty:null}));
     if (!lines.value.length) addLine();
     // Base Price is a read-only reference showing the Item's own standard_rate
