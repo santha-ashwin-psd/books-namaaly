@@ -627,6 +627,7 @@ import SummaryStrip from "../components/SummaryStrip.vue";
 import Pagination from "../components/Pagination.vue";
 import JournalTab from "../components/JournalTab.vue";
 import { usePagination } from "../composables/usePagination.js";
+import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 
 const { toast } = useToast();
 const route = useRoute();
@@ -729,7 +730,16 @@ async function reconcileSelected(){
   }catch(e){toast.error(e.message||"Failed to reconcile transactions");}
   finally{reconciling.value=false;}
 }
-onMounted(()=>{if(route.query.account)selectedAccount.value=String(route.query.account);load();});
+onMounted(async ()=>{
+  if(route.query.account) selectedAccount.value=String(route.query.account);
+
+  await load();
+
+  useOpenFromQuery({
+    route,
+    openByName: (n) => openView(list.value.find(t => t.name === n) || { name: n }),
+  });
+});
 </script>
 
 <style scoped>

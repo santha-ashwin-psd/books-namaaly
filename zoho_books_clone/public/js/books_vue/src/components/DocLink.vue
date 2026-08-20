@@ -37,6 +37,7 @@ const DOCTYPE_ROUTE = {
   "Sales Order":       "list:/sales-orders",
   "Purchase Order":    "list:/purchase-orders",
   "Payment Entry":     "list:/payments-received",
+  "Bank Transaction":  "list:/banking/transactions",
   "Credit Note":       "list:/credit-notes",
   "Debit Note":        "list:/debit-notes",
   "Delivery Note":     "list:/delivery-challans",
