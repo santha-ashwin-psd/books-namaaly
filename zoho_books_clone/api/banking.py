@@ -102,7 +102,9 @@ def _recalc_balance(bank_account: str) -> float:
     row = frappe.db.sql("""
         SELECT COALESCE(SUM(credit) - SUM(debit), 0) AS net
         FROM `tabBank Transaction`
-        WHERE bank_account = %s AND docstatus = 1
+        WHERE bank_account = %s
+            AND docstatus = 1
+            AND IFNULL(status, '') != 'Cancelled'
     """, bank_account, as_dict=True)
     net = flt(row[0].net) if row else 0.0
     live = opening + net
@@ -812,6 +814,125 @@ def mark_transaction_reconciled(bank_transaction: str, clearance_date: str = Non
     live = _recalc_balance(row.bank_account)
     return {"bank_transaction": bank_transaction, "status": "Reconciled", "current_balance": live}
 
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def cancel_bank_transaction(bank_transaction: str) -> dict:
+    """
+    Mark a Bank Transaction as Cancelled.
+
+    The transaction remains in the system so it can be viewed
+    and deleted later. Cancelled transactions are excluded from
+    balance calculations.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking", write=True)
+
+    row = frappe.db.get_value(
+        "Bank Transaction",
+        bank_transaction,
+        ["docstatus", "bank_account", "status"],
+        as_dict=True,
+    )
+
+    if not row:
+        frappe.throw(
+            _("Transaction {0} not found.").format(bank_transaction)
+        )
+
+    if row.docstatus != 1:
+        frappe.throw(
+            _("Transaction {0} is not submitted.").format(bank_transaction)
+        )
+
+    if row.status == "Cancelled":
+        return {
+            "bank_transaction": bank_transaction,
+            "status": "Cancelled",
+        }
+
+    doc = frappe.get_doc("Bank Transaction", bank_transaction)
+
+    # Bypass native Frappe DocType permission.
+    doc.flags.ignore_permissions = True
+
+    # Perform a real Frappe cancellation.
+    # This changes docstatus from 1 (Submitted) to 2 (Cancelled).
+    doc.cancel()
+
+    frappe.db.set_value(
+        "Bank Transaction",
+        bank_transaction,
+        "status",
+        "Cancelled",
+        update_modified=False,
+    )
+
+    frappe.db.commit()
+
+    live = _recalc_balance(row.bank_account)
+
+    return {
+        "bank_transaction": bank_transaction,
+        "status": "Cancelled",
+        "current_balance": live,
+    }
+
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def delete_cancelled_bank_transaction(bank_transaction: str) -> dict:
+    """
+    Permanently delete a Bank Transaction only when its status
+    is Cancelled.
+    """
+    from zoho_books_clone.utils.access import require_module
+    require_module("banking", write=True)
+
+    row = frappe.db.get_value(
+        "Bank Transaction",
+        bank_transaction,
+        ["docstatus", "status", "bank_account"],
+        as_dict=True,
+    )
+
+    if not row:
+        frappe.throw(
+            _("Transaction {0} not found.").format(bank_transaction)
+        )
+
+    if row.status != "Cancelled":
+        frappe.throw(
+            _("Only Cancelled transactions can be deleted.")
+        )
+
+    from zoho_books_clone.accounts.central_validator import assert_not_locked
+
+    assert_not_locked("Bank Transaction", bank_transaction)
+
+    bank_account = row.bank_account
+
+    # Remove GL entries belonging to this transaction
+    frappe.db.delete(
+        "General Ledger Entry",
+        {
+            "voucher_type": "Bank Transaction",
+            "voucher_no": bank_transaction,
+        },
+    )
+
+    # Delete the Bank Transaction itself
+    frappe.delete_doc(
+        "Bank Transaction",
+        bank_transaction,
+        ignore_permissions=True,
+        force=True,
+    )
+
+    frappe.db.commit()
+
+    live = _recalc_balance(bank_account)
+
+    return {
+        "deleted": bank_transaction,
+        "current_balance": live,
+    }
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def delete_bank_account(name: str) -> dict:

@@ -67,7 +67,7 @@
           <template v-else>
             <tr v-for="t in paged" :key="t.name" class="bt-row" :class="{'bt-row--reconciled':t.status==='Reconciled'}" @click="openView(t)">
               <td class="bt-checkcol" @click.stop>
-                <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled'" @change="toggleSelect(t.name)" />
+                <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled' || t.status==='Cancelled'" @change="toggleSelect(t.name)" />
               </td>
               <td class="mono-sm">{{ fmtDate(t.date) }}</td>
               <td class="text-muted">{{ t.bank_account||'—' }}</td>
@@ -100,7 +100,7 @@
           <div v-for="t in paged" :key="t.name" class="bt-mobile-card" @click="openView(t)">
             <div class="bt-mc-top">
               <span style="display:flex;align-items:center;gap:8px">
-                <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled'" @click.stop @change="toggleSelect(t.name)" />
+                <input type="checkbox" :checked="selected.has(t.name)" :disabled="t.status==='Reconciled' || t.status==='Cancelled'" @click.stop @change="toggleSelect(t.name)" />
                 <span class="bt-mc-date">{{ fmtDate(t.date) }}</span>
               </span>
               <span class="bt-badge" :class="t.status==='Reconciled'?'badge-green':t.status==='Unreconciled'?'badge-orange':'badge-grey'">{{ t.status||'Unreconciled' }}</span>
@@ -136,7 +136,18 @@
               <div class="bt-dh-title">Transaction Details</div>
               <div class="bt-dh-sub">{{ viewDoc.bank_account||'—' }} · {{ fmtDate(viewDoc.date) }}</div>
             </div>
-            <span class="bt-badge" :class="viewDoc.status==='Reconciled'?'badge-green':'badge-orange'">{{ viewDoc.status||'Unreconciled' }}</span>
+            <span
+  class="bt-badge"
+  :class="
+    viewDoc.status === 'Reconciled'
+      ? 'badge-green'
+      : viewDoc.status === 'Cancelled'
+        ? 'badge-red'
+        : 'badge-orange'
+  "
+>
+  {{ viewDoc.status || 'Unreconciled' }}
+</span>
           </div>
           <div class="bt-dh-amount">
             <div class="bt-dh-amt-lbl">{{ flt(viewDoc.deposit)>0 ? 'Deposit' : 'Withdrawal' }}</div>
@@ -154,7 +165,18 @@
             <div><div class="bt-meta-lbl">Deposit</div><div class="mono-sm green">{{ flt(viewDoc.deposit)>0?fmtCur(viewDoc.deposit):'—' }}</div></div>
             <div><div class="bt-meta-lbl">Withdrawal</div><div class="mono-sm red">{{ flt(viewDoc.withdrawal)>0?fmtCur(viewDoc.withdrawal):'—' }}</div></div>
             <div><div class="bt-meta-lbl">Reference</div><div class="mono-sm">{{ viewDoc.reference_number||'—' }}</div></div>
-            <div><div class="bt-meta-lbl">Status</div><div><span class="bt-badge" :class="viewDoc.status==='Reconciled'?'badge-green':'badge-orange'">{{ viewDoc.status||'Unreconciled' }}</span></div></div>
+            <div><div class="bt-meta-lbl">Status</div><div><span
+  class="bt-badge"
+  :class="
+    viewDoc.status === 'Reconciled'
+      ? 'badge-green'
+      : viewDoc.status === 'Cancelled'
+        ? 'badge-red'
+        : 'badge-orange'
+  "
+>
+  {{ viewDoc.status || 'Unreconciled' }}
+</span></div></div>
           </div>
           <div class="bt-section-hdr"><span v-html="icon('file',13)"></span> Description</div>
           <div class="bt-desc">{{ viewDoc.description||'—' }}</div>
@@ -168,11 +190,52 @@
           />
         </div>
         <div class="bt-dfooter">
-          <button v-if="viewDoc.status!=='Reconciled'" class="bt-btn-primary" :disabled="reconciling || !$canEdit('banking')" :title="!$canEdit('banking') ? 'Read-only access' : ''" @click="reconcileOne(viewDoc)">
-            {{ reconciling ? 'Reconciling…' : 'Mark as Reconciled' }}
-          </button>
-          <button class="bt-btn-ghost" @click="viewOpen=false">Close</button>
-        </div>
+
+  <!-- CANCELLED -->
+  <button
+    v-if="viewDoc.status === 'Cancelled'"
+    class="bt-btn-danger"
+    :disabled="reconciling || !$canEdit('banking')"
+    :title="!$canEdit('banking') ? 'Read-only access' : ''"
+    @click="deleteCancelledTransaction(viewDoc)"
+  >
+    {{ reconciling ? 'Deleting…' : 'Delete' }}
+  </button>
+
+  <!-- NOT CANCELLED -->
+  <template v-else>
+
+    <!-- Cancel is available for BOTH Reconciled and Unreconciled -->
+    <button
+      class="bt-btn-danger-outline"
+      :disabled="reconciling || !$canEdit('banking')"
+      :title="!$canEdit('banking') ? 'Read-only access' : ''"
+      @click="cancelTransaction(viewDoc)"
+    >
+      {{ reconciling ? 'Processing…' : 'Cancel' }}
+    </button>
+
+    <!-- Only Unreconciled can be reconciled -->
+    <button
+      v-if="viewDoc.status !== 'Reconciled'"
+      class="bt-btn-primary"
+      :disabled="reconciling || !$canEdit('banking')"
+      :title="!$canEdit('banking') ? 'Read-only access' : ''"
+      @click="reconcileOne(viewDoc)"
+    >
+      {{ reconciling ? 'Reconciling…' : 'Mark as Reconciled' }}
+    </button>
+
+  </template>
+
+  <button
+    class="bt-btn-ghost"
+    @click="viewOpen=false"
+  >
+    Close
+  </button>
+
+</div>
       </template>
     </div>
 
@@ -686,13 +749,24 @@ function sort(col){if(sortCol.value===col)sortDir.value=sortDir.value==="asc"?"d
 function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db">⇅</span>';return sortDir.value==="asc"?"↑":"↓";}
 const summaryDeposit=computed(()=>filtered.value.reduce((s,t)=>s+flt(t.deposit),0));
 const summaryWithdrawal=computed(()=>filtered.value.reduce((s,t)=>s+flt(t.withdrawal),0));
-const counts=computed(()=>({unreconciled:list.value.filter(t=>t.status!=="Reconciled").length}));
+const counts = computed(() => ({
+  unreconciled: list.value.filter(
+    t => t.status === "Unreconciled"
+  ).length
+}));
 function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
 function openView(t){viewDoc.value=t;viewOpen.value=true;}
 
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "bank-transactions" });
 
-const reconcilableNames=computed(()=>paged.value.filter(t=>t.status!=="Reconciled").map(t=>t.name));
+const reconcilableNames = computed(() =>
+  paged.value
+    .filter(t =>
+      t.status !== "Reconciled" &&
+      t.status !== "Cancelled"
+    )
+    .map(t => t.name)
+);
 const allSelected=computed(()=>reconcilableNames.value.length>0 && reconcilableNames.value.every(n=>selected.value.has(n)));
 function toggleSelect(name){
   const s=new Set(selected.value);
@@ -713,6 +787,83 @@ async function reconcileOne(t){
     toast.success(`${t.name} marked as Reconciled`);
   }catch(e){toast.error(e.message||"Failed to reconcile transaction");}
   finally{reconciling.value=false;}
+}
+async function cancelTransaction(t) {
+  if (!t || t.status === "Cancelled") return;
+
+  if (!confirm(`Cancel transaction ${t.name}?`)) return;
+
+  reconciling.value = true;
+
+  try {
+    await apiPOST(
+      "zoho_books_clone.api.banking.cancel_bank_transaction",
+      {
+        bank_transaction: t.name,
+      },
+      {
+        module: "banking",
+        action: "edit",
+      }
+    );
+
+    t.status = "Cancelled";
+
+    if (viewDoc.value && viewDoc.value.name === t.name) {
+      viewDoc.value = { ...viewDoc.value, status: "Cancelled" };
+    }
+
+    selected.value.delete(t.name);
+
+    toast.success(`${t.name} cancelled`);
+
+    await load();
+  } catch (e) {
+    toast.error(e.message || "Failed to cancel transaction");
+  } finally {
+    reconciling.value = false;
+  }
+}
+
+
+async function deleteCancelledTransaction(t) {
+  if (!t || t.status !== "Cancelled") return;
+
+  if (!confirm(
+    `Delete cancelled transaction ${t.name} permanently?\n\nThis action cannot be undone.`
+  )) return;
+
+  reconciling.value = true;
+
+  try {
+    await apiPOST(
+      "zoho_books_clone.api.banking.delete_cancelled_bank_transaction",
+      {
+        bank_transaction: t.name,
+      },
+      {
+        module: "banking",
+        action: "delete",
+      }
+    );
+
+    const index = list.value.findIndex(x => x.name === t.name);
+
+    if (index !== -1) {
+      list.value.splice(index, 1);
+    }
+
+    selected.value.delete(t.name);
+
+    viewOpen.value = false;
+    viewDoc.value = null;
+
+    toast.success(`${t.name} deleted`);
+  } catch (e) {
+    toast.error(e.message || "Failed to delete transaction");
+  } finally {
+    reconciling.value = false;
+  }
 }
 async function reconcileSelected(){
   const names=[...selected.value];
@@ -866,5 +1017,53 @@ onMounted(async ()=>{
 .bt-dfooter .bt-btn-ghost[disabled] { opacity: .5; cursor: not-allowed; }
 @media (max-width: 720px) {
   .bt-fmt-modal { width: 96vw; right: -100vw; }
+}
+.bt-btn-danger-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bt-btn-danger-outline:hover {
+  background: #fef2f2;
+}
+
+.bt-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bt-btn-danger:hover {
+  background: #b91c1c;
+}
+
+.bt-btn-danger:disabled,
+.bt-btn-danger-outline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.badge-red {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
 }
 </style>
