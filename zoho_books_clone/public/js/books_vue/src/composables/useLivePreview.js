@@ -245,6 +245,9 @@ function _renderClassic(doc, cfg) {
   .addr-ct{font-size:12px;color:#111;margin-bottom:2px}
   .addr-nm{font-size:12px;font-weight:700;color:#111;margin-bottom:4px}
   .addr-ln{font-size:12px;color:#111;line-height:1.6}
+  .addr-body-split{display:flex}
+  .addr-body-left{flex:1;min-width:0;padding:10px 12px}
+  .addr-body-right{flex:1;min-width:0;padding:10px 12px;border-left:1.3px solid #1c1c1c}
   /* Table */
   table.it{width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;margin-top:4px;border:1.3px solid #1c1c1c}
   table.it th{background:#fff;color:#111;padding:8px 9px;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;text-align:left;border:none;border-bottom:1.5px solid #1c1c1c;border-right:1px solid #1c1c1c;white-space:nowrap}
@@ -326,20 +329,31 @@ function _renderClassic(doc, cfg) {
     const phone = doc.customer_mobile || doc.contact_mobile || doc.contact_phone || "";
     const contactNm = doc.contact_display || "";
     const companyNm = doc.customer_company_name || doc.supplier_company_name || "";
-    const col = (label, lines) => `
-      <div class="addr-col">
-        <div class="addr-h">${label}</div>
-        <div class="addr-body">
+    const dispatchedThrough = doc.dispatched_through || "";
+    const destination = doc.destination || "";
+    const dispatchExtra = (dispatchedThrough || destination) ? `
+      ${dispatchedThrough ? `<div class="addr-ln"><b>Dispatched Through :</b> ${_esc(dispatchedThrough)}</div>` : ""}
+      ${destination ? `<div class="addr-ln"><b>Destination :</b> ${_esc(destination)}</div>` : ""}
+    ` : "";
+    const col = (label, lines, extra) => {
+      const bodyInner = `
           ${contactNm ? `<div class="addr-ct">${_esc(contactNm)}</div>` : ""}
           <div class="addr-nm">${_esc(party)}</div>
           ${companyNm ? `<div class="addr-nm">${_esc(companyNm)}</div>` : ""}
           ${lines.map(l => `<div class="addr-ln">${_esc(l)}</div>`).join("")}
           ${gstin ? `<div class="addr-ln"><b>GSTIN :</b> ${_esc(gstin)}</div>` : ""}
-          ${phone ? `<div class="addr-ln"><b>Phone :</b> ${_esc(phone)}</div>` : ""}
-        </div>
+          ${phone ? `<div class="addr-ln"><b>Phone :</b> ${_esc(phone)}</div>` : ""}`;
+      const body = extra
+        ? `<div class="addr-body addr-body-split"><div class="addr-body-left">${bodyInner}</div><div class="addr-body-right">${extra}</div></div>`
+        : `<div class="addr-body">${bodyInner}</div>`;
+      return `
+      <div class="addr-col">
+        <div class="addr-h">${label}</div>
+        ${body}
       </div>`;
+    };
     if (!billLines.length && !shipLines.length && !gstin && !phone && !companyNm) return "";
-    return `<div class="addr-table">${col("Billing Address", billLines)}${col("Shipping Address", shipLines)}</div>`;
+    return `<div class="addr-table">${col("Billing Address", billLines)}${col("Shipping Address", shipLines, dispatchExtra)}</div>`;
   })()}
   <table class="it">
     <thead><tr>
@@ -389,7 +403,7 @@ function _renderClassic(doc, cfg) {
   <div class="bf-row bf-row-sign">
     <div class="bf-cell sign-note-cell">This is a computer-generated invoice. E. &amp; O. E.</div>
     <div class="bf-cell sign-qr-cell">
-  <img src="/assets/zoho_books_clone/img/upi.png" alt="UPI QR Code"/>
+  <img src="${_logoSrc("/assets/zoho_books_clone/img/upi.png")}" alt="UPI QR Code"/>
 </div>
     <div class="bf-cell sign-for-cell">
       <div>For, ${_esc(doc.company || cfg.companyName || "")}</div>

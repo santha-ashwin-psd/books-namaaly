@@ -655,6 +655,13 @@
                         :disabled="reversingSE === se.name || !$canEdit('inventory')"
                         @click.stop="reverseManufactureEntry(se)"
                       >{{ reversingSE === se.name ? 'Reversing…' : 'Reverse This Completion' }}</button>
+                      <button
+                        v-if="reversibleTransferSEs.has(se.name)"
+                        class="bomx-btn bomx-btn-sm bomx-btn-light"
+                        style="color:var(--bx-red);border:1px solid var(--bx-red);margin-top:8px"
+                        :disabled="reversingSE === se.name || !$canEdit('inventory')"
+                        @click.stop="reverseMaterialIssue(se)"
+                      >{{ reversingSE === se.name ? 'Reversing…' : 'Reverse This Transfer' }}</button>
                     </div>
                   </div>
                   <div v-else class="bomx-tree-empty">No Stock Entries posted against this Work Order yet.</div>
@@ -755,8 +762,8 @@
         <template v-if="productionItemHasBatch">
           <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:14px">
             <div>
-              <div class="bomx-hf-label">Batch No</div>
-              <input class="bomx-fi" type="text" v-model="completeForm.batch_no" placeholder="Leave blank to auto-generate" style="width:100%"/>
+              <div class="bomx-hf-label">Batch No <span style="color:var(--bx-red)">*</span></div>
+              <input class="bomx-fi" type="text" v-model="completeForm.batch_no" placeholder="Required for batch-tracked items" style="width:100%"/>
             </div>
             <div>
               <div class="bomx-hf-label">Manufacturing Date</div>
@@ -1185,6 +1192,17 @@ const reversingSE = ref(""); // name of the Stock Entry currently being reversed
 const latestReversibleSE = computed(() => {
   const se = stockEntries.value.find(s => s.stock_entry_type === "Manufacture" && s.docstatus === 1);
   return se ? se.name : "";
+});
+// Mirrors reverse_material_issue()'s server-side rule: any submitted
+// Material Transfer can be reversed as long as none of the qty it moved
+// into WIP has been consumed yet (checked server-side per row). We don't
+// pre-filter by "latest" here the way we do for Manufacture entries --
+// unlike consumption, an unconsumed transfer has no ordering dependency --
+// but the backend still throws per-entry if that specific transfer's
+// material was already consumed, so the button can show and then fail with
+// a clear message rather than being hidden speculatively.
+const reversibleTransferSEs = computed(() => {
+  return new Set(stockEntries.value.filter(s => s.stock_entry_type === "Material Transfer" && s.docstatus === 1).map(s => s.name));
 });
 const qcInspections = ref([]);
 const qcLoading = ref(false);
@@ -2191,6 +2209,32 @@ async function reverseManufactureEntry(se) {
   reversingSE.value = "";
 }
 
+// Undoes a Material Transfer via work_order_engine.reverse_material_issue:
+// cancels the Stock Entry (reversing the WIP stock movement) and rolls back
+// transferred_qty on the affected Work Order Item rows. Backend rejects the
+// call if any of that transfer's material has already been consumed.
+async function reverseMaterialIssue(se) {
+  if (!(await confirm({
+    title: "Reverse this material transfer?",
+    body: `This cancels ${se.name} — reversing the material it moved into WIP — and rolls back this Work Order's transferred quantity accordingly. This can't be undone.`,
+    okLabel: "Reverse Transfer",
+    okStyle: "danger",
+  }))) return;
+  reversingSE.value = se.name;
+  try {
+    await apiCall("zoho_books_clone.manufacturing.work_order_engine.reverse_material_issue", {
+      work_order: wo.value.name,
+      stock_entry: se.name,
+    });
+    toast(`${se.name} reversed`);
+    await loadWO();
+    await loadStockEntries();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  reversingSE.value = "";
+}
+
 // QC Inspections for finished-good items get auto-created (In Process type)
 // against the Manufacture Stock Entry when this Work Order is completed —
 // see zoho_books_clone.quality.qc_engine.auto_create_qc_for_stock_entry.
@@ -2476,6 +2520,9 @@ watch(() => completeForm.value.qty_manufactured, (newQty) => {
 async function submitComplete() {
   const qty = flt(completeForm.value.qty_manufactured);
   if (qty <= 0) return toast("Qty Manufactured must be greater than zero", "error");
+  if (productionItemHasBatch.value && !String(completeForm.value.batch_no || "").trim()) {
+    return toast("Batch No is required for batch-tracked items", "error");
+  }
 
   // Re-sync produced_qty/process_loss_qty from the server right before
   // validating, instead of trusting whatever was loaded when the modal

@@ -496,6 +496,14 @@
                   <span v-if="selectedCustomer.tax_id" style="font-weight:600;color:#111827">{{selectedCustomer.tax_id}}</span>
                   <span v-else style="font-size:11px;font-weight:700;padding:1px 8px;border-radius:12px;background:#fff7ed;color:#b45309">Unregistered</span>
                 </div>
+                <div v-if="selectedCustomer.dispatched_through" style="display:flex;justify-content:space-between;font-size:12.5px">
+                  <span style="color:#6B7280">Dispatched Through</span>
+                  <span style="font-weight:600;color:#111827">{{selectedCustomer.dispatched_through}}</span>
+                </div>
+                <div v-if="selectedCustomer.destination" style="display:flex;justify-content:space-between;font-size:12.5px">
+                  <span style="color:#6B7280">Destination</span>
+                  <span style="font-weight:600;color:#111827">{{selectedCustomer.destination}}</span>
+                </div>
                 <div v-if="selectedCustomer.tds_applicable" style="display:flex;justify-content:space-between;font-size:12.5px">
                   <span style="color:#6B7280">TDS</span>
                   <span style="font-weight:600;color:#111827">Applicable{{ selectedCustomer.tds_section ? ' · '+selectedCustomer.tds_section : '' }}</span>
@@ -592,13 +600,37 @@
             <button class="nim-btn" style="border:1px solid #E5E7EB" @click="stmtLoaded=false; loadStatement()" :disabled="stmtLoading">
               <span v-if="stmtLoading">Loading…</span><span v-else>↺ Refresh</span>
             </button>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:11.5px;color:#6B7280;font-weight:600">Period</span>
+              <input type="date" v-model="stmtFromDate" class="nim-stmt-date" :max="stmtToDate || undefined" />
+              <span style="font-size:11.5px;color:#9CA3AF">to</span>
+              <input type="date" v-model="stmtToDate" class="nim-stmt-date" :min="stmtFromDate || undefined" />
+              <button class="nim-btn" style="border:1px solid #E5E7EB;padding:6px 12px" @click="applyStmtFilter" :disabled="ledgerLoading">
+                {{ledgerLoading ? '…' : 'Apply'}}
+              </button>
+              <button v-if="stmtFromDate || stmtToDate" class="nim-btn" style="border:1px solid #E5E7EB;padding:6px 10px;color:#6B7280" @click="clearStmtFilter">
+                ✕ Clear
+              </button>
+            </div>
             <div style="margin-left:auto;display:flex;gap:8px">
               <!-- <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="downloadStatementPdf" :disabled="downloadingStmtPdf">
                 {{downloadingStmtPdf ? 'Generating…' : '⬇ Download PDF'}}
               </button> -->
-              <button v-if="ledgerRows.length" class="nim-btn" style="border:1px solid #E5E7EB" @click="printStatement">
-                🖨️ Print
-              </button>
+              <div v-if="ledgerRows.length" style="position:relative" v-click-outside="() => showPrintMenu=false">
+                <button class="nim-btn" style="border:1px solid #E5E7EB" @click="showPrintMenu=!showPrintMenu">
+                  🖨️ Print ▾
+                </button>
+                <div v-if="showPrintMenu" style="position:absolute;top:calc(100% + 4px);right:0;z-index:20;background:#fff;border:1px solid #E5E7EB;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.1);min-width:200px;overflow:hidden">
+                  <button class="nim-print-menu-item" @click="showPrintMenu=false; printStatement()">
+                    <span>📄 Ledger Statement</span>
+                    <span style="font-size:11px;color:#9CA3AF">Date / Ref / Balance</span>
+                  </button>
+                  <button class="nim-print-menu-item" @click="showPrintMenu=false; printStatementConfirmation()">
+                    <span>✅ Balance Confirmation</span>
+                    <span style="font-size:11px;color:#9CA3AF">Signed acknowledgement letter</span>
+                  </button>
+                </div>
+              </div>
               <button v-if="stmt && stmt.email" class="nim-btn" style="border:1px solid #E5E7EB" @click="sendStatement" :disabled="sendingStmt || !$canEdit('customers')" :title="!$canEdit('customers') ? 'Read-only access' : ''">
                 {{sendingStmt ? 'Sending…' : '📧 Send Statement'}}
               </button>
@@ -1145,6 +1177,17 @@
                 </select>
               </div>
             </div>
+
+            <div class="cus-form-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+              <div>
+                <label class="inv-lbl">Dispatched Through</label>
+                <input v-model="form.dispatched_through" class="inv-fi" placeholder="e.g. Road, Courier, Rail"/>
+              </div>
+              <div>
+                <label class="inv-lbl">Destination</label>
+                <input v-model="form.destination" class="inv-fi" placeholder="Destination"/>
+              </div>
+            </div>
 <!-- 
             <div class="inv-sec-lbl">TDS / Withholding Tax</div>
             <div style="margin-bottom:18px">
@@ -1514,6 +1557,7 @@ const form = reactive({
   gst_treatment: "Registered Business",
   tax_id: "", default_currency: "INR", credit_limit: 0,
   email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
+  dispatched_through: "", destination: "",
   address_line1: "", address_line2: "",
   city: "", state: "", pincode: "", country: "India",
   ship_address_line1: "", ship_address_line2: "",
@@ -1712,7 +1756,8 @@ async function load() {
     const [rows, balances, credits, lastInvs] = await Promise.all([
       apiList("Customer", {
         fields: ["name","customer_name","customer_type","customer_group","territory","email_id","mobile_no",
-          "tax_id","city","state","disabled","default_currency","credit_limit","salutation","gst_treatment"],
+          "tax_id","city","state","disabled","default_currency","credit_limit","salutation","gst_treatment",
+          "address_line1","address_line2","pincode","country"],
         order: "customer_name asc", limit: 300,
       }),
       apiGET("zoho_books_clone.api.books_data.get_customer_outstanding").catch(() => ({})),
@@ -1759,6 +1804,7 @@ function resetForm() {
     gst_treatment: "Registered Business",
     tax_id: "", default_currency: "INR", credit_limit: 0,
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
+    dispatched_through: "", destination: "",
     address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
     ship_address_line1: "", ship_address_line2: "", ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
     payment_terms: "", place_of_supply: "", source: "", pan_no: "", opening_balance: 0,
@@ -1796,6 +1842,8 @@ async function openEdit(name) {
       default_currency: doc.default_currency || "INR",
       credit_limit: doc.credit_limit || 0,
       email_id: doc.email_id || "",
+      dispatched_through: doc.dispatched_through || "",
+      destination: doc.destination || "",
       mobile_code: mno.startsWith("+") && mno.includes(" ") ? mno.split(" ")[0] : "+91",
       mobile_no:   mno.startsWith("+") && mno.includes(" ") ? mno.substring(mno.indexOf(" ") + 1) : mno,
       phone: doc.phone || "",
@@ -1876,6 +1924,8 @@ async function saveCustomer() {
       default_currency: form.default_currency,
       credit_limit: parseFloat(form.credit_limit) || 0,
       email_id: form.email_id.trim(),
+      dispatched_through: form.dispatched_through.trim(),
+      destination: form.destination.trim(),
       mobile_no: form.mobile_no.trim() ? (form.mobile_code + " " + form.mobile_no.trim()) : "",
       phone: form.phone.trim(),
       website: form.website.trim(),
@@ -2087,6 +2137,9 @@ async function selectCustomer(c) {
   stmt.value        = null;
   stmtLoaded.value  = false;
   stmtPage.value    = 1;
+  stmtCompany.value = null;
+  stmtFromDate.value = "";
+  stmtToDate.value   = "";
   custTxns.value    = [];
   custTxnsLoaded.value = false;
   txnPage.value     = 1;
@@ -2130,6 +2183,16 @@ const ledgerRows    = ref([]);
 const ledgerTotals  = ref({});
 const ledgerLoading = ref(false);
 const downloadingStmtPdf = ref(false);
+const showPrintMenu = ref(false);
+// Books Company record (address/phone/fiscal-year) for the letterhead and
+// period calc on the balance-confirmation print — fetched lazily once per
+// statement load, same "get_doc" endpoint Invoices.vue uses for GSTIN.
+const stmtCompany = ref(null);
+// Optional period filter (yyyy-mm-dd, matches <input type="date">) applied
+// to the ledger rows only — the KPI cards (outstanding/overdue/open count)
+// stay as-is since those reflect current standing, not a historical window.
+const stmtFromDate = ref("");
+const stmtToDate   = ref("");
 
 // ── Load-more computed slices ──
 const custTxnsActive    = computed(() => custTxns.value.filter((t) => t.docstatus !== 2 && t.status !== "Cancelled"));
@@ -2151,21 +2214,53 @@ async function loadStatement() {
   ledgerLoading.value = true;
   try {
     const co = await resolveCompany();
-    const [kpiData, ledgerData] = await Promise.all([
+    const [kpiData, ledgerData, companyDoc] = await Promise.all([
       apiGET("zoho_books_clone.db.queries.get_customer_statement", {
         customer: selectedCustomer.value.name, company: co,
       }),
       apiGET("zoho_books_clone.api.docs.get_customer_statement", {
         customer: selectedCustomer.value.name,
+        from_date: stmtFromDate.value || undefined,
+        to_date: stmtToDate.value || undefined,
       }).catch(() => null),
+      apiGET("zoho_books_clone.api.docs.get_doc", { doctype: "Books Company", name: co }).catch(() => null),
     ]);
     stmt.value = kpiData;
     ledgerRows.value = ledgerData?.rows || [];
     ledgerTotals.value = ledgerData?.totals || {};
+    stmtCompany.value = companyDoc || null;
     stmtLoaded.value = true;
   } catch (e) { toast("Could not load statement: " + e.message, "error"); }
   stmtLoading.value = false;
   ledgerLoading.value = false;
+}
+
+// Re-fetches just the ledger rows for the selected From/To range, keeping
+// the KPI cards and Books Company info already loaded in place.
+async function applyStmtFilter() {
+  if (!selectedCustomer.value) return;
+  if (stmtFromDate.value && stmtToDate.value && stmtFromDate.value > stmtToDate.value) {
+    toast("From date must be before To date", "error");
+    return;
+  }
+  ledgerLoading.value = true;
+  try {
+    const ledgerData = await apiGET("zoho_books_clone.api.docs.get_customer_statement", {
+      customer: selectedCustomer.value.name,
+      from_date: stmtFromDate.value || undefined,
+      to_date: stmtToDate.value || undefined,
+    });
+    ledgerRows.value = ledgerData?.rows || [];
+    ledgerTotals.value = ledgerData?.totals || {};
+    stmtPage.value = 1;
+  } catch (e) { toast("Could not apply filter: " + e.message, "error"); }
+  ledgerLoading.value = false;
+}
+
+function clearStmtFilter() {
+  stmtFromDate.value = "";
+  stmtToDate.value = "";
+  applyStmtFilter();
 }
 
 async function sendStatement() {
@@ -2192,6 +2287,9 @@ function buildStatementPdfHtml() {
   const custName = selectedCustomer.value?.customer_name || selectedCustomer.value?.name || "";
   const company = window.__booksCompany || "";
   const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const periodLabel = (stmtFromDate.value || stmtToDate.value)
+    ? `${stmtFromDate.value ? fmtStmtDate(stmtFromDate.value) : "Start"} – ${stmtToDate.value ? fmtStmtDate(stmtToDate.value) : "Date"}`
+    : `As on ${today}`;
 
   const rowsHtml = ledgerRows.value.map(r => `<tr>
       <td>${fmtStmtDate(r.date)}</td>
@@ -2226,7 +2324,7 @@ function buildStatementPdfHtml() {
   <div class="stmt-header">
     ${company ? `<div class="stmt-company">${company}</div>` : ""}
     <div class="stmt-title">Account Statement</div>
-    <div class="stmt-sub">Account: ${custName} &nbsp;|&nbsp; As on ${today}</div>
+    <div class="stmt-sub">Account: ${custName} &nbsp;|&nbsp; ${periodLabel}</div>
   </div>
   <table>
     <thead>
@@ -2266,6 +2364,216 @@ function printStatement() {
     </style>
     <div class="stmt-toolbar">
       <span class="tb-lbl">PRINT PREVIEW</span>
+      <button class="print-btn" onclick="window.print()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+    </div>`;
+  const html = docHtml.replace("<body>", "<body>" + toolbarHtml);
+
+  const win = window.open("", "_blank");
+  if (!win) { toast("Please allow pop-ups to print", "error"); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+}
+
+// Balance-confirmation letter — matches the traditional "Statement of
+// Accounts" / balance-confirmation format (company letterhead, party
+// address block, single running table, certification note, and a
+// signature block for the customer to countersign and return).
+const FY_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+// Fiscal-year start date for the "period from" line — derived from the
+// Books Company's configured fiscal_year_start_month (defaults to April,
+// India's standard FY) relative to today, not a fabricated/blank value.
+function fiscalYearStartDate() {
+  const monthName = stmtCompany.value?.fiscal_year_start_month || "April";
+  const startMonthIdx = Math.max(0, FY_MONTHS.indexOf(monthName));
+  const now = new Date();
+  let year = now.getFullYear();
+  if (now.getMonth() < startMonthIdx) year -= 1;
+  return new Date(year, startMonthIdx, 1);
+}
+
+function buildStatementConfirmationHtml() {
+  const cust = selectedCustomer.value || {};
+  const custName = cust.customer_name || cust.name || "";
+  const custAddrLines = [
+    [cust.address_line1, cust.address_line2].filter(Boolean).join(", "),
+    [cust.city, cust.state].filter(Boolean).join(", "),
+    [cust.pincode, cust.country].filter(Boolean).join(", "),
+  ].filter(Boolean);
+
+  const co = stmtCompany.value || {};
+  const companyName = co.company_name || window.__booksCompany || "";
+  const companyAddrLine = [co.address_line, co.city, co.state].filter(Boolean).join(", ")
+    + (co.pincode ? ` - ${co.pincode}` : "")
+    + (co.phone ? `. PH ${co.phone}` : "");
+
+  const now = new Date();
+  const today = now.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const timeNow = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }).toLowerCase().replace(" ", "");
+  const place = co.city || "";
+
+  const rows = ledgerRows.value;
+  // "From" date: use the applied filter's From date if set; otherwise the
+  // earliest real transaction date if within the current FY, otherwise the
+  // FY start date itself (mirrors how a standard statement period is
+  // framed, rather than leaving it blank when the first row is the
+  // dateless Opening Balance entry).
+  const fyStart = fiscalYearStartDate();
+  const firstTxnDate = rows.map(r => r.date).filter(Boolean).sort()[0];
+  const periodFrom = stmtFromDate.value
+    ? fmtStmtDate(stmtFromDate.value)
+    : (firstTxnDate && new Date(firstTxnDate) < fyStart ? fmtStmtDate(firstTxnDate) : fmtStmtDate(fyStart));
+  const periodTo = stmtToDate.value ? fmtStmtDate(stmtToDate.value) : today;
+
+  const closing = Number(ledgerTotals.value.closing_balance || 0);
+  const closingAbs = fmtStmt(Math.abs(closing));
+  const closingType = closing >= 0 ? "Debit" : "Credit";
+
+  const totalDebit = rows.reduce((s, r) => s + Number(r.debit || 0), 0);
+  const totalCredit = rows.reduce((s, r) => s + Number(r.credit || 0), 0);
+
+  const rowsHtml = rows.map(r => `<tr>
+      <td>${fmtStmtDate(r.date)}</td>
+      <td>${r.ref || ""}</td>
+      <td>${r.type || ""}${r.type === "Payment" && r.mode_of_payment ? ` (${r.mode_of_payment})` : ""}</td>
+      <td>${r.due_date ? fmtStmtDate(r.due_date) : ""}</td>
+      <td>${r.cheque_no || ""}</td>
+      <td class="num">${Number(r.debit||0) ? fmtStmt(r.debit) : "0.00"}</td>
+      <td class="num">${Number(r.credit||0) ? fmtStmt(r.credit) : "0.00"}</td>
+      <td class="num bal">${fmtStmt(Math.abs(Number(r.balance||0)))}</td>
+    </tr>`).join("");
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #111; font-size: 12px; }
+  .conf-header { text-align: center; margin-bottom: 18px; }
+  .conf-company { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+  .conf-company-sub { font-size: 11px; color: #333; margin-top: 2px; }
+  .conf-party { margin-bottom: 14px; font-size: 12px; line-height: 1.5; }
+  .conf-party b { display: inline-block; min-width: 78px; }
+  .conf-party .addr-lines { display: inline-block; vertical-align: top; }
+  .conf-title { text-align: center; font-size: 13.5px; font-weight: 700; text-decoration: underline; margin: 14px 0 12px; }
+  .conf-intro { font-size: 12px; line-height: 1.6; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #666; padding: 5px 7px; font-size: 10.5px; }
+  th { background: #f0f0f0; text-align: left; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  tfoot td { font-weight: 700; background: #f7f7f7; }
+  .conf-cert { font-size: 11px; line-height: 1.6; margin-top: 16px; color: #222; }
+  .conf-sign-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 26px; }
+  .conf-sign-row .place { font-size: 12px; line-height: 1.8; }
+  .conf-sign-row .for-co { text-align: right; font-size: 12px; line-height: 1.5; }
+  .conf-sign-row .sign-line { margin-top: 34px; border-top: 1px solid #333; width: 200px; text-align: center; font-size: 11px; padding-top: 4px; margin-left: auto; }
+  .conf-confirm-box { margin-top: 30px; border-top: 2px solid #333; padding-top: 14px; }
+  .conf-confirm-title { text-align: center; font-size: 12.5px; font-weight: 700; text-decoration: underline; margin-bottom: 10px; }
+  .conf-confirm-text { font-size: 11.5px; line-height: 1.7; }
+  .conf-confirm-sign { margin-top: 34px; font-size: 12px; }
+  .conf-confirm-sign .line { display: inline-block; border-bottom: 1px solid #333; width: 320px; margin-left: 6px; }
+  .conf-footer { margin-top: 24px; text-align: center; font-size: 9.5px; color: #999; }
+</style></head>
+<body>
+  <div class="conf-header">
+    ${companyName ? `<div class="conf-company">${companyName}</div>` : ""}
+    ${companyAddrLine.trim() && companyAddrLine.trim() !== "." ? `<div class="conf-company-sub">${companyAddrLine}</div>` : ""}
+  </div>
+
+  <div class="conf-party">
+    <div><b>PARTY NAME</b> : <b style="min-width:0">${custName}</b></div>
+    ${custAddrLines.length ? `<div><b>ADDRESS</b> : <span class="addr-lines">${custAddrLines.join("<br>")}</span></div>` : ""}
+  </div>
+
+  <div class="conf-title">Statement of Accounts</div>
+
+  <div class="conf-intro">
+    Dear Sir/Madam,<br><br>
+    Please find below the statement of Accounts for the period from ${periodFrom} to ${periodTo}
+    stating that there is a ${closingType} balance of ₹${closingAbs} against you as per the following details.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Ref No</th>
+        <th>Particulars</th>
+        <th>Due Date</th>
+        <th>Chq No</th>
+        <th class="num">Debit (₹)</th>
+        <th class="num">Credit (₹)</th>
+        <th class="num">Balance (₹)</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Total</td>
+        <td class="num">${fmtStmt(totalDebit)}</td>
+        <td class="num">${fmtStmt(totalCredit)}</td>
+        <td class="num">${closingAbs} ${closingType === "Debit" ? "Dr" : "Cr"}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="conf-cert">
+    This is to certify that this is a true extract taken from the computer system kept, maintained in good
+    working condition, fed and operated in regular course of business of our company by a qualified person
+    at all relevant points of time.<br><br>
+    Please verify with your books and confirm the correctness of the above statement of Accounts. If not
+    confirmed within 10 days, it is presumed that the above balance is accepted by you.<br><br>
+    We are sending the statement of Accounts in duplicate to enable you to return a copy in confirmation of the same.
+  </div>
+
+  <div class="conf-sign-row">
+    <div class="place">
+      PLACE : ${place || "______________________"}<br>
+      DATE &nbsp;: ${today}<br>
+      TIME &nbsp;: ${timeNow}
+    </div>
+    <div class="for-co">
+      For ${companyName || "________________________"}
+      <div class="sign-line">Authorised Signature</div>
+    </div>
+  </div>
+
+  <div class="conf-confirm-box">
+    <div class="conf-confirm-title">BALANCE CONFIRMATION</div>
+    <div class="conf-confirm-text">
+      I/We confirm that, as per the above statement of Accounts, there is a debit/credit balance of
+      ₹${closingAbs} against us/me as on ${today}. In token of my/our acknowledgement and confirmation of
+      accounts today, I/We received a copy of the statement.
+    </div>
+    <div class="conf-confirm-sign">Customer's Seal and Signature :<span class="line"></span></div>
+    <div class="conf-confirm-sign" style="margin-top:20px">Date :<span class="line" style="width:150px"></span></div>
+  </div>
+
+  <div class="conf-footer">Generated on ${today} ${timeNow} &nbsp;·&nbsp; Page 1 of 1</div>
+</body></html>`;
+}
+
+// Print-preview for the balance-confirmation letter — same pop-up + Print
+// button pattern as printStatement(), just backed by the confirmation
+// letter layout instead of the plain ledger table.
+function printStatementConfirmation() {
+  if (!ledgerRows.value.length) { toast("No statement rows to print", "error"); return; }
+  const docHtml = buildStatementConfirmationHtml();
+  const toolbarHtml = `
+    <style>
+      .stmt-toolbar { position:sticky; top:0; z-index:10; background:#fff; padding:10px 18px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; gap:10px; font-family:Arial,Helvetica,sans-serif; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+      .stmt-toolbar .tb-lbl { font-size:11.5px; font-weight:700; color:#374151; letter-spacing:.04em; }
+      .stmt-toolbar .print-btn { margin-left:auto; background:#1a6ef7; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-weight:700; cursor:pointer; font:inherit; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+      .stmt-toolbar .print-btn:hover { background:#1558d0; }
+      @media print { .stmt-toolbar { display:none!important; } }
+    </style>
+    <div class="stmt-toolbar">
+      <span class="tb-lbl">PRINT PREVIEW — BALANCE CONFIRMATION</span>
       <button class="print-btn" onclick="window.print()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Print
@@ -2522,6 +2830,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.nim-print-menu-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;padding:9px 12px;background:#fff;border:none;border-bottom:1px solid #F3F4F6;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:#374151;text-align:left;}
+.nim-print-menu-item:last-child{border-bottom:none;}
+.nim-print-menu-item:hover{background:#F9FAFB;}
+.nim-stmt-date{border:1px solid #E5E7EB;border-radius:7px;padding:6px 8px;font:inherit;font-size:12.5px;color:#374151;background:#fff;}
+.nim-stmt-date:focus{outline:none;border-color:#1a6ef7;}
 .cus-pay-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;}
 .cus-pay-modal{background:#fff;border-radius:12px;padding:22px;width:340px;box-shadow:0 10px 30px rgba(0,0,0,.15);}
 /* ── Drawer slide-in animation ──────────────────────────── */

@@ -635,6 +635,9 @@ def seed_customer_custom_fields():
         ("bank_ifsc",           "Bank IFSC Code",        "Data",     "bank_account_no", ""),
         # Notes / remarks
         ("notes",               "Notes",                 "Small Text","bank_ifsc",      ""),
+        # Dispatch details
+        ("dispatched_through",  "Dispatched Through",    "Data",     "notes",           ""),
+        ("destination",         "Destination",           "Data",     "dispatched_through", ""),
     ]
 
     DB_TYPE_MAP = {

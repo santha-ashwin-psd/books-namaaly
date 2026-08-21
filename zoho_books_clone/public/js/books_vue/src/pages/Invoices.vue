@@ -2033,6 +2033,9 @@ async function downloadInvoicePdf(mode = 'pdf', copyText = '') {
   // Pull the latest selected template from Company Settings before rendering.
   try { await refreshBranding(); } catch {}
 
+  // Resolve shipping address from the Address master (not the invoice's cached text)
+  const resolvedShippingAddress = await resolveShippingAddressForPrint(inv);
+
   // Build the same data shape used by the create/edit preview
   const data = {
     name: inv.name,
@@ -2045,10 +2048,12 @@ async function downloadInvoicePdf(mode = 'pdf', copyText = '') {
     place_of_supply: inv.place_of_supply,
     billing_address: inv.billing_address || '',
     billing_address_name: inv.billing_address_name || '',
-    shipping_address: inv.shipping_address || '',
+    shipping_address: resolvedShippingAddress,
     shipping_address_name: inv.shipping_address_name || '',
     customer_gstin: inv.customer_gstin || '',
     customer_mobile: inv.customer_mobile || '',
+    dispatched_through: customers.value.find(c=>c.name===inv.customer)?.dispatched_through || '',
+    destination: customers.value.find(c=>c.name===inv.customer)?.destination || '',
     items: withItemTaxRates(inv.items || [], inv.place_of_supply),
     taxes: inv.taxes || [],
     subtotal: inv.net_total != null ? flt(inv.net_total) : flt(inv.grand_total) - flt(inv.total_tax),
@@ -2120,7 +2125,7 @@ async function downloadBothInvoicePdf() {
   }
 }
 
-function printShippingAddress(inv) {
+async function printShippingAddress(inv) {
   showDownloadMenu.value = false;
 
   const printWin = window.open('', '_blank');
@@ -2128,11 +2133,13 @@ function printShippingAddress(inv) {
     return toast("Popup blocked. Please allow popups to print.", "error");
   }
 
+  const resolvedShippingAddress = await resolveShippingAddressForPrint(inv);
+
   const label = `
     <div class="label-box">
       <div class="title">Shipping To</div>
       <div class="name">${inv.customer_name || inv.customer || ''}</div>
-      <div class="address">${displayAddr(inv.shipping_address)}</div>
+      <div class="address">${displayAddr(resolvedShippingAddress)}</div>
       ${
         inv.customer_mobile
           ? '<div class="phone">Phone: ' + inv.customer_mobile + '</div>'
@@ -2178,13 +2185,13 @@ function printShippingAddress(inv) {
           .label-box {
   width: calc(100% - 20mm);
   height: 89mm;
-  margin: 5mm 10mm;
+  margin: 4mm 10mm;
 
   box-sizing: border-box;
   border: 2px solid #374151;
   border-radius: 8px;
 
-  padding: 18mm 15mm;
+  padding: 14mm 15mm;
 
   display: flex;
   flex-direction: column;
@@ -2229,10 +2236,6 @@ function printShippingAddress(inv) {
             .page {
               width: 210mm;
               height: 297mm;
-            }
-
-            .label-box {
-              height: 99mm;
             }
           }
         </style>
@@ -2318,7 +2321,7 @@ async function load() {
   loading.value=false;
 }
 async function loadCustomers() {
-  try { const r=await apiList("Customer",{fields:["name","customer_name","company_name"],filters:[["disabled","=",0]],limit:100000,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
+  try { const r=await apiList("Customer",{fields:["name","customer_name","company_name","dispatched_through","destination"],filters:[["disabled","=",0]],limit:100000,order:"customer_name asc"})||[]; customers.value=r.map(x=>({...x,value:x.name,label:x.customer_name||x.name})); } catch {}
 }
 async function loadSalesPersons() {
   try { const r=await apiList("Sales Person",{fields:["name","sales_person_name"],filters:[["disabled","=",0]],limit:100000,order:"sales_person_name asc"})||[]; salesPersons.value=r.map(x=>({...x,value:x.name,label:x.sales_person_name||x.name})); } catch {}
@@ -2726,6 +2729,20 @@ function formatAddress(a) {
 function displayAddr(text) {
   if (!text) return "";
   return text.includes("\n") ? text : text.split(", ").join("\n");
+}
+// Print/download should always reflect the current Address master record
+// (not the invoice's cached shipping_address text snapshot), so re-fetch
+// by shipping_address_name at print time and fall back to the cached
+// text only if the linked Address no longer exists.
+async function resolveShippingAddressForPrint(inv) {
+  const addrName = inv?.shipping_address_name;
+  if (addrName) {
+    try {
+      const addr = await apiGet("Address", addrName);
+      if (addr) return formatAddress(addr);
+    } catch {}
+  }
+  return inv?.shipping_address || "";
 }
 function onBillingAddrSelect(opt) {
   form.billing_address = opt ? formatAddress(opt) : "";
@@ -3376,17 +3393,19 @@ async function printInvoice(data) {
   printDoc(_toPrintDoc(data), _invCfg(data));
 }
 
-function printViewInvoice() {
+async function printViewInvoice() {
   const inv=viewInv.value;
   if (!inv) return;
+  const resolvedShippingAddress = await resolveShippingAddressForPrint(inv);
   printInvoice({
     name:inv.name, customer:inv.customer, customer_name:inv.customer_name,
     customer_company_name: customers.value.find(c=>c.name===inv.customer)?.company_name||"",
     posting_date:inv.posting_date, due_date:inv.due_date, po_no:inv.po_no,
     place_of_supply:inv.place_of_supply,
     billing_address:inv.billing_address||"", billing_address_name:inv.billing_address_name||"",
-    shipping_address:inv.shipping_address||"", shipping_address_name:inv.shipping_address_name||"",
+    shipping_address:resolvedShippingAddress, shipping_address_name:inv.shipping_address_name||"",
     customer_gstin:inv.customer_gstin||"", customer_mobile:inv.customer_mobile||"",
+    dispatched_through:customers.value.find(c=>c.name===inv.customer)?.dispatched_through||"", destination:customers.value.find(c=>c.name===inv.customer)?.destination||"",
     items:withItemTaxRates(inv.items||[], inv.place_of_supply), taxes:inv.taxes||[],
     subtotal:(inv.net_total != null ? flt(inv.net_total) : flt(inv.grand_total)-flt(inv.total_tax)),
     totalTax:flt(inv.total_tax), grandTotal:flt(inv.grand_total),

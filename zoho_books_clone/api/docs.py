@@ -4464,12 +4464,12 @@ def get_customer_statement(customer, from_date=None, to_date=None):
 
     invs = frappe.get_all("Sales Invoice",
         filters={"customer": customer, "docstatus": 1, "is_return": 0},
-        fields=["name", "posting_date", "grand_total"],
+        fields=["name", "posting_date", "due_date", "grand_total"],
         order_by="posting_date asc")
     for i in invs:
         if fd.from_date and str(i.posting_date) < fd.from_date: continue
         if fd.to_date   and str(i.posting_date) > fd.to_date:   continue
-        rows.append({"date": i.posting_date, "ref": i.name,
+        rows.append({"date": i.posting_date, "ref": i.name, "due_date": i.due_date,
                      "type": "Invoice", "debit": flt(i.grand_total), "credit": 0})
 
     cns = frappe.get_all("Sales Invoice",
@@ -4483,7 +4483,7 @@ def get_customer_statement(customer, from_date=None, to_date=None):
                      "type": "Credit Note", "debit": 0, "credit": abs(flt(c.grand_total))})
 
     pes = frappe.db.sql("""
-        SELECT name, payment_date, paid_amount, mode_of_payment
+        SELECT name, payment_date, paid_amount, mode_of_payment, reference_no, reference_date
         FROM `tabPayment Entry`
         WHERE party_type='Customer' AND party=%s AND payment_type='Receive' AND docstatus=1
         ORDER BY payment_date ASC
@@ -4493,7 +4493,8 @@ def get_customer_statement(customer, from_date=None, to_date=None):
         if fd.to_date   and str(p.payment_date) > fd.to_date:   continue
         rows.append({"date": p.payment_date, "ref": p.name,
                      "type": "Payment", "debit": 0, "credit": flt(p.paid_amount),
-                     "mode_of_payment": p.mode_of_payment or ""})
+                     "mode_of_payment": p.mode_of_payment or "",
+                     "cheque_no": p.reference_no or "", "ref_date": p.reference_date})
 
     rows.sort(key=lambda r: (str(r["date"]) if r["date"] else "", r["ref"] or ""))
     running = 0.0

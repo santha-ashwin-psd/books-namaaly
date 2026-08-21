@@ -78,6 +78,7 @@
                 <button class="inv-act-btn" @click="openView(p)" title="View"><span v-html="icon('eye',13)"></span></button>
                 <button v-if="p.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : 'Edit'" @click="openEdit(p)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="p.docstatus===1" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : 'Cancel'" @click="cancelPmt(p)">✕</button>
+                <button v-if="p.docstatus===2" class="inv-act-btn" style="border-color:#dbeafe;color:#2563eb" :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : 'Amend'" @click="amendPmt(p)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="p.docstatus===0 || p.docstatus===2" class="inv-act-btn" style="border-color:#fee2e2;color:#dc2626" :disabled="!$canDelete('payments')" :title="!$canDelete('payments') ? 'Not permitted' : 'Delete'" @click="deletePmt(p)"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
@@ -118,6 +119,7 @@
               <button class="pay-mc-btn" @click.stop="openView(p)">View</button>
               <button v-if="p.docstatus===0" class="pay-mc-btn" :disabled="!$canEdit('payments')" @click.stop="openEdit(p)">Edit</button>
               <button v-if="p.docstatus===1" class="pay-mc-btn pay-mc-danger" :disabled="!$canEdit('payments')" @click.stop="cancelPmt(p)">Cancel</button>
+              <button v-if="p.docstatus===2" class="pay-mc-btn" :disabled="!$canCreate('payments')" @click.stop="amendPmt(p)">Amend</button>
               <button v-if="p.docstatus===0||p.docstatus===2" class="pay-mc-btn pay-mc-danger" :disabled="!$canDelete('payments')" @click.stop="deletePmt(p)">Delete</button>
             </div>
           </div>
@@ -502,6 +504,9 @@
             <button v-if="viewPmt.docstatus===1" class="pmt-vd-btn-cancel" :disabled="!$canEdit('payments')" :title="!$canEdit('payments') ? 'Read-only access' : ''" @click="cancelPmt(viewPmt)">
               Cancel Payment
             </button>
+            <button v-if="viewPmt.docstatus===2" class="form-btn form-btn-success" :disabled="!$canCreate('payments') || amending" :title="!$canCreate('payments') ? 'Read-only access' : ''" @click="amendPmt(viewPmt)">
+              <span v-html="icon('edit',13)"></span> {{ amending ? 'Amending…' : 'Amend' }}
+            </button>
             <button v-if="viewPmt.docstatus===0 || viewPmt.docstatus===2" class="pmt-vd-btn-cancel" :disabled="!$canDelete('payments')" :title="!$canDelete('payments') ? 'Not permitted' : ''" @click="deletePmt(viewPmt)">
               <span v-html="icon('trash',13)"></span> Delete
             </button>
@@ -515,7 +520,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
-import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiPOST, apiDelete, resolveCompany, apiLinkValues } from "../api/client.js";
+import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiPOST, apiDelete, apiAmend, resolveCompany, apiLinkValues } from "../api/client.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { useOpenFromQuery } from "../composables/useOpenFromQuery.js";
 import { usePagination } from "../composables/usePagination.js";
@@ -545,6 +550,21 @@ async function deletePmt(p) {
     viewOpen.value = false;
     await load();
   } catch (e) { toast.error(e.message || "Delete failed"); }
+}
+const amending = ref(false);
+async function amendPmt(p) {
+  if (!canCreate("payments")) { toast("Read-only access", "error"); return; }
+  if (amending.value) return;
+  amending.value = true;
+  try {
+    const doc = await apiAmend("Payment Entry", p.name);
+    toast.success(`Revision ${doc.name} created`);
+    viewOpen.value = false;
+    await load();
+    const fresh = sorted.value.find(x => x.name === doc.name) || doc;
+    await openEdit(fresh);
+  } catch (e) { toast.error(e.message || "Amend failed"); }
+  amending.value = false;
 }
 
 // ─── Bulk actions ──────────────────────────────────────────────────────
@@ -613,7 +633,7 @@ import { flt, fmtDate } from "../utils/format.js";
 import SearchableSelect from "../components/SearchableSelect.vue";
 
 const { toast } = useToast();
-const { canEdit, canDelete } = usePermissions();
+const { canEdit, canDelete, canCreate } = usePermissions();
 const route = useRoute();
 const defaultTab = computed(() => route.path === "/payments-received" ? "Receive" : "Pay");
 const activeTab = ref(defaultTab.value);

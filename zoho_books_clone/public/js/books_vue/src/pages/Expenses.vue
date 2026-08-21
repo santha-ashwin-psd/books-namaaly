@@ -62,6 +62,7 @@
               <td style="display:flex;gap:4px;justify-content:flex-end">
                 <button class="inv-act-btn" @click="openView(e)"><span v-html="icon('eye',13)"></span></button>
                 <button v-if="e.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'" @click="openEdit(e)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="e.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'" @click.stop="deleteExpense(e)"><span v-html="icon('trash',13)"></span></button>
               </td>
             </tr>
             <tr v-if="!sorted.length"><td colspan="9" class="exp-empty">No expenses found</td></tr>
@@ -98,6 +99,7 @@
             <div class="exp-mc-footer">
               <button class="exp-mc-btn" @click.stop="openView(e)">View</button>
               <button v-if="e.docstatus===0" class="exp-mc-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(e)">Edit</button>
+              <button v-if="e.docstatus===2" class="exp-mc-btn exp-mc-danger" :disabled="!$canDelete('bills')" @click.stop="deleteExpense(e)">Delete</button>
             </div>
           </div>
         </template>
@@ -350,6 +352,9 @@
           <button v-if="viewDoc.docstatus===1" class="form-btn form-btn-outline" :disabled="cancelling || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="cancelExpense(viewDoc)">
             <span v-html="icon('x',13)"></span> {{ cancelling ? 'Cancelling…' : 'Cancel Expense' }}
           </button>
+          <button v-if="viewDoc.docstatus===2" class="form-btn form-btn-outline" style="color:#dc2626;border-color:#fecaca" :disabled="deleting || !$canDelete('bills')" :title="!$canDelete('bills') ? 'Not permitted' : ''" @click="deleteExpense(viewDoc)">
+            <span v-html="icon('trash',13)"></span> {{ deleting ? 'Deleting…' : 'Delete Expense' }}
+          </button>
         </div>
 
       </template>
@@ -362,7 +367,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from "vue";
-import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, resolveCompany } from "../api/client.js";
+import { apiList, apiGet, apiGET, apiSave, apiSubmit, apiCancel, apiDelete, resolveCompany } from "../api/client.js";
 import { useToast } from "../composables/useToast.js";
 import { useConfirm } from "../composables/useConfirm.js";
 import { icon } from "../utils/icons.js";
@@ -393,6 +398,7 @@ const drawerOpen=ref(false),drawerSaving=ref(false),editingName=ref("");
 const expCollapsed=reactive({basic:false,payment:false,notes:true});
 const viewOpen=ref(false),viewDoc=ref(null);
 const cancelling=ref(false);
+const deleting=ref(false);
 const receiptFile=ref(null);
 function onReceiptChange(e){const f=e.target.files[0];if(f)receiptFile.value=f;e.target.value="";}
 const sortCol=ref("posting_date"),sortDir=ref("desc");
@@ -599,6 +605,24 @@ async function saveExpense(submit){
   finally{drawerSaving.value=false;}
 }
 
+async function deleteExpense(doc){
+  const ok = await confirm({
+    title: "Delete Expense",
+    body: `Permanently delete ${doc.name}? This cannot be undone.`,
+    okLabel: "Delete",
+    cancelLabel: "Go back",
+    okStyle: "danger",
+  });
+  if(!ok) return;
+  deleting.value=true;
+  try{
+    await apiDelete("Expense", doc.name);
+    toast.success(`${doc.name} deleted`);
+    viewOpen.value=false;
+    await load();
+  }catch(e){toast.error(e.message||"Failed to delete expense");}
+  finally{deleting.value=false;}
+}
 async function cancelExpense(doc){
   const ok = await confirm({
     title: "Cancel Expense",
@@ -754,6 +778,7 @@ watch(() => route.query.open, (n) => { if (n) _openFromQuery(); });
   .exp-mc-sub { font-size: 11.5px; color: #868e96; margin-bottom: 8px; }
   .exp-mc-footer { display: flex; gap: 6px; margin-top: 8px; }
   .exp-mc-btn { flex: 1; padding: 6px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; background: #f1f5f9; border: 1px solid #e2e8f0; color: #374151; }
+  .exp-mc-danger { background: #fff1f2; border-color: #fecaca; color: #dc2626; }
   .exp-mc--skeleton { pointer-events: none; }
   .exp-mc-shimmer { border-radius: 6px; background: linear-gradient(90deg,#f3f4f6 25%,#e9ecef 50%,#f3f4f6 75%); background-size: 200% 100%; animation: exp-shimmer 1.4s infinite; }
   @keyframes exp-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
