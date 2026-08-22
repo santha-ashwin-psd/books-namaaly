@@ -160,7 +160,14 @@
         <tr v-else v-for="row in paged" :key="row.name" class="inv-row" :class="{selected:selected.has(row.name)}">
           <td class="td-check" @click.stop><input type="checkbox" :checked="selected.has(row.name)" @change="toggle(row.name)"/></td>
           <td @click="openView(row)" data-label="Code"><DocLink doctype="Item" :name="row.name">{{row.item_code||row.name}}</DocLink></td>
-          <td class="fw-600" data-label="Name"><span @click="openView(row)">{{row.item_name}}</span><span v-if="row.has_variants" class="it-tpl-badge it-tpl-badge--link" @click.stop="openVariants(row)" title="Manage variants">Template ↗</span><span v-else-if="row.variant_of" class="it-var-badge">Variant</span></td>
+          <td class="fw-600" data-label="Name">
+  <span @click="openView(row)">{{row.item_name}}</span>
+  <span class="text-muted" style="font-size:11px;margin-left:6px;">
+    ({{row.stock_uom || 'Nos'}})
+  </span>
+  <span v-if="row.has_variants" class="it-tpl-badge it-tpl-badge--link" @click.stop="openVariants(row)" title="Manage variants">Template ↗</span>
+  <span v-else-if="row.variant_of" class="it-var-badge">Variant</span>
+</td>
           <td @click="openView(row)" class="col-hide-tablet" data-label="Group"><span v-if="row.item_group" class="it-group-badge">{{row.item_group}}</span><span v-else class="text-muted">—</span></td>
           <td @click="openView(row)" data-label="Type">
             <span class="b-badge" style="font-size:11px"
@@ -188,7 +195,12 @@
       <div v-else v-for="row in paged" :key="row.name" class="ii-mob-card" @click="openView(row)">
         <div class="ii-mob-card-main">
           <div class="ii-mob-card-top">
-            <span class="fw-700" style="font-size:14px;color:#111827;line-height:1.3">{{row.item_name}}</span>
+            <span class="fw-700" style="font-size:14px;color:#111827;line-height:1.3">
+  {{row.item_name}}
+  <span class="text-muted" style="font-size:11px;margin-left:5px;">
+    ({{row.stock_uom || 'Nos'}})
+  </span>
+</span>
             <span class="inv-status-badge" :class="row.disabled?'status-inactive':'status-active'" style="flex-shrink:0">{{row.disabled?'Inactive':'Active'}}</span>
           </div>
           <div class="ii-mob-card-meta">
@@ -223,7 +235,12 @@
             <button @click.stop="openEdit(row)" class="ii-qa-btn ii-qa-edit ii-card-edit" :disabled="!$canEdit('inventory')" :title="!$canEdit('inventory') ? 'Read-only access' : 'Quick Edit'" v-html="icon('edit',12)"></button>
           </div>
         </div>
-        <div class="fw-700" style="font-size:14px;margin-bottom:3px;line-height:1.3">{{row.item_name}}</div>
+       <div class="fw-700" style="font-size:14px;margin-bottom:3px;line-height:1.3">
+  {{row.item_name}}
+  <span style="font-size:12px;font-weight:400;color:#6b7280;margin-left:5px">
+    ({{row.stock_uom || 'Nos'}})
+  </span>
+</div>
         <div class="text-muted" style="font-size:11px;margin-bottom:8px">{{row.item_code}}</div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span v-if="row.item_group" class="it-group-badge" style="font-size:11px">{{row.item_group}}</span>

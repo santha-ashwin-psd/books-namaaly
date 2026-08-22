@@ -32,7 +32,13 @@
           <template v-else>
             <tr v-for="a in sorted" :key="a.name" class="ia-row" @click="openView(a)">
               <td class="mono-sm text-muted">{{ fmtDate(a.posting_date) }}</td>
-              <td class="font-medium">{{ a.item_name||a.item_code }}<span v-if="a.batch_no" class="ia-batch-pill">{{ a.batch_no }}</span></td>
+              <td class="font-medium">
+  {{ a.item_name||a.item_code }}
+  <span class="text-muted" style="font-size:11px;margin-left:6px;">
+    ({{ a.stock_uom || 'Nos' }})
+  </span>
+  <span v-if="a.batch_no" class="ia-batch-pill">{{ a.batch_no }}</span>
+</td>
               <td class="text-muted">{{ a.warehouse||'—' }}</td>
               <td><span v-if="a.adjustment_reason" class="ia-reason">{{ a.adjustment_reason }}</span><span v-else class="text-muted">—</span></td>
               <td class="ta-r mono-sm" :class="flt(a.qty)>=0?'green':'red'">{{ flt(a.qty)>0?'+':'' }}{{ fmtQty(a.qty) }}</td>
@@ -63,7 +69,13 @@
               <span class="ia-mc-docno">{{ a.name }}</span>
               <span class="ia-badge" :class="a.docstatus===1?'badge-green':a.docstatus===2?'badge-grey':'badge-orange'">{{ a.docstatus===1?'Submitted':a.docstatus===2?'Cancelled':'Draft' }}</span>
             </div>
-            <div class="ia-mc-mid">{{ a.item_name||a.item_code }}<span v-if="a.batch_no" class="ia-batch-pill">{{ a.batch_no }}</span></div>
+            <div class="ia-mc-mid">
+  {{ a.item_name||a.item_code }}
+  <span class="text-muted" style="font-size:11px;margin-left:6px;">
+    ({{ a.stock_uom || 'Nos' }})
+  </span>
+  <span v-if="a.batch_no" class="ia-batch-pill">{{ a.batch_no }}</span>
+</div>
             <div class="ia-mc-meta">
               <span>{{ fmtDate(a.posting_date) }} · {{ a.warehouse||'—' }}</span>
               <span :class="flt(a.qty)>=0?'ia-mc-pos':'ia-mc-neg'">{{ flt(a.qty)>0?'+':'' }}{{ fmtQty(a.qty) }}</span>
@@ -160,7 +172,12 @@
           <div class="ia-dh-top">
             <div class="ia-dh-ico"><span v-html="icon('repeat',20)"></span></div>
             <div>
-              <div class="ia-dh-title">{{ viewDoc.item_name||viewDoc.item_code }}</div>
+             <div class="ia-dh-title">
+  {{ viewDoc.item_name||viewDoc.item_code }}
+  <span class="text-muted" style="font-size:11px;margin-left:6px;">
+    ({{ viewDoc.stock_uom || 'Nos' }})
+  </span>
+</div>
               <div class="ia-dh-sub">{{ viewDoc.warehouse }} · {{ fmtDate(viewDoc.posting_date) }}<span v-if="viewDoc.batch_no"> · Batch {{ viewDoc.batch_no }}</span></div>
             </div>
             <span class="ia-badge" :class="viewDoc.docstatus===1?'badge-green':viewDoc.docstatus===2?'badge-grey':'badge-orange'">{{ viewDoc.docstatus===1?'Submitted':viewDoc.docstatus===2?'Cancelled':'Draft' }}</span>

@@ -811,10 +811,12 @@ def get_inventory_adjustments(company=None):
     rows = frappe.db.sql("""
         SELECT se.name, se.posting_date, se.docstatus, se.value_difference,
                se.adjustment_reason, se.remarks,
-               sed.item_code, sed.item_name, sed.t_warehouse AS warehouse,
+               sed.item_code, sed.item_name, item.stock_uom,
+               sed.t_warehouse AS warehouse,
                sed.batch_no, sed.qty, sed.basic_rate
         FROM `tabStock Entry` se
         LEFT JOIN `tabStock Entry Detail` sed ON sed.parent = se.name
+        LEFT JOIN `tabItem` item ON item.name = sed.item_code
         WHERE se.stock_entry_type = 'Stock Adjustment' AND se.company = %s
         GROUP BY se.name
         ORDER BY se.posting_date DESC, se.creation DESC
