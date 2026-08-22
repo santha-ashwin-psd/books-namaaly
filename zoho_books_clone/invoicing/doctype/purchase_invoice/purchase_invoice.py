@@ -109,7 +109,7 @@ class PurchaseInvoice(Document):
             # and capping against that would make it impossible to ever
             # submit a debit note against a paid bill, even though that's a
             # completely normal case (overcharge/return found after payment).
-            if getattr(self, "return_against", None):
+            if getattr(self, "return_against", None) and getattr(self, "debit_note_reason", "") != "Incentive":
                 src_grand_total = abs(flt(frappe.db.get_value(
                     "Purchase Invoice", self.return_against, "grand_total"
                 ) or 0))

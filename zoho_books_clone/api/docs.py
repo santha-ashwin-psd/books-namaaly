@@ -1831,6 +1831,7 @@ def create_debit_note():
     draft_only   = frappe.utils.cint(fd.get("draft_only") or 0)
     warehouse    = fd.get("warehouse") or ""
     items_raw    = fd.get("items") or "[]"
+    incentive_amount = flt(fd.get("incentive_amount") or 0)
 
     if isinstance(items_raw, str):
         items_raw = json.loads(items_raw)
@@ -1841,10 +1842,38 @@ def create_debit_note():
 
     if not vendor:
         frappe.throw("Vendor is required")
+
     if not reason:
         frappe.throw("Reason is required")
-    if not items_raw:
+
+    if not items_raw and reason != "Incentive":
         frappe.throw("At least one item is required")
+
+    # Incentive-specific validation.
+    # Existing debit note reasons continue through the normal flow unchanged.
+    if reason == "Incentive":
+        if not against_bill:
+            frappe.throw("A bill is required for an Incentive debit note")
+
+        if incentive_amount < 0:
+            frappe.throw("Incentive amount cannot be negative")
+
+        bill_grand_total = flt(
+            frappe.db.get_value(
+                "Purchase Invoice",
+                against_bill,
+                "grand_total",
+            ) or 0
+        )
+
+        if not bill_grand_total:
+            frappe.throw("Unable to determine the selected bill amount")
+
+        if incentive_amount > bill_grand_total + 0.01:
+            frappe.throw(
+                f"Incentive amount cannot exceed the bill amount of "
+                f"{bill_grand_total:.2f}"
+            )
 
     company = _get_company(frappe.session.user)
 
@@ -1872,6 +1901,58 @@ def create_debit_note():
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
+   
+# Incentive debit notes use the manually entered incentive amount
+# instead of the normal item subtotal/tax calculation.
+    # Incentive debit notes use the manually entered incentive amount.
+# No item is required from the UI. For the Purchase Invoice backend,
+# use the first item from the original bill only as the accounting item
+# and replace its value with the entered incentive amount.
+    if reason == "Incentive":
+        source_item = None
+
+        if against_bill:
+            source_item = frappe.db.get_value(
+                "Purchase Invoice Item",
+                {
+                    "parent": against_bill,
+                    "parenttype": "Purchase Invoice",
+                },
+                [
+                    "item_code",
+                    "item_name",
+                    "description",
+                    "uom",
+                    "expense_account",
+                ],
+                as_dict=True,
+            )
+
+        if not source_item:
+            frappe.throw(
+                "Unable to determine an item from the selected bill for the Incentive debit note"
+            )
+
+        pi_items = [{
+            "item_code": source_item.item_code,
+            "item_name": source_item.item_name or source_item.item_code,
+            "description": "Incentive",
+            "hsn_code": "",
+            "uom": source_item.uom or "Nos",
+            "qty": -1,
+            "rate": incentive_amount,
+            "discount_percentage": 0,
+            "discount_amount": 0,
+            "amount": -incentive_amount,
+            "expense_account": source_item.expense_account or expense_account,
+            "tax_code": "",
+            "batch_no": None,
+            "batch_expiry_date": None,
+        }]
+
+    # Incentive amount is the complete debit amount.
+    # Do not apply the bill's normal tax calculation.
+        taxes_raw = []
 
     supplier_display = frappe.db.get_value("Supplier", vendor, "supplier_name") or vendor
     pi = frappe.get_doc({
@@ -1880,6 +1961,8 @@ def create_debit_note():
         "company":          company,
         "supplier":         vendor,
         "supplier_name":    supplier_display,
+        "debit_note_reason": reason,
+        "incentive_amount": incentive_amount,
         "return_against":   against_bill,
         "posting_date":     date,
         "remark":           remark,
@@ -2687,14 +2770,46 @@ def create_credit_note():
     notes        = fd.get("notes") or ""
     cost_center  = fd.get("cost_center") or ""
     warehouse    = fd.get("warehouse") or ""
+    incentive_amount = flt(fd.get("incentive_amount") or 0)
     items_raw    = json.loads(fd.get("items") or "[]")
     taxes_raw    = json.loads(fd.get("taxes") or "[]")
 
     if not customer:
         frappe.throw("Customer is required")
-    if not items_raw:
+    if not items_raw and reason != "Incentive":
         frappe.throw("At least one item is required")
+    if reason == "Incentive":
+        if not against_inv:
+            frappe.throw("An invoice is required for an Incentive credit note")
 
+        if incentive_amount <= 0:
+            frappe.throw("Incentive amount must be greater than 0")
+
+        inv_data = frappe.db.get_value(
+            "Sales Invoice",
+            against_inv,
+            ["grand_total", "outstanding_amount", "docstatus"],
+            as_dict=True,
+        )
+
+        if not inv_data:
+            frappe.throw("Unable to determine the selected invoice")
+
+        if inv_data.docstatus != 1:
+            frappe.throw("The selected invoice must be submitted")
+
+        invoice_outstanding = flt(inv_data.outstanding_amount or 0)
+
+        if invoice_outstanding <= 0:
+            frappe.throw(
+                "The selected invoice has no outstanding amount available for an incentive"
+            )
+
+        if incentive_amount > invoice_outstanding + 0.01:
+            frappe.throw(
+                f"Incentive amount cannot exceed the invoice outstanding amount "
+                f"of {invoice_outstanding:.2f}"
+            )
     # Validate: CN total must not exceed the parent invoice's outstanding amount
     if against_inv and frappe.db.exists("Sales Invoice", against_inv):
         inv_data = frappe.db.get_value(
@@ -2738,6 +2853,43 @@ def create_credit_note():
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
+    # Incentive credit notes do not come from manually entered items.
+# Frappe Sales Invoice requires at least one item, so use the first
+# item from the source invoice and replace its amount with the incentive.
+    if reason == "Incentive":
+        source_item = frappe.db.get_value(
+            "Sales Invoice Item",
+            {"parent": against_inv},
+            [
+                "item_code",
+                "item_name",
+                "description",
+                "uom",
+                "income_account",
+            ],
+            as_dict=True,
+        )
+
+        if not source_item:
+            frappe.throw(
+                "Unable to create Incentive credit note because the selected invoice has no item"
+            )
+
+        incentive_item = {
+            "item_code": source_item.item_code,
+            "item_name": source_item.item_name or source_item.item_code,
+            "description": source_item.description or source_item.item_name or source_item.item_code,
+            "uom": source_item.uom or "Nos",
+            "qty": -1,
+            "rate": incentive_amount,
+            "amount": -incentive_amount,
+            "discount_percentage": 0,
+            "discount_amount": 0,
+            "income_account": source_item.income_account or income_account,
+            "tax_code": "",
+        }
+
+        cn_items = [incentive_item]
 
     cn_taxes = [
         {
@@ -4514,7 +4666,6 @@ def get_customer_statement(customer, from_date=None, to_date=None):
             "credit_notes": total_cn, "closing_balance": running,
         },
     }
-
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def get_customer_email_defaults(customer):

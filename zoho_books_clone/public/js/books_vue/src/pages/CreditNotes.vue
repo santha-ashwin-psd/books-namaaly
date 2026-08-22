@@ -230,9 +230,30 @@
                   <option>Damaged Goods</option>
                   <option>Short Delivery</option>
                   <option>Duplicate Invoice</option>
+                  <option>Incentive</option>
                   <option>Other</option>
                 </select>
               </div>
+              <div class="cn-field" v-if="form.reason === 'Incentive'">
+  <label class="inv-lbl">
+    Incentive Amount (₹) <span class="inv-req">*</span>
+  </label>
+
+ <input
+  v-model.number="form.incentive_amount"
+  type="number"
+  min="0"
+  :max="incentiveMaxAmount"
+  step="0.01"
+  class="inv-fi"
+  placeholder="Enter incentive amount"
+  @input="validateIncentiveAmount"
+/>
+  <div class="cn-field-hint">
+  Maximum:
+  {{ fmtCur(incentiveMaxAmount) }}
+</div>
+</div>
               <div class="cn-field">
                 <label class="inv-lbl">Cost Center</label>
                 <select v-model="form.cost_center" class="inv-fi">
@@ -244,8 +265,10 @@
           </div>
         </div>
 
+        
         <!-- ══ CARD 2: Items to Credit ══ -->
-        <div class="add-card">
+<template v-if="form.reason !== 'Incentive'">
+<div class="add-card">
           <div class="add-card-header" @click="cnCollapsed.items=!cnCollapsed.items">
             <div class="add-card-title">
               <span class="add-card-title-icon">
@@ -377,6 +400,7 @@
             </div> <!-- /cn-form-totals -->
           </div>
         </div>
+        </template>
 
         <!-- ══ CARD 3: Notes ══ -->
         <div class="add-card">
@@ -809,8 +833,46 @@ function balanceFor(name) {
 let _id = 1;
 const blankLine = () => ({ id: _id++, item_code: "", item_name: "", description: "", hsn_code: "", qty: 1, rate: 0, uom: "Nos", discount_percentage: 0, discount_amount: 0, amount: 0, tax_code: "", collapsed: false, batch_no: "", batch_expiry_date: "" });
 const costCenters = ref([]);
-const form = reactive({ customer: "", posting_date: todayStr(), return_against: "", reason: "Price Adjustment", notes: "", cost_center: "" });
+const form = reactive({
+  customer: "",
+  posting_date: todayStr(),
+  return_against: "",
+  reason: "Price Adjustment",
+  incentive_amount: 0,
+  notes: "",
+  cost_center: ""
+});
 const invoiceSummary = reactive({ data: null, loading: false });
+const isIncentive = computed(() => form.reason === "Incentive");
+
+const incentiveMaxAmount = computed(() => {
+  const data = invoiceSummary.data || {};
+
+  const grandTotal = flt(data.grand_total || 0);
+  const paid = flt(data.total_paid || 0);
+  const previousCredits = flt(data.total_credits || 0);
+
+  return Math.max(0, grandTotal - paid - previousCredits);
+});
+const incentiveAmount = computed(() =>
+  Math.max(0, flt(form.incentive_amount || 0))
+);
+
+function validateIncentiveAmount() {
+  let amount = flt(form.incentive_amount || 0);
+
+  if (amount < 0) {
+    amount = 0;
+  }
+
+  const max = incentiveMaxAmount.value;
+
+  if (max > 0 && amount > max) {
+    amount = max;
+  }
+
+  form.incentive_amount = Math.round(amount * 100) / 100;
+}
 const cnTaxes = ref([]);
 // Whether the source invoice's tax breakup was inter-state (IGST) rather than
 // intra-state (CGST+SGST) — detected once from the inherited tax rows, since
@@ -923,7 +985,11 @@ const subtotal = computed(() => lines.value.reduce((s, l) => s + flt(l.amount), 
 // its OWN tax_code — fixes taxes over-applying when items are removed after
 // inheriting from an invoice: previously every inherited tax rate was applied
 // to the whole remaining subtotal regardless of which items it belonged to.
-const cnActiveLines = computed(() => lines.value.filter(l => l.item_code && flt(l.qty) > 0));
+
+const cnActiveLines = computed(() =>
+  lines.value.filter(l => l.item_code && flt(l.qty) > 0)
+);
+
 const cnTaxCtx = computed(() => ({
   companyState: "same",
   placeOfSupply: cnIsInterState.value ? "different" : "same",
@@ -931,7 +997,15 @@ const cnTaxCtx = computed(() => ({
 }));
 const cnTaxRows  = computed(() => computeTaxRows(cnActiveLines.value, taxTemplates.value, cnTaxCtx.value));
 const cnTaxLines = computed(() => cnTaxRows.value.map(t => ({ description: t.description, rate: t.rate, amount: t.amount, tax_type: t.account_head })));
-const cnGrandTotal = computed(() => subtotal.value + cnTaxLines.value.reduce((s, t) => s + t.amount, 0));
+
+const cnGrandTotal = computed(() => {
+  if (isIncentive.value) {
+    return Math.max(0, flt(form.incentive_amount || 0));
+  }
+
+  return subtotal.value +
+    cnTaxLines.value.reduce((s, t) => s + t.amount, 0);
+});
 
 const appliedTotal = computed(() => viewApplications.value.reduce((s, a) => s + flt(a.amount), 0));
 const groupedApplications = computed(() => {
@@ -970,7 +1044,15 @@ const timelineSteps = computed(() => {
 // ── Create / Edit ─────────────────────────────────────────────────────────
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { customer: "", posting_date: todayStr(), return_against: "", reason: "Price Adjustment", notes: "", cost_center: "" });
+  Object.assign(form, {
+  customer: "",
+  posting_date: todayStr(),
+  return_against: "",
+  reason: "Price Adjustment",
+  incentive_amount: 0,
+  notes: "",
+  cost_center: ""
+});
   invoiceSummary.data = null; invoiceSummary.loading = false;
   cnTaxes.value = [];
   cnIsInterState.value = false;
@@ -982,7 +1064,15 @@ function openNew() {
 async function openEdit(c) {
   editingName.value = c.name;
   cnTaxes.value = [];
-  Object.assign(form, { customer: c.customer || "", posting_date: c.posting_date || todayStr(), return_against: c.return_against || "", reason: "Price Adjustment", notes: "", cost_center: "" });
+  Object.assign(form, {
+  customer: c.customer || "",
+  posting_date: c.posting_date || todayStr(),
+  return_against: c.return_against || "",
+  reason: "Price Adjustment",
+  incentive_amount: 0,
+  notes: "",
+  cost_center: ""
+});
   lines.value = [blankLine()];
   Object.assign(cnCollapsed, { customer: false, items: false, notes: true });
   fetchCustomers(""); fetchItems(""); fetchInvoices(""); fetchTaxTemplates(); fetchCostCenters();
@@ -1216,19 +1306,65 @@ async function writeOffCN(c) {
 }
 
 async function saveCN(submit) {
-  if (!form.customer) return toast.error("Customer is required");
-  if (!lines.value.some(l => l.item_code && flt(l.qty) > 0)) return toast.error("At least one item required");
+  if (!form.customer) {
+    return toast.error("Customer is required");
+  }
+
+  if (form.reason === "Incentive") {
+  const amount = flt(form.incentive_amount || 0);
+  const maxAmount = incentiveMaxAmount.value;
+
+  if (!form.return_against) {
+    return toast.error(
+      "Please select an invoice before entering an incentive"
+    );
+  }
+
+  if (maxAmount <= 0) {
+    return toast.error(
+      "The selected invoice has no outstanding amount available for an incentive"
+    );
+  }
+
+ if (amount <= 0) {
+    return toast.error("Incentive amount must be greater than 0");
+}
+
+if (amount > maxAmount + 0.01) {
+  return toast.error(
+    `Incentive amount cannot exceed the outstanding amount of ${fmtCur(maxAmount)}`
+  );
+}
+  }
+
+// Items are required for normal credit notes,
+// but NOT for Incentive credit notes.
+if (form.reason !== "Incentive") {
+    if (!lines.value.some(l => l.item_code && flt(l.qty) > 0)) {
+        return toast.error("At least one item is required");
+    }
+}
+  
   drawerSaving.value = true;
   try {
-    const itemsPayload = lines.value
+    const itemsPayload = form.reason === "Incentive"
+  ? []
+  : lines.value
       .filter(l => l.item_code)
       .map(l => ({
-        item_code: l.item_code, item_name: l.item_name || l.item_code,
-        description: l.description, hsn_code: l.hsn_code || "",
-        qty: flt(l.qty), rate: flt(l.rate), uom: l.uom || "Nos",
-        discount_percentage: flt(l.discount_percentage), discount_amount: flt(l.discount_amount),
-        amount: flt(l.amount), tax_code: l.tax_code || "",
-        batch_no: l.batch_no || "", batch_expiry_date: l.batch_expiry_date || "",
+        item_code: l.item_code,
+        item_name: l.item_name || l.item_code,
+        description: l.description,
+        hsn_code: l.hsn_code || "",
+        qty: flt(l.qty),
+        rate: flt(l.rate),
+        uom: l.uom || "Nos",
+        discount_percentage: flt(l.discount_percentage),
+        discount_amount: flt(l.discount_amount),
+        amount: flt(l.amount),
+        tax_code: l.tax_code || "",
+        batch_no: l.batch_no || "",
+        batch_expiry_date: l.batch_expiry_date || "",
       }));
 
     // IMPORTANT: build the tax payload from the CURRENT line items (each
@@ -1245,7 +1381,9 @@ async function saveCN(submit) {
           const account = tmpl?.taxes?.[0]?.account_head || taxAccountHead.value;
           return { tax_type: account, description: tl.description, rate: tl.rate };
         }));
-    const taxesJson = JSON.stringify(taxPayload);
+    const taxesJson = JSON.stringify(
+  form.reason === "Incentive" ? [] : taxPayload
+);
     if (!editingName.value && submit === 1) {
       // New + submit → backend API which wires GL accounts and CN- naming
       const r = await apiPOST("zoho_books_clone.api.docs.create_credit_note", {
@@ -1255,6 +1393,9 @@ async function saveCN(submit) {
         reason: form.reason,
         notes: form.notes || "",
         cost_center: form.cost_center || "",
+        incentive_amount: form.reason === "Incentive"
+          ? flt(form.incentive_amount || 0)
+          : 0,
         items: JSON.stringify(itemsPayload),
         taxes: taxesJson,
       });
@@ -1269,6 +1410,9 @@ async function saveCN(submit) {
         reason: form.reason,
         notes: form.notes || "",
         cost_center: form.cost_center || "",
+        incentive_amount: form.reason === "Incentive"
+          ? flt(form.incentive_amount || 0)
+          : 0,
         items: JSON.stringify(itemsPayload),
         taxes: taxesJson,
       });

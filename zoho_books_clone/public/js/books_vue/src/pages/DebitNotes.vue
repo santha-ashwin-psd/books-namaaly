@@ -216,12 +216,13 @@
 
               <div class="dn-field">
                 <label class="inv-lbl">Reason</label>
-                <select v-model="form.reason" class="inv-fi">
+                <select v-model="form.reason" class="inv-fi" @change="onReasonChange">
                   <option>Vendor Overcharge</option>
                   <option>Goods Returned</option>
                   <option>Damaged Goods</option>
                   <option>Short Delivery</option>
                   <option>Duplicate Invoice</option>
+                  <option>Incentive</option>
                   <option>Other</option>
                 </select>
               </div>
@@ -236,139 +237,398 @@
           </div>
         </div>
 
+        
         <!-- ══ CARD 2: Debit Items ══ -->
-        <div class="add-card">
-          <div class="add-card-header" @click="dnCollapsed.items=!dnCollapsed.items">
-            <div class="add-card-title">
-              <span class="add-card-title-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-              </span>
-              Debit Items
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="dn-lines-badge">{{ lines.length }} line{{ lines.length!==1?'s':'' }}</span>
-              <span class="add-card-chevron" :class="{collapsed:dnCollapsed.items}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </span>
-            </div>
+<!-- ══ CARD 2: Debit Items ══ -->
+<div v-if="!isIncentive" class="add-card">
+  <div class="add-card-header" @click="dnCollapsed.items=!dnCollapsed.items">
+    <div class="add-card-title">
+      <span class="add-card-title-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4z"/>
+        </svg>
+      </span>
+      Debit Items
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="dn-lines-badge">
+        {{ lines.length }} line{{ lines.length !== 1 ? 's' : '' }}
+      </span>
+
+      <span class="add-card-chevron" :class="{collapsed:dnCollapsed.items}">
+        <svg width="14" height="14" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </span>
+    </div>
+  </div>
+
+  <div
+    class="add-card-body"
+    :class="{collapsed:dnCollapsed.items}"
+    style="padding:0"
+  >
+
+    <!-- Item cards -->
+    <div class="dn-item-cards">
+
+      <div
+        v-for="(line, idx) in lines"
+        :key="line.id"
+        class="dn-item-card"
+      >
+
+        <div
+          class="dn-item-card-header"
+          @click="line.collapsed = !line.collapsed"
+        >
+          <span class="dn-item-card-num">#{{ idx + 1 }}</span>
+
+          <span class="dn-item-card-title">
+            {{ line.item_name || line.item_code || 'Line Item' }}
+          </span>
+
+          <div class="dn-item-card-subtotal">
+            <span class="dn-item-subtotal-label">SUBTOTAL</span>
+            <span class="dn-item-amount">
+              {{ fmtCur(line.amount) }}
+            </span>
           </div>
-          <div class="add-card-body" :class="{collapsed:dnCollapsed.items}" style="padding:0">
-            <!-- Expandable item cards -->
-            <div class="dn-item-cards">
-              <div v-for="(line, idx) in lines" :key="line.id" class="dn-item-card">
-                <!-- Card header -->
-                <div class="dn-item-card-header" @click="line.collapsed = !line.collapsed">
-                  <span class="dn-item-card-num">#{{ idx + 1 }}</span>
-                  <span class="dn-item-card-title">{{ line.item_name || line.item_code || 'Line Item' }}</span>
-                  <div class="dn-item-card-subtotal">
-                    <span class="dn-item-subtotal-label">SUBTOTAL</span>
-                    <span class="dn-item-amount">{{ fmtCur(line.amount) }}</span>
-                  </div>
-                  <span class="dn-item-chevron" :class="{collapsed: line.collapsed}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                  </span>
-                  <button class="dn-item-rm" @click.stop="removeLine(line.id)">
-                    <span v-html="icon('x', 12)"></span>
-                  </button>
-                </div>
-                <!-- Card body -->
-                <div class="dn-item-card-body" v-show="!line.collapsed">
-                  <div class="dn-item-col dn-item-col--left">
-                    <div class="dn-item-field">
-                      <label>Item Name <span class="inv-req">*</span></label>
-                      <SearchableSelect v-model="line.item_code" :options="items"
-                        placeholder="Search item or service" :createable="true" createDoctype="Item"
-                        @search="fetchItems" @update:modelValue="onItemChange(line)" />
-                    </div>
-                    <div class="dn-item-field" style="margin-top:12px">
-                      <label>Description</label>
-                      <textarea v-model="line.description" class="inv-fi dn-item-desc-ta" rows="3" maxlength="500" placeholder="Item description…"></textarea>
-                      <div class="dn-field-hint">{{ (line.description||'').length }}/500</div>
-                    </div>
-                  </div>
-                  <div class="dn-item-col dn-item-col--right">
-                    <div class="dn-item-num-row">
-                      <div class="dn-item-field">
-                        <label>HSN/SAC</label>
-                        <input v-model="line.hsn_code" class="inv-fi" placeholder="e.g. 998314" />
-                      </div>
-                      <div class="dn-item-field">
-                        <label>UOM</label>
-                        <select v-model="line.uom" class="inv-fi">
-                          <option v-for="u in uomList" :key="u" :value="u">{{ u }}</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="dn-item-num-row">
-                      <div class="dn-item-field">
-                        <label>Qty</label>
-                        <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="calcLine(line)" />
-                      </div>
-                      <div class="dn-item-field">
-                        <label>Rate (₹)</label>
-                        <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)" />
-                      </div>
-                    </div>
-                    <div class="dn-item-num-row" v-if="line.batch_no">
-                      <div class="dn-item-field">
-                        <label>Batch No</label>
-                        <input :value="line.batch_no" class="inv-fi" disabled />
-                      </div>
-                      <div class="dn-item-field" v-if="line.batch_expiry_date">
-                        <label>Batch Expiry</label>
-                        <input :value="line.batch_expiry_date" class="inv-fi" disabled />
-                      </div>
-                    </div>
-                    <div class="dn-item-num-row">
-                      <div class="dn-item-field">
-                        <label>Discount %</label>
-                        <input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" />
-                      </div>
-                      <div class="dn-item-field">
-                        <label>Tax Template</label>
-                        <select v-model="line.tax_code" class="inv-fi">
-                          <option value="">— No Tax —</option>
-                          <option v-for="t in taxTemplates" :key="t.name" :value="t.name">{{ t.title || t.name }}</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+
+          <span
+            class="dn-item-chevron"
+            :class="{collapsed: line.collapsed}"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </span>
+
+          <button
+            class="dn-item-rm"
+            @click.stop="removeLine(line.id)"
+          >
+            <span v-html="icon('x', 12)"></span>
+          </button>
+        </div>
+
+        <div
+          class="dn-item-card-body"
+          v-show="!line.collapsed"
+        >
+          <div class="dn-item-col dn-item-col--left">
+
+            <div class="dn-item-field">
+              <label>
+                Item Name <span class="inv-req">*</span>
+              </label>
+
+              <SearchableSelect
+                v-model="line.item_code"
+                :options="items"
+                placeholder="Search item or service"
+                :createable="true"
+                createDoctype="Item"
+                @search="fetchItems"
+                @update:modelValue="onItemChange(line)"
+              />
+            </div>
+
+            <div
+              class="dn-item-field"
+              style="margin-top:12px"
+            >
+              <label>Description</label>
+
+              <textarea
+                v-model="line.description"
+                class="inv-fi dn-item-desc-ta"
+                rows="3"
+                maxlength="500"
+                placeholder="Item description…"
+              ></textarea>
+
+              <div class="dn-field-hint">
+                {{ (line.description || '').length }}/500
               </div>
             </div>
-            <div style="padding:10px 16px 4px">
-              <button class="inv-add-line-btn" @click="addLine"><span v-html="icon('plus',12)"></span> Add Item</button>
-            </div>
-            <!-- Totals -->
-            <div class="dn-form-totals">
-              <div v-if="dnTaxLines.length" class="dn-tax-note">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Tax is recalculated live from each item's own Tax Template — change an item's template above to update it
+
+          </div>
+
+          <div class="dn-item-col dn-item-col--right">
+
+            <div class="dn-item-num-row">
+
+              <div class="dn-item-field">
+                <label>HSN/SAC</label>
+                <input
+                  v-model="line.hsn_code"
+                  class="inv-fi"
+                  placeholder="e.g. 998314"
+                />
               </div>
-              <div class="po-totals" style="justify-content:flex-end">
-                <div class="po-totals-right" style="min-width:260px">
-                  <div class="po-total-row">
-                    <span>Subtotal</span>
-                    <span>{{ fmtCur(subtotal) }}</span>
-                  </div>
-                  <template v-if="dnTaxLines.length">
-                    <div v-for="tl in dnTaxLines" :key="tl.description" class="po-total-row dn-tax-row">
-                      <span>{{ tl.description }} ({{ tl.rate }}%)</span>
-                      <span>{{ fmtCur(tl.amount) }}</span>
-                    </div>
-                  </template>
-                  <div v-else class="po-total-row dn-tax-row">
-                    <span>Tax</span><span>{{ fmtCur(0) }}</span>
-                  </div>
-                  <div class="po-total-row dn-grand-total-row">
-                    <span>Total Debit</span>
-                    <span>{{ fmtCur(dnGrandTotal) }}</span>
-                  </div>
-                </div>
+
+              <div class="dn-item-field">
+                <label>UOM</label>
+                <select v-model="line.uom" class="inv-fi">
+                  <option
+                    v-for="u in uomList"
+                    :key="u"
+                    :value="u"
+                  >
+                    {{ u }}
+                  </option>
+                </select>
+              </div>
+
+            </div>
+
+            <div class="dn-item-num-row">
+
+              <div class="dn-item-field">
+                <label>Qty</label>
+                <input
+                  v-model.number="line.qty"
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  class="inv-fi"
+                  @input="calcLine(line)"
+                />
+              </div>
+
+              <div class="dn-item-field">
+                <label>Rate (₹)</label>
+                <input
+                  v-model.number="line.rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="inv-fi"
+                  @input="calcLine(line)"
+                />
+              </div>
+
+            </div>
+
+            <div
+              class="dn-item-num-row"
+              v-if="line.batch_no"
+            >
+              <div class="dn-item-field">
+                <label>Batch No</label>
+                <input
+                  :value="line.batch_no"
+                  class="inv-fi"
+                  disabled
+                />
+              </div>
+
+              <div
+                class="dn-item-field"
+                v-if="line.batch_expiry_date"
+              >
+                <label>Batch Expiry</label>
+                <input
+                  :value="line.batch_expiry_date"
+                  class="inv-fi"
+                  disabled
+                />
               </div>
             </div>
+
+            <div class="dn-item-num-row">
+
+              <div class="dn-item-field">
+                <label>Discount %</label>
+                <input
+                  v-model.number="line.discount_percentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="inv-fi"
+                  @input="calcLine(line)"
+                />
+              </div>
+
+              <div class="dn-item-field">
+                <label>Tax Template</label>
+
+                <select
+                  v-model="line.tax_code"
+                  class="inv-fi"
+                >
+                  <option value="">— No Tax —</option>
+
+                  <option
+                    v-for="t in taxTemplates"
+                    :key="t.name"
+                    :value="t.name"
+                  >
+                    {{ t.title || t.name }}
+                  </option>
+                </select>
+              </div>
+
+            </div>
+
           </div>
         </div>
+
+      </div>
+    </div>
+
+    <!-- Add Item -->
+    <div style="padding:10px 16px 4px">
+      <button
+        class="inv-add-line-btn"
+        @click="addLine"
+      >
+        <span v-html="icon('plus',12)"></span>
+        Add Item
+      </button>
+    </div>
+
+    <!-- Normal Debit Note totals -->
+    <div class="dn-form-totals">
+
+      <div v-if="dnTaxLines.length" class="dn-tax-note">
+        <svg width="12" height="12" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+
+        Tax is recalculated live from each item's own Tax Template —
+        change an item's template above to update it
+      </div>
+
+      <div class="po-totals" style="justify-content:flex-end">
+        <div class="po-totals-right" style="min-width:260px">
+
+          <div class="po-total-row">
+            <span>Subtotal</span>
+            <span>{{ fmtCur(subtotal) }}</span>
+          </div>
+
+          <template v-if="dnTaxLines.length">
+
+            <div
+              v-for="tl in dnTaxLines"
+              :key="tl.description"
+              class="po-total-row dn-tax-row"
+            >
+              <span>
+                {{ tl.description }} ({{ tl.rate }}%)
+              </span>
+
+              <span>
+                {{ fmtCur(tl.amount) }}
+              </span>
+            </div>
+
+          </template>
+
+          <div
+            v-else
+            class="po-total-row dn-tax-row"
+          >
+            <span>Tax</span>
+            <span>{{ fmtCur(0) }}</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="po-totals" style="justify-content:flex-end">
+        <div class="po-totals-right" style="min-width:260px">
+
+          <div class="po-total-row dn-grand-total-row">
+            <span>Total Debit</span>
+            <span>{{ fmtCur(displayDebitTotal) }}</span>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ INCENTIVE ONLY ══ -->
+<div v-if="isIncentive" class="add-card">
+
+  <div class="add-card-header">
+    <div class="add-card-title">
+      Incentive
+    </div>
+  </div>
+
+  <div class="add-card-body">
+
+    <div class="dn-field">
+
+      <label class="inv-lbl">
+        Incentive Amount
+      </label>
+
+      <input
+        v-model.number="form.incentive_amount"
+        type="number"
+        min="0"
+        :max="incentiveMaxAmount"
+        step="0.01"
+        class="inv-fi"
+        placeholder="Enter incentive amount"
+        @input="validateIncentiveAmount"
+      />
+
+      <div class="dn-field-hint">
+        Maximum: {{ fmtCur(incentiveMaxAmount) }}
+      </div>
+
+      <div
+        v-if="incentiveAmount > incentiveMaxAmount"
+        style="font-size:12px;color:#dc2626;margin-top:4px"
+      >
+        Incentive amount cannot exceed the bill amount.
+      </div>
+
+      <div
+        v-if="incentiveAmount < 0"
+        style="font-size:12px;color:#dc2626;margin-top:4px"
+      >
+        Incentive amount cannot be negative.
+      </div>
+
+    </div>
+
+    <!-- Incentive Total -->
+    <div
+      class="po-totals"
+      style="justify-content:flex-end;margin-top:10px"
+    >
+      <div
+        class="po-totals-right"
+        style="min-width:260px"
+      >
+
+        <div class="po-total-row dn-grand-total-row">
+          <span>Total Debit</span>
+          <span>{{ fmtCur(displayDebitTotal) }}</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
 
         <!-- ══ CARD 3: Notes ══ -->
         <div class="add-card">
@@ -797,7 +1057,15 @@ async function fetchCostCenters() {
     costCenters.value = r.map(c => c.name);
   } catch { costCenters.value = []; }
 }
-const form = reactive({ supplier: "", posting_date: todayStr(), return_against: "", reason: "Vendor Overcharge", notes: "", cost_center: "" });
+const form = reactive({
+  supplier: "",
+  posting_date: todayStr(),
+  return_against: "",
+  reason: "Vendor Overcharge",
+  incentive_amount: 0,
+  notes: "",
+  cost_center: ""
+});
 const dnCollapsed = reactive({ vendor: false, items: false, notes: true });
 const billSummary = reactive({ data: null, loading: false });
 
@@ -926,6 +1194,19 @@ const dnTaxCtx = computed(() => ({
 const dnTaxRows   = computed(() => computeTaxRows(dnActiveLines.value, taxTemplates.value, dnTaxCtx.value));
 const dnTaxLines  = computed(() => dnTaxRows.value.map(t => ({ description: t.description, rate: t.rate, amount: t.amount, tax_type: t.account_head })));
 const dnGrandTotal = computed(() => subtotal.value + dnTaxLines.value.reduce((s, t) => s + t.amount, 0));
+const isIncentive = computed(() => form.reason === "Incentive");
+
+const incentiveMaxAmount = computed(() =>
+  Math.max(0, flt(billSummary.data?.outstanding_amount || 0))
+);
+
+const incentiveAmount = computed(() =>
+  Math.max(0, flt(form.incentive_amount || 0))
+);
+
+const displayDebitTotal = computed(() =>
+  isIncentive.value ? incentiveAmount.value : dnGrandTotal.value
+);
 
 const timelineSteps = computed(() => {
   const d = viewDoc.value;
@@ -965,7 +1246,15 @@ const groupedApplications = computed(() => {
 // ── Create / Edit ─────────────────────────────────────────────────────────
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { supplier: "", posting_date: todayStr(), return_against: "", reason: "Vendor Overcharge", notes: "", cost_center: "" });
+ Object.assign(form, {
+  supplier: "",
+  posting_date: todayStr(),
+  return_against: "",
+  reason: "Vendor Overcharge",
+  incentive_amount: 0,
+  notes: "",
+  cost_center: ""
+});
   billSummary.data = null; billSummary.loading = false;
   dnTaxes.value = [];
   dnIsInterState.value = false;
@@ -975,6 +1264,7 @@ function openNew() {
   drawerOpen.value = true;
 }
 async function openEdit(d) {
+  incentive_amount: 0,
   editingName.value = d.name;
   dnTaxes.value = [];
   Object.assign(form, { supplier: d.supplier || "", posting_date: d.posting_date || todayStr(), return_against: d.return_against || "", reason: "Vendor Overcharge", notes: "", cost_center: "" });
@@ -1119,8 +1409,25 @@ async function onItemChange(line) {
     } catch {}
   }
 }
-function addLine() { lines.value.push(blankLine()); }
-function removeLine(id) { if (lines.value.length > 1) lines.value = lines.value.filter(l => l.id !== id); }
+function onReasonChange() {
+  if (form.reason === "Incentive") {
+    // Incentive debit notes do not require item lines
+    lines.value = [];
+  } else if (!lines.value.length) {
+    // Normal debit notes require at least one item line
+    lines.value = [blankLine()];
+  }
+}
+
+function addLine() {
+  lines.value.push(blankLine());
+}
+
+function removeLine(id) {
+  if (lines.value.length > 1) {
+    lines.value = lines.value.filter(l => l.id !== id);
+  }
+}
 function calcLine(l) {
   if (l.discount_percentage > 100) l.discount_percentage = 100;
   if (l.discount_percentage < 0) l.discount_percentage = 0;
@@ -1128,6 +1435,21 @@ function calcLine(l) {
   const disc = Math.round(base * flt(l.discount_percentage) / 100 * 100) / 100;
   l.discount_amount = disc;
   l.amount = base - disc;
+}
+function validateIncentiveAmount() {
+  let amount = flt(form.incentive_amount || 0);
+
+  if (amount < 0) {
+    amount = 0;
+  }
+
+  const max = incentiveMaxAmount.value;
+
+  if (max > 0 && amount > max) {
+    amount = max;
+  }
+
+  form.incentive_amount = Math.round(amount * 100) / 100;
 }
 async function fetchTaxTemplates() {
   try {
@@ -1149,18 +1471,53 @@ async function fetchTaxTemplates() {
 
 async function saveDN(submit) {
   if (!form.supplier) return toast.error("Vendor is required");
-  const activeLines = lines.value.filter(l => l.item_code && flt(l.qty) > 0);
-  if (!activeLines.length) return toast.error("At least one item with quantity > 0 is required");
+
+  const activeLines = lines.value.filter(
+    l => l.item_code && flt(l.qty) > 0
+  );
+
+  // Normal debit notes require at least one item.
+  // Incentive debit notes are item-less and use incentive_amount instead.
+  if (form.reason !== "Incentive" && !activeLines.length) {
+    return toast.error("At least one item with quantity > 0 is required");
+  }
+
+  if (form.reason === "Incentive") {
+  const amount = flt(form.incentive_amount || 0);
+  const billAmount = flt(billSummary.data?.grand_total || 0);
+
+  if (amount < 0) {
+    return toast.error("Incentive amount cannot be negative");
+  }
+
+  if (!billAmount) {
+    return toast.error("Please select a valid bill before entering an incentive");
+  }
+
+  if (amount > billAmount + 0.01) {
+    return toast.error(
+      `Incentive amount cannot exceed the bill amount of ${fmtCur(billAmount)}`
+    );
+  }
+}
   drawerSaving.value = true;
   try {
-    const itemsPayload = activeLines.map(l => ({
-      item_code: l.item_code, item_name: l.item_name || l.item_code,
+    const itemsPayload = form.reason === "Incentive"
+  ? []
+  : activeLines.map(l => ({
+      item_code: l.item_code,
+      item_name: l.item_name || l.item_code,
       description: l.description || l.item_name || l.item_code,
       hsn_code: l.hsn_code || "",
-      qty: flt(l.qty), rate: flt(l.rate), uom: l.uom || "Nos",
-      discount_percentage: flt(l.discount_percentage), discount_amount: flt(l.discount_amount),
-      amount: flt(l.amount), tax_code: l.tax_code || "",
-      batch_no: l.batch_no || "", batch_expiry_date: l.batch_expiry_date || "",
+      qty: flt(l.qty),
+      rate: flt(l.rate),
+      uom: l.uom || "Nos",
+      discount_percentage: flt(l.discount_percentage),
+      discount_amount: flt(l.discount_amount),
+      amount: flt(l.amount),
+      tax_code: l.tax_code || "",
+      batch_no: l.batch_no || "",
+      batch_expiry_date: l.batch_expiry_date || "",
     }));
     // IMPORTANT: build the tax payload from the CURRENT line items (each
     // taxed by its own tax_code), not the old dnTaxes snapshot inherited from
@@ -1168,9 +1525,21 @@ async function saveDN(submit) {
     // stayed the same size no matter how many items got removed here, so it
     // used to apply every original rate against whatever subtotal remained.
     const recomputedTaxes = dnTaxRows.value.map(t => ({ tax_type: t.account_head, description: t.description, rate: t.rate }));
-    const taxPayload = recomputedTaxes.length
-      ? recomputedTaxes
-      : (dnTaxes.value.length ? dnTaxes.value : dnTaxLines.value.map(tl => ({ tax_type: taxAccountHead.value, description: tl.description, rate: tl.rate })));
+    const taxPayload = form.reason === "Incentive"
+  ? []
+  : (
+      recomputedTaxes.length
+        ? recomputedTaxes
+        : (
+            dnTaxes.value.length
+              ? dnTaxes.value
+              : dnTaxLines.value.map(tl => ({
+                  tax_type: taxAccountHead.value,
+                  description: tl.description,
+                  rate: tl.rate
+                }))
+          )
+    );
     if (!editingName.value) {
       const r = await apiPOST("zoho_books_clone.api.docs.create_debit_note", {
         vendor: form.supplier,
@@ -1179,9 +1548,13 @@ async function saveDN(submit) {
         reason: form.reason,
         notes: form.notes || "",
         cost_center: form.cost_center || "",
+        incentive_amount: form.reason === "Incentive"
+          ? flt(form.incentive_amount || 0)
+          : 0,
         items: JSON.stringify(itemsPayload),
         taxes: JSON.stringify(taxPayload),
         draft_only: submit ? 0 : 1,
+        
       });
       toast.success(`Debit Note ${r?.debit_note || ""} ${submit ? "submitted" : "saved as draft"}`);
     } else {

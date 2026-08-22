@@ -247,6 +247,22 @@
    "options": "Purchase Invoice"
   },
   {
+ "fieldname": "debit_note_reason",
+ "fieldtype": "Select",
+ "label": "Debit Note Reason",
+ "options": "Vendor Overcharge\nGoods Returned\nDamaged Goods\nShort Delivery\nDuplicate Invoice\nIncentive\nOther",
+ "hidden": 1,
+ "read_only": 1
+},
+{
+    "fieldname": "incentive_amount",
+    "fieldtype": "Currency",
+    "label": "Incentive Amount",
+    "hidden": 1,
+    "read_only": 1
+},
+
+  {
    "fieldname": "remark",
    "fieldtype": "Small Text",
    "label": "Remark"
