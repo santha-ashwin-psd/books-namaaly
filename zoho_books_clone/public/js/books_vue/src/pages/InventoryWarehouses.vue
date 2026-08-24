@@ -625,6 +625,9 @@
             <div>
               <div style="font-size:13.5px;font-weight:700;color:#111827">{{ adjDrawer.item_name }}</div>
               <div style="font-size:11.5px;color:#6b7280;margin-top:2px;">{{ adjDrawer.item_code }}</div>
+              <div style="font-size:11.5px;color:#6b7280;margin-top:2px;">
+  UOM: <strong style="color:#374151">{{ adjDrawer.item_uom || 'Nos' }}</strong>
+</div>
             </div>
             <div style="margin-left:auto;text-align:right">
               <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em">{{ adjDrawer.batch_no ? 'Current Batch Qty' : 'Current Qty' }}</div>
@@ -882,7 +885,7 @@ const filterDDOpen   = ref(false);
 
 const adjDrawer = reactive({
   open: false, saving: false, pick_item: false,
-  item_code: "", item_name: "", warehouse: "",
+  item_code: "", item_name: "", item_uom: "", warehouse: "",
   current_qty: 0, new_qty: "", reason: "", notes: "",
   batch_no: "", item_total_qty: 0, pickedHasBatch: false,
 });
@@ -1250,7 +1253,13 @@ function printStockPdf() {
 }
 
 async function loadItems() {
-  try { allItems.value = await apiList("Item", { fields: ["name","item_name","has_batch_no"], limit: 100000, order: "item_name asc" }) || []; }
+  try { 
+  allItems.value = await apiList("Item", { 
+    fields: ["name","item_name","has_batch_no","stock_uom"], 
+    limit: 100000, 
+    order: "item_name asc" 
+  }) || []; 
+}
   catch {}
 }
 
@@ -1322,6 +1331,7 @@ watch(() => adjDrawer.item_code, (code) => {
   if (!adjDrawer.pick_item || !code) return;
   const it = allItems.value.find((i) => i.name === code);
   adjDrawer.item_name = it?.item_name || code;
+  adjDrawer.item_uom = it?.stock_uom || "Nos";
   adjDrawer.pickedHasBatch = !!it?.has_batch_no;
   const row = stockItems.value.find((r) => r.item_code === code);
   adjDrawer.current_qty = row ? flt(row.actual_qty) : 0;

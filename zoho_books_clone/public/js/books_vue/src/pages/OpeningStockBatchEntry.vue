@@ -163,9 +163,24 @@
           <div v-for="(line, idx) in lines" :key="line.id" class="ob-line-card">
             <div class="ob-line-row">
               <div class="ob-line-field" style="flex:2.2">
-                <label class="ob-label">Item</label>
-                <SearchableSelect v-model="line.item_code" :options="items" placeholder="Item…" @search="fetchItems" @select="opt=>onItemSelect(line,opt)" />
-              </div>
+  <label class="ob-label">Item</label>
+  <SearchableSelect
+    v-model="line.item_code"
+    :options="items"
+    placeholder="Item…"
+    @search="fetchItems"
+    @select="opt=>onItemSelect(line,opt)"
+  />
+</div>
+
+<div class="ob-line-field" style="flex:.8">
+  <label class="ob-label">UOM</label>
+  <input
+    :value="line.stock_uom || 'Nos'"
+    class="ob-input"
+    readonly
+  />
+</div>
               <div class="ob-line-field" style="flex:1.6">
                 <label class="ob-label">Warehouse</label>
                 <SearchableSelect v-model="line.t_warehouse" :options="warehouses" placeholder="Warehouse…" @search="fetchWarehouses" :compact="true"/>
@@ -222,9 +237,24 @@
               <button @click="removeLine(line.id)" class="ob-rm-line ob-rm-line-sm"><span v-html="icon('x',12)"></span></button>
             </div>
             <div class="ob-aic-field">
-              <label class="ob-label">Item</label>
-              <SearchableSelect v-model="line.item_code" :options="items" placeholder="Item…" @search="fetchItems" @select="opt=>onItemSelect(line,opt)" />
-            </div>
+  <label class="ob-label">Item</label>
+  <SearchableSelect
+    v-model="line.item_code"
+    :options="items"
+    placeholder="Item…"
+    @search="fetchItems"
+    @select="opt=>onItemSelect(line,opt)"
+  />
+</div>
+
+<div class="ob-aic-field">
+  <label class="ob-label">UOM</label>
+  <input
+    :value="line.stock_uom || 'Nos'"
+    class="ob-input"
+    readonly
+  />
+</div>
             <div class="ob-aic-field">
               <label class="ob-label">Warehouse</label>
               <SearchableSelect v-model="line.t_warehouse" :options="warehouses" placeholder="Warehouse…" @search="fetchWarehouses" />
@@ -357,7 +387,7 @@ const items        = ref([]);
 const lines        = ref([]);
 let _id = 1;
 const blankLine = () => ({
-  id: _id++, item_code: "", item_name: "", qty: 1, basic_rate: 0,
+  id: _id++, item_code: "", item_name: "", qty: 1, basic_rate: 0,stock_uom: "",
   t_warehouse: "", batch_no: "", manufacturing_date: "", expiry_date: "",
   has_batch_no: 0, batchOptions: [],
 });
@@ -498,9 +528,18 @@ async function fetchWarehouses(q = "") {
 }
 async function fetchItems(q = "") {
   try {
-    const r = await apiLinkValues("Item", q);
-    items.value = r.map(x => ({ label: x.name, value: x.name }));
-  } catch { items.value = []; }
+    const r = await apiList("Item", {
+      fields: ["name", "item_name"],
+      filters: q ? [["name", "like", `%${q}%`]] : [],
+      limit: 20,
+    });
+    items.value = r.map(x => ({
+      label: x.item_name ? `${x.name} — ${x.item_name}` : x.name,
+      value: x.name,
+    }));
+  } catch {
+    items.value = [];
+  }
 }
 async function fetchBatches(line, q = "") {
   if (!line.item_code) { line.batchOptions = []; return; }
@@ -542,12 +581,13 @@ async function onItemSelect(line, opt) {
   if (!line.item_code) return;
   try {
     const r = await apiList("Item", {
-      fields: ["name", "item_name", "standard_buying_rate", "standard_rate", "has_batch_no"],
+      fields: ["name", "item_name", "standard_buying_rate", "standard_rate", "has_batch_no", "stock_uom"],
       filters: [["name", "=", line.item_code]], limit: 1,
     });
     const it = r && r[0];
     if (it) {
       line.item_name = it.item_name || line.item_code;
+      line.stock_uom = it.stock_uom || "";
       line.has_batch_no = it.has_batch_no ? 1 : 0;
       if (!flt(line.basic_rate)) line.basic_rate = flt(it.standard_buying_rate) || flt(it.standard_rate) || 0;
       // Item changed — whatever batch/dates were on the line belonged to the
@@ -594,6 +634,7 @@ async function openEdit(e) {
         const line = {
           id: _id++, item_code: it.item_code || "", item_name: it.item_name || it.item_code || "",
           qty: flt(it.qty) || 1, basic_rate: flt(it.basic_rate) || 0,
+          stock_uom: it.stock_uom || "",
           t_warehouse: it.t_warehouse || "", batch_no: it.batch_no || "",
           manufacturing_date: "", expiry_date: "", has_batch_no: 0, batchOptions: [],
         };

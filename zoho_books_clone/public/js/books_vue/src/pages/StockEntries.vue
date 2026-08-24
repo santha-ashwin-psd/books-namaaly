@@ -232,7 +232,21 @@
           </div>
           <div v-for="line in lines" :key="line.id" class="se-items-line">
             <div class="se-items-row">
-              <div><SearchableSelect v-model="line.item_code" :options="items" placeholder="Item…" @search="fetchItems" @select="opt=>onItemSelect(line,opt)" /></div>
+              <div>
+  <SearchableSelect
+    v-model="line.item_code"
+    :options="items"
+    placeholder="Item…"
+    @search="fetchItems"
+    @select="opt=>onItemSelect(line,opt)"
+  />
+  <div
+    v-if="line.item_code"
+    style="font-size:11px;color:#6b7280;margin-top:4px;margin-left:2px;"
+  >
+    UOM: {{ line.stock_uom || 'Nos' }}
+  </div>
+</div>
               <div><input v-model.number="line.qty" type="number" min="0" step="0.001" class="se-input ta-r" /></div>
               <div><input v-model.number="line.basic_rate" type="number" min="0" step="0.01" class="se-input ta-r" /></div>
               <div><button @click="removeLine(line.id)" class="se-rm-line"><span v-html="icon('x',12)"></span></button></div>
@@ -278,7 +292,19 @@
             </div>
             <div class="se-aic-field">
               <label class="se-label">Item</label>
-              <SearchableSelect v-model="line.item_code" :options="items" placeholder="Item…" @search="fetchItems" @select="opt=>onItemSelect(line,opt)" />
+              <SearchableSelect
+  v-model="line.item_code"
+  :options="items"
+  placeholder="Item…"
+  @search="fetchItems"
+  @select="opt=>onItemSelect(line,opt)"
+/>
+<div
+  v-if="line.item_code"
+  style="font-size:11px;color:#6b7280;margin-top:4px;margin-left:2px;"
+>
+  UOM: {{ line.stock_uom || 'Nos' }}
+</div>
             </div>
             <div class="se-aic-row2">
               <div class="se-aic-field">
@@ -580,7 +606,7 @@ const sortDir     = ref("desc");
 let _id = 1;
 const blankLine = () => ({
   id: _id++, item_code: "", qty: 1, basic_rate: 0, s_warehouse: "", t_warehouse: "",
-  has_batch_no: 0, batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
+  has_batch_no: 0, stock_uom: "", batch_no: "", manufacturing_date: "", expiry_date: "", batchOptions: [],
 });
 
 const form = reactive({
@@ -840,11 +866,12 @@ async function onItemSelect(line, opt) {
   line.item_code = opt?.value ?? opt;
   if (!line.item_code) return;
   try {
-    const r = await apiList("Item", { fields: ["name", "standard_buying_rate", "standard_rate", "has_batch_no"], filters: [["name", "=", line.item_code]], limit: 1 });
+    const r = await apiList("Item", { fields: ["name", "standard_buying_rate", "standard_rate", "has_batch_no", "stock_uom"], filters: [["name", "=", line.item_code]], limit: 1 });
     const it = r && r[0];
     if (it) {
-      if (!flt(line.basic_rate)) line.basic_rate = flt(it.standard_buying_rate) || flt(it.standard_rate) || 0;
-      line.has_batch_no = it.has_batch_no ? 1 : 0;
+  if (!flt(line.basic_rate)) line.basic_rate = flt(it.standard_buying_rate) || flt(it.standard_rate) || 0;
+  line.has_batch_no = it.has_batch_no ? 1 : 0;
+  line.stock_uom = it.stock_uom || "";
       // Item changed — whatever batch/dates were on the line belonged to the
       // previous item and must not ride along, whether the new item is
       // batch-tracked or not.
@@ -895,8 +922,9 @@ async function openEdit(e, { force = false } = {}) {
           has_batch_no: 0, batch_no: it.batch_no || "", manufacturing_date: "", expiry_date: "", batchOptions: [],
         };
         try {
-          const r = await apiList("Item", { fields: ["name", "has_batch_no"], filters: [["name", "=", line.item_code]], limit: 1 });
+          const r = await apiList("Item", { fields: ["name", "has_batch_no", "stock_uom"], filters: [["name", "=", line.item_code]], limit: 1 });
           line.has_batch_no = r?.[0]?.has_batch_no ? 1 : 0;
+line.stock_uom = r?.[0]?.stock_uom || "";
         } catch {}
         if (line.has_batch_no && line.batch_no) {
           try {

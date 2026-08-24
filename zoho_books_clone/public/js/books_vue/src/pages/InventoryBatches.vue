@@ -160,10 +160,29 @@
           <input v-model="form.batch_no" class="bt-input" :disabled="!!editingName" placeholder="Leave blank to auto-generate (Item Code-Year-Sequence)" />
         </div>
 
-        <div class="bt-form-fld">
-          <label class="bt-form-lbl">Item <span class="req">*</span></label>
-          <SearchableSelect v-model="form.item" :options="formItemOptions" placeholder="Select item" :disabled="!!editingName" @search="fetchFormItems" />
-        </div>
+        <div class="bt-form-row">
+  <div class="bt-form-fld">
+    <label class="bt-form-lbl">Item <span class="req">*</span></label>
+    <SearchableSelect
+      v-model="form.item"
+      :options="formItemOptions"
+      placeholder="Select item"
+      :disabled="!!editingName"
+      @search="fetchFormItems"
+      @select="onFormItemSelect"
+    />
+  </div>
+
+  <div class="bt-form-fld">
+    <label class="bt-form-lbl">UOM</label>
+    <input
+      :value="form.stock_uom || '—'"
+      class="bt-input"
+      readonly
+    />
+  </div>
+</div>
+
 
         <div class="bt-form-row">
           <div class="bt-form-fld">
@@ -239,8 +258,8 @@ const filters = reactive({ item: "", warehouse: "" });
 
 const drawerOpen = ref(false), editingName = ref(null), saving = ref(false);
 const emptyForm = () => ({
-  batch_no: "", item: "", warehouse: "", manufacturing_date: "",
-  expiry_date: "", supplier: "", disabled: false, batch_qty: 0, add_qty: 0,
+  batch_no: "", item: "", stock_uom: "", warehouse: "", manufacturing_date: "",
+  expiry_date: "", supplier: "", disabled: 0, add_qty: 0,
 });
 const form = reactive(emptyForm());
 
@@ -478,9 +497,42 @@ async function fetchFormItems(q = "") {
   try {
     const f = [["has_batch_no", "=", 1]];
     if (q) f.push(["name", "like", `%${q}%`]);
-    const r = await apiList("Item", { fields: ["name", "item_name"], filters: f, limit: 20 });
-    formItemOptions.value = r.map(x => ({ label: x.item_name ? `${x.name} — ${x.item_name}` : x.name, value: x.name }));
-  } catch { formItemOptions.value = []; }
+
+    const r = await apiList("Item", {
+      fields: ["name", "item_name", "stock_uom"],
+      filters: f,
+      limit: 20
+    });
+
+    formItemOptions.value = r.map(x => ({
+      label: x.item_name ? `${x.name} — ${x.item_name}` : x.name,
+      value: x.name,
+      stock_uom: x.stock_uom || ""
+    }));
+  } catch {
+    formItemOptions.value = [];
+  }
+}
+async function onFormItemSelect(opt) {
+  form.item = opt?.value ?? opt ?? "";
+  form.stock_uom = "";
+
+  if (!form.item) {
+    form.stock_uom = "";
+    return;
+  }
+
+  try {
+    const r = await apiList("Item", {
+      fields: ["name", "stock_uom"],
+      filters: [["name", "=", form.item]],
+      limit: 1,
+    });
+
+    form.stock_uom = r?.[0]?.stock_uom || "";
+  } catch {
+    form.stock_uom = "";
+  }
 }
 async function fetchWarehouses(q = "") {
   try {
