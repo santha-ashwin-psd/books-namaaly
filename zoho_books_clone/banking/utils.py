@@ -2,6 +2,24 @@ from __future__ import annotations
 import frappe
 from frappe.utils import flt
 
+# Bank Transaction.description is a Data field -- Frappe hard-caps those at
+# 140 characters and raises CharacterLengthExceededError on insert() rather
+# than truncating for you. Keep a couple of chars of margin.
+_DESCRIPTION_MAX_LEN = 140
+
+
+def _clip_description(text):
+    """Trim text to fit Bank Transaction.description's 140-char Data field
+    limit, appending an ellipsis when it had to cut anything so it's obvious
+    on screen that this is a shortened copy -- the full text always still
+    lives on the source Payment/Journal Entry's own (unlimited-length)
+    remarks field.
+    """
+    text = text or ""
+    if len(text) <= _DESCRIPTION_MAX_LEN:
+        return text
+    return text[: _DESCRIPTION_MAX_LEN - 1].rstrip() + "…"
+
 
 def create_bank_transaction_row(
     bank_account_gl, date, credit, debit, company,
@@ -68,7 +86,15 @@ def create_bank_transaction_row(
         "credit":           flt(credit),   # Bank statement convention: credit = money IN
         "debit":            flt(debit),    # Bank statement convention: debit  = money OUT
         "currency":         currency or "INR",
-        "description":      description,
+        # description is a Data field -- Frappe hard-caps those at 140 chars
+        # and insert() throws (rather than silently truncating) if exceeded.
+        # A payment covering many invoices/bills can easily build a longer
+        # remarks string upstream (e.g. "Payment against INV-1, INV-2, ...")
+        # -- truncate defensively here so that never blocks the Bank
+        # Transaction mirror from being created. The full, untruncated text
+        # always still lives on the source Payment/Journal Entry's own
+        # remarks field, which has no such length limit.
+        "description":      _clip_description(description),
         "reference_number": reference_number,
         "payment_entry":    payment_entry,
         "journal_entry":    journal_entry,

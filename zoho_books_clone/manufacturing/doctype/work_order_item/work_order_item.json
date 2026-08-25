@@ -108,6 +108,14 @@
    "description": "Comma-separated list of the sub-assembly BOM(s) this row's material was exploded from, if any. Set automatically when loading materials from a BOM; used to group the raw materials list by sub-assembly on screen and in print. Hidden -- not meant for manual editing."
   },
   {
+   "fieldname": "sub_assembly_qty_breakdown",
+   "fieldtype": "Small Text",
+   "label": "Sub-Assembly Qty Breakdown",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "JSON list of {bom, qty} showing how much of this row's required_qty came from each sub-assembly BOM listed in sub_assembly_boms (or bom:\"\" for the portion required directly on the top BOM). The row itself stays merged into one stock-consumption line (see _merge_duplicate_rows) -- this field only lets the Work Order UI show each sub-assembly's correct portion instead of lumping shared rows into one ambiguous group. Hidden -- not meant for manual editing."
+  },
+  {
    "fieldname": "sec_substitution",
    "fieldtype": "Section Break",
    "label": "Substitution"

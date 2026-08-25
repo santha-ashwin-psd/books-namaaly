@@ -238,6 +238,7 @@ function _renderClassic(doc, cfg) {
   hr.sep{border:none;border-top:1px solid #1c1c1c;margin:16px 0}
   /* Billing / Shipping address table */
   .addr-table{display:flex;width:100%;border:1.3px solid #1c1c1c;margin:10px 0 16px;font-family:Arial,sans-serif}
+  .addr-table.has-dispatch{margin-bottom:0}
   .addr-col{flex:1;min-width:0;width:50%}
   .addr-col+.addr-col{border-left:1.3px solid #1c1c1c}
   .addr-h{font-size:12px;font-weight:700;color:#111;padding:8px 12px;border-bottom:1.3px solid #1c1c1c}
@@ -248,6 +249,13 @@ function _renderClassic(doc, cfg) {
   .addr-body-split{display:flex}
   .addr-body-left{flex:1;min-width:0;padding:10px 12px}
   .addr-body-right{flex:1;min-width:0;padding:10px 12px;border-left:1.3px solid #1c1c1c}
+  /* Dispatch details table -- separate row directly under Billing/Shipping,
+     not squeezed into the Shipping Address column */
+  .dispatch-table{display:flex;width:100%;border:1.3px solid #1c1c1c;border-top:none;margin:0 0 16px;font-family:Arial,sans-serif}
+  .dispatch-cell{flex:1;min-width:0;padding:8px 12px}
+  .dispatch-cell+.dispatch-cell{border-left:1.3px solid #1c1c1c}
+  .dispatch-lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555;margin-bottom:2px}
+  .dispatch-val{font-size:12px;color:#111;font-weight:600}
   /* Table */
   table.it{width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;margin-top:4px;border:1.3px solid #1c1c1c}
   table.it th{background:#fff;color:#111;padding:8px 9px;font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;text-align:left;border:none;border-bottom:1.5px solid #1c1c1c;border-right:1px solid #1c1c1c;white-space:nowrap}
@@ -331,11 +339,8 @@ function _renderClassic(doc, cfg) {
     const companyNm = doc.customer_company_name || doc.supplier_company_name || "";
     const dispatchedThrough = doc.dispatched_through || "";
     const destination = doc.destination || "";
-    const dispatchExtra = (dispatchedThrough || destination) ? `
-      ${dispatchedThrough ? `<div class="addr-ln"><b>Dispatched Through :</b> ${_esc(dispatchedThrough)}</div>` : ""}
-      ${destination ? `<div class="addr-ln"><b>Destination :</b> ${_esc(destination)}</div>` : ""}
-    ` : "";
-    const col = (label, lines, extra) => {
+    const hasDispatch = !!(dispatchedThrough || destination);
+    const col = (label, lines) => {
       const bodyInner = `
           ${contactNm ? `<div class="addr-ct">${_esc(contactNm)}</div>` : ""}
           <div class="addr-nm">${_esc(party)}</div>
@@ -343,17 +348,25 @@ function _renderClassic(doc, cfg) {
           ${lines.map(l => `<div class="addr-ln">${_esc(l)}</div>`).join("")}
           ${gstin ? `<div class="addr-ln"><b>GSTIN :</b> ${_esc(gstin)}</div>` : ""}
           ${phone ? `<div class="addr-ln"><b>Phone :</b> ${_esc(phone)}</div>` : ""}`;
-      const body = extra
-        ? `<div class="addr-body addr-body-split"><div class="addr-body-left">${bodyInner}</div><div class="addr-body-right">${extra}</div></div>`
-        : `<div class="addr-body">${bodyInner}</div>`;
       return `
       <div class="addr-col">
         <div class="addr-h">${label}</div>
-        ${body}
+        <div class="addr-body">${bodyInner}</div>
       </div>`;
     };
     if (!billLines.length && !shipLines.length && !gstin && !phone && !companyNm) return "";
-    return `<div class="addr-table">${col("Billing Address", billLines)}${col("Shipping Address", shipLines, dispatchExtra)}</div>`;
+    const dispatchTable = hasDispatch ? `
+      <div class="dispatch-table">
+        <div class="dispatch-cell">
+          <div class="dispatch-lbl">Dispatched Through</div>
+          <div class="dispatch-val">${dispatchedThrough ? _esc(dispatchedThrough) : "&mdash;"}</div>
+        </div>
+        <div class="dispatch-cell">
+          <div class="dispatch-lbl">Destination</div>
+          <div class="dispatch-val">${destination ? _esc(destination) : "&mdash;"}</div>
+        </div>
+      </div>` : "";
+    return `<div class="addr-table${hasDispatch ? " has-dispatch" : ""}">${col("Billing Address", billLines)}${col("Shipping Address", shipLines)}</div>${dispatchTable}`;
   })()}
   <table class="it">
     <thead><tr>

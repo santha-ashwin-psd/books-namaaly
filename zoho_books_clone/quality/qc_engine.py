@@ -621,6 +621,12 @@ def auto_create_qc_for_purchase_invoice(doc, method=None):
     (see _stamp_qc_target_warehouse) with that normally-resolved warehouse
     before that override happens, so it's on record for Phase 3's release.
     """
+    if not flt(getattr(doc, "update_stock", 0)):
+        # No stock movement on this submission (e.g. every Debit Note
+        # reason except "Goods Returned", including Incentive's synthetic
+        # placeholder item row) -- nothing to quarantine or inspect.
+        # Mirrors the same guard added to doc_requires_qc.
+        return
     _auto_create_qc_for_rows(
         doc,
         flag_field="inspection_required_before_purchase",
@@ -922,6 +928,19 @@ def doc_requires_qc(doc) -> bool:
     if doc.doctype == "Stock Entry":
         if getattr(doc, "stock_entry_type", "") != "Manufacture":
             return False
+
+    if doc.doctype == "Purchase Invoice" and not flt(getattr(doc, "update_stock", 0)):
+        # Mirrors stock_link.on_purchase_invoice_submit's own check (both
+        # its _resolve_bin_and_track and _stock_rows early-return when
+        # update_stock is falsy): this submission moves no physical stock,
+        # so there is nothing for QC to gate. Without this, every Debit
+        # Note routed through this same doctype (is_return=1,
+        # update_stock=0 for every reason except "Goods Returned") got
+        # blocked here too -- most visibly Incentive debit notes, which
+        # carry a synthetic single-item placeholder row (Purchase Invoice
+        # requires >=1 item) purely to satisfy that framework constraint,
+        # not a real incoming receipt of that item.
+        return False
 
     flag_field = _ITEM_FLAG_FOR_INSPECTION_TYPE.get(inspection_type)
     if not flag_field:

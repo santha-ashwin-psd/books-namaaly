@@ -310,39 +310,46 @@
               <div class="bomx-rm-cards">
                 <div v-if="!wo.items || !wo.items.length" class="bomx-tree-empty">No raw materials yet. Select a BOM and click "Load / Refresh Materials from BOM".</div>
                 <template v-for="grp in groupedWoItems" :key="grp.key">
+                  <template v-if="!grp.hidden">
                   <div class="bomx-rm-group-hdr">
                     <span v-if="grp.subAssembly" class="bomx-link" @click="router.push(`/manufacturing/bom/${grp.subAssembly}`)">🧩 {{ grp.label }}</span>
                     <span v-else>{{ grp.label }}</span>
                     <span class="bomx-count">({{ grp.rows.length }})</span>
                   </div>
-                <div class="bomx-rm-card" v-for="{ rm, idx } in grp.rows" :key="idx">
+                <div class="bomx-rm-card" v-for="{ rm, idx, qtyOverride, isShared, sharedWith, breakdown } in grp.rows" :key="idx + '-' + grp.key">
                   <div class="bomx-rm-card-hdr">
                     <span class="bomx-tree-icon">📦</span>
                     <span class="bomx-rm-card-title" style="font-weight:600">{{ rm.item_code || 'New Row' }}</span>
                     <span v-if="rm.is_scrap_row" class="bomx-badge" style="background:#ecfdf5;color:#047857;font-size:10px" :title="'Split off from ' + rm.original_item_code + ' as a scrap-reuse row'">From Scrap</span>
                     <span v-else-if="flt(rm.scrap_reused_qty) > 0" class="bomx-badge" style="background:#ecfdf5;color:#047857;font-size:10px" :title="scrapBreakdownTooltip(rm)">Partly from Scrap</span>
                     <span v-else-if="rm.is_substituted" class="bomx-badge" style="background:#eef2ff;color:#4338ca;font-size:10px" :title="'Substituted from ' + rm.original_item_code">Substituted</span>
+                    <span v-if="grp.key==='__shared__'" class="bomx-badge" style="background:#fff7ed;color:#c2410c;font-size:10px" :title="'Also required by: ' + sharedWith.join(', ')">Shared ({{ sharedWith.length }})</span>
+                    <span v-else-if="isShared" class="bomx-badge" style="background:#f1f5f9;color:#475569;font-size:10px" title="Read-only reference. This material's total qty is edited once in the Shared Materials group below.">Reference only</span>
                     <div style="flex:1"></div>
-                    <button v-if="readOnly && wo.docstatus===1 && !rm.is_scrap_row && !flt(rm.consumed_qty) && rm.name" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canEdit('inventory')" @click="openSubstitute(rm)" :title="!$canEdit('inventory') ? 'Read-only access' : 'Substitute or reuse scrap against this material'">Substitute</button>
-                    <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
+                    <button v-if="readOnly && wo.docstatus===1 && !rm.is_scrap_row && !flt(rm.consumed_qty) && rm.name && grp.key==='__shared__'" class="bomx-btn bomx-btn-sm bomx-btn-light" style="color:var(--bx-mfgB);border:1px solid var(--bx-mfg)" :disabled="!$canEdit('inventory')" @click="openSubstitute(rm)" :title="!$canEdit('inventory') ? 'Read-only access' : 'Substitute or reuse scrap against this material'">Substitute</button>
+                    <button v-if="!readOnly && (grp.key==='__shared__' || !isShared)" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
+                  </div>
+                  <div v-if="grp.key==='__shared__' && breakdown" class="bomx-field-hint" style="margin-bottom:6px">
+                    Made up of: {{ sharedWith.map(s => `${s}: ${fmtQty(breakdown.has(s) ? breakdown.get(s) : 0)}`).join(' + ') }}
                   </div>
                   <div class="bomx-rm-card-body bomx-rm-card-body-3col">
                     <div class="bomx-rm-field bomx-rm-field-wide">
                       <label>Item Code</label>
-                      <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly" @change="refreshRackForRow(rm)">
+                      <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly || (isShared && grp.key!=='__shared__')" @change="refreshRackForRow(rm)">
                         <option value="">— Select —</option>
                         <option v-for="i in rawMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
                       </select>
                     </div>
                     <div class="bomx-rm-field">
-                      <label>Required Qty</label>
-                      <input class="bomx-fi bomx-fi-mono" type="number" v-model="rm.required_qty" min="0" step="any" :disabled="readOnly"/>
+                      <label>{{ isShared && grp.key!=='__shared__' ? 'Qty for this Sub-Assembly' : 'Required Qty (Total)' }}</label>
+                      <input v-if="grp.key==='__shared__' || !isShared" class="bomx-fi bomx-fi-mono" type="number" v-model="rm.required_qty" min="0" step="any" :disabled="readOnly"/>
+                      <div v-else class="bomx-rm-static" :title="'Total for this shared row across all sub-assemblies: ' + fmtQty(rm.required_qty) + '. Edited once in the Shared Materials group below.'">{{ qtyOverride != null ? fmtQty(qtyOverride) : '—' }}</div>
                     </div>
                     <div class="bomx-rm-field">
                       <label>Source Warehouse</label>
-                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="!warehousesEditable" @change="refreshRackForRow(rm)">
+                      <select class="bomx-fi" v-model="rm.source_warehouse" :disabled="!warehousesEditable || (isShared && grp.key!=='__shared__')" @change="refreshRackForRow(rm)">
                         <option value="">— Use Default —</option>
                         <option v-for="w in warehouseList" :key="w.name" :value="w.name">{{ w.name }}</option>
                       </select>
@@ -361,6 +368,7 @@
                     </div>
                   </div>
                 </div>
+                </template>
                 </template>
               </div>
 
@@ -1645,6 +1653,10 @@ async function loadFromBom() {
       // the API returns an array, so join it here. Parsed back into an
       // array by groupedWoItems() below wherever it's read for display.
       sub_assembly_boms: (i.sub_assembly_boms || []).join(","),
+      // Small Text field can only hold a plain string -- API returns a list
+      // of {bom, qty}. JSON-encoded here, parsed back by groupedWoItems()
+      // below wherever it's read for display.
+      sub_assembly_qty_breakdown: JSON.stringify(i.sub_assembly_qty_breakdown || []),
       // use per-row source_warehouse from BOM Item if set, else fall back to
       // the default source warehouse coming from Manufacturing Settings
       source_warehouse: i.source_warehouse || r.default_source_warehouse || "",
@@ -1695,14 +1707,44 @@ const materialsStale = computed(() => {
   return Math.abs(flt(wo.value.qty) - flt(wo.value.items_loaded_for_qty)) > tolerance;
 });
 
+// Parses a row's sub_assembly_qty_breakdown ("[{bom,qty},...]" JSON text,
+// or already an array straight off the API) into a Map(origin -> qty).
+// Returns null if unparseable/empty so callers can fall back cleanly for
+// legacy rows saved before this field existed.
+function parseQtyBreakdown(rm) {
+  const raw = rm.sub_assembly_qty_breakdown;
+  let list = raw;
+  if (typeof raw === "string") {
+    if (!raw) return null;
+    try { list = JSON.parse(raw); } catch (e) { return null; }
+  }
+  if (!Array.isArray(list) || !list.length) return null;
+  const m = new Map();
+  list.forEach(({ bom, qty }) => m.set(bom || "", flt(qty)));
+  return m;
+}
+
 // Groups the (already merged, still consumption-correct) Work Order raw
 // materials by which sub-assembly BOM they were exploded from, mirroring
 // the same grouping added to BOM.vue's Components tab. Backend tags each
 // merged row with sub_assembly_boms: [] (direct on the BOM), [oneBom]
 // (came only from that sub-assembly), or multiple entries if the same
 // item+warehouse combo was pulled in from more than one sub-assembly (or
-// both a sub-assembly and the top BOM directly) — those go in a "Shared /
-// Multiple Sub-Assemblies" group since they can't be attributed to just one.
+// both a sub-assembly and the top BOM directly).
+//
+// A shared row still has to stay ONE stock-consumption line (see
+// _merge_duplicate_rows), but it's placed once under EACH sub-assembly it
+// belongs to -- using sub_assembly_qty_breakdown to show that
+// sub-assembly's own correct portion (qtyOverride), so the person doing the
+// process reads the right qty for the sub-assembly in front of them. These
+// per-sub-assembly placements are READ-ONLY REFERENCES ONLY (never the
+// editable total -- there's no single "primary" occurrence among them,
+// since none of them individually represents the whole row). The one
+// actually-editable copy of the row (full item/qty/warehouse, tied to the
+// real merged required_qty) lives once in the separate "Shared Materials"
+// group below, alongside its own breakdown so it's clear what the total is
+// made of. Legacy rows with no breakdown data fall back to only appearing
+// in that Shared Materials group, same as before this field existed.
 const groupedWoItems = computed(() => {
   const items = wo.value.items || [];
   const direct = [];
@@ -1714,7 +1756,19 @@ const groupedWoItems = computed(() => {
     if (origins.length === 0) {
       direct.push({ rm, idx });
     } else if (origins.length > 1) {
-      shared.push({ rm, idx });
+      const breakdown = parseQtyBreakdown(rm);
+      shared.push({ rm, idx, sharedWith: origins, breakdown });
+      if (breakdown) {
+        origins.forEach((sub) => {
+          if (!bySub.has(sub)) bySub.set(sub, []);
+          bySub.get(sub).push({
+            rm, idx,
+            qtyOverride: breakdown.has(sub) ? breakdown.get(sub) : null,
+            isShared: true,
+            sharedWith: origins,
+          });
+        });
+      }
     } else {
       const sub = origins[0];
       if (!bySub.has(sub)) bySub.set(sub, []);
@@ -1722,12 +1776,18 @@ const groupedWoItems = computed(() => {
     }
   });
   const groups = [];
-  if (direct.length) groups.push({ key: "__direct__", label: "Direct Raw Materials", subAssembly: null, rows: direct });
-  [...bySub.keys()].sort().forEach((sub) => {
+  // Sub-assembly groups first, in the order their sub-assembly BOM was
+  // first encountered while exploding the top BOM (bySub is a Map, so
+  // insertion order already matches that) -- then Direct Raw Materials
+  // last, so the print/screen order matches the order sub-assemblies are
+  // actually built in: first sub-assembly's materials, then the second's,
+  // then whatever's needed directly on the top-level BOM.
+  [...bySub.keys()].forEach((sub) => {
     const bomMeta = bomList.value.find(b => b.name === sub);
     groups.push({ key: sub, label: bomMeta ? `${sub} — ${bomMeta.item_name}` : sub, subAssembly: sub, rows: bySub.get(sub) });
   });
-  if (shared.length) groups.push({ key: "__shared__", label: "Shared / Multiple Sub-Assemblies", subAssembly: null, rows: shared });
+  if (direct.length) groups.push({ key: "__direct__", label: "Direct Raw Materials", subAssembly: null, rows: direct });
+  if (shared.length) groups.push({ key: "__shared__", label: "Shared Materials (combined qty across sub-assemblies)", subAssembly: null, rows: shared, hidden: true });
   // If nothing has origin info at all (e.g. an older WO saved before this
   // tagging existed), just fall back to one flat, unlabeled group so nothing
   // regresses for pre-existing data.
@@ -2060,21 +2120,27 @@ function itemUom(code) {
 }
 
 function printWorkOrder() {
-  const groups = groupedWoItems.value;
+  const groups = groupedWoItems.value.filter(g => !g.hidden);
   const groupHtml = (grp) => `
         <tr><td colspan="8" style="background:#EEF2FF;font-weight:700;color:#3730a3;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 10px;border-top:2px solid #C7D2FE">${esc(grp.label)}</td></tr>
-        ${grp.rows.map(({ rm }) => {
-          const required = flt(rm.required_qty);
+        ${grp.rows.map(({ rm, qtyOverride, isShared }) => {
+          // For a shared row (same item pulled in by more than one
+          // sub-assembly), print this sub-assembly's own portion instead
+          // of the row's full combined total -- transferred/needed can't
+          // be meaningfully split per sub-assembly since they're tracked
+          // once on the underlying merged stock row, so those columns are
+          // left blank here rather than showing a misleading number.
+          const required = isShared ? qtyOverride : flt(rm.required_qty);
           const transferred = flt(rm.transferred_qty);
-          const needed = Math.max(required - transferred, 0);
+          const needed = isShared ? null : Math.max(required - transferred, 0);
           return `
         <tr>
           <td>${esc(rm.item_code)}</td>
           <td>${esc(itemLabel(rm.item_code))}</td>
           <td>${esc(itemUom(rm.item_code) || "—")}</td>
           <td style="text-align:right">${esc(fmtQty(required))}</td>
-          <td style="text-align:right">${esc(fmtQty(transferred))}</td>
-          <td style="text-align:right;font-weight:700">${esc(fmtQty(needed))}</td>
+          <td style="text-align:right">${isShared ? "—" : esc(fmtQty(transferred))}</td>
+          <td style="text-align:right;font-weight:700">${isShared ? "—" : esc(fmtQty(needed))}</td>
           <td>${esc(rm.source_warehouse || wo.value.source_warehouse || "—")}</td>
           <td>${esc(rm.rack_no || "—")}</td>
         </tr>`;

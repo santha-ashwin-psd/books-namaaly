@@ -482,6 +482,13 @@
             </div>
 
             <div v-if="viewLoading" style="text-align:center;padding:24px;color:#6b7280;font-size:13px">Loading…</div>
+            <template v-else-if="viewReason === 'Incentive'">
+              <div class="inv-sec-lbl">Incentive</div>
+              <div style="padding:16px;background:#f9fafb;border-radius:8px;color:#374151;font-size:13px">
+                This is a goodwill incentive credit of {{ fmtCur(Math.abs(viewDoc.grand_total||0)) }} issued against
+                <DocLink doctype="Sales Invoice" :name="viewDoc.return_against" /> — not tied to specific line items.
+              </div>
+            </template>
             <template v-else-if="viewItems.length">
               <div class="inv-sec-lbl">Line Items</div>
               <!-- Desktop table -->
@@ -849,10 +856,14 @@ const incentiveMaxAmount = computed(() => {
   const data = invoiceSummary.data || {};
 
   const grandTotal = flt(data.grand_total || 0);
-  const paid = flt(data.total_paid || 0);
   const previousCredits = flt(data.total_credits || 0);
 
-  return Math.max(0, grandTotal - paid - previousCredits);
+  // Capped by the invoice's total value minus credit already issued against
+  // it — NOT by outstanding_amount. A credit note (including an Incentive)
+  // is a goodwill/adjustment credit independent of whether the invoice is
+  // still owed money; a fully paid invoice must remain a valid target (see
+  // fetchInvoices() below).
+  return Math.max(0, grandTotal - previousCredits);
 });
 const incentiveAmount = computed(() =>
   Math.max(0, flt(form.incentive_amount || 0))
@@ -1079,7 +1090,18 @@ async function openEdit(c) {
   drawerOpen.value = true;
   try {
     const doc = await apiGet("Sales Invoice", c.name);
-    if (doc?.items?.length) {
+    // Reason is stored as "reason — notes" in remarks; restore both.
+    if (doc?.remarks) {
+      const parts = doc.remarks.split(" — ");
+      form.reason = parts[0].trim() || "Price Adjustment";
+      form.notes = parts.slice(1).join(" — ").trim();
+    }
+    if (form.reason === "Incentive") {
+      // The saved item is a synthetic placeholder (Frappe requires >=1 item
+      // row), not a real line — don't load it into the editable items grid.
+      form.incentive_amount = Math.abs(doc?.items?.[0]?.amount || 0);
+      lines.value = [blankLine()];
+    } else if (doc?.items?.length) {
       lines.value = doc.items.map(i => ({
         id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
         description: i.description || "", hsn_code: i.hsn_code || "",
@@ -1095,7 +1117,6 @@ async function openEdit(c) {
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
     cnIsInterState.value = detectInterState(doc?.taxes || []);
-    if (doc?.remarks) form.notes = doc.remarks;
     if (doc?.cost_center) form.cost_center = doc.cost_center;
   } catch {}
 }

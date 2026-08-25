@@ -720,6 +720,13 @@
             </div>
 
             <div v-if="viewLoading" style="text-align:center;padding:24px;color:#6b7280;font-size:13px">Loading…</div>
+            <template v-else-if="viewReason === 'Incentive'">
+              <div class="inv-sec-lbl">Incentive</div>
+              <div style="padding:16px;background:#f9fafb;border-radius:8px;color:#374151;font-size:13px">
+                This is a goodwill incentive debit of {{ fmtCur(Math.abs(viewDoc.grand_total||0)) }} issued against
+                <DocLink doctype="Purchase Invoice" :name="viewDoc.return_against" /> — not tied to specific line items.
+              </div>
+            </template>
             <template v-else-if="viewItems.length">
               <div class="inv-sec-lbl">Line Items</div>
               <!-- Desktop table -->
@@ -1197,7 +1204,10 @@ const dnGrandTotal = computed(() => subtotal.value + dnTaxLines.value.reduce((s,
 const isIncentive = computed(() => form.reason === "Incentive");
 
 const incentiveMaxAmount = computed(() =>
-  Math.max(0, flt(billSummary.data?.outstanding_amount || 0))
+  // Capped by the bill's total value, NOT outstanding_amount — an incentive
+  // debit note is a goodwill/adjustment debit independent of whether the
+  // bill is still owed money; a fully paid bill remains a valid target.
+  Math.max(0, flt(billSummary.data?.grand_total || 0))
 );
 
 const incentiveAmount = computed(() =>
@@ -1264,10 +1274,9 @@ function openNew() {
   drawerOpen.value = true;
 }
 async function openEdit(d) {
-  incentive_amount: 0,
   editingName.value = d.name;
   dnTaxes.value = [];
-  Object.assign(form, { supplier: d.supplier || "", posting_date: d.posting_date || todayStr(), return_against: d.return_against || "", reason: "Vendor Overcharge", notes: "", cost_center: "" });
+  Object.assign(form, { supplier: d.supplier || "", posting_date: d.posting_date || todayStr(), return_against: d.return_against || "", reason: "Vendor Overcharge", incentive_amount: 0, notes: "", cost_center: "" });
   billSummary.data = null; billSummary.loading = false;
   lines.value = [blankLine()];
   Object.assign(dnCollapsed, { vendor: false, items: false, notes: true });
@@ -1275,7 +1284,16 @@ async function openEdit(d) {
   drawerOpen.value = true;
   try {
     const doc = await apiGet("Purchase Invoice", d.name);
-    if (doc?.items?.length) {
+    // Reason lives in its own field on Purchase Invoice; notes in `remark`.
+    if (doc?.debit_note_reason) form.reason = doc.debit_note_reason;
+    if (doc?.remark) form.notes = doc.remark;
+    if (form.reason === "Incentive") {
+      // The saved item is a synthetic placeholder (Purchase Invoice
+      // requires >=1 item row), not a real line — don't load it into the
+      // editable items grid.
+      form.incentive_amount = Math.abs(doc?.items?.[0]?.amount || 0);
+      lines.value = [blankLine()];
+    } else if (doc?.items?.length) {
       lines.value = doc.items.map(i => ({
         id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
         description: i.description || "", hsn_code: i.hsn_code || "",
@@ -1290,8 +1308,12 @@ async function openEdit(d) {
       .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
       .filter(t => t.tax_type);
     dnIsInterState.value = detectInterState(doc?.taxes || []);
-    if (doc?.remarks) form.notes = doc.remarks;
     if (doc?.cost_center) form.cost_center = doc.cost_center;
+    // Load the bill summary (amount/paid/outstanding) for the bill already
+    // saved on this document — needed for the incentive max-amount cap and
+    // the save-time "valid bill" check, since onBillSelect only fires on
+    // user interaction with the dropdown, not this programmatic set above.
+    if (form.return_against) fetchBillSummary(form.return_against);
   } catch {}
 }
 async function openView(d) {
@@ -1307,7 +1329,7 @@ async function openView(d) {
     const doc = await apiGet("Purchase Invoice", d.name);
     viewItems.value = doc?.items || [];
     if (doc) viewDoc.value = { ...viewDoc.value, ...doc };
-    if (doc?.remarks) viewReason.value = doc.remarks.split(" — ")[0].trim();
+    if (doc?.debit_note_reason) viewReason.value = doc.debit_note_reason;
     if (d.docstatus === 1) {
       const [bal, apps] = await Promise.all([
         apiGET("zoho_books_clone.api.docs.get_debit_note_balance", { debit_note_name: d.name }).catch(() => null),
@@ -1357,32 +1379,19 @@ function onVendorSelect(opt) {
   dnTaxes.value = [];
   fetchBills("");
 }
-async function onBillSelect(opt) {
-  const billName = opt?.value ?? opt;
+// Populates billSummary.data (bill amount/paid/outstanding/status) for a
+// given bill name. Shared by onBillSelect (user picks a bill from the
+// dropdown) and openEdit (bill is already set on the loaded document) —
+// previously only onBillSelect populated it, so editing an existing
+// Incentive debit note left billSummary.data null even though a bill was
+// already selected, which broke both the "Maximum" display and the
+// "select a valid bill" save-time validation.
+async function fetchBillSummary(billName) {
   billSummary.data = null;
-  dnTaxes.value = [];
-  if (!billName) return;
+  if (!billName) return null;
   billSummary.loading = true;
   try {
     const doc = await apiGet("Purchase Invoice", billName);
-    dnTaxes.value = (doc?.taxes || [])
-      .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
-      .filter(t => t.tax_type);
-    dnIsInterState.value = detectInterState(doc?.taxes || []);
-    if (doc?.items?.length) {
-      lines.value = doc.items.map(i => ({
-        id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
-        description: i.description || i.item_name || "", hsn_code: i.hsn_code || "",
-        qty: Math.abs(i.qty || 1), rate: Math.abs(i.rate || 0),
-        uom: i.uom || "Nos", discount_percentage: Math.abs(i.discount_percentage || 0),
-        discount_amount: Math.abs(i.discount_amount || 0),
-        amount: Math.round(Math.abs(i.qty || 1) * Math.abs(i.rate || 0) * 100) / 100,
-        tax_code: i.tax_code || i.item_tax_template || "", collapsed: true,
-        batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "",
-      }));
-      toast.success(`Loaded ${doc.items.length} item(s) from ${billName}`);
-    }
-    if (!form.supplier && doc?.supplier) form.supplier = doc.supplier;
     const paid = Math.abs(flt(doc?.grand_total || 0)) - Math.abs(flt(doc?.outstanding_amount || 0));
     billSummary.data = {
       grand_total: Math.abs(flt(doc?.grand_total || 0)),
@@ -1390,8 +1399,34 @@ async function onBillSelect(opt) {
       outstanding: Math.abs(flt(doc?.outstanding_amount || 0)),
       status: doc?.status || "Unpaid",
     };
-  } catch {}
+    return doc;
+  } catch { return null; }
   finally { billSummary.loading = false; }
+}
+async function onBillSelect(opt) {
+  const billName = opt?.value ?? opt;
+  dnTaxes.value = [];
+  if (!billName) { billSummary.data = null; return; }
+  const doc = await fetchBillSummary(billName);
+  if (!doc) return;
+  dnTaxes.value = (doc.taxes || [])
+    .map(t => ({ tax_type: t.account_head || "", description: t.description || "", rate: Number(t.rate || 0) }))
+    .filter(t => t.tax_type);
+  dnIsInterState.value = detectInterState(doc.taxes || []);
+  if (doc.items?.length) {
+    lines.value = doc.items.map(i => ({
+      id: _id++, item_code: i.item_code || "", item_name: i.item_name || i.item_code || "",
+      description: i.description || i.item_name || "", hsn_code: i.hsn_code || "",
+      qty: Math.abs(i.qty || 1), rate: Math.abs(i.rate || 0),
+      uom: i.uom || "Nos", discount_percentage: Math.abs(i.discount_percentage || 0),
+      discount_amount: Math.abs(i.discount_amount || 0),
+      amount: Math.round(Math.abs(i.qty || 1) * Math.abs(i.rate || 0) * 100) / 100,
+      tax_code: i.tax_code || i.item_tax_template || "", collapsed: true,
+      batch_no: i.batch_no || "", batch_expiry_date: i.batch_expiry_date || "",
+    }));
+    toast.success(`Loaded ${doc.items.length} item(s) from ${billName}`);
+  }
+  if (!form.supplier && doc.supplier) form.supplier = doc.supplier;
 }
 async function onItemChange(line) {
   const it = items.value.find(i => i.name === line.item_code || i.value === line.item_code);
@@ -1559,15 +1594,30 @@ async function saveDN(submit) {
       toast.success(`Debit Note ${r?.debit_note || ""} ${submit ? "submitted" : "saved as draft"}`);
     } else {
       const company = await resolveCompany();
-      const doc = {
-        doctype: "Purchase Invoice", name: editingName.value,
-        company, supplier: form.supplier,
-        posting_date: form.posting_date,
-        is_return: 1, return_against: form.return_against || null,
-        cost_center: form.cost_center || "",
-        remarks: form.notes || "",
-        update_stock: form.reason === "Goods Returned" ? 1 : 0,
-        items: activeLines.map(l => ({
+      let editItems;
+      if (form.reason === "Incentive") {
+        // Incentive debit notes are item-less in the UI. Purchase Invoice
+        // requires >=1 item row, so reuse the first item from the source
+        // bill as a placeholder and replace its value with the incentive.
+        const sourceItem = (await apiList("Purchase Invoice Item", {
+          filters: [["parent", "=", form.return_against]],
+          fields: ["item_code", "item_name", "uom"],
+          limit: 1,
+        }).catch(() => []))[0];
+        const amount = flt(form.incentive_amount || 0);
+        editItems = [{
+          doctype: "Purchase Invoice Item",
+          item_code: sourceItem?.item_code || lines.value[0]?.item_code || "",
+          item_name: sourceItem?.item_name || lines.value[0]?.item_name || "",
+          description: "Incentive",
+          hsn_code: "", uom: sourceItem?.uom || "Nos",
+          qty: -1, rate: amount,
+          discount_percentage: 0,
+          amount: -amount,
+          batch_no: null, batch_expiry_date: null,
+        }];
+      } else {
+        editItems = activeLines.map(l => ({
           doctype: "Purchase Invoice Item",
           item_code: l.item_code, item_name: l.item_name || l.item_code,
           description: l.description || l.item_code,
@@ -1576,8 +1626,19 @@ async function saveDN(submit) {
           discount_percentage: flt(l.discount_percentage),
           amount: -Math.abs(flt(l.amount)),
           batch_no: l.batch_no || null, batch_expiry_date: l.batch_expiry_date || null,
-        })),
-        taxes: taxPayload.map(t => ({
+        }));
+      }
+      const doc = {
+        doctype: "Purchase Invoice", name: editingName.value,
+        company, supplier: form.supplier,
+        posting_date: form.posting_date,
+        is_return: 1, return_against: form.return_against || null,
+        cost_center: form.cost_center || "",
+        debit_note_reason: form.reason,
+        remark: form.notes || "",
+        update_stock: form.reason === "Goods Returned" ? 1 : 0,
+        items: editItems,
+        taxes: form.reason === "Incentive" ? [] : taxPayload.map(t => ({
           doctype: "Tax Line",
           charge_type: "On Net Total",
           account_head: t.tax_type,

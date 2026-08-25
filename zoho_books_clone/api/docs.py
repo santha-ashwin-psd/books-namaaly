@@ -1826,7 +1826,7 @@ def create_debit_note():
     against_bill = fd.get("against_bill") or None
     date         = fd.get("date") or today()
     reason       = fd.get("reason") or ""
-    remark       = fd.get("remark") or ""
+    remark       = fd.get("notes") or fd.get("remark") or ""
     cost_center  = fd.get("cost_center") or ""
     draft_only   = frappe.utils.cint(fd.get("draft_only") or 0)
     warehouse    = fd.get("warehouse") or ""
@@ -2798,17 +2798,33 @@ def create_credit_note():
         if inv_data.docstatus != 1:
             frappe.throw("The selected invoice must be submitted")
 
-        invoice_outstanding = flt(inv_data.outstanding_amount or 0)
+        # Capped by the invoice's total value minus credit already issued
+        # against it — NOT by outstanding_amount. A credit note is a
+        # goodwill/adjustment credit independent of whether the invoice is
+        # still owed money, so a fully paid invoice remains a valid target.
+        grand_total = flt(inv_data.grand_total or 0)
+        pe_refs = frappe.get_all(
+            "Payment Entry Reference",
+            filters={"reference_name": against_inv, "reference_doctype": "Sales Invoice"},
+            fields=["parent", "allocated_amount"],
+        )
+        total_paid = sum(
+            flt(ref.allocated_amount) for ref in pe_refs
+            if frappe.db.get_value("Payment Entry", ref.parent, "docstatus") == 1
+        )
+        outstanding = flt(inv_data.outstanding_amount or 0)
+        previous_credits = max(0.0, round(grand_total - outstanding - total_paid, 2))
+        incentive_max = max(0.0, round(grand_total - previous_credits, 2))
 
-        if invoice_outstanding <= 0:
+        if incentive_max <= 0:
             frappe.throw(
-                "The selected invoice has no outstanding amount available for an incentive"
+                "The selected invoice has no remaining value available for an incentive"
             )
 
-        if incentive_amount > invoice_outstanding + 0.01:
+        if incentive_amount > incentive_max + 0.01:
             frappe.throw(
-                f"Incentive amount cannot exceed the invoice outstanding amount "
-                f"of {invoice_outstanding:.2f}"
+                f"Incentive amount cannot exceed the invoice's remaining available amount "
+                f"of {incentive_max:.2f}"
             )
     # Validate: CN total must not exceed the parent invoice's outstanding amount
     if against_inv and frappe.db.exists("Sales Invoice", against_inv):
@@ -3044,6 +3060,36 @@ def save_credit_note_draft():
         }
         for it in items_raw if (it.get("item_code") or it.get("item_name"))
     ]
+
+    # Incentive credit notes do not come from manually entered items.
+    # Frappe Sales Invoice requires at least one item, so use the first
+    # item from the source invoice and replace its amount with the incentive.
+    if reason == "Incentive":
+        incentive_amount = flt(fd.get("incentive_amount") or 0)
+        source_item = frappe.db.get_value(
+            "Sales Invoice Item",
+            {"parent": against_inv},
+            ["item_code", "item_name", "description", "uom", "income_account"],
+            as_dict=True,
+        )
+        if not source_item:
+            frappe.throw(
+                _("Unable to create Incentive credit note because the selected invoice has no item")
+            )
+        cn_items = [{
+            "item_code": source_item.item_code,
+            "item_name": source_item.item_name or source_item.item_code,
+            "description": source_item.description or source_item.item_name or source_item.item_code,
+            "uom": source_item.uom or "Nos",
+            "qty": -1,
+            "rate": incentive_amount,
+            "amount": -incentive_amount,
+            "discount_percentage": 0,
+            "discount_amount": 0,
+            "income_account": source_item.income_account or income_account,
+            "tax_code": "",
+        }]
+
     cn_taxes = [
         {
             "charge_type":  "On Net Total",

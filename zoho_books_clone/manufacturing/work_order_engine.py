@@ -353,17 +353,20 @@ def _merge_duplicate_rows(rows):
     """
     merged = {}
     order = []
+    qty_by_origin = {}  # key -> {origin: accumulated_qty}, origin "" = direct on top BOM
     for r in rows:
         key = (r["item_code"], r.get("source_warehouse") or "")
         origin = r.get("sub_assembly_bom") or ""
+        row_qty = flt(r["required_qty"])
         if key not in merged:
             m = dict(r)
             m["sub_assembly_boms"] = [origin] if origin else []
             merged[key] = m
             order.append(key)
+            qty_by_origin[key] = {origin: row_qty}
         else:
             m = merged[key]
-            m["required_qty"] = flt(m["required_qty"]) + flt(r["required_qty"])
+            m["required_qty"] = flt(m["required_qty"]) + row_qty
             m["amount"] = flt(m["amount"]) + flt(r["amount"])
             # Keep rate consistent with the merged qty/amount -- otherwise
             # rate keeps the first occurrence's value while amount reflects
@@ -371,8 +374,18 @@ def _merge_duplicate_rows(rows):
             m["rate"] = m["amount"] / m["required_qty"] if m["required_qty"] else 0.0
             if origin and origin not in m["sub_assembly_boms"]:
                 m["sub_assembly_boms"].append(origin)
+            qty_by_origin[key][origin] = flt(qty_by_origin[key].get(origin, 0)) + row_qty
     for k in order:
         merged[k].pop("sub_assembly_bom", None)
+        # Per-origin qty split, purely for the Work Order UI to show each
+        # sub-assembly's correct portion of a shared row instead of lumping
+        # it into one ambiguous "Shared / Multiple Sub-Assemblies" group.
+        # The merged row above stays the single stock-consumption line --
+        # this never changes required_qty/amount, only how the same qty is
+        # attributed for display.
+        merged[k]["sub_assembly_qty_breakdown"] = [
+            {"bom": origin, "qty": qty} for origin, qty in qty_by_origin[k].items()
+        ]
     return [merged[k] for k in order]
 
 
@@ -1807,6 +1820,10 @@ def apply_partial_scrap_substitution(work_order, work_order_item_row, scrap_item
         # of always falling into "Direct Raw Materials" -- it's the same
         # requirement, just partially resourced from scrap.
         "sub_assembly_boms": row.sub_assembly_boms or "",
+        # Same reasoning -- carry the qty breakdown text as-is so the split-
+        # off row still shows under the right sub-assembly group(s). Not
+        # re-proportioned to the smaller scrap_qty; it's informational only.
+        "sub_assembly_qty_breakdown": row.sub_assembly_qty_breakdown or "",
     })
     wo.flags.ignore_validate_update_after_submit = True
     wo.save(ignore_permissions=True)
