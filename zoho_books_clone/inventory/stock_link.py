@@ -122,6 +122,40 @@ def on_purchase_invoice_cancel(doc, method=None):
     """Reverse the auto-receipt Stock Entry when a Purchase Invoice is cancelled."""
     _cancel_linked_entries(doc.doctype, doc.name)
 
+def on_purchase_invoice_update_after_submit(doc, method=None):
+    """
+    Rebuild the auto-created stock entry whenever a submitted Purchase Invoice
+    is edited.
+
+    The old Material Receipt/Issue is cancelled first so its stock and GL
+    impact are reversed. Then a new stock entry is created from the current
+    invoice values.
+
+    If Update Inventory on Submit is turned off during the edit, the old
+    auto-created stock entry is simply cancelled and no replacement is made.
+    """
+    # Remove the stock movement created from the previous version of the bill.
+    _cancel_linked_entries(doc.doctype, doc.name)
+
+    # If inventory tracking was disabled in the updated bill, do not recreate it.
+    if not flt(getattr(doc, "update_stock", 0)):
+        frappe.msgprint(
+            _("Stock Entry updated: previous automatic stock movement was cancelled."),
+            indicator="blue",
+            alert=True,
+        )
+        return
+
+    # Recreate the stock movement using the UPDATED bill data.
+    on_purchase_invoice_submit(doc, method)
+
+    frappe.msgprint(
+        _("Stock Entry updated automatically from Purchase Invoice {0}.").format(
+            frappe.bold(doc.name)
+        ),
+        indicator="green",
+        alert=True,
+    )
 
 def on_delivery_note_submit(doc, method=None):
     """
@@ -494,8 +528,6 @@ def _cancel_linked_entries(ref_doctype: str, ref_docname: str) -> None:
         se = frappe.get_doc("Stock Entry", row.name)
         se.flags.ignore_permissions = True
         se.cancel()
-
-
 def _default_warehouse(company: str | None) -> str | None:
     """Return the default warehouse configured in Books Settings, if any."""
     try:

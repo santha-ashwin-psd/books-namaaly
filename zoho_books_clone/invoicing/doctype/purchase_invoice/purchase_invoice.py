@@ -34,7 +34,34 @@ class PurchaseInvoice(Document):
                 self.fiscal_year = validate_fiscal_year(self.posting_date, self.company)
             except Exception:
                 self.fiscal_year = ""
+    def before_update_after_submit(self):
+        # Recalculate item amounts and invoice totals when a submitted
+        # Purchase Invoice is edited.
+        if not self.items:
+            frappe.throw(_("Please add at least one item"))
 
+        for item in self.items:
+            base = round(flt(item.qty) * flt(item.rate), 2)
+
+            item.discount_percentage = flt(item.discount_percentage)
+
+            if item.discount_percentage:
+                item.discount_amount = round(
+                    base * item.discount_percentage / 100, 2
+                )
+            else:
+                item.discount_amount = flt(item.discount_amount)
+
+            item.amount = round(
+                base - item.discount_amount,
+                2
+            )
+
+        self.calculate_totals()
+        self.set_outstanding_amount()
+
+    
+   
     def calculate_totals(self):
         subtotal = sum(flt(i.amount) for i in self.items)
         self.calculate_discount(subtotal)
@@ -76,8 +103,7 @@ class PurchaseInvoice(Document):
         )
 
     def set_outstanding_amount(self):
-        if self.docstatus == 0:
-            self.outstanding_amount = self.grand_total
+       self.outstanding_amount = self.grand_total
 
     def validate_accounts(self):
         if self.credit_to:
@@ -96,6 +122,8 @@ class PurchaseInvoice(Document):
             else:                                                             self.status = "Submitted"
         else:
             self.status = "Draft"
+
+
 
     def on_submit(self):
         if getattr(self, "is_return", 0):
@@ -148,7 +176,45 @@ class PurchaseInvoice(Document):
             # Release ordered_qty now that the bill is raised against the PO
             if getattr(self, "update_stock", 0) and getattr(self, "purchase_order", None):
                 self._release_ordered_qty(direction=-1)
+    def on_update_after_submit(self):
+        """
+        Re-sync accounting and stock after editing a submitted Purchase Invoice.
+        """
 
+        # Make sure the submitted invoice has the latest calculations.
+        self.validate()
+
+        # Keep outstanding amount consistent with the updated grand total.
+        self.outstanding_amount = self.grand_total
+
+        # ---------------------------------------------------------
+        # 1. Replace OLD GL entries with updated accounting
+        # ---------------------------------------------------------
+        post_purchase_invoice(self, replace_existing=True)
+
+        # ---------------------------------------------------------
+        # 2. Update outstanding/status
+        # ---------------------------------------------------------
+        self.db_set(
+            "outstanding_amount",
+            self.grand_total,
+            update_modified=False,
+        )
+
+        self.db_set(
+            "status",
+            "Submitted",
+            update_modified=False,
+        )
+
+        # ---------------------------------------------------------
+        # 3. Synchronize linked Stock Entry
+        # ---------------------------------------------------------
+        from zoho_books_clone.inventory.stock_link import (
+            on_purchase_invoice_update_after_submit,
+        )
+
+        on_purchase_invoice_update_after_submit(self)
     def on_cancel(self):
         self.status = "Cancelled"
         self.outstanding_amount = 0
@@ -251,3 +317,4 @@ class PurchaseInvoice(Document):
             {"outstanding_amount": new_outstanding, "status": new_status},
             update_modified=False,
         )
+   

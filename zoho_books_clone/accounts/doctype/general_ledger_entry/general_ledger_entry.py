@@ -256,6 +256,62 @@ def _create_gl_entry(entry: dict) -> str:
     doc.flags.ignore_mandatory   = True
     doc.insert()
     return doc.name
+def replace_voucher_gl_entries(voucher_type: str, voucher_no: str, gl_map: list[dict]) -> list[str]:
+    """
+    Replace the active GL entries belonging directly to a voucher.
+
+    Used when an already-submitted invoice is edited.
+
+    Unlike reverse_voucher(), this does not create reversal rows.
+    The old active GL rows are cancelled and the updated GL rows are
+    inserted for the same voucher.
+
+    Payment Entries and Journal Entries referencing the invoice are not touched.
+    """
+
+    _validate_gl_balance(gl_map)
+
+    # Find the accounts currently affected by this voucher.
+    old_accounts = frappe.db.sql("""
+        SELECT DISTINCT account
+        FROM `tabGeneral Ledger Entry`
+        WHERE voucher_type = %s
+          AND voucher_no = %s
+          AND is_cancelled = 0
+          AND is_reversal = 0
+    """, (voucher_type, voucher_no), as_dict=True)
+
+    affected_accounts = {row.account for row in old_accounts if row.account}
+
+    # Cancel the old active rows.
+    frappe.db.sql("""
+        UPDATE `tabGeneral Ledger Entry`
+        SET is_cancelled = 1
+        WHERE voucher_type = %s
+          AND voucher_no = %s
+          AND is_cancelled = 0
+          AND is_reversal = 0
+    """, (voucher_type, voucher_no))
+
+    # Create the updated rows.
+    created_names = []
+
+    for entry in gl_map:
+        account = entry.get("account")
+
+        if not account:
+            frappe.throw(
+                _("GL entry missing 'account' field: {0}").format(entry)
+            )
+
+        created_names.append(_create_gl_entry(entry))
+        affected_accounts.add(account)
+
+    # Recalculate balances for both old and new accounts.
+    for account in affected_accounts:
+        _update_account_balance(account)
+
+    return created_names
 
 
 def _update_account_balance(account: str) -> None:

@@ -753,6 +753,7 @@ def save_doc(doc):
             # child rows added via d.update() have no DB name yet, so
             # validate_update_after_submit would throw DoesNotExistError on them.
             d.flags.ignore_validate_update_after_submit = True
+            d.validate()
             # ignore_validate_update_after_submit skips ALL validate hooks, including
             # the period lock checks. Run them explicitly so submitted docs in locked
             # periods cannot be silently edited.

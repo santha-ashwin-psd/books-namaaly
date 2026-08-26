@@ -82,7 +82,15 @@
               <td class="td-balance ta-r mono-sm" @click="openView(b)" :class="{'text-danger':flt(b.outstanding_amount)>0,'text-success':flt(b.outstanding_amount)<=0&&b.docstatus===1}">{{ fmtCur(b.outstanding_amount) }}</td>
               <td class="td-actions bill-act-cell">
                 <button class="inv-act-btn" @click="openView(b)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="b.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" @click="openEdit(b)" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"><span v-html="icon('edit',13)"></span></button>
+                <button
+  v-if="b.docstatus===0 || (b.docstatus===1 && flt(b.outstanding_amount)>0)"
+  class="inv-act-btn"
+  :disabled="!$canEdit('bills')"
+  @click="openEdit(b)"
+  :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"
+>
+  <span v-html="icon('edit',13)"></span>
+</button>
                 <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" :disabled="!$canCreate('payments')" @click="payBill(b)" :title="!$canCreate('payments') ? 'Read-only access' : 'Record Payment'">₹</button>
                 <button v-if="b.docstatus===0 || b.docstatus===2" class="inv-act-btn bill-act-del" :disabled="!$canDelete('bills')" @click="deleteBill(b)" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',13)"></span></button>
               </td>
@@ -121,7 +129,14 @@
             </div>
             <div class="bil-mc-footer">
               <button class="bil-mc-btn" @click.stop="openView(b)">View</button>
-              <button v-if="b.docstatus===0" class="bil-mc-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(b)">Edit</button>
+              <button
+  v-if="b.docstatus===0 || (b.docstatus===1 && flt(b.outstanding_amount)>0)"
+  class="bil-mc-btn"
+  :disabled="!$canEdit('bills')"
+  @click.stop="openEdit(b)"
+>
+  Edit
+</button>
               <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="bil-mc-btn bil-mc-pay" :disabled="!$canCreate('payments')" @click.stop="payBill(b)">Pay</button>
               <button v-if="b.docstatus===0||b.docstatus===2" class="bil-mc-btn bil-mc-danger" :disabled="!$canDelete('bills')" @click.stop="deleteBill(b)">Delete</button>
             </div>
@@ -163,7 +178,15 @@
               </div>
               <div style="display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px">
                 <button class="inv-act-btn" @click.stop="openView(b)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="b.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('bills')" @click.stop="openEdit(b)" :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"><span v-html="icon('edit',13)"></span></button>
+                <button
+  v-if="b.docstatus===0 || (b.docstatus===1 && flt(b.outstanding_amount)>0)"
+  class="inv-act-btn"
+  :disabled="!$canEdit('bills')"
+  @click.stop="openEdit(b)"
+  :title="!$canEdit('bills') ? 'Read-only access' : 'Edit'"
+>
+  <span v-html="icon('edit',13)"></span>
+</button>
                 <button v-if="b.docstatus===1 && flt(b.outstanding_amount)>0" class="inv-act-btn inv-act-pay" :disabled="!$canCreate('payments')" @click.stop="payBill(b)" :title="!$canCreate('payments') ? 'Read-only access' : 'Record Payment'">₹</button>
                 <button v-if="b.docstatus===0||b.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('bills')" @click.stop="deleteBill(b)" :title="!$canDelete('bills') ? 'Not permitted' : 'Delete'"><span v-html="icon('trash',13)"></span></button>
               </div>
@@ -207,39 +230,51 @@
           <div class="add-card-body" :class="{collapsed:billCollapsed.details}">
             <div>
               <label class="inv-lbl">Vendor <span class="inv-req">*</span></label>
-              <SearchableSelect v-model="form.supplier" :options="vendors"
-                placeholder="Select vendor…" :createable="true" createDoctype="Supplier"
-                @search="fetchVendors" @select="onVendorSelect" />
+              <SearchableSelect
+  v-model="form.supplier"
+  :options="vendors"
+  placeholder="Select vendor..."
+  :createable="true"
+  createDoctype="Supplier"
+  :disabled="billEditMode === 'submitted'"
+  @search="fetchVendors"
+  @select="onVendorSelect"
+/>
             </div>
             <!-- Lower section: field rows on the left, inventory toggle card on the right -->
             <div class="bill-details-lower">
               <div class="bill-details-lower-main add-details-grid" style="margin-top:14px">
                 <div>
                   <label class="inv-lbl">Bill Date <span class="inv-req">*</span></label>
-                  <input v-model="form.posting_date" type="date" class="inv-fi" />
+                  <input
+  v-model="form.posting_date"
+  type="date"
+  class="inv-fi"
+  :disabled="billEditMode === 'submitted'"
+/>
                 </div>
                 <div>
                   <label class="inv-lbl">Due Date</label>
-                  <input v-model="form.due_date" type="date" class="inv-fi" />
+                  <input v-model="form.due_date" type="date" class="inv-fi" :disabled="billEditMode === 'submitted'" />
                 </div>
                 <div>
                   <label class="inv-lbl">Vendor Bill #</label>
-                  <input v-model="form.bill_no" type="text" class="inv-fi" placeholder="Vendor's invoice number" maxlength="50" />
+                  <input v-model="form.bill_no" type="text" class="inv-fi" placeholder="Vendor's invoice number" maxlength="50" :disabled="billEditMode === 'submitted'" />
                 </div>
                 <div>
                   <label class="inv-lbl">Vendor Bill Date</label>
-                  <input v-model="form.bill_date" type="date" class="inv-fi" />
+                  <input v-model="form.bill_date" type="date" class="inv-fi" :disabled="billEditMode === 'submitted'" />
                 </div>
                 <div>
                   <label class="inv-lbl">Cost Center</label>
-                  <select v-model="form.cost_center" class="inv-fi">
+                  <select v-model="form.cost_center" class="inv-fi" :disabled="billEditMode === 'submitted'">
                     <option value="">— Select —</option>
                     <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
                   </select>
                 </div>
                 <div>
                   <label class="inv-lbl">Place of Supply</label>
-                  <select v-model="form.place_of_supply" class="inv-fi">
+                  <select v-model="form.place_of_supply" class="inv-fi" :disabled="billEditMode === 'submitted'">
                     <option value="">— Select State —</option>
                     <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
                   </select>
@@ -256,13 +291,19 @@
                       <div class="inv-inv-sub">Stock increases in the selected warehouse when this bill is submitted</div>
                     </div>
                     <label class="inv-inv-switch">
-                      <input type="checkbox" v-model="form.update_stock" :true-value="1" :false-value="0" />
+                      <input
+  type="checkbox"
+  v-model="form.update_stock"
+  :true-value="1"
+  :false-value="0"
+  :disabled="billEditMode === 'submitted'"
+/>
                       <span class="inv-inv-slider"></span>
                     </label>
                   </div>
                   <div v-if="form.update_stock" class="inv-inv-wh-row">
                     <label class="inv-lbl" style="margin-bottom:6px">Receiving Warehouse <span style="color:#dc2626">*</span></label>
-                    <SearchableSelect v-model="form.set_warehouse" :options="warehouses" placeholder="Select warehouse where stock will be received…" :createable="true" createDoctype="Warehouse" @search="fetchWarehouses" @create="fetchWarehouses('')" />
+                    <SearchableSelect v-model="form.set_warehouse" :options="warehouses" :disabled="billEditMode === 'submitted'" placeholder="Select warehouse where stock will be received…" :createable="true" createDoctype="Warehouse" @search="fetchWarehouses" @create="fetchWarehouses('')" />
                   </div>
                 </div>
               </div>
@@ -289,6 +330,7 @@
                 :options="vendorAddresses"
                 valueKey="name" labelKey="label"
                 placeholder="— Select —"
+                :disabled="billEditMode === 'submitted'"
                 :createable="true" :staticCreate="true"
                 createLabel="+ Add New Address"
                 @select="onBillingAddrSelect"
@@ -354,7 +396,24 @@
                     </td>
                     <td class="td-mrp"><input :value="fmtN(line._standardRate)" type="text" readonly disabled class="inv-fi" style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"/></td>
                     <td class="td-qty"><input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" :class="{'field-error': line.qty > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.qty = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
-                    <td class="td-rate"><input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" :class="{'field-error': line.rate > 999999999}" @input="e => { if(Number(e.target.value) > 999999999){ line.rate = 999999999; e.target.value = 999999999; } calcLine(line); }"/></td>
+                    <td class="td-rate">
+  <input
+    v-model.number="line.rate"
+    type="number"
+    min="0"
+    step="0.01"
+    class="inv-fi"
+    :class="{'field-error': line.rate > 999999999}"
+    :disabled="false"
+    @input="e => {
+      if(Number(e.target.value) > 999999999){
+        line.rate = 999999999;
+        e.target.value = 999999999;
+      }
+      calcLine(line);
+    }"
+  />
+</td>
                     <td class="td-disc"><input v-model.number="line.discount_percentage" type="number" min="0" max="100" step="0.1" class="inv-fi" @input="calcLine(line)" placeholder="0"/></td>
                     <td class="td-tax">
                       <select v-model="line.tax_code" class="inv-fi">
@@ -463,12 +522,26 @@
         <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New bill — unsaved changes' }}</div>
         <div class="add-footer-actions">
           <button class="add-btn-cancel" @click="drawerOpen=false">Cancel</button>
-          <button class="add-btn-draft" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveBill(0)">
-            <span v-html="icon('save',13)"></span> {{ drawerSaving ? 'Saving…' : 'Save Draft' }}
-          </button>
-          <button class="add-btn-more" :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))" :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''" @click="saveBill(1)">
-            <span v-html="icon('check',13)"></span> {{ drawerSaving ? 'Saving…' : 'Submit' }}
-          </button>
+   <button
+  v-if="billEditMode !== 'submitted' || editingName"
+  class="add-btn-draft"
+  :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))"
+  :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''"
+  @click="saveBill(0)"
+>
+  <span v-html="icon('save',13)"></span>
+  {{ drawerSaving ? 'Saving...' : (editingName ? 'Save Changes' : 'Save Draft') }}
+</button>
+  <button
+  v-if="!editingName || billEditMode !== 'submitted'"
+  class="add-btn-more"
+  :disabled="drawerSaving || !(editingName ? $canEdit('bills') : $canCreate('bills'))"
+  :title="!(editingName ? $canEdit('bills') : $canCreate('bills')) ? 'Read-only access' : ''"
+  @click="saveBill(1)"
+>
+  <span v-html="icon('check',13)"></span>
+  {{ drawerSaving ? 'Saving…' : (editingName ? 'Save & Submit' : 'Submit') }}
+</button>
         </div>
       </div>
     </div>
@@ -517,7 +590,7 @@
 
           <!-- Action buttons bar -->
           <div class="inv-action-bar">
-            <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewDoc)">
+            <button v-if="viewDoc.docstatus===0 || (viewDoc.docstatus===1 && flt(viewDoc.outstanding_amount)>0)" class="inv-ab-btn" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="openEdit(viewDoc, true)">
               <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
             </button>
             <button v-if="viewDoc.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canEdit('bills')" :title="!$canEdit('bills') ? 'Read-only access' : ''" @click="submitBill(viewDoc)">
@@ -1035,6 +1108,8 @@ const tabs = [
 const list = ref([]), loading = ref(false), search = ref(""), selected = ref(new Set());
 const viewMode = ref("table"); // "table" | "grid"
 const drawerOpen = ref(false), drawerSaving = ref(false), editingName = ref("");
+const reopenViewAfterSave = ref(false);
+const billEditMode = ref("normal"); // "normal" | "submitted"
 const viewOpen = ref(false), viewDoc = ref(null), viewTab = ref("details");
 const billCollapsed = reactive({ details: false, billing: true, lines: false, remarks: true });
 const viewLoading = ref(false), viewItems = ref([]), viewPayments = ref([]), viewTaxes = ref([]), viewDebitApps = ref([]);
@@ -1273,6 +1348,7 @@ const timelineSteps = computed(() => {
 
 
 function openNew() {
+  billEditMode.value = "normal";
   editingName.value = "";
   Object.assign(form, { supplier: "", posting_date: todayStr(), due_date: "", bill_no: "", bill_date: "", remarks: "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", place_of_supply: "33-Tamil Nadu", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
@@ -1281,7 +1357,9 @@ function openNew() {
   fetchVendors(""); fetchItems(""); fetchWarehouses("");
   drawerOpen.value = true;
 }
-async function openEdit(b) {
+async function openEdit(b, fromView = false) {
+  reopenViewAfterSave.value = fromView;
+  billEditMode.value = b.docstatus === 1 ? "submitted" : "normal";
   editingName.value = b.name;
   Object.assign(form, { supplier: b.supplier || "", posting_date: b.posting_date || todayStr(), due_date: b.due_date || "", bill_no: b.bill_no || "", bill_date: b.bill_date || "", remarks: b.remark || "", currency: "INR", exchange_rate: 1, update_stock: 1, set_warehouse: "", billing_address: "", billing_address_name: "", cost_center: "", place_of_supply: "33-Tamil Nadu", tds_applicable: false, tds_section: "", tds_rate: 0, discount_type: "Percentage", additional_discount_percentage: 0, additional_discount_amount: 0 });
   vendorAddresses.value = [];
@@ -1783,18 +1861,38 @@ async function saveBill(submit) {
     }
 
     const saved = await apiSave(doc);
-    if (submit && saved?.name) await apiSubmit("Purchase Invoice", saved.name);
-    toast.success(`Bill ${saved?.name || ""} ${submit ? "submitted" : "saved"}`);
-    drawerOpen.value = false;
-    await load();
-    // Sync viewDoc from fresh list data so outstanding_amount/grand_total update
-    if (saved?.name) {
-      const fresh = list.value.find(x => x.name === saved.name);
-      if (fresh) {
-        if (viewDoc.value?.name === saved.name) viewDoc.value = { ...viewDoc.value, ...fresh };
-        if (viewOpen.value && viewDoc.value?.name === saved.name) await openView(fresh);
-      }
+
+if (submit && saved?.name) {
+  await apiSubmit("Purchase Invoice", saved.name);
+}
+
+toast.success(
+  `Bill ${saved?.name || ""} ${submit ? "submitted" : "saved"}`
+);
+
+drawerOpen.value = false;
+
+// Reload the list
+await load();
+
+// Refresh the currently open View Drawer from the actual saved document
+if (saved?.name) {
+  try {
+    const refreshed = await apiGet("Purchase Invoice", saved.name);
+
+    if (refreshed) {
+      viewDoc.value = {
+  ...viewDoc.value,
+  ...refreshed,
+};
+
+viewItems.value = refreshed.items || [];
+viewTaxes.value = refreshed.taxes || [];
     }
+  } catch (e) {
+    console.error("Failed to refresh bill drawer:", e);
+  }
+}
   } catch (e) { toast.error(e.message || "Failed to save bill"); }
   finally { drawerSaving.value = false; }
 }

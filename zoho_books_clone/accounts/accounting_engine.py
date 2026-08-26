@@ -204,7 +204,7 @@ def post_sales_invoice(doc) -> None:
 
 # ─── Purchase Invoice ──────────────────────────────────────────────────────────
 
-def post_purchase_invoice(doc) -> None:
+def post_purchase_invoice(doc, replace_existing=False) -> None:
     """
     Perpetual inventory (Model B — GR/IR) purchase posting:
 
@@ -379,7 +379,18 @@ def post_purchase_invoice(doc) -> None:
                 break
 
     _append_round_off_entry(gl_map, doc, invert=True)
-    make_gl_entries(gl_map)
+
+    if replace_existing:
+        from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import (
+            replace_voucher_gl_entries,
+        )
+        replace_voucher_gl_entries(
+            doc.doctype,
+            doc.name,
+            gl_map,
+        )
+    else:
+        make_gl_entries(gl_map)
 
 
 # ─── Debit Note (Purchase Return) ──────────────────────────────────────────────
