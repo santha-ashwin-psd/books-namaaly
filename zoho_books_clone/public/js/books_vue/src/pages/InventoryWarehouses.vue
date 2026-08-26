@@ -795,6 +795,9 @@
             <label class="nim-label">Item <span class="nim-req">*</span></label>
             <SearchableSelect v-model="transferForm.item_code" :options="allItems"
               value-key="name" label-key="item_name" placeholder="Select item"/>
+            <div v-if="transferForm.item_code" style="margin-top:6px;font-size:12px;color:#64748b">
+              UOM: <strong>{{ transferForm.item_uom || 'Nos' }}</strong>
+            </div>
           </div>
           <div class="nim-mb">
             <label class="nim-label">Quantity <span class="nim-req">*</span></label>
@@ -912,7 +915,7 @@ function removeRackRow(idx) {
   form.racks.splice(idx, 1);
 }
 const transferForm = reactive({
-  from_warehouse: "", to_warehouse: "", item_code: "", qty: 1,
+  from_warehouse: "", to_warehouse: "", item_code: "", item_uom: "", qty: 1,
 });
 
 function whMeta(type) { return WH_TYPE_META[type] || WH_DEFAULT; }
@@ -1335,6 +1338,27 @@ watch(() => adjDrawer.item_code, (code) => {
   adjDrawer.pickedHasBatch = !!it?.has_batch_no;
   const row = stockItems.value.find((r) => r.item_code === code);
   adjDrawer.current_qty = row ? flt(row.actual_qty) : 0;
+});
+
+// When an item is selected in Stock Transfer dialog, fill its UOM
+watch(() => transferForm.item_code, (code) => {
+  if (!code) {
+    transferForm.item_uom = "";
+    return;
+  }
+  const it = allItems.value.find((i) => i.name === code);
+  transferForm.item_uom = it?.stock_uom || "Nos";
+});
+
+// Reset transfer form when dialog closes
+watch(() => showTransfer.value, (isOpen) => {
+  if (!isOpen) {
+    transferForm.from_warehouse = "";
+    transferForm.to_warehouse = "";
+    transferForm.item_code = "";
+    transferForm.item_uom = "";
+    transferForm.qty = 1;
+  }
 });
 
 async function submitAdjustment() {
