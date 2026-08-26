@@ -336,7 +336,7 @@
                   </div>
                   <div class="bomx-rm-card-body bomx-rm-card-body-3col">
                     <div class="bomx-rm-field bomx-rm-field-wide">
-                      <label>Item Code</label>
+                      <label>Item Code <span v-if="rm.item_code" style="font-weight:400;color:var(--bx-muted,#94a3b8)">({{ itemUom(rm.item_code) }})</span></label>
                       <select class="bomx-fi" v-model="rm.item_code" :disabled="readOnly || (isShared && grp.key!=='__shared__')" @change="refreshRackForRow(rm)">
                         <option value="">— Select —</option>
                         <option v-for="i in rawMaterialItems" :key="i.name" :value="i.name">{{ i.item_name || i.name }}</option>
