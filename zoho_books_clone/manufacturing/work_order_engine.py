@@ -35,6 +35,27 @@ from zoho_books_clone.utils.tenancy import assert_doc_in_user_company
 from zoho_books_clone.inventory.utils import get_valuation_rate, get_conversion_factor, get_stock_balance_bulk
 
 
+def _item_label(row):
+    """'Item Name (CODE)', falling back to just the code when no separate
+    item_name is set -- used to make multi-item error/notice messages
+    readable instead of a bare list of item codes."""
+    name = getattr(row, "item_name", None)
+    code = row.item_code
+    if name and name != code:
+        return f"{name} ({code})"
+    return code
+
+
+def _bulleted(lines):
+    """Join message lines as one-per-line bullets (`\\n• ...`) instead of a
+    comma-separated run-on list -- comma-joining reads fine for one item but
+    turns into a wall of text once there's more than a couple, especially
+    since each entry already contains its own commas (e.g. "needs 2.0, only
+    0.0 in stock"). The frontend's confirm dialog renders these as a proper
+    <ul> list; see esc()/formatDialogBody() in WorkOrder.vue."""
+    return "\n".join(f"• {line}" for line in lines)
+
+
 def _get_work_order(work_order):
     wo = frappe.get_doc("Work Order", work_order)
     if wo.docstatus != 1:
@@ -516,15 +537,15 @@ def issue_materials(work_order):
             continue
         available = flt(balances.get(wh, {}).get(row.item_code))
         if available < pending:
-            blockers.append(f"{row.item_code} (needs {pending}, only {available} in stock)")
+            blockers.append(f"{_item_label(row)} — needs {pending}, only {available} in stock")
 
     if blockers:
         frappe.throw(_(
             "Cannot issue materials — the following item(s) are not fully in stock and "
-            "their Item Group doesn't allow partial issue: {0}. Either bring these items "
-            "fully into stock, or mark their Item Group as \"Allow Partial Material Issue\" "
-            "if short/partial transfers should be allowed for them."
-        ).format(", ".join(blockers)))
+            "their Item Group doesn't allow partial issue:\n\n{0}\n\n"
+            "Either bring these items fully into stock, or mark their Item Group as "
+            "\"Allow Partial Material Issue\" if short/partial transfers should be allowed for them."
+        ).format(_bulleted(blockers)))
 
     se = frappe.new_doc("Stock Entry")
     se.company = wo.company
@@ -542,12 +563,12 @@ def issue_materials(work_order):
         if available <= 0:
             # Only reachable for partial-allowed items (blockers above
             # already ruled out non-partial items being short at all).
-            skipped.append(row.item_code)
+            skipped.append(f"{_item_label(row)} — needs {pending}, none in stock")
             continue
 
         qty_to_issue = pending if available >= pending else available
         if qty_to_issue < pending:
-            skipped.append(f"{row.item_code} (only {qty_to_issue} of {pending} available)")
+            skipped.append(f"{_item_label(row)} — issued {qty_to_issue} of {pending} needed ({available} available)")
 
         se.append("items", {
             "item_code": row.item_code,
@@ -560,8 +581,8 @@ def issue_materials(work_order):
     if not se.items:
         frappe.throw(_(
             "None of the pending raw materials are currently in stock at their "
-            "source warehouse(s), so nothing could be issued. Skipped: {0}"
-        ).format(", ".join(skipped)))
+            "source warehouse(s), so nothing could be issued:\n\n{0}"
+        ).format(_bulleted(skipped)))
 
     se.insert(ignore_permissions=True)
     se.submit()
@@ -576,8 +597,8 @@ def issue_materials(work_order):
     if skipped:
         frappe.msgprint(_(
             "Materials issued via {0}. The following item(s) were skipped due to "
-            "insufficient stock and remain pending: {1}"
-        ).format(se.name, ", ".join(skipped)), indicator="orange", alert=True)
+            "insufficient stock and remain pending:\n\n{1}"
+        ).format(se.name, _bulleted(skipped)), indicator="orange", alert=True)
 
     return se.name
 
@@ -1029,14 +1050,16 @@ def complete_work_order(work_order, qty_manufactured, process_loss_qty=0,
         if not allow_negative:
             available = get_stock_balance_bulk([row.item_code], s_wh).get(row.item_code, 0.0)
             if flt(available) < consume_qty - 0.0001:
-                # Same format as issue_materials so the Vue frontend can parse it if needed
-                blockers.append(f"{row.item_code} (needs {consume_qty}, only {flt(available)} in stock)")
+                # Same bulleted format as issue_materials so the Vue
+                # frontend's confirm dialog renders it the same way.
+                blockers.append(f"{_item_label(row)} — needs {consume_qty}, only {flt(available)} in stock")
 
     if blockers:
         frappe.throw(_(
-            "Cannot complete Work Order — the following item(s) are not fully in stock in their source warehouse: {0}. "
+            "Cannot complete Work Order — the following item(s) are not fully in stock in "
+            "their source warehouse:\n\n{0}\n\n"
             "Either bring these items fully into stock, or enable negative stock."
-        ).format(", ".join(blockers)))
+        ).format(_bulleted(blockers)))
     for row in wo.items:
         consume_qty = _consume_qty_for_row(row, wo, consumption_ratio, ms)
         if consume_qty <= 0:

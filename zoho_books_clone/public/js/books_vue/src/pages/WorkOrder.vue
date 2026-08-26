@@ -2078,13 +2078,11 @@ async function issueMaterials() {
     const seName = result?.message;
     const partial = (result?.serverMessages || [])[0];
     if (partial) {
-      await confirm({
+      await confirm(shortfallDialogOptions({
         title: "Materials Partially Issued",
-        body: `Materials issued via ${esc(seName)}.<br><br>${esc(partial.text)}`,
-        okLabel: "OK",
-        okStyle: "primary",
-        hideCancel: true,
-      });
+        message: partial.text,
+        subtitle: `Materials issued via ${seName}, but some items didn't have enough stock to fully transfer.`,
+      }));
     } else {
       toast(`Materials issued via ${seName}`);
     }
@@ -2094,19 +2092,94 @@ async function issueMaterials() {
     // stock at its source warehouse) is a longer, multi-item message that
     // was disappearing in the default error toast before it could be fully
     // read -- same fix as the partial-issue case above.
-    await confirm({
+    await confirm(shortfallDialogOptions({
       title: "Could Not Issue Materials",
-      body: esc(e.message),
-      okLabel: "OK",
-      okStyle: "primary",
-      hideCancel: true,
-    });
+      message: e.message,
+      subtitle: "Inventory shortfall detected for required BOM components.",
+    }));
   }
   actionLoading.value = false;
 }
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Renders a backend message for the confirm dialog. Several server-side
+// checks (issue_materials / complete_work_order) list multiple items in one
+// error -- e.g. "needs 2.0, only 0.0 in stock" for every short item. Left as
+// plain text those run together into an unreadable wall of comma-separated
+// clauses once there's more than one item, so the backend marks each item
+// as its own "• " line; this turns consecutive bullet lines into a proper
+// <ul> list and keeps the surrounding sentences as normal paragraphs, so
+// the popup reads as an intro, a scannable item list, then next steps.
+function formatDialogBody(msg) {
+  const lines = String(msg ?? "").split("\n");
+  let html = "";
+  let inList = false;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const isBullet = line.startsWith("• ");
+    if (isBullet && !inList) { html += "<ul class=\"bv-confirm-list\">"; inList = true; }
+    if (!isBullet && inList) { html += "</ul>"; inList = false; }
+    if (isBullet) {
+      html += `<li>${esc(line.slice(2))}</li>`;
+    } else if (line) {
+      html += `<p>${esc(line)}</p>`;
+    }
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+
+// Parses the backend's per-item "• " bullet lines (from issue_materials /
+// complete_work_order shortfall messages, see _item_label()/_bulleted() in
+// work_order_engine.py) into structured cards for the confirm dialog's
+// item-card view. Tied to the exact wording those functions emit -- if a
+// line doesn't match any known shape it's dropped rather than guessed at,
+// so callers should check the returned array isn't empty before switching
+// to the card layout and fall back to the plain-text dialog otherwise.
+function parseShortfallItems(msg) {
+  const lines = String(msg ?? "").split("\n").map(l => l.trim()).filter(l => l.startsWith("• "));
+  const items = [];
+  for (const line of lines) {
+    const body = line.slice(2);
+    let m;
+    if ((m = body.match(/^(.+?) — needs ([\d.]+), only ([\d.]+) in stock$/))) {
+      items.push({ title: m[1], required: m[2], inStock: m[3] });
+    } else if ((m = body.match(/^(.+?) — needs ([\d.]+), none in stock$/))) {
+      items.push({ title: m[1], required: m[2], inStock: "0" });
+    } else if ((m = body.match(/^(.+?) — issued ([\d.]+) of ([\d.]+) needed \(([\d.]+) available\)$/))) {
+      items.push({ title: m[1], required: m[3], inStock: m[4] });
+    }
+  }
+  return items.map(it => ({
+    title: it.title,
+    badge: { label: "Shortage", tone: "danger" },
+    fields: [
+      { label: "Required", value: it.required },
+      { label: "In Stock", value: it.inStock, tone: "danger" },
+    ],
+  }));
+}
+
+// Shared shape for the stock-shortfall confirm dialogs (Could Not Issue
+// Materials / Could Not Complete / Materials Partially Issued): a short
+// subtitle plus one card per short item, falling back to the plain
+// paragraph/list rendering when the message doesn't parse into items (e.g.
+// unrelated errors that land in the same catch block).
+function shortfallDialogOptions({ title, message, subtitle, okLabel = "OK" }) {
+  const items = parseShortfallItems(message);
+  return {
+    title,
+    icon: items.length ? "warning" : "",
+    body: items.length ? `<p>${esc(subtitle)}</p>` : formatDialogBody(message),
+    items,
+    okLabel,
+    okStyle: "primary",
+    hideCancel: !items.length,
+    width: "480px",
+  };
 }
 
 function itemLabel(code) {
@@ -2662,13 +2735,11 @@ async function submitComplete() {
       toast(`${e.message} Someone else may have just recorded a completion on this Work Order -- refreshing the current numbers.`, "error");
       await loadWO();
     } else if (missingStock) {
-      await confirm({
+      await confirm(shortfallDialogOptions({
         title: "Could Not Complete",
-        body: esc(e.message),
-        okLabel: "OK",
-        okStyle: "primary",
-        hideCancel: true,
-      });
+        message: e.message,
+        subtitle: "Inventory shortfall detected for required BOM components.",
+      }));
     } else {
       toast(e.message, "error");
     }

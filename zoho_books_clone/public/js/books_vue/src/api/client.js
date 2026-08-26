@@ -103,11 +103,14 @@ function _parseResponse(json, status, opts) {
   }
   if (json.exc || json.exc_type) {
     // Always throw — never fall through to return when server signals an exception.
-    const excStr = (json.exc || "").replace(/\\n/g, "\n").replace(/\\"/g, '"');
-    const match = excStr.match(/frappe\.exceptions\.\w+:\s*([^\n]+)/);
-    if (match && match[1].trim()) {
-      throw new Error(match[1].trim());
-    }
+    // Prefer _server_messages: frappe.throw() always pushes its message there
+    // too (via the underlying msgprint), and _parseServerMessage() reads the
+    // whole thing. The exc-traceback regex below used to be tried first, but
+    // `[^\n]+` only captures up to the FIRST newline in the traceback line --
+    // fine for a single-line message, but it silently truncated any message
+    // (like a multi-item error listing each item on its own line) that
+    // contains real newlines. Falling back to it only when there's no
+    // _server_messages keeps that path for whatever edge case still needs it.
     if (json._server_messages) {
       try {
         const msgs = JSON.parse(json._server_messages);
@@ -117,6 +120,11 @@ function _parseResponse(json, status, opts) {
       } catch (inner) {
         if (inner instanceof Error) throw inner;
       }
+    }
+    const excStr = (json.exc || "").replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    const match = excStr.match(/frappe\.exceptions\.\w+:\s*([\s\S]+)/);
+    if (match && match[1].trim()) {
+      throw new Error(match[1].trim());
     }
     let fallbackMsg = json.exc_type || "Server error " + status;
     if (json.message) {
