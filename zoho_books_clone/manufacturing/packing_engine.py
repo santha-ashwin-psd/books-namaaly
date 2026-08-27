@@ -132,16 +132,27 @@ def _check_stock_availability(requirements, default_warehouse):
             shortages.append((item_code, warehouse, available, qty))
 
     if shortages:
-        lines = "".join(
-            "<li><b>{0}</b> (warehouse <b>{1}</b>) — available {2}, required {3}</li>".format(
-                item_code, warehouse, round(available, 2), round(qty, 2)
+        item_names = {
+            d.name: d.item_name
+            for d in frappe.get_all(
+                "Item", filters=[["name", "in", [s[0] for s in shortages]]], fields=["name", "item_name"]
             )
-            for item_code, warehouse, available, qty in shortages
-        )
+        }
+        lines = []
+        for item_code, warehouse, available, qty in shortages:
+            name = item_names.get(item_code)
+            label = f"{name} ({item_code})" if name and name != item_code else item_code
+            lines.append(f"{label} · {warehouse} — needs {round(qty, 2)}, only {round(available, 2)} in stock")
+        # One bullet per line (not a comma-joined sentence or inline <ul><li>
+        # HTML) so the Vue frontend's shortfall-item-card dialog can parse
+        # and render each short item on its own card -- see
+        # parseShortfallItems() in WorkOrder.vue and _item_label()/
+        # _bulleted() in work_order_engine.py, which use the same
+        # "needs X, only Y in stock" wording.
+        item_list = "\n".join(f"• {line}" for line in lines)
         frappe.throw(_(
-            "Not enough stock to cover this Packing Slip:"
-            "<ul>{0}</ul>"
-        ).format(lines))
+            "Not enough stock to cover this Packing Slip:\n\n{0}"
+        ).format(item_list))
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])

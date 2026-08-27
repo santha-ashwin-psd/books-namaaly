@@ -2759,13 +2759,11 @@ async function createPackingSlip() {
   } catch (e) {
     const missingStock = /Not enough stock/i.test(e.message || "") || /Cannot pack/i.test(e.message || "");
     if (missingStock) {
-      await confirm({
+      await confirm(shortfallDialogOptions({
         title: "Could Not Create Packing Slip",
-        body: e.message,
-        okLabel: "OK",
-        okStyle: "primary",
-        hideCancel: true,
-      });
+        message: e.message,
+        subtitle: "Inventory shortfall detected for this Packing Slip.",
+      }));
     } else {
       toast(e.message, "error");
     }
