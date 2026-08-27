@@ -497,7 +497,7 @@
                           <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="calcLine(line)"/>
                         </div>
                         <div class="po-item-field">
-                          <label>Rate ({{ CURRENCY_SYMBOLS[form.currency] || '₹' }})</label>
+                          <label>Rate ({{ CURRENCY_SYMBOLS[form.currency] || 'OMR ' }})</label>
                           <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)"/>
                         </div>
                       </div>
@@ -1154,7 +1154,7 @@ const TEMPLATES = [
   { key: "modern",  label: "Modern"  },
   { key: "minimal", label: "Minimal" },
 ];
-const CURRENCY_SYMBOLS = { INR: "₹" };
+const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR " };
 
 // ── Tax presets ──────────────────────────────────────────────────────
 const TAX_PRESETS = [

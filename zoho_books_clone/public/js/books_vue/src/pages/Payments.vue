@@ -217,7 +217,7 @@
                 <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12.5px;display:flex;align-items:center;gap:8px">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   <span style="color:#92400e">
-                    <strong>TDS u/s {{ vendorTdsInfo.section }}</strong> already deducted at billing (est. ₹{{ tdsDeduction.toFixed(2) }}) —
+                    <strong>TDS u/s {{ vendorTdsInfo.section }}</strong> already deducted at billing (est. OMR {{ tdsDeduction.toFixed(2) }}) —
                     Outstanding amount shown is the <strong>net payable to vendor</strong>. Pay exactly the outstanding amount.
                   </span>
                 </div>
@@ -764,7 +764,7 @@ const pmtTrends = computed(()=>({
   received: _pTrend(pmtThisMonth.value.received, list.value.filter(p=>(p.payment_date||'').startsWith(_pLYM())&&p.payment_type==="Receive").reduce((s,p)=>s+flt(p.paid_amount),0)),
   paid:     _pTrend(pmtThisMonth.value.paid, list.value.filter(p=>(p.payment_date||'').startsWith(_pLYM())&&p.payment_type==="Pay").reduce((s,p)=>s+flt(p.paid_amount),0)),
 }));
-function fmtCur(v) { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v)); }
+function fmtCur(v) { const n = flt(v); try { return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n); } catch { return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } }
 
 const allChecked = computed(() => sorted.value.length > 0 && sorted.value.every(p => selected.value.has(p.name)));
 function toggle(name) { const s = new Set(selected.value); s.has(name)?s.delete(name):s.add(name); selected.value=s; }
@@ -956,7 +956,7 @@ async function savePayment(submit) {
   if (_savingInFlight) return; // synchronous guard — blocks a second click before Vue can disable the button
   if (!form.party) return toast.error("Party is required");
   if (!form.paid_amount || flt(form.paid_amount) <= 0) return toast.error("Amount must be greater than 0");
-  if (flt(form.paid_amount) > 999999999) return toast.error("Amount cannot exceed 9 digits (max ₹999,999,999)");
+  if (flt(form.paid_amount) > 999999999) return toast.error("Amount cannot exceed 9 digits (max OMR 999,999,999)");
   if (!form.payment_date) return toast.error("Payment date is required");
   if (flt(form.bank_charges) > flt(form.paid_amount)) return toast.error("Bank Charges cannot exceed the Amount");
   _savingInFlight = true;

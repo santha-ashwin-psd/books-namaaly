@@ -16,7 +16,7 @@
   <SummaryStrip v-if="!loading" :cards="[
     { label: 'Total Proformas', tone: 'accent', value: list.length },
     { label: 'In Filter', tone: 'info', value: filtered.length, valueClass: 'blue' },
-    { label: 'Pipeline Value', tone: 'warn', value: '₹' + fmtAmt(list.reduce((s,p) => s + (Number(p.grand_total)||0), 0)) },
+    { label: 'Pipeline Value', tone: 'warn', value: 'OMR ' + fmtAmt(list.reduce((s,p) => s + (Number(p.grand_total)||0), 0)) },
   ]" />
 
   <!-- Table -->
@@ -43,7 +43,7 @@
           <td><span class="mono" style="font-size:12px;color:#3B5BDB">{{p.name}}</span></td>
           <td class="fw-600">{{p.customer_name||p.customer||'—'}}</td>
           <td class="c-muted" style="font-size:12.5px">{{p.posting_date||'—'}}</td>
-          <td class="ta-r mono" style="font-weight:600;color:#2F9E44">₹{{fmtAmt(p.grand_total)}}</td>
+          <td class="ta-r mono" style="font-weight:600;color:#2F9E44">OMR {{fmtAmt(p.grand_total)}}</td>
           <td><span class="b-badge b-badge-orange">Draft / Proforma</span></td>
           <td style="text-align:center">
             <button @click.stop="confirmDel(p)" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" style="background:none;border:none;cursor:pointer;color:#C92A2A;padding:4px" v-html="icon('trash',13)"></button>
@@ -70,7 +70,7 @@
             </div>
             <button class="pf-dclose" @click="viewOpen=false"><span v-html="icon('x',16)"></span></button>
           </div>
-          <div class="pf-view-amount">₹{{ fmtAmt(viewDoc.grand_total) }}</div>
+          <div class="pf-view-amount">OMR {{ fmtAmt(viewDoc.grand_total) }}</div>
         </div>
 
         <div class="pf-dbody">
@@ -80,7 +80,7 @@
               <div><div class="pf-meta-lbl">Customer</div><div style="font-weight:600">{{ viewDoc.customer_name||viewDoc.customer }}</div></div>
               <div><div class="pf-meta-lbl">Date</div><div>{{ viewDoc.posting_date }}</div></div>
               <div><div class="pf-meta-lbl">Valid Until</div><div>{{ viewDoc.due_date||'—' }}</div></div>
-              <div><div class="pf-meta-lbl">Grand Total</div><div class="mono" style="color:#16a34a;font-weight:700">₹{{ fmtAmt(viewDoc.grand_total) }}</div></div>
+              <div><div class="pf-meta-lbl">Grand Total</div><div class="mono" style="color:#16a34a;font-weight:700">OMR {{ fmtAmt(viewDoc.grand_total) }}</div></div>
               <div style="grid-column:1/-1" v-if="viewDoc.remarks"><div class="pf-meta-lbl">Remarks</div><div>{{ viewDoc.remarks }}</div></div>
             </div>
           </div>
@@ -96,8 +96,8 @@
                 <tr v-for="it in viewDoc.items" :key="it.name||it.item_code">
                   <td>{{ it.item_name||it.item_code }}</td>
                   <td class="ta-r">{{ it.qty }}</td>
-                  <td class="ta-r mono">₹{{ fmtAmt(it.rate) }}</td>
-                  <td class="ta-r mono fw-700">₹{{ fmtAmt(it.amount) }}</td>
+                  <td class="ta-r mono">OMR {{ fmtAmt(it.rate) }}</td>
+                  <td class="ta-r mono fw-700">OMR {{ fmtAmt(it.amount) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -184,7 +184,7 @@
             <button class="pf-rm" :disabled="!$canCreate('invoices')" @click="removeItem(i)"><span v-html="icon('trash',12)"></span></button>
           </div>
           <div v-if="!form.items.length" class="pf-items-empty">No items yet — click Add Item</div>
-          <div class="pf-total"><span>Total</span><span class="mono">₹{{ fmtAmt(itemTotal) }}</span></div>
+          <div class="pf-total"><span>Total</span><span class="mono">OMR {{ fmtAmt(itemTotal) }}</span></div>
         </div>
       </div>
 

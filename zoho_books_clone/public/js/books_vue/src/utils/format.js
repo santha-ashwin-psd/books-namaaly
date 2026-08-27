@@ -5,14 +5,19 @@ export function flt(v) { return parseFloat(v) || 0; }
 
 export function fmt(v, c) {
   if (v == null || v === "") return "—";
+  const currency = c || "OMR";
   try {
-    return new Intl.NumberFormat("en-IN", {
+    return new Intl.NumberFormat("en-OM", {
       style: "currency",
-      currency: c || "INR",
-      maximumFractionDigits: 2,
+      currency,
     }).format(v);
   } catch {
-    return "₹" + Number(v).toLocaleString("en-IN");
+    // OMR uses 3-decimal Baisa; only force 2dp for currencies that use it.
+    const symbol = currency === "OMR" ? "ر.ع. " : "";
+    const decimals = currency === "OMR" ? 3 : 2;
+    return symbol + Number(v).toLocaleString("en-OM", {
+      minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+    });
   }
 }
 

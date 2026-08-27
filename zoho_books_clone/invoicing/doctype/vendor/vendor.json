@@ -51,7 +51,7 @@
       "fieldtype": "Link",
       "label": "Default Currency",
       "options": "Currency",
-      "default": "INR"
+      "default": "OMR"
     },
     {
       "fieldname": "payment_terms",

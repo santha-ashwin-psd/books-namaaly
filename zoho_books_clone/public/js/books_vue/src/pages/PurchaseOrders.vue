@@ -357,7 +357,7 @@
                         <div v-if="line.qty > 999999999" class="exp-field-hint exp-field-hint-err">Max 9 digits</div>
                       </div>
                       <div class="po-item-field">
-                        <label>Rate (₹)</label>
+                        <label>Rate (OMR)</label>
                         <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" :class="{'field-error': line.rate > 999999999}" @input="calcLine(line)" />
                         <div v-if="line.rate > 999999999" class="exp-field-hint exp-field-hint-err">Max 9 digits</div>
                       </div>
@@ -1043,7 +1043,7 @@ const billModal = reactive({ open: false, saving: false, poName: "", lines: [],
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function expectedDefault() { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); }
-function fmtCur(v) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(flt(v)); }
+function fmtCur(v) { const n = flt(v); try { return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n); } catch { return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } }
 
 function isPastExpected(o) {
   if (!o?.expected_delivery_date) return false;

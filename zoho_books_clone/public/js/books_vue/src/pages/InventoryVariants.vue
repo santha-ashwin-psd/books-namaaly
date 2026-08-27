@@ -81,8 +81,8 @@
           <option value="set">Set to</option>
           <option value="inc_pct">Increase %</option>
           <option value="dec_pct">Decrease %</option>
-          <option value="inc_amt">Increase ₹</option>
-          <option value="dec_amt">Decrease ₹</option>
+          <option value="inc_amt">Increase OMR </option>
+          <option value="dec_amt">Decrease OMR </option>
           <option value="round">Round to nearest</option>
         </select>
         <input v-if="bulk.op !== 'round'" v-model.number="bulk.value" type="number" min="0" step="0.01"
@@ -114,8 +114,8 @@
               <th class="iv-th-check"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
               <th>Variant</th>
               <th>SKU / Code</th>
-              <th class="ta-r">Selling ₹</th>
-              <th class="ta-r">Buying ₹</th>
+              <th class="ta-r">Selling OMR </th>
+              <th class="ta-r">Buying OMR </th>
               <th v-if="template.is_stock_item" class="ta-r iv-th-stock">Stock</th>
               <th class="ta-c">Active</th>
               <th class="ta-r iv-th-actions">Actions</th>
@@ -141,17 +141,17 @@
                   :title="v.in_use ? 'Used in transactions — code can\'t change' : ''" />
                 <div v-if="v.in_use" class="iv-inuse-tag">in use</div>
               </td>
-              <td class="td-sell ta-r" data-label="Selling ₹">
+              <td class="td-sell ta-r" data-label="Selling OMR ">
                 <input v-model.number="v.standard_rate" type="number" min="0" step="0.01"
                   class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canEdit('inventory')" />
               </td>
-              <td class="td-buy ta-r" data-label="Buying ₹">
+              <td class="td-buy ta-r" data-label="Buying OMR ">
                 <input v-model.number="v.standard_buying_rate" type="number" min="0" step="0.01"
                   class="iv-input iv-rate-input ta-r" @input="markDirty(v.name)" :disabled="!$canEdit('inventory')" />
               </td>
               <td v-if="template.is_stock_item" class="td-stock ta-r" data-label="Stock">
                 <div class="iv-stock-qty" :class="{ 'iv-stock-zero': !v.actual_qty }">{{ fmtQty(v.actual_qty) }}</div>
-                <div class="iv-stock-val">₹{{ fmt(v.stock_value) }}</div>
+                <div class="iv-stock-val">OMR {{ fmt(v.stock_value) }}</div>
               </td>
               <td class="td-active ta-c" data-label="Active">
                 <label class="iv-switch">

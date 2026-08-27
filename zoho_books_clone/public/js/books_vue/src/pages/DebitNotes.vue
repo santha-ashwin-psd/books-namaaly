@@ -402,7 +402,7 @@
               </div>
 
               <div class="dn-item-field">
-                <label>Rate (₹)</label>
+                <label>Rate (OMR)</label>
                 <input
                   v-model.number="line.rate"
                   type="number"
@@ -1092,7 +1092,7 @@ const applyModal = reactive({ open: false, saving: false, dnName: "", balance: 0
 const refundModal = reactive({ open: false, saving: false, dnName: "", balance: 0, amount: 0, mode: "Bank Transfer", reference: "" });
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-function fmtCur(v) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(Math.abs(flt(v))); }
+function fmtCur(v) { const n = Math.abs(flt(v)); try { return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n); } catch { return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } }
 
 async function load() {
   loading.value = true;
@@ -1367,7 +1367,7 @@ async function fetchBills(q = "") {
     bills.value = r.map(x => {
       const due = Number(x.outstanding_amount || 0);
       const total = Number(x.grand_total || 0);
-      const dueStr = due > 0 ? ` · ₹${due.toLocaleString("en-IN",{minimumFractionDigits:2})} due` : " · Paid";
+      const dueStr = due > 0 ? ` · OMR ${due.toLocaleString("en-OM",{minimumFractionDigits:3})} due` : " · Paid";
       return { ...x, label: `${x.name}${dueStr}${x.supplier_name ? ` · ${x.supplier_name}` : ""}`, value: x.name };
     });
   } catch { bills.value = []; }

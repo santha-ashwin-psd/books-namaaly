@@ -161,6 +161,9 @@ def _seed_coa(company: str) -> None:
     We check by that full name first so the idempotency guard works even when
     the account was created in a previous call.
     """
+    company_currency = (
+        frappe.db.get_value("Books Company", company, "currency") or "OMR"
+    )
     for name, atype, parent, is_group in COA:
         full_name = _acc_name(name, company)
 
@@ -178,7 +181,7 @@ def _seed_coa(company: str) -> None:
                 "parent_account": parent_full,
                 "is_group":       is_group,
                 "company":        company,
-                "currency":       "INR",
+                "currency":       company_currency,
             })
             doc.insert(ignore_permissions=True)
         except Exception as exc:

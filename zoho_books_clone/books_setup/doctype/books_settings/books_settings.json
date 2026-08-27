@@ -92,7 +92,7 @@
    "fieldtype": "Link",
    "label": "Default Currency",
    "options": "Currency",
-   "default": "INR",
+   "default": "OMR",
    "idx": 3,
    "creation": "2026-03-16 04:22:11.189548",
    "modified": "2026-03-16 04:22:11.189548",

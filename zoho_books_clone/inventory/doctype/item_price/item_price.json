@@ -233,7 +233,7 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
-   "default": "INR"
+   "default": "OMR"
   },
   {
    "creation": "2026-04-11 00:00:00.000000",

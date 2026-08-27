@@ -451,7 +451,7 @@
                 class="bomx-field-hint"
                 style="color:var(--bx-amber);margin-bottom:8px"
               >
-                ⚠ Planned Operating Cost is ₹0.00 despite planned time being set — the Operations table likely has no Hour Rate
+                ⚠ Planned Operating Cost is OMR 0.00 despite planned time being set — the Operations table likely has no Hour Rate
                 stored (captured as 0 when this was last loaded from the BOM). Click Recalculate to
                 <button type="button" class="bomx-btn-link" style="border:none;background:none;color:var(--bx-mfgB);text-decoration:underline;cursor:pointer;padding:0;font:inherit" :disabled="!$canEdit('inventory')" @click="recalcOperatingCost(true)">re-pull current Workstation hour rates</button>
                 and resync.
@@ -459,11 +459,11 @@
               <div class="bomx-hdr-fields bomx-hf-cols-1-1" style="padding:0;border:none;background:none;margin-bottom:8px">
                 <div>
                   <div class="bomx-hf-label">Planned Operating Cost</div>
-                  <div class="bomx-rm-static" >₹ {{ fmt(wo.planned_operating_cost) }}</div>
+                  <div class="bomx-rm-static" >OMR {{ fmt(wo.planned_operating_cost) }}</div>
                 </div>
                 <div>
                   <div class="bomx-hf-label">Actual Operating Cost</div>
-                  <div class="bomx-rm-static" >₹ {{ fmt(wo.actual_operating_cost) }}</div>
+                  <div class="bomx-rm-static" >OMR {{ fmt(wo.actual_operating_cost) }}</div>
                 </div>
                 <div>
                   <div class="bomx-hf-label">Additional Operating Cost</div>
@@ -471,7 +471,7 @@
                 </div>
                 <div>
                   <div class="bomx-hf-label">Total Operating Cost</div>
-                  <div class="bomx-rm-static" style="font-weight:700">₹ {{ fmt(totalOperatingCostPreview) }}</div>
+                  <div class="bomx-rm-static" style="font-weight:700">OMR {{ fmt(totalOperatingCostPreview) }}</div>
                 </div>
               </div>
             </template>
@@ -649,8 +649,8 @@
                         </div>
                       </div>
                       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap" v-if="flt(se.operating_cost_absorbed) || flt(se.manufacturing_variance_loss)">
-                        <span class="bomx-badge badge-active" v-if="flt(se.operating_cost_absorbed)">Op. Cost Absorbed: ₹ {{ fmt(se.operating_cost_absorbed) }}</span>
-                        <span class="bomx-badge" style="background:var(--bx-redS);color:var(--bx-red)" v-if="flt(se.manufacturing_variance_loss)">Variance Loss: ₹ {{ fmt(se.manufacturing_variance_loss) }}</span>
+                        <span class="bomx-badge badge-active" v-if="flt(se.operating_cost_absorbed)">Op. Cost Absorbed: OMR {{ fmt(se.operating_cost_absorbed) }}</span>
+                        <span class="bomx-badge" style="background:var(--bx-redS);color:var(--bx-red)" v-if="flt(se.manufacturing_variance_loss)">Variance Loss: OMR {{ fmt(se.manufacturing_variance_loss) }}</span>
                       </div>
                       <!-- Only the most recent submitted Manufacture entry is reversible
                            (reverse_manufacture_entry enforces this server-side too, to keep
@@ -684,34 +684,34 @@
               <div class="bomx-cost-card">
                 <div class="bomx-cost-card-hdr">
                   <span>Cost Breakdown</span>
-                  <span class="bomx-cost-total-pill">₹ {{ fmt(totalWorkOrderCost) }}</span>
+                  <span class="bomx-cost-total-pill">OMR {{ fmt(totalWorkOrderCost) }}</span>
                 </div>
                 <div class="bomx-cost-card-body">
                   <div class="bomx-cost-item">
                     <div class="bomx-cost-item-lbl">
                       <span class="bomx-cost-dot" style="background:var(--bx-mfg)"></span>Raw Material Cost
                     </div>
-                    <div class="bomx-cost-item-val">₹ {{ fmt(rawMaterialCost) }}</div>
+                    <div class="bomx-cost-item-val">OMR {{ fmt(rawMaterialCost) }}</div>
                   </div>
                   <div class="bomx-cost-plus">+</div>
                   <div class="bomx-cost-item">
                     <div class="bomx-cost-item-lbl">
                       <span class="bomx-cost-dot" style="background:var(--bx-violet)"></span>Operation Cost
                     </div>
-                    <div class="bomx-cost-item-val">₹ {{ fmt(totalOperatingCostPreview) }}</div>
+                    <div class="bomx-cost-item-val">OMR {{ fmt(totalOperatingCostPreview) }}</div>
                   </div>
                   <div class="bomx-cost-eq">=</div>
                   <div class="bomx-cost-item bomx-cost-item--total">
                     <div class="bomx-cost-item-lbl">Total Cost (Planned)</div>
-                    <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(totalWorkOrderCost) }}</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total">OMR {{ fmt(totalWorkOrderCost) }}</div>
                   </div>
                   <div class="bomx-cost-item bomx-cost-item--total" v-if="actualAbsorbedCost !== null" style="margin-top:6px">
                     <div class="bomx-cost-item-lbl" title="Actual cost posted into finished-good stock across every completion recorded so far, from the Manufacture Stock Entries (raw material + operating cost, net of scrap credit) -- not the BOM-load-time snapshot above.">Total Cost (Actual)</div>
-                    <div class="bomx-cost-item-val bomx-cost-item-val--total">₹ {{ fmt(actualAbsorbedCost) }}</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total">OMR {{ fmt(actualAbsorbedCost) }}</div>
                   </div>
                   <div class="bomx-cost-item bomx-cost-item--total" v-if="manufacturingVarianceLoss > 0" style="margin-top:6px">
                     <div class="bomx-cost-item-lbl" style="color:var(--bx-red)" title="Abnormal process loss and/or scrap value exceeding the available cost pool -- written off as a loss instead of being capitalized into the finished good's cost. Posted to a variance/loss account in the GL.">Manufacturing Variance Loss</div>
-                    <div class="bomx-cost-item-val bomx-cost-item-val--total" style="color:var(--bx-red)">₹ {{ fmt(manufacturingVarianceLoss) }}</div>
+                    <div class="bomx-cost-item-val bomx-cost-item-val--total" style="color:var(--bx-red)">OMR {{ fmt(manufacturingVarianceLoss) }}</div>
                   </div>
                 </div>
               </div>
@@ -816,7 +816,7 @@
                 <input class="bomx-fi bomx-fi-mono" type="number" v-model="s.qty" min="0" step="any"/>
               </div>
               <div class="bomx-rm-field" v-if="!s.is_process_loss">
-                <label>Rate (₹)</label>
+                <label>Rate (OMR)</label>
                 <input class="bomx-fi bomx-fi-mono" type="number" v-model="s.rate" min="0" step="any" placeholder="Valuation rate"/>
               </div>
               <button class="bomx-btn-icon danger" @click="completeForm.scrap_items.splice(idx,1)" title="Remove">
@@ -1361,7 +1361,7 @@ const totalPlannedOperationMinutes = computed(() =>
 // Mirrors the backend's PER-ROW logic (see work_order.py::calculate_operating_cost):
 // each operation row contributes its actual cost if it has logged actual time,
 // else its planned cost. Switching the WHOLE total to "actual" the moment any
-// one row gets a Job Card would make every not-yet-started row contribute ₹0
+// one row gets a Job Card would make every not-yet-started row contribute OMR 0
 // instead of its planned cost, understating the true cost-to-date.
 const totalOperatingCostPreview = computed(() => {
   const rowsTotal = (wo.value.operations || []).reduce((sum, op) => {
@@ -2848,8 +2848,8 @@ function scrapBreakdownFor(rm) {
 }
 function scrapBreakdownTooltip(rm) {
   const b = scrapBreakdownFor(rm);
-  const fresh = `Fresh: ${b.freshQty.toFixed(4)} ${rm.uom || ''} (₹${b.freshValue.toFixed(2)})`;
-  const scrap = `Scrap: ${b.scrapQty.toFixed(4)} (₹${b.scrapValue.toFixed(2)})${b.scrapItems ? ' from ' + b.scrapItems : ''}`;
+  const fresh = `Fresh: ${b.freshQty.toFixed(4)} ${rm.uom || ''} (OMR ${b.freshValue.toFixed(2)})`;
+  const scrap = `Scrap: ${b.scrapQty.toFixed(4)} (OMR ${b.scrapValue.toFixed(2)})${b.scrapItems ? ' from ' + b.scrapItems : ''}`;
   return `${fresh} + ${scrap}`;
 }
 

@@ -140,7 +140,7 @@
         <th class="sortable col-hide-tablet" @click="sortBy('item_group')">Group <span v-html="sortArrow('item_group')"></span></th>
         <th class="sortable" @click="sortBy('item_type')">Type <span v-html="sortArrow('item_type')"></span></th>
         <th class="col-hide-tablet">UOM</th>
-        <th class="ta-r sortable" @click="sortBy('standard_rate')">Rate (₹) <span v-html="sortArrow('standard_rate')"></span></th>
+        <th class="ta-r sortable" @click="sortBy('standard_rate')">Rate (OMR) <span v-html="sortArrow('standard_rate')"></span></th>
         <th>Status</th>
         <th style="width:90px;text-align:center">Actions</th>
       </tr></thead>
@@ -211,7 +211,7 @@
           </div>
         </div>
         <div class="ii-mob-card-right">
-          <div class="fw-700" style="font-size:14px;color:#2F9E44">₹{{fmt(row.standard_rate)}}</div>
+          <div class="fw-700" style="font-size:14px;color:#2F9E44">OMR {{fmt(row.standard_rate)}}</div>
           <div class="text-muted" style="font-size:11px">{{row.stock_uom||'Nos'}}</div>
         </div>
         <div class="ii-mob-card-actions">

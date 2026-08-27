@@ -91,7 +91,7 @@
                 <td colspan="8" style="padding:0">
                   <div class="br-suggest-panel">
                     <div style="font-size:12px;font-weight:600;color:#1e40af;margin-bottom:8px">
-                      🤖 {{ suggestions[t.name].matches.length }} candidate payment{{ suggestions[t.name].matches.length===1?'':'s' }} for ₹{{ fmtCur(suggestions[t.name].bt_amount) }} ({{ suggestions[t.name].bt_direction==='in'?'received':'paid out' }})
+                      🤖 {{ suggestions[t.name].matches.length }} candidate payment{{ suggestions[t.name].matches.length===1?'':'s' }} for OMR {{ fmtCur(suggestions[t.name].bt_amount) }} ({{ suggestions[t.name].bt_direction==='in'?'received':'paid out' }})
                     </div>
                     <div v-if="!suggestions[t.name].matches.length" style="font-size:12.5px;color:#6b7280;padding:8px">No Payment Entries matched on amount + date. You can mark this row Reconciled manually if you reviewed it.</div>
                     <div v-for="m in suggestions[t.name].matches" :key="m.name" class="br-suggest-card">
@@ -150,7 +150,7 @@
             </div>
             <div v-if="suggestions[t.name]" class="br-suggest-panel" style="margin-top:10px">
               <div style="font-size:12px;font-weight:600;color:#1e40af;margin-bottom:8px">
-                🤖 {{ suggestions[t.name].matches.length }} candidate payment{{ suggestions[t.name].matches.length===1?'':'s' }} for ₹{{ fmtCur(suggestions[t.name].bt_amount) }} ({{ suggestions[t.name].bt_direction==='in'?'received':'paid out' }})
+                🤖 {{ suggestions[t.name].matches.length }} candidate payment{{ suggestions[t.name].matches.length===1?'':'s' }} for OMR {{ fmtCur(suggestions[t.name].bt_amount) }} ({{ suggestions[t.name].bt_direction==='in'?'received':'paid out' }})
               </div>
               <div v-if="!suggestions[t.name].matches.length" style="font-size:12.5px;color:#6b7280;padding:8px">No Payment Entries matched on amount + date. You can mark this row Reconciled manually if you reviewed it.</div>
               <div v-for="m in suggestions[t.name].matches" :key="m.name" class="br-suggest-card">
@@ -239,7 +239,7 @@ const summary=computed(()=>{
   const unmatched=transactions.value.filter(t=>t.status!=="Reconciled").length;
   return{statementBalance:stmtBal,systemBalance:systemBalance.value,diff:systemBalance.value-stmtBal,unmatched};
 });
-function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
+function fmtCur(v){const n=flt(v);try{return new Intl.NumberFormat("en-OM",{style:"currency",currency:"OMR"}).format(n);}catch{return "ر.ع. "+n.toLocaleString("en-OM",{minimumFractionDigits:3,maximumFractionDigits:3});}}
 
 const statusTabs=computed(()=>{
   const recon=transactions.value.filter(t=>t.status==="Reconciled").length;

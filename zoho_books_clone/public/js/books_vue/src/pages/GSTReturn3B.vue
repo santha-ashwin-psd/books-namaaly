@@ -86,17 +86,17 @@
               </tr>
               <tr class="g3-row muted-row">
                 <td><span class="g3-sec">(b)</span> Zero rated — exports / SEZ</td>
-                <td class="ta-r mono">₹0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
                 <td class="ta-r mono" colspan="3" style="text-align:center">—</td>
               </tr>
               <tr class="g3-row muted-row">
                 <td><span class="g3-sec">(c)</span> Nil rated / exempted</td>
-                <td class="ta-r mono">₹0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
                 <td class="ta-r mono" colspan="3" style="text-align:center">—</td>
               </tr>
               <tr class="g3-row muted-row">
                 <td><span class="g3-sec">(d)</span> Inward — reverse charge</td>
-                <td class="ta-r mono">₹0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
                 <td class="ta-r mono" colspan="3" style="text-align:center">—</td>
               </tr>
               <tr class="g3-total-row">
@@ -123,19 +123,19 @@
             <div class="mob-supply-card muted">
               <div class="mob-supply-label"><span class="g3-sec">(b)</span> Zero rated — exports / SEZ</div>
               <div class="mob-kv-grid">
-                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">₹0.00</span>
+                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">OMR 0.00</span>
               </div>
             </div>
             <div class="mob-supply-card muted">
               <div class="mob-supply-label"><span class="g3-sec">(c)</span> Nil rated / exempted</div>
               <div class="mob-kv-grid">
-                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">₹0.00</span>
+                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">OMR 0.00</span>
               </div>
             </div>
             <div class="mob-supply-card muted">
               <div class="mob-supply-label"><span class="g3-sec">(d)</span> Inward — reverse charge</div>
               <div class="mob-kv-grid">
-                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">₹0.00</span>
+                <span class="mob-kv-key">Taxable</span><span class="mob-kv-val mono">OMR 0.00</span>
               </div>
             </div>
             <div class="mob-total-card">
@@ -174,9 +174,9 @@
               </tr>
               <tr class="g3-row muted-row">
                 <td><span class="g3-sec">(B)</span> ITC Reversed — rule 42/43</td>
-                <td class="ta-r mono">₹0.00</td>
-                <td class="ta-r mono">₹0.00</td>
-                <td class="ta-r mono">₹0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
+                <td class="ta-r mono">OMR 0.00</td>
               </tr>
               <tr class="g3-total-row">
                 <td><strong>Net ITC Available</strong></td>
@@ -200,9 +200,9 @@
             <div class="mob-supply-card muted">
               <div class="mob-supply-label"><span class="g3-sec">(B)</span> ITC Reversed — rule 42/43</div>
               <div class="mob-kv-grid">
-                <span class="mob-kv-key">IGST</span><span class="mob-kv-val mono">₹0.00</span>
-                <span class="mob-kv-key">CGST</span><span class="mob-kv-val mono">₹0.00</span>
-                <span class="mob-kv-key">SGST</span><span class="mob-kv-val mono">₹0.00</span>
+                <span class="mob-kv-key">IGST</span><span class="mob-kv-val mono">OMR 0.00</span>
+                <span class="mob-kv-key">CGST</span><span class="mob-kv-val mono">OMR 0.00</span>
+                <span class="mob-kv-key">SGST</span><span class="mob-kv-val mono">OMR 0.00</span>
               </div>
             </div>
             <div class="mob-total-card">

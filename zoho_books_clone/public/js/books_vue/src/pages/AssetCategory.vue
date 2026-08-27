@@ -183,7 +183,7 @@
                 <div class="ac-item-card-code">{{ asset.asset_code || asset.name }}</div>
                 <div class="ac-item-card-footer">
                   <span class="ac-item-card-dept">{{ asset.department || '—' }}</span>
-                  <span class="ac-item-card-cost">₹ {{ flt(asset.purchase_cost, 2) }}</span>
+                  <span class="ac-item-card-cost">OMR {{ flt(asset.purchase_cost, 2) }}</span>
                 </div>
               </div>
             </div>

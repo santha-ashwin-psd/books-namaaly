@@ -720,7 +720,7 @@ const csvPreviewRows   = ref([]);
 const importingCSV     = ref(false);
 
 // ── Currency symbol map ──────────────────────────────────────────────────────
-const CURRENCY_SYMBOLS = { INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", JPY: "¥", CAD: "C$", AUD: "A$" };
+const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR ", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", JPY: "¥", CAD: "C$", AUD: "A$" };
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const filteredLists = computed(() => {
@@ -756,7 +756,7 @@ const pageOffset  = computed(() => page.value * pageSize);
 const pagedPrices = computed(() => sortedPrices.value.slice(pageOffset.value, pageOffset.value + pageSize));
 
 const currencySymbol = computed(() =>
-  CURRENCY_SYMBOLS[selectedList.value?.currency] || selectedList.value?.currency || "₹"
+  CURRENCY_SYMBOLS[selectedList.value?.currency] || selectedList.value?.currency || "OMR "
 );
 
 const validRows  = computed(() => csvPreviewRows.value.filter(r => !r._hasError));
@@ -1257,7 +1257,7 @@ function exportCSV() {
 function fmtRate(v) {
   const n   = flt(v) || 0;
   const sym = currencySymbol.value;
-  return sym + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sym + n.toLocaleString("en-OM", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function typeLabel(pl) {

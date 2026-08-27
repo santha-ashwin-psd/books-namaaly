@@ -101,7 +101,7 @@
   <!-- ── Bulk actions bar ── -->
   <div v-if="selectedRows.size>0" class="inv-bulk-bar">
     <span class="inv-bulk-count">{{ selectedRows.size }} selected</span>
-    <button class="inv-bulk-btn inv-bulk-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkPayment">₹ Record Payment</button>
+    <button class="inv-bulk-btn inv-bulk-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkPayment">OMR Record Payment</button>
     <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkEmail"><span v-html="icon('mail',13)"></span> Send Email</button>
     <button class="inv-bulk-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="bulkCancel">Cancel Submitted</button>
     <button class="inv-bulk-btn inv-bulk-danger" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : ''" @click="bulkDelete">Delete Drafts</button>
@@ -164,7 +164,7 @@
                 <button class="inv-act-btn" @click="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
                 <button v-if="inv.docstatus===0 || (inv.docstatus===1 && flt(inv.outstanding_amount)>0)" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
-                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click="openPayment(inv)">₹</button>
+                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click="openPayment(inv)">OMR </button>
               </div>
             </td>
           </tr>
@@ -260,7 +260,7 @@
               <div style="display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px">
                 <button class="inv-act-btn" @click.stop="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
                 <button v-if="inv.docstatus===0 || (inv.docstatus===1 && flt(inv.outstanding_amount)>0)" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
-                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click.stop="openPayment(inv)">₹</button>
+                <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click.stop="openPayment(inv)">OMR </button>
                 <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
               </div>
             </div>
@@ -598,7 +598,7 @@
                     <span style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
                       <select v-model="form.discount_type" class="inv-fi" style="width:74px;padding:2px 4px">
                         <option value="Percentage">%</option>
-                        <option value="Amount">₹</option>
+                        <option value="Amount">OMR </option>
                       </select>
                       <input
                         v-if="form.discount_type==='Percentage'"
@@ -974,14 +974,14 @@
                       <th style="width:36px">#</th>
                       <th>Item &amp; Description</th>
                       <th>HSN/SAC</th>
-                      <th class="th-r">MRP (₹)</th>
+                      <th class="th-r">MRP (OMR)</th>
                       <th class="th-r">Qty</th>
-                      <th class="th-r">Rate (₹)</th>
-                      <th class="th-r">Discount (₹)</th>
+                      <th class="th-r">Rate (OMR)</th>
+                      <th class="th-r">Discount (OMR)</th>
                       <th>Tax Template</th>
                       <th>Batch No</th>
                       <th>Expiry Date</th>
-                      <th class="th-r">Amount (₹)</th>
+                      <th class="th-r">Amount (OMR)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1623,7 +1623,7 @@ function matchIndianState(raw) {
   if (!clean) return "";
   return INDIAN_STATES.find(s => s.split("-").slice(1).join("-").toLowerCase() === clean) || "";
 }
-const CURRENCY_SYMBOLS = { INR: "₹" };
+const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR " };
 const TEMPLATES = [
   { key:"classic", label:"Classic" },
   { key:"modern",  label:"Modern"  },
@@ -1746,10 +1746,10 @@ const viewPaymentsLoading = ref(false);
 const confirmModal = reactive({ open:false, loading:false, title:"", message:"", actionLabel:"Confirm", action: null, payments:[] });
 
 // ── Helpers ────────────────────────────────────────────────────────────
-const currencySymbol = computed(() => CURRENCY_SYMBOLS[form.currency] || "₹");
+const currencySymbol = computed(() => CURRENCY_SYMBOLS[form.currency] || "OMR ");
 function fmtAmt(v, currency) {
   const cur = currency || form.currency || "INR";
-  const sym = CURRENCY_SYMBOLS[cur] || "₹";
+  const sym = CURRENCY_SYMBOLS[cur] || "OMR ";
   const locale = cur === "INR" ? "en-IN" : "en-US";
   return sym + Number(v||0).toLocaleString(locale,{minimumFractionDigits:2,maximumFractionDigits:2});
 }
@@ -1851,7 +1851,7 @@ function exactLineAmount(l) {
 }
 // The source invoice truncates (not rounds) its printed Subtotal from the
 // unrounded total across all lines — summing pre-rounded per-line amounts
-// instead overstates it by a paisa (e.g. ₹33,812.95 vs the correct ₹33,812.94).
+// instead overstates it by a paisa (e.g. OMR 33,812.95 vs the correct OMR 33,812.94).
 const subtotal = computed(()=>Math.floor(lines.value.reduce((s,l)=>s+exactLineAmount(l),0)*100)/100);
 
 // Common invoice-level discount, applied on the subtotal before tax —
@@ -1878,7 +1878,7 @@ const taxLines = computed(()=>
   }).map(r=>({ template:r.description, description:r.description, tax_type:r.tax_type, rate:r.rate, account_head:r.account_head, amount:r.amount }))
 );
 
-// Per-line GST breakup (e.g. "CGST 2.5% ₹226.60", "SGST 2.5% ₹226.60") — same
+// Per-line GST breakup (e.g. "CGST 2.5% OMR 226.60", "SGST 2.5% OMR 226.60") — same
 // engine as the invoice-level taxLines, just scoped to a single line so each
 // item card can show its own tax like the printed invoice's per-item columns.
 function lineTaxBreakup(line) {
@@ -1909,7 +1909,7 @@ function withItemTaxRates(items, placeOfSupply){
 // Line Total (incl. GST) must be rounded ONCE on the combined value — adding
 // the already-rounded Amount to the already-rounded GST (double rounding)
 // overstates it by a paisa vs. the source invoice's printed Amount column
-// (e.g. ₹9,517.15 instead of the correct ₹9,517.14).
+// (e.g. OMR 9,517.15 instead of the correct OMR 9,517.14).
 function lineAmountWithTax(line) {
   const exact = exactLineAmount(line);
   const rateTotal = lineTaxBreakup(line).reduce((s,t)=>s+t.rate,0);
@@ -1918,8 +1918,8 @@ function lineAmountWithTax(line) {
 
 const taxAmount  = computed(()=>taxLines.value.reduce((s,t)=>s+t.amount,0));
 // GST rule (Sec 170, CGST Act): the invoice total is rounded off to the
-// nearest rupee. Without this step the app's total (e.g. ₹35,503.61) will
-// never match the printed/e-invoice total (₹35,504.00), which always
+// nearest rupee. Without this step the app's total (e.g. OMR 35,503.61) will
+// never match the printed/e-invoice total (OMR 35,504.00), which always
 // carries an explicit Round Off line.
 const preRoundTotal = computed(()=>netTotal.value+taxAmount.value);
 const roundOff   = computed(()=>Math.round((Math.round(preRoundTotal.value)-preRoundTotal.value)*100)/100);

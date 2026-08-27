@@ -1006,7 +1006,7 @@
           <div class="inv-sec-lbl">Opening Balance</div>
           <div class="cus-form-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
             <div>
-              <label class="inv-lbl">Opening Balance (₹)</label>
+              <label class="inv-lbl">Opening Balance (OMR)</label>
               <input v-model.number="form.opening_balance" type="number" min="0" class="inv-fi" placeholder="0.00"
                 :style="formErrors.opening_balance?'border-color:#dc2626;background:#fff5f5':''"
                 @input="delete formErrors.opening_balance"
@@ -1228,7 +1228,7 @@ const form = reactive({
   name: "",
   supplier_name: "", supplier_type: "Company",
   supplier_group: "",
-  tax_id: "", default_currency: "INR", payment_terms: "",
+  tax_id: "", default_currency: "OMR", payment_terms: "",
   email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
   address_line1: "", address_line2: "",
   city: "", state: "", pincode: "", country: "India",
@@ -1313,7 +1313,7 @@ function resetForm() {
   Object.assign(form, {
     name: "", supplier_name: "", supplier_type: "Company",
     supplier_group: "",
-    tax_id: "", default_currency: "INR", payment_terms: "",
+    tax_id: "", default_currency: "OMR", payment_terms: "",
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
     address_line1: "", address_line2: "",
     city: "", state: "", pincode: "", country: "India",
@@ -2010,7 +2010,12 @@ function vendorInitials(name) {
   return (name || "?").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 function fmtCur(v) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(Number(v || 0));
+  const n = Number(v || 0);
+  try {
+    return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n);
+  } catch {
+    return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
 }
 
 async function loadAllBalances() {

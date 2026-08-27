@@ -94,7 +94,7 @@
    "label": "Due Date"
   },
   {
-   "default": "INR",
+   "default": "OMR",
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",

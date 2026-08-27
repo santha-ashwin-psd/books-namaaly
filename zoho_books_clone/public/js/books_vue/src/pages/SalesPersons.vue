@@ -472,7 +472,7 @@ function reportsToName(id) {
 }
 
 function fmtCur(v) {
-  return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  return "OMR " + Number(v || 0).toLocaleString("en-OM", { maximumFractionDigits: 0 });
 }
 
 async function selectSP(s) {

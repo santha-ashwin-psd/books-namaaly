@@ -190,7 +190,7 @@
                 <input v-model.number="line.qty" type="number" min="0" step="0.001" class="ob-input ta-r" />
               </div>
               <div class="ob-line-field" style="flex:1">
-                <label class="ob-label">Rate (₹)</label>
+                <label class="ob-label">Rate (OMR)</label>
                 <input v-model.number="line.basic_rate" type="number" min="0" step="0.01" class="ob-input ta-r" />
               </div>
               <button @click="removeLine(line.id)" class="ob-rm-line" style="margin-top:20px" aria-label="Remove item"><span v-html="icon('x',12)"></span></button>
@@ -265,7 +265,7 @@
                 <input v-model.number="line.qty" type="number" min="0" step="0.001" class="ob-input ta-r" />
               </div>
               <div class="ob-aic-field" style="flex:1">
-                <label class="ob-label">Rate (₹)</label>
+                <label class="ob-label">Rate (OMR)</label>
                 <input v-model.number="line.basic_rate" type="number" min="0" step="0.01" class="ob-input ta-r" />
               </div>
             </div>
@@ -435,7 +435,7 @@ watch(totalPages, (tp) => { if (page.value > tp) page.value = tp; });
 const kpi = computed(() => {
   // Cancelled entries no longer represent real opening balances — exclude
   // them here the same way "value" already does, so the KPI strip can't show
-  // e.g. "Batches Created: 6" next to "Opening Value: ₹0.00".
+  // e.g. "Batches Created: 6" next to "Opening Value: OMR 0.00".
   const active = list.value.filter(e => e.docstatus !== 2);
   return {
     total:      list.value.length,
@@ -459,7 +459,7 @@ function shortWH(wh) {
   return parts[0].length > 18 ? parts[0].slice(0, 16) + "…" : parts[0];
 }
 function fmtCur(v) {
-  return "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "OMR " + flt(v).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
 async function load() {

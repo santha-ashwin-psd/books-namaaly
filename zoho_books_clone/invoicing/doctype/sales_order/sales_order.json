@@ -474,7 +474,7 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
-   "default": "INR",
+   "default": "OMR",
    "idx": 0,
    "creation": "2026-06-24 00:00:00.000000",
    "modified": "2026-06-24 00:00:00.000000",

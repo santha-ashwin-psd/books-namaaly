@@ -87,7 +87,7 @@ def execute():
                     )
                     continue
             try:
-                currency = frappe.db.get_value("Books Company", company, "default_currency") or "OMR"
+                currency = frappe.db.get_value("Books Company", company, "currency") or "OMR"
             except Exception:
                 currency = "OMR"
             try:

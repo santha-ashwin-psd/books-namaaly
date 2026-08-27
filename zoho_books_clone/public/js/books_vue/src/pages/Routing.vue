@@ -24,7 +24,7 @@
     <div class="bomx-sum-card">
       <div class="bomx-sc-bar" style="background:var(--bx-amber)"></div>
       <div class="bomx-sc-lbl" style="color:var(--bx-amber)">Est. Labour Cost</div>
-      <div class="bomx-sc-val" style="color:var(--bx-amber)">₹{{ formatMoney(totalCost) }}</div>
+      <div class="bomx-sc-val" style="color:var(--bx-amber)">OMR {{ formatMoney(totalCost) }}</div>
       <div class="bomx-sc-sub">This routing</div>
     </div>
   </div>
@@ -112,11 +112,11 @@
             </div>
             <div class="bomx-sbar-cell">
               <div class="bomx-sbar-lbl">Est. Labour Cost</div>
-              <div class="bomx-sbar-val" style="color:var(--bx-green)">₹{{ formatMoney(totalCost) }}</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-green)">OMR {{ formatMoney(totalCost) }}</div>
             </div>
             <div class="bomx-sbar-cell">
               <div class="bomx-sbar-lbl">Avg Rate / Op</div>
-              <div class="bomx-sbar-val" style="color:var(--bx-amber)">₹{{ formatMoney(avgRate) }}</div>
+              <div class="bomx-sbar-val" style="color:var(--bx-amber)">OMR {{ formatMoney(avgRate) }}</div>
             </div>
           </div>
 

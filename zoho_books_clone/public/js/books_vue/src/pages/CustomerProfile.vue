@@ -252,7 +252,12 @@ const initials = computed(() => {
 });
 
 function fmtCur(v) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(Number(v || 0));
+  const n = Number(v || 0);
+  try {
+    return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n);
+  } catch {
+    return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
 }
 
 function daysAgo(d) {

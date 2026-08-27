@@ -304,7 +304,7 @@ const BUILTIN_VARS = [
 
 const subjectPlaceholder = "e.g. Invoice {{invoice_no}} is due on {{due_date}}";
 const bodyPlaceholder = `<p>Dear {{customer_name}},</p>
-<p>Your invoice <b>{{invoice_no}}</b> of ₹{{amount}} is due on {{due_date}}.</p>
+<p>Your invoice <b>{{invoice_no}}</b> of OMR {{amount}} is due on {{due_date}}.</p>
 <p>Regards,<br>{{company}}</p>`;
 
 const filtered = computed(() => {

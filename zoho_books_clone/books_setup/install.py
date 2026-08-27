@@ -130,6 +130,7 @@ def seed_naming_series():
 # ─── Currencies ──────────────────────────────────────────────────────────────
 def seed_currencies():
     currencies = [
+        ("OMR", "ر.ع.", "Baisa", 1000, "#,###.###"),
         ("INR", "₹", "Paise",  100, "#,##,###.##"),
         ("USD", "$", "Cents",  100, "#,###.##"),
         ("EUR", "€", "Cents",  100, "#,###.##"),
@@ -278,6 +279,10 @@ def create_default_accounts():
         """Return the full scoped account name."""
         return f"{name} - {company}"
 
+    account_currency = (
+        frappe.db.get_value("Books Company", company, "currency") or "OMR"
+    )
+
     for name, atype, parent, is_group in coa:
         full_name = _acc(name)
         if frappe.db.exists("Account", full_name):
@@ -290,7 +295,7 @@ def create_default_accounts():
                 "parent_account": _acc(parent) if parent else "",
                 "is_group":       is_group,
                 "company":        company,
-                "currency":       "INR",
+                "currency":       account_currency,
             }).insert(ignore_permissions=True)
         except Exception as e:
             frappe.log_error(str(e), f"Account seed: {name}")
@@ -336,7 +341,7 @@ def seed_landed_cost_accounts():
                 "parent_account": parent,
                 "is_group":       0,
                 "company":        company,
-                "currency":       "INR",
+                "currency":       frappe.db.get_value("Books Company", company, "currency") or "OMR",
             }).insert(ignore_permissions=True)
         except Exception as e:
             frappe.log_error(str(e), f"Landed cost account seed: {name}")
@@ -552,8 +557,8 @@ def seed_warehouses():
 def seed_price_lists():
     """Create default Selling and Buying price lists."""
     price_lists = [
-        ("Standard Selling", "INR", 1, 0),
-        ("Standard Buying",  "INR", 0, 1),
+        ("Standard Selling", "OMR", 1, 0),
+        ("Standard Buying",  "OMR", 0, 1),
         ("Export Selling",   "USD", 1, 0),
     ]
 

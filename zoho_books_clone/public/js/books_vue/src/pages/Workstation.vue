@@ -205,7 +205,7 @@
             <div style="margin-top:16px">
               <div class="bomx-hf-label">Hourly Operating Cost <span style="color:var(--bx-red)">*</span></div>
               <div style="position:relative">
-                <span style="position:absolute;left:9px;top:8px;color:var(--bx-muted);font-weight:600;font-size:13px">₹</span>
+                <span style="position:absolute;left:9px;top:8px;color:var(--bx-muted);font-weight:600;font-size:13px">OMR </span>
                 <input class="bomx-fi" type="number" v-model.number="doc.hour_rate" min="0" step="any" style="width:100%;padding-left:24px"/>
               </div>
               <div class="bomx-field-hint">Used for calculating manufacturing costs.</div>

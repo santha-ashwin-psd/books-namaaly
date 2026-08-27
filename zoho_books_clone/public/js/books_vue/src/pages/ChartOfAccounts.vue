@@ -160,9 +160,9 @@
                   <span class="coa-txn-detail" v-if="r.party_name || r.party" :title="r.party_name || r.party">{{ r.party_name || r.party }}</span>
                   <span class="coa-txn-detail" v-else :title="r.voucher_no"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></span>
                   <span class="coa-txn-type">{{ r.voucher_type }}</span>
-                  <span class="ta-r coa-txn-dr">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
-                  <span class="ta-r coa-txn-cr">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '' }}</span>
-                  <span class="ta-r coa-txn-bal" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
+                  <span class="ta-r coa-txn-dr">{{ getRowDr(r) > 0 ? "OMR "+getRowDr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '' }}</span>
+                  <span class="ta-r coa-txn-cr">{{ getRowCr(r) > 0 ? "OMR "+getRowCr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '' }}</span>
+                  <span class="ta-r coa-txn-bal" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">OMR {{ Number(r.balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}</span>
                 </div>
                 <div class="coa-detail-loadmore">
                   <span>Showing {{ Math.min(inlineLedger[selectedAccount.name].visible, inlineLedger[selectedAccount.name].rows.length) }} of {{ inlineLedger[selectedAccount.name].rows.length }}</span>
@@ -272,7 +272,7 @@
                 <div style="display:flex;justify-content:space-between"><b style="color:#2563eb" @click.stop><DocLink :doctype="r.voucher_type" :name="r.voucher_no" :mono-style="false" /></b><span style="color:#6b7280">{{r.posting_date}}</span></div>
                 <div style="display:flex;justify-content:space-between;margin-top:2px;color:#6b7280">
                   <span>{{r.voucher_type}} · {{r.party_name||r.party||'—'}}</span>
-                  <span :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151', fontWeight:700}">₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}</span>
+                  <span :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151', fontWeight:700}">OMR {{ Number(r.balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}</span>
                 </div>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;border-top:1px solid #e5e7eb">
@@ -386,7 +386,7 @@
           <span class="coa-sec-lbl">Opening Balance</span>
           <div class="coa-fg coa-fg2">
             <div>
-              <label class="coa-lbl">Opening Balance (₹)</label>
+              <label class="coa-lbl">Opening Balance (OMR)</label>
               <input v-model="form.opening" type="number" min="0" step="0.01" class="coa-fi" placeholder="0.00" />
             </div>
             <div>
@@ -469,10 +469,10 @@
                   <td style="padding:8px 10px;color:#2563eb;font-weight:600"><DocLink :doctype="r.voucher_type" :name="r.voucher_no" /></td>
                   <td style="padding:8px 10px;color:#6b7280">{{ r.voucher_type }}</td>
                   <td style="padding:8px 10px;color:#374151" :title="r.party || ''">{{ r.party_name || r.party || '—' }}</td>
-                  <td style="padding:8px 10px;text-align:right;color:#16a34a">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
-                  <td style="padding:8px 10px;text-align:right;color:#dc2626">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</td>
+                  <td style="padding:8px 10px;text-align:right;color:#16a34a">{{ getRowDr(r) > 0 ? "OMR "+getRowDr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '—' }}</td>
+                  <td style="padding:8px 10px;text-align:right;color:#dc2626">{{ getRowCr(r) > 0 ? "OMR "+getRowCr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '—' }}</td>
                   <td style="padding:8px 10px;text-align:right;font-weight:700" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">
-                    ₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}
+                    OMR {{ Number(r.balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}
                   </td>
                 </tr>
               </tbody>
@@ -481,7 +481,7 @@
                   <td colspan="4" style="padding:10px;font-weight:700;color:#374151">Closing Balance</td>
                   <td colspan="2"></td>
                   <td style="padding:10px;text-align:right;font-weight:800;font-size:14px" :style="{color: ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance > 0 ? '#16a34a' : '#dc2626'}">
-                    ₹{{ Number(ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}
+                    OMR {{ Number(ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}
                   </td>
                 </tr>
               </tfoot>
@@ -506,16 +506,16 @@
                 <div class="ldg-card-strip">
                   <div class="ldg-strip-cell">
                     <span class="ldg-strip-lbl">Debit</span>
-                    <span class="ldg-strip-val ldg-strip-dr">{{ getRowDr(r) > 0 ? "₹"+getRowDr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
+                    <span class="ldg-strip-val ldg-strip-dr">{{ getRowDr(r) > 0 ? "OMR "+getRowDr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '—' }}</span>
                   </div>
                   <div class="ldg-strip-cell ldg-strip-cell--mid">
                     <span class="ldg-strip-lbl">Credit</span>
-                    <span class="ldg-strip-val ldg-strip-cr">{{ getRowCr(r) > 0 ? "₹"+getRowCr(r).toLocaleString("en-IN",{minimumFractionDigits:2}) : '—' }}</span>
+                    <span class="ldg-strip-val ldg-strip-cr">{{ getRowCr(r) > 0 ? "OMR "+getRowCr(r).toLocaleString("en-OM",{minimumFractionDigits:3}) : '—' }}</span>
                   </div>
                   <div class="ldg-strip-cell">
                     <span class="ldg-strip-lbl">Balance</span>
                     <span class="ldg-strip-val" :style="{color: r.balance > 0 ? '#16a34a' : r.balance < 0 ? '#dc2626' : '#374151'}">
-                      ₹{{ Number(r.balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}
+                      OMR {{ Number(r.balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}
                     </span>
                   </div>
                 </div>
@@ -525,7 +525,7 @@
                 <span class="ldg-closing-lbl">Closing Balance</span>
                 <span class="ldg-closing-val"
                   :style="{color: ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance > 0 ? '#16a34a' : '#dc2626'}">
-                  ₹{{ Number(ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance).toLocaleString("en-IN",{minimumFractionDigits:2}) }}
+                  OMR {{ Number(ledgerDrawer.rows[ledgerDrawer.rows.length-1].balance).toLocaleString("en-OM",{minimumFractionDigits:3}) }}
                 </span>
               </div>
             </div><!-- end .ldg-mobile-cards -->
@@ -701,7 +701,7 @@ function fmtINR(v) {
   if (!v && v !== 0) return "—";
   const n = Number(v);
   if (n === 0) return "—";
-  return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  return "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 3 });
 }
 
 async function load() {
@@ -944,7 +944,7 @@ const trialBalance = computed(() => {
 function fmtBal(v) {
   const n = Number(v || 0);
   if (Math.abs(n) < 0.005) return "—";
-  return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 function getBalType(val, defaultType) {
   const n = Number(val || 0);

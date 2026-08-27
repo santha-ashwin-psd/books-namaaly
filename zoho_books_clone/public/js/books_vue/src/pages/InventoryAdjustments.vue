@@ -261,7 +261,7 @@ const netValue = computed(()=>list.value.filter(a=>a.docstatus===1).reduce((s,a)
 const diff = computed(()=> (form.new_qty===null||form.new_qty==="") ? 0 : flt(form.new_qty) - flt(currentQty.value));
 const canSave = computed(()=> form.warehouse && form.item_code && form.reason && form.new_qty!==null && form.new_qty!=="" && flt(form.new_qty)>=0 && Math.abs(diff.value)>0.0000001 && (!form.item_has_batch_no || !!form.batch_no));
 
-function fmtCur(v){ return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v)); }
+function fmtCur(v){ const n = flt(v); try { return new Intl.NumberFormat("en-OM",{style:"currency",currency:"OMR"}).format(n); } catch { return "ر.ع. " + n.toLocaleString("en-OM",{minimumFractionDigits:3,maximumFractionDigits:3}); } }
 function fmtQty(v){ return Number(flt(v)).toLocaleString("en-IN",{maximumFractionDigits:3}); }
 
 async function fetchWarehouses(q=""){ try{ const co=await resolveCompany(); const r=await apiList("Warehouse",{fields:["name"],filters:[["company","=",co],["is_group","=",0],...(q?[["name","like",`%${q}%`]]:[])],limit:30}); warehouses.value=r.map(x=>({label:x.name,value:x.name})); }catch{warehouses.value=[];} }

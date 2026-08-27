@@ -17,7 +17,7 @@
     </div>
     <div class="jen-sum-card">
       <div class="jen-sum-lbl" style="color:#2f9e44">Total Debits</div>
-      <div class="jen-sum-val" style="color:#2f9e44">{{summary.totalDr>=1000?'₹'+(summary.totalDr/1000).toFixed(1)+'K':fmtINR(summary.totalDr)||'₹0'}}</div>
+      <div class="jen-sum-val" style="color:#2f9e44">{{summary.totalDr>=1000?'OMR '+(summary.totalDr/1000).toFixed(1)+'K':fmtINR(summary.totalDr)||'OMR 0'}}</div>
     </div>
     <div class="jen-sum-card">
       <div class="jen-sum-lbl" style="color:#c92a2a">Drafts</div>
@@ -317,10 +317,10 @@
           <div class="jen-balance-bar" :class="lines.length&&(totalDr>0||totalCr>0)?(balanced?'jen-bal-ok':'jen-bal-err'):'jen-bal-zero'">
             <div style="display:flex;align-items:center;gap:8px">
               <span v-html="icon(balanced&&(totalDr>0)?'check':'info',14)"></span>
-              <span>{{!lines.length||(totalDr===0&&totalCr===0)?'Add debit and credit lines':balanced?'Balanced — ready to post':'Difference: ₹'+Math.abs(totalDr-totalCr).toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
+              <span>{{!lines.length||(totalDr===0&&totalCr===0)?'Add debit and credit lines':balanced?'Balanced — ready to post':'Difference: OMR '+Math.abs(totalDr-totalCr).toLocaleString('en-OM',{minimumFractionDigits:3})}}</span>
             </div>
             <div style="font-weight:700">
-              <span v-if="totalDr>0||totalCr>0">Dr: ₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}} / Cr: ₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
+              <span v-if="totalDr>0||totalCr>0">Dr: OMR {{totalDr.toLocaleString('en-OM',{minimumFractionDigits:3})}} / Cr: OMR {{totalCr.toLocaleString('en-OM',{minimumFractionDigits:3})}}</span>
             </div>
           </div>
 
@@ -360,8 +360,8 @@
                 </tr>
                 <tr class="jen-total-row">
                   <td colspan="2" style="padding:8px 10px;font-size:12px;font-weight:700;color:#868e96;text-transform:uppercase;letter-spacing:.04em">Totals</td>
-                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#c92a2a">₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
-                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#2f9e44">₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
+                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#c92a2a">OMR {{totalDr.toLocaleString('en-OM',{minimumFractionDigits:3})}}</td>
+                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#2f9e44">OMR {{totalCr.toLocaleString('en-OM',{minimumFractionDigits:3})}}</td>
                   <td colspan="2"></td>
                 </tr>
               </tbody>
@@ -429,8 +429,8 @@
             <div v-if="lines.length" class="jen-lmc-totals">
               <span class="jen-lmc-totals-lbl">Totals</span>
               <div class="jen-lmc-totals-vals">
-                <span class="jen-lmc-totals-dr">Dr: ₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
-                <span class="jen-lmc-totals-cr">Cr: ₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
+                <span class="jen-lmc-totals-dr">Dr: OMR {{totalDr.toLocaleString('en-OM',{minimumFractionDigits:3})}}</span>
+                <span class="jen-lmc-totals-cr">Cr: OMR {{totalCr.toLocaleString('en-OM',{minimumFractionDigits:3})}}</span>
               </div>
             </div>
 
@@ -660,7 +660,7 @@ function fmtINR(v) {
   if (!v && v !== 0) return "—";
   const n = Number(v);
   if (n === 0) return "—";
-  return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  return "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 3 });
 }
 function fmtDateLocal(d) {
   if (!d) return "—";

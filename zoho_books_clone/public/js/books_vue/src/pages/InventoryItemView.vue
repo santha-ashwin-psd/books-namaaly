@@ -187,7 +187,7 @@
           <thead>
             <tr>
               <th>Price List</th>
-              <th class="ta-r">Rate (₹)</th>
+              <th class="ta-r">Rate (OMR)</th>
               <th>UOM</th>
               <th>Valid From</th>
               <th>Valid To</th>

@@ -184,7 +184,7 @@ const summaryOut=computed(()=>filteredRows.value.filter(e=>flt(e.actual_qty)<0).
 const stockValue=computed(()=>filteredRows.value.reduce((s,e)=>s+flt(e.stock_value_difference),0));
 function openView(e){viewDoc.value=e;viewOpen.value=true;}
 function goVoucher(e){if(e.voucher_no)router.push({name:"stock-entries",query:{open:e.voucher_no}});}
-function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
+function fmtCur(v){const n=flt(v);try{return new Intl.NumberFormat("en-OM",{style:"currency",currency:"OMR"}).format(n);}catch{return "ر.ع. "+n.toLocaleString("en-OM",{minimumFractionDigits:3,maximumFractionDigits:3});}}
 function fmtQty(v){return Number(flt(v)).toLocaleString("en-IN",{maximumFractionDigits:3});}
 function exportCSV(){
   const rows=sorted.value;

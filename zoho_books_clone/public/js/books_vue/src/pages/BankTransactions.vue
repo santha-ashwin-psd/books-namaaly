@@ -754,7 +754,7 @@ const counts = computed(() => ({
     t => t.status === "Unreconciled"
   ).length
 }));
-function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
+function fmtCur(v){const n=flt(v);try{return new Intl.NumberFormat("en-OM",{style:"currency",currency:"OMR"}).format(n);}catch{return "ر.ع. "+n.toLocaleString("en-OM",{minimumFractionDigits:3,maximumFractionDigits:3});}}
 function openView(t){viewDoc.value=t;viewOpen.value=true;}
 
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "bank-transactions" });

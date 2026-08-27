@@ -240,7 +240,12 @@ function daysPast(dateStr) {
 }
 
 function fmtCur(v) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(flt(v));
+  const n = flt(v);
+  try {
+    return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n);
+  } catch {
+    return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
 }
 
 onMounted(loadAll);

@@ -661,11 +661,11 @@
             <div class="cus-stmt-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
               <div style="background:#FFF5F5;border:1px solid #FFC9C9;border-radius:10px;padding:14px 16px">
                 <div style="font-size:11px;color:#C92A2A;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Total Outstanding</div>
-                <div style="font-size:20px;font-weight:700;color:#C92A2A">₹{{fmtStmt(stmt.total_outstanding)}}</div>
+                <div style="font-size:20px;font-weight:700;color:#C92A2A">OMR {{fmtStmt(stmt.total_outstanding)}}</div>
               </div>
               <div style="background:#FFF9DB;border:1px solid #FFD43B;border-radius:10px;padding:14px 16px">
                 <div style="font-size:11px;color:#E67700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Overdue</div>
-                <div style="font-size:20px;font-weight:700;color:#E67700">₹{{fmtStmt(stmt.overdue_amount)}}</div>
+                <div style="font-size:20px;font-weight:700;color:#E67700">OMR {{fmtStmt(stmt.overdue_amount)}}</div>
               </div>
               <div style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px">
                 <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Open Invoices</div>
@@ -703,10 +703,10 @@
                           <span v-else>{{row.ref}}</span>
                           <span v-if="row.type==='Payment' && row.mode_of_payment" style="color:#9CA3AF;font-weight:500"> ({{row.mode_of_payment}})</span>
                         </td>
-                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.debit ? '₹'+fmtStmt(row.debit) : ''}}</td>
-                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.credit ? '₹'+fmtStmt(row.credit) : ''}}</td>
+                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.debit ? 'OMR '+fmtStmt(row.debit) : ''}}</td>
+                        <td style="padding:8px 14px;text-align:right;white-space:nowrap">{{row.credit ? 'OMR '+fmtStmt(row.credit) : ''}}</td>
                         <td style="padding:8px 14px;text-align:right;font-weight:600;white-space:nowrap" :style="row.balance>=0?'color:#C92A2A':'color:#2F9E44'">
-                          ₹{{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}
+                          OMR {{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}
                         </td>
                       </tr>
                     </tbody>
@@ -714,7 +714,7 @@
                       <tr style="background:#F9FAFB;font-weight:700">
                         <td colspan="5" style="padding:10px 14px">Closing Balance</td>
                         <td style="padding:10px 14px;text-align:right;white-space:nowrap" :style="ledgerTotals.closing_balance>=0?'color:#C92A2A':'color:#2F9E44'">
-                          ₹{{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}
+                          OMR {{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}
                         </td>
                       </tr>
                     </tfoot>
@@ -736,15 +736,15 @@
                     </div>
                     <div class="cus-stmt-mc-mid">
                       <span>{{fmtDate(row.date) || '—'}}</span>
-                      <span>Bal ₹{{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}</span>
+                      <span>Bal OMR {{fmtStmt(Math.abs(row.balance))}} {{row.balance>=0?'Dr':'Cr'}}</span>
                     </div>
                     <div class="cus-stmt-mc-amount">
-                      {{row.debit ? '₹'+fmtStmt(row.debit)+' Dr' : '₹'+fmtStmt(row.credit)+' Cr'}}
+                      {{row.debit ? 'OMR '+fmtStmt(row.debit)+' Dr' : 'OMR '+fmtStmt(row.credit)+' Cr'}}
                     </div>
                   </div>
                   <div style="padding:12px 14px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;background:#F9FAFB">
                     <span>Closing Balance</span>
-                    <span>₹{{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}</span>
+                    <span>OMR {{fmtStmt(Math.abs(ledgerTotals.closing_balance||0))}} {{(ledgerTotals.closing_balance||0)>=0?'Dr':'Cr'}}</span>
                   </div>
                 </div>
 
@@ -1215,7 +1215,7 @@
             <div class="inv-sec-lbl">Opening Balance</div>
             <div class="cus-form-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
               <div>
-                <label class="inv-lbl">Opening Balance (₹)</label>
+                <label class="inv-lbl">Opening Balance (OMR)</label>
                 <input v-model.number="form.opening_balance" type="number" min="0" class="inv-fi" placeholder="0.00"
                   :style="formErrors.opening_balance?'border-color:#dc2626;background:#fff5f5':''"
                   @input="delete formErrors.opening_balance"
@@ -1571,7 +1571,7 @@ const form = reactive({
 
 const activeRule = computed(() => GST_RULES[form.gst_treatment] || GST_RULES["Registered Business"]);
 
-const currencySymbol = "₹";
+const currencySymbol = "OMR ";
 
 // Clear GSTIN/POS errors when treatment changes
 watch(() => form.gst_treatment, () => {
@@ -2495,7 +2495,7 @@ function buildStatementConfirmationHtml() {
   <div class="conf-intro">
     Dear Sir/Madam,<br><br>
     Please find below the statement of Accounts for the period from ${periodFrom} to ${periodTo}
-    stating that there is a ${closingType} balance of ₹${closingAbs} against you as per the following details.
+    stating that there is a ${closingType} balance of OMR ${closingAbs} against you as per the following details.
   </div>
 
   <table>
@@ -2506,9 +2506,9 @@ function buildStatementConfirmationHtml() {
         <th>Particulars</th>
         <th>Due Date</th>
         <th>Chq No</th>
-        <th class="num">Debit (₹)</th>
-        <th class="num">Credit (₹)</th>
-        <th class="num">Balance (₹)</th>
+        <th class="num">Debit (OMR)</th>
+        <th class="num">Credit (OMR)</th>
+        <th class="num">Balance (OMR)</th>
       </tr>
     </thead>
     <tbody>${rowsHtml}</tbody>
@@ -2547,7 +2547,7 @@ function buildStatementConfirmationHtml() {
     <div class="conf-confirm-title">BALANCE CONFIRMATION</div>
     <div class="conf-confirm-text">
       I/We confirm that, as per the above statement of Accounts, there is a debit/credit balance of
-      ₹${closingAbs} against us/me as on ${today}. In token of my/our acknowledgement and confirmation of
+      OMR ${closingAbs} against us/me as on ${today}. In token of my/our acknowledgement and confirmation of
       accounts today, I/We received a copy of the statement.
     </div>
     <div class="conf-confirm-sign">Customer's Seal and Signature :<span class="line"></span></div>

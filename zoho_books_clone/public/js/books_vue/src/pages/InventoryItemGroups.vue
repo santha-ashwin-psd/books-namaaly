@@ -253,7 +253,7 @@
               <div class="ig-item-card-code">{{ item.item_code }}</div>
               <div class="ig-item-card-footer">
                 <span class="ig-item-card-uom">{{ item.stock_uom || 'Nos' }}</span>
-                <span class="ig-item-card-rate">₹ {{ flt(item.standard_rate, 2) }}</span>
+                <span class="ig-item-card-rate">OMR {{ flt(item.standard_rate, 2) }}</span>
               </div>
             </div>
           </div>

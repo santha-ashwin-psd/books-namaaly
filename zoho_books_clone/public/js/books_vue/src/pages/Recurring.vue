@@ -663,7 +663,7 @@ function isDue(r) {
 function fmtCurrency(v) {
   if (v == null || v === "") return "—";
   const n = Number(v) || 0;
-  return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  return "OMR " + n.toLocaleString("en-OM", { maximumFractionDigits: 3 });
 }
 
 function sort(col) {

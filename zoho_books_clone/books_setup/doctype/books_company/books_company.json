@@ -57,7 +57,7 @@
    "fieldtype": "Link",
    "options": "Currency",
    "label": "Default Currency",
-   "default": "INR",
+   "default": "OMR",
    "idx": 11
   },
   {

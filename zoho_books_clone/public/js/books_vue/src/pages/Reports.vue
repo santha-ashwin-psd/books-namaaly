@@ -96,10 +96,10 @@
         <div style="display:flex;align-items:flex-end;gap:6px;min-width:400px;height:140px;padding:0 4px">
           <div v-for="m in plMonthly" :key="m.month" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
             <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;justify-content:flex-end">
-              <div :style="{width:'60%',background:'#4C6EF5',borderRadius:'3px 3px 0 0',height:barH(m.income)+'px',minHeight:'2px',transition:'height .3s'}" :title="'Income: ₹'+fmtN(m.income)"></div>
+              <div :style="{width:'60%',background:'#4C6EF5',borderRadius:'3px 3px 0 0',height:barH(m.income)+'px',minHeight:'2px',transition:'height .3s'}" :title="'Income: OMR '+fmtN(m.income)"></div>
             </div>
             <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;justify-content:flex-end">
-              <div :style="{width:'60%',background:'#FA5252',borderRadius:'3px 3px 0 0',height:barH(m.expense)+'px',minHeight:'2px',transition:'height .3s'}" :title="'Expense: ₹'+fmtN(m.expense)"></div>
+              <div :style="{width:'60%',background:'#FA5252',borderRadius:'3px 3px 0 0',height:barH(m.expense)+'px',minHeight:'2px',transition:'height .3s'}" :title="'Expense: OMR '+fmtN(m.expense)"></div>
             </div>
             <div style="font-size:10px;color:#868E96;margin-top:4px;white-space:nowrap">{{m.month.slice(5)}}</div>
           </div>
@@ -224,7 +224,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="books-card-title" style="margin:0">Accounts Receivable Aging</div>
         <div v-if="arAging.length" style="font-size:12.5px;color:#868E96">
-          Total: <span style="font-weight:700;color:#C92A2A">₹{{fmtN(arAging.reduce((s,r)=>s+r.total,0))}}</span>
+          Total: <span style="font-weight:700;color:#C92A2A">OMR {{fmtN(arAging.reduce((s,r)=>s+r.total,0))}}</span>
         </div>
       </div>
       <template v-if="arLoading"><div class="loading-shimmer" style="height:120px;border-radius:8px"></div></template>
@@ -300,7 +300,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="books-card-title" style="margin:0">Accounts Payable Aging</div>
         <div v-if="apAging.length" style="font-size:12.5px;color:#868E96">
-          Total: <span style="font-weight:700;color:#C92A2A">₹{{fmtN(apAging.reduce((s,r)=>s+r.total,0))}}</span>
+          Total: <span style="font-weight:700;color:#C92A2A">OMR {{fmtN(apAging.reduce((s,r)=>s+r.total,0))}}</span>
         </div>
       </div>
       <template v-if="apLoading"><div class="loading-shimmer" style="height:120px;border-radius:8px"></div></template>
@@ -375,7 +375,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="books-card-title" style="margin:0">Item-wise Sales</div>
         <div v-if="itemSales.length" style="font-size:12.5px;color:#868E96">
-          Total: <span style="font-weight:700;color:#2F9E44">₹{{fmtN(itemSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
+          Total: <span style="font-weight:700;color:#2F9E44">OMR {{fmtN(itemSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
         </div>
       </div>
       <template v-if="itemsLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
@@ -422,7 +422,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="books-card-title" style="margin:0">Customer-wise Sales</div>
         <div v-if="customerSales.length" style="font-size:12.5px;color:#868E96">
-          Total: <span style="font-weight:700;color:#2F9E44">₹{{fmtN(customerSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
+          Total: <span style="font-weight:700;color:#2F9E44">OMR {{fmtN(customerSales.reduce((s,r)=>s+Number(r.total_amount||0),0))}}</span>
         </div>
       </div>
       <template v-if="customersLoading"><div class="loading-shimmer" style="height:200px;border-radius:8px"></div></template>
@@ -756,7 +756,7 @@ import { apiGET, resolveCompany } from "../api/client.js";
 import Modal from "../components/Modal.vue";
 
 const fmt    = formatCurrency;
-const fmtAmt = (v) => v != null ? "₹" + Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+const fmtAmt = (v) => v != null ? "OMR " + Number(v).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : "—";
 const fmtN   = (v) => Number(v||0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
 const today    = new Date();

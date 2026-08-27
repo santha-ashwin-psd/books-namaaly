@@ -157,7 +157,7 @@ const maxInvoiceAmt = computed(() => Math.max(0, Number(state.invoiceTotal || 0)
 const exceedsInvoice = computed(() => grandTotal.value > maxInvoiceAmt.value + 0.005);
 
 function fmt(v) {
-  return "₹" + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "OMR " + Number(v || 0).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 function recalc(line) {
   if (line.qty > line.maxQty) line.qty = line.maxQty;

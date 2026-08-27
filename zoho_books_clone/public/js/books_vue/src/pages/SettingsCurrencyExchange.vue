@@ -177,15 +177,15 @@
       <div class="sce-stat-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
         <div style="background:#EBFBEE;border:1px solid #b2f2bb;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#2F9E44;margin-bottom:6px">Realised Gain</div>
-          <div style="font-size:24px;font-weight:800;color:#2F9E44">₹{{pnlSummary.gain.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div style="font-size:24px;font-weight:800;color:#2F9E44">OMR {{pnlSummary.gain.toLocaleString('en-OM',{minimumFractionDigits:3})}}</div>
         </div>
         <div style="background:#FFF5F5;border:1px solid #ffc9c9;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#C92A2A;margin-bottom:6px">Realised Loss</div>
-          <div style="font-size:24px;font-weight:800;color:#C92A2A">₹{{pnlSummary.loss.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div style="font-size:24px;font-weight:800;color:#C92A2A">OMR {{pnlSummary.loss.toLocaleString('en-OM',{minimumFractionDigits:3})}}</div>
         </div>
         <div :style="'background:'+(pnlSummary.net>=0?'#E8EAF6':'#FFF5F5')+';border:1px solid '+(pnlSummary.net>=0?'#c5cae9':'#ffc9c9')+';border-radius:12px;padding:18px 20px'">
           <div :style="'font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')+';margin-bottom:6px'">Net P&amp;L</div>
-          <div :style="'font-size:24px;font-weight:800;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')">{{pnlSummary.net>=0?'+':''}}₹{{Math.abs(pnlSummary.net).toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div :style="'font-size:24px;font-weight:800;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')">{{pnlSummary.net>=0?'+':''}}OMR {{Math.abs(pnlSummary.net).toLocaleString('en-OM',{minimumFractionDigits:3})}}</div>
         </div>
         <div style="background:#FFF8F0;border:1px solid #ffd8a8;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#E67700;margin-bottom:6px">Transactions</div>
@@ -214,7 +214,7 @@
               <td style="padding:10px 14px;font-weight:600">{{r.amountFC.toLocaleString()}}</td>
               <td style="padding:10px 14px">
                 <span :style="'font-weight:700;color:'+(r.gainLoss>=0?'#2F9E44':'#C92A2A')">
-                  {{r.gainLoss>=0?'+':''}}₹{{Math.abs(r.gainLoss).toLocaleString('en-IN',{minimumFractionDigits:2})}}
+                  {{r.gainLoss>=0?'+':''}}OMR {{Math.abs(r.gainLoss).toLocaleString('en-OM',{minimumFractionDigits:3})}}
                 </span>
               </td>
             </tr>

@@ -121,7 +121,7 @@
               class="bv-ai-inv-chip"
               @click="sendQuick(inv.name)">
               <span class="bv-ai-inv-name">{{ inv.name }}</span>
-              <span class="bv-ai-inv-meta">{{ inv.customer }} · ₹{{ Number(inv.outstanding_amount || 0).toLocaleString() }}</span>
+              <span class="bv-ai-inv-meta">{{ inv.customer }} · OMR {{ Number(inv.outstanding_amount || 0).toLocaleString() }}</span>
             </button>
           </div>
 
@@ -151,10 +151,10 @@
             </div>
             <div v-for="(item, j) in (m.confirm.items || [])" :key="j" class="bv-ai-confirm-row">
               <span class="bv-ai-confirm-label">{{ item.item_name }}</span>
-              <span>× {{ item.qty }} @ ₹{{ Number(item.rate || 0).toLocaleString() }}</span>
+              <span>× {{ item.qty }} @ OMR {{ Number(item.rate || 0).toLocaleString() }}</span>
             </div>
             <div class="bv-ai-confirm-total" v-if="confirmTotal(m.confirm)">
-              Total: ₹{{ confirmTotal(m.confirm).toLocaleString() }}
+              Total: OMR {{ confirmTotal(m.confirm).toLocaleString() }}
             </div>
             <div v-if="!m.confirmed" class="bv-ai-confirm-actions">
               <button class="bv-ai-confirm-yes" @click="doConfirmCreate(m)">✓ Confirm</button>
@@ -189,7 +189,7 @@
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Name</span><span>{{ m.proData.item_name }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Type</span><span>{{ m.proData.item_type || 'Product' }}</span></div>
               <div v-if="m.proData.item_group" class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Group</span><span>{{ m.proData.item_group }}</span></div>
-              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Rate</span><span>₹{{ Number(m.proData.rate || 0).toLocaleString() }}</span></div>
+              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Rate</span><span>OMR {{ Number(m.proData.rate || 0).toLocaleString() }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">UOM</span><span>{{ m.proData.uom || 'Nos' }}</span></div>
             </template>
 
@@ -199,10 +199,10 @@
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Customer</span><span>{{ m.proData.customer }}</span></div>
               <div v-for="(item, j) in (m.proData.items || [])" :key="j" class="bv-ai-confirm-row">
                 <span class="bv-ai-confirm-label">{{ item.item_name }}</span>
-                <span>× {{ item.qty }} @ ₹{{ Number(item.rate || 0).toLocaleString() }}</span>
+                <span>× {{ item.qty }} @ OMR {{ Number(item.rate || 0).toLocaleString() }}</span>
               </div>
               <div class="bv-ai-confirm-total" v-if="confirmTotal(m.proData)">
-                Total: ₹{{ confirmTotal(m.proData).toLocaleString() }}
+                Total: OMR {{ confirmTotal(m.proData).toLocaleString() }}
               </div>
             </template>
 
@@ -211,7 +211,7 @@
               <div class="bv-ai-confirm-header">💵 Payment Preview</div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Invoice</span><span>{{ m.proData.invoice }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Customer</span><span>{{ m.proData.customer }}</span></div>
-              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Amount</span><span style="font-weight:700;color:#2F9E44">₹{{ Number(m.proData.amount || 0).toLocaleString() }}</span></div>
+              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Amount</span><span style="font-weight:700;color:#2F9E44">OMR {{ Number(m.proData.amount || 0).toLocaleString() }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Mode</span><span>{{ m.proData.mode || 'Cash' }}</span></div>
             </template>
 
@@ -220,7 +220,7 @@
               <div class="bv-ai-confirm-header">🚫 Cancel Invoice</div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Invoice</span><span>{{ m.proData.invoice }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Customer</span><span>{{ m.proData.customer }}</span></div>
-              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Amount</span><span>₹{{ Number(m.proData.amount || 0).toLocaleString() }}</span></div>
+              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Amount</span><span>OMR {{ Number(m.proData.amount || 0).toLocaleString() }}</span></div>
               <div style="font-size:11px;color:#b91c1c;margin-top:6px">⚠️ This action cannot be easily undone.</div>
             </template>
 
@@ -228,8 +228,8 @@
             <template v-else-if="m.proAction === 'update_item_price'">
               <div class="bv-ai-confirm-header">💲 Price Update</div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Item</span><span>{{ m.proData.item_name }}</span></div>
-              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Old Rate</span><span style="text-decoration:line-through;color:#94a3b8">₹{{ Number(m.proData.old_rate || 0).toLocaleString() }}</span></div>
-              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">New Rate</span><span style="font-weight:700;color:#2F9E44">₹{{ Number(m.proData.new_rate || 0).toLocaleString() }}</span></div>
+              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Old Rate</span><span style="text-decoration:line-through;color:#94a3b8">OMR {{ Number(m.proData.old_rate || 0).toLocaleString() }}</span></div>
+              <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">New Rate</span><span style="font-weight:700;color:#2F9E44">OMR {{ Number(m.proData.new_rate || 0).toLocaleString() }}</span></div>
             </template>
 
             <!-- Purchase Order (no-stock flow) -->
@@ -238,7 +238,7 @@
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Item</span><span>{{ m.proData.item_code }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Supplier</span><span>{{ m.proData.supplier }}</span></div>
               <div class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Qty</span><span>{{ m.proData.qty }}</span></div>
-              <div v-if="m.proData.rate" class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Rate</span><span>₹{{ Number(m.proData.rate || 0).toLocaleString() }}</span></div>
+              <div v-if="m.proData.rate" class="bv-ai-confirm-row"><span class="bv-ai-confirm-label">Rate</span><span>OMR {{ Number(m.proData.rate || 0).toLocaleString() }}</span></div>
               <div style="font-size:11px;color:#15803d;margin-top:6px">✓ Stock will be received immediately after confirmation.</div>
             </template>
 

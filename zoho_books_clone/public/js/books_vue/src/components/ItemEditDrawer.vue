@@ -155,23 +155,23 @@
             <div class="ad-section-title">Rates</div>
             <div class="ad-grid-2">
               <div class="ad-field">
-                <label class="ad-label">Selling Rate (₹)</label>
+                <label class="ad-label">Selling Rate (OMR)</label>
                 <div class="ad-input-prefix-wrap">
-                  <span class="ad-input-prefix">₹</span>
+                  <span class="ad-input-prefix">OMR </span>
                   <input type="number" class="ad-input ad-input--prefixed" v-model="form.standard_rate" min="0" placeholder="0.00"/>
                 </div>
               </div>
               <div class="ad-field">
-                <label class="ad-label">Buying Rate (₹)</label>
+                <label class="ad-label">Buying Rate (OMR)</label>
                 <div class="ad-input-prefix-wrap">
-                  <span class="ad-input-prefix">₹</span>
+                  <span class="ad-input-prefix">OMR </span>
                   <input type="number" class="ad-input ad-input--prefixed" v-model="form.standard_buying_rate" min="0" placeholder="0.00"/>
                 </div>
               </div>
               <div class="ad-field">
-                <label class="ad-label">MRP (₹)</label>
+                <label class="ad-label">MRP (OMR)</label>
                 <div class="ad-input-prefix-wrap">
-                  <span class="ad-input-prefix">₹</span>
+                  <span class="ad-input-prefix">OMR </span>
                   <input type="number" class="ad-input ad-input--prefixed" v-model="form.mrp" min="0" placeholder="0.00"/>
                 </div>
                 <div class="ad-hint" style="margin-top:6px">If left blank, Selling Rate is used as the MRP on invoices.</div>

@@ -78,7 +78,7 @@ const SS_CREATE_FIELDS = {
   Item: [
     { f: "item_name",     l: "Item Name",  req: true,  type: "text" },
     { f: "item_group",    l: "Item Group", req: false, type: "text" },
-    { f: "standard_rate", l: "Rate (₹)",   req: false, type: "number" },
+    { f: "standard_rate", l: "Rate (OMR)",   req: false, type: "number" },
     { f: "stock_uom",     l: "UOM",        req: false, type: "text", placeholder: "Nos" },
   ],
   Customer: [

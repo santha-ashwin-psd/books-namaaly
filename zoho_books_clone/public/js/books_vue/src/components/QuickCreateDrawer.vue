@@ -151,7 +151,7 @@
                 </select>
               </div>
               <div class="qcd-field">
-                <label class="qcd-lbl">Standard Rate (₹)</label>
+                <label class="qcd-lbl">Standard Rate (OMR)</label>
                 <input v-model.number="form.standard_rate" type="number" min="0" step="0.01" class="qcd-input" placeholder="0.00" />
               </div>
               <div class="qcd-field">

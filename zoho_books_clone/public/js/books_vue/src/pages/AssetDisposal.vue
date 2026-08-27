@@ -360,8 +360,8 @@ const { confirm } = useConfirm();
 
 function flt(n) { const x = Number(n); return isNaN(x) ? 0 : x; }
 function INR(n) {
-  if (n == null || isNaN(n)) return '₹0.00';
-  return '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n == null || isNaN(n)) return 'OMR 0.00';
+  return 'OMR ' + Number(n).toLocaleString('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 function todayLocal() {
   const d = new Date();

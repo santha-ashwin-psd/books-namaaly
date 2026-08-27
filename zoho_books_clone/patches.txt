@@ -119,3 +119,11 @@ zoho_books_clone.patches.v1_17.disable_stale_gst_accounts
 # v1_17 -- run after it. Idempotent, only inserts missing rows. Safe to
 # re-run.
 zoho_books_clone.patches.v1_18.seed_vat_tax_templates
+
+# INR -> OMR currency migration, Phase 1 (backend): seeds OMR into the
+# Currency master, sets default_currency=OMR on every existing company
+# and on Books Settings/Global Defaults, and back-fills currency=OMR on
+# every existing Account that has zero GL Entries against it (accounts
+# with postings keep their original currency -- never touches
+# transactional history). Idempotent, safe to re-run.
+zoho_books_clone.patches.v1_19.migrate_currency_to_omr

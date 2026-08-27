@@ -318,7 +318,7 @@
             <div class="cc-section-title cc-section-divided">Budget</div>
             <div class="cc-grid2">
               <div class="cc-field">
-                <label class="cc-label">Budget Amount (₹)</label>
+                <label class="cc-label">Budget Amount (OMR)</label>
                 <input v-model="fForm.budget" class="b-input" type="number" min="0" step="1000" placeholder="0" />
               </div>
               <div class="cc-field">
@@ -421,8 +421,8 @@ function setView(v) { viewMode.value = v; try { localStorage.setItem("books.cc.v
 const fForm = reactive({ name: "", code: "", parent: "", type: "Department", color: CC_COLORS[0], budget: "", budget_period: "Annual", alert_pct: 80, budget_action: "Warn", is_group: 0, status: "Active", desc: "", modified: "" });
 
 // ── formatting helpers ───────────────────────────────────────────────────────
-function fmtINR(v) { const n = Number(v || 0); if (n === 0) return "₹0"; return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 0 }); }
-function fmtSigned(v) { const n = Number(v || 0); return (n < 0 ? "-" : "") + "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 0 }); }
+function fmtINR(v) { const n = Number(v || 0); if (n === 0) return "OMR 0"; return "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 0 }); }
+function fmtSigned(v) { const n = Number(v || 0); return (n < 0 ? "-" : "") + "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 0 }); }
 function spentOf(cc) { return spend.value[cc.name] || 0; }
 // Utilisation never goes below 0 — a net-income cost center (negative net
 // spend) means nothing was consumed against budget, i.e. 0% utilised.

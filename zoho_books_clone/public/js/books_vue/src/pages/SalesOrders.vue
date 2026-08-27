@@ -1290,9 +1290,9 @@ const deliverModal = reactive({ open: false, saving: false, soName: "", warehous
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function deliveryDefault() { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().slice(0, 10); }
-const currencySymbol = "₹";
+const currencySymbol = "OMR ";
 function fmtAmt(v) {
-  return "₹" + Math.abs(flt(v)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "OMR " + Math.abs(flt(v)).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 function fmtCur(v) { return fmtAmt(v); }
 

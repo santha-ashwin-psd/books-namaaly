@@ -279,7 +279,7 @@
                     <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="sc.qty" min="0" step="any"/>
                   </div>
                   <div class="bomx-rm-field" v-if="!sc.is_process_loss">
-                    <label>Rate (₹)</label>
+                    <label>Rate (OMR)</label>
                     <input class="bomx-fi bomx-fi-mono" type="number" v-model.number="sc.rate" min="0" step="any"/>
                   </div>
                 </div>

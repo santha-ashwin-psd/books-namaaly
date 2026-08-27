@@ -227,7 +227,7 @@
           <div class="se-items-head">
             <div>Item</div>
             <div class="ta-r">Qty</div>
-            <div class="ta-r">Rate (₹)</div>
+            <div class="ta-r">Rate (OMR)</div>
             <div></div>
           </div>
           <div v-for="line in lines" :key="line.id" class="se-items-line">
@@ -312,7 +312,7 @@
                 <input v-model.number="line.qty" type="number" min="0" step="0.001" class="se-input ta-r" />
               </div>
               <div class="se-aic-field">
-                <label class="se-label">Rate (₹)</label>
+                <label class="se-label">Rate (OMR)</label>
                 <input v-model.number="line.basic_rate" type="number" min="0" step="0.01" class="se-input ta-r" />
               </div>
             </div>
@@ -767,7 +767,12 @@ function sortArrow(col) {
   return sortDir.value === "asc" ? "↑" : "↓";
 }
 function fmtCur(v) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(flt(v));
+  const n = flt(v);
+  try {
+    return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n);
+  } catch {
+    return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
 }
 
 async function load() {

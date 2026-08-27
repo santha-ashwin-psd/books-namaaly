@@ -124,7 +124,7 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
-   "default": "INR"
+   "default": "OMR"
   },
   {
    "fieldname": "amended_from",

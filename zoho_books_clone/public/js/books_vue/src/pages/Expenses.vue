@@ -173,10 +173,10 @@
               <div>
                 <label class="inv-lbl">Amount <span class="inv-req">*</span></label>
                 <div class="exp-amount-wrap">
-                  <span class="exp-amount-prefix">₹</span>
+                  <span class="exp-amount-prefix">OMR</span>
                   <input v-model.number="form.total_claimed_amount" type="number" min="0" max="999999999.99" step="0.01" class="inv-fi exp-amount-input" placeholder="0.00" />
                 </div>
-                <div v-if="form.total_claimed_amount > 999999999.99" class="exp-field-hint exp-field-hint-err">Amount cannot exceed ₹99,99,99,999.99</div>
+                <div v-if="form.total_claimed_amount > 999999999.99" class="exp-field-hint exp-field-hint-err">Amount cannot exceed OMR 99,99,99,999.99</div>
               </div>
               <div>
                 <label class="inv-lbl">Expense Account <span class="inv-req">*</span></label>
@@ -453,7 +453,7 @@ async function fetchPaidThroughAccounts(q = "") {
     paidThroughOptions.value = rows.map(r => ({ label: `${r.account_name || r.name}  ·  ${fmt(balances[r.name] || 0)}`, value: r.name }));
   } catch { paidThroughOptions.value = []; }
 }
-const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
+const form=reactive({posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"OMR",remark:"",expense_account:"",paid_through:"",cost_center:""});
 const costCenters=ref([]);
 async function fetchCostCenters(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Cost Center",fields:JSON.stringify(["name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co],["is_group","=",0]]),order_by:"name asc",limit_page_length:100})||[];costCenters.value=r.map(c=>c.name);}catch{costCenters.value=[];}}
 async function fetchExpenseCategories(){try{const co=await resolveCompany();const r=await apiGET("frappe.client.get_list",{doctype:"Expense Category",fields:JSON.stringify(["name","category_name"]),filters:JSON.stringify([["disabled","=",0],["company","=",co]]),order_by:"category_name asc",limit_page_length:200})||[];expenseCategories.value=r.map(c=>({value:c.name,label:c.category_name||c.name}));}catch{expenseCategories.value=[];}}
@@ -497,7 +497,7 @@ const expTrends = computed(()=>({
   submitted: _exTr(list.value.filter(e=>e.docstatus===1).length, list.value.filter(e=>(e.posting_date||'').startsWith(_exLYM())&&e.docstatus===1).length),
   draft:     _exTr(list.value.filter(e=>e.docstatus===0).length, list.value.filter(e=>(e.posting_date||'').startsWith(_exLYM())&&e.docstatus===0).length),
 }));
-function fmtCur(v){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v));}
+function fmtCur(v){const n=flt(v);try{return new Intl.NumberFormat("en-OM",{style:"currency",currency:"OMR"}).format(n);}catch{return "ر.ع. "+n.toLocaleString("en-OM",{minimumFractionDigits:3,maximumFractionDigits:3});}}
 const filtered=computed(()=>{let r=list.value;if(activeTab.value==="draft")r=r.filter(e=>e.docstatus===0);if(activeTab.value==="submitted")r=r.filter(e=>e.docstatus===1);if(search.value.trim()){const q=search.value.toLowerCase();r=r.filter(x=>(x.name||"").toLowerCase().includes(q)||(x.expense_type||"").toLowerCase().includes(q));}return r;});
 const sorted=computed(()=>{const col=sortCol.value;return[...filtered.value].sort((a,b)=>{const av=a[col]??"",bv=b[col]??"";const c=typeof av==="number"?av-bv:String(av).localeCompare(String(bv));return sortDir.value==="asc"?c:-c;});});
 const { page, pageSize, paged } = usePagination(sorted, { storageKey: "expenses" });
@@ -506,13 +506,13 @@ function sortArrow(col){if(sortCol.value!==col)return'<span style="color:#d1d5db
 const allChecked=computed(()=>sorted.value.length>0&&sorted.value.every(e=>selected.value.has(e.name)));
 function toggle(n){const s=new Set(selected.value);s.has(n)?s.delete(n):s.add(n);selected.value=s;}
 function toggleAll(e){selected.value=e.target.checked?new Set(sorted.value.map(x=>x.name)):new Set();}
-function openNew(){editingName.value="";receiptFile.value=null;Object.assign(form,{posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});Object.assign(expCollapsed,{basic:false,payment:false,notes:true});drawerOpen.value=true;}
+function openNew(){editingName.value="";receiptFile.value=null;Object.assign(form,{posting_date:new Date().toISOString().slice(0,10),expense_type:"",total_claimed_amount:0,currency:"OMR",remark:"",expense_account:"",paid_through:"",cost_center:""});Object.assign(expCollapsed,{basic:false,payment:false,notes:true});drawerOpen.value=true;}
 async function openEdit(e){
   editingName.value=e.name;
   receiptFile.value=null;
   // Reset to blanks first so a failed/partial fetch below can never leave
   // stale account/cost-center values from a previously edited expense.
-  Object.assign(form,{posting_date:"",expense_type:"",total_claimed_amount:0,currency:"INR",remark:"",expense_account:"",paid_through:"",cost_center:""});
+  Object.assign(form,{posting_date:"",expense_type:"",total_claimed_amount:0,currency:"OMR",remark:"",expense_account:"",paid_through:"",cost_center:""});
   try{
     const doc=await apiGet("Expense",e.name);
     Object.assign(form,{
@@ -525,7 +525,7 @@ async function openEdit(e){
       // tax-inclusive `total_amount` — loading the inclusive total here would
       // re-apply gst_rate on top of it on every subsequent edit.
       total_claimed_amount: flt(doc.amount ?? doc.total_amount),
-      currency: "INR",
+      currency: "OMR",
       remark: doc.description||doc.notes||"",
     });
     // Expense is FLAT (one row = one expense), so seed a single line for editing
@@ -537,7 +537,7 @@ async function openEdit(e){
       posting_date:e.posting_date||"",
       expense_type:e.expense_type||"",
       total_claimed_amount:flt(e.amount ?? e.total_amount ?? e.total_claimed_amount),
-      currency:"INR",
+      currency:"OMR",
       remark:e.description||"",
       expense_account:"",
       paid_through:"",
@@ -559,7 +559,7 @@ async function openView(e) {
 
 async function saveExpense(submit){
   if(!flt(form.total_claimed_amount)) return toast.error("Enter an amount");
-  if(flt(form.total_claimed_amount) > 999999999.99) return toast.error("Amount cannot exceed ₹99,99,99,999.99");
+  if(flt(form.total_claimed_amount) > 999999999.99) return toast.error("Amount cannot exceed OMR 99,99,99,999.99");
   if(!form.expense_type)              return toast.error("Category is required");
   if(!form.expense_account)           return toast.error("Expense Account is required");
   if(!form.paid_through)              return toast.error("Paid Through is required");
@@ -723,9 +723,9 @@ watch(() => route.query.open, (n) => { if (n) _openFromQuery(); });
 .ew-kv-val { font-size:13px;color:#374151;text-align:right; }
 
 /* ── Amount field with prefix ── */
-.exp-amount-wrap { position:relative;display:flex;align-items:center; }
-.exp-amount-prefix { position:absolute;left:11px;font-size:13px;font-weight:600;color:#6b7280;pointer-events:none; }
-.exp-amount-input { padding-left:24px!important;font-weight:600;font-size:14px!important; }
+.exp-amount-wrap { display:flex;align-items:stretch; }
+.exp-amount-prefix { flex-shrink:0;display:flex;align-items:center;padding:0 11px;font-size:13px;font-weight:600;color:#495057;background:#f1f3f5;border:1px solid #d9e0ea;border-right:none;border-radius:7px 0 0 7px; }
+.exp-amount-input { border-radius:0 7px 7px 0!important;font-weight:600;font-size:14px!important; }
 
 /* ── Receipt Upload ── */
 .exp-receipt-drop { display:flex;align-items:center;gap:12px;padding:14px 16px;border:2px dashed #bfdbfe;border-radius:10px;cursor:pointer;background:#f0f7ff;transition:border-color .15s,background .15s; }

@@ -1,9 +1,10 @@
 {% set inv = doc %}
 {% set company = frappe.db.get_single_value("Global Defaults","default_company") or "Your Company" %}
 {% set company_doc = frappe.get_doc("Company", company) if frappe.db.exists("Company", company) else None %}
-{% set cur = inv.currency or "INR" %}
+{% set cur = inv.currency or "OMR" %}
 {% set cur_sym = frappe.db.get_value("Currency", cur, "symbol") or cur %}
-{% macro fc(amount) %}{{ cur_sym }}{{ "{:,.2f}".format(amount|float) }}{% endmacro %}
+{% set cur_dp = 3 if cur in ("OMR", "KWD", "BHD", "JOD") else 2 %}
+{% macro fc(amount) %}{{ cur_sym }}{{ ("{:,." ~ cur_dp ~ "f}").format(amount|float) }}{% endmacro %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -394,7 +395,7 @@
         <span class="status-badge {{ smap.get(inv.status,'badge-draft') }}">{{ inv.status }}</span>
       </div>
       <div class="party-label" style="text-align:center; margin-top:6px">Currency</div>
-      <div style="font-size:13px; font-weight:600; color:var(--ink-900)">{{ inv.currency or "INR" }}</div>
+      <div style="font-size:13px; font-weight:600; color:var(--ink-900)">{{ inv.currency or "OMR" }}</div>
     </div>
   </div>
 

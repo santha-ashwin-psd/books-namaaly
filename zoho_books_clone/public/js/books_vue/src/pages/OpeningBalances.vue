@@ -106,7 +106,7 @@
         <template v-if="isSec(type)">
           <div class="ob-col-header" style="display:grid;grid-template-columns:1fr 130px 130px;align-items:center;gap:10px;padding:8px 16px;background:#F8F9FC;border-top:1px solid #F1F3F5">
             <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96">Account</div>
-            <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;text-align:right">Balance (₹)</div>
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;text-align:right">Balance (OMR)</div>
             <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96">Dr / Cr</div>
           </div>
           <div v-for="a in secAccts(type)" :key="a.name" class="ob-acct-row">
@@ -201,8 +201,8 @@ const showResetModal  = ref(false);
 function r2(v) { return Math.round(Number(v || 0) * 100) / 100; }
 function fmtINR(v) {
   const n = Number(v || 0);
-  if (n === 0) return "₹0";
-  return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  if (n === 0) return "OMR 0";
+  return "OMR " + Math.abs(n).toLocaleString("en-OM", { minimumFractionDigits: 3 });
 }
 function guessRT(t, name) {
   t = (t || "").toLowerCase();

@@ -236,7 +236,7 @@
               </div>
               <div class="cn-field" v-if="form.reason === 'Incentive'">
   <label class="inv-lbl">
-    Incentive Amount (₹) <span class="inv-req">*</span>
+    Incentive Amount (OMR) <span class="inv-req">*</span>
   </label>
 
  <input
@@ -336,7 +336,7 @@
                         <input v-model.number="line.qty" type="number" min="0.001" step="0.001" class="inv-fi" @input="calcLine(line)" />
                       </div>
                       <div class="cn-item-field">
-                        <label>Rate (₹)</label>
+                        <label>Rate (OMR)</label>
                         <input v-model.number="line.rate" type="number" min="0" step="0.01" class="inv-fi" @input="calcLine(line)" />
                       </div>
                     </div>
@@ -900,7 +900,7 @@ const applyModal = reactive({ open: false, saving: false, cnName: "", balance: 0
 const refundModal = reactive({ open: false, saving: false, cnName: "", balance: 0, amount: 0, mode: "Bank Transfer", reference: "" });
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-function fmtCur(v) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(Math.abs(flt(v))); }
+function fmtCur(v) { const n = Math.abs(flt(v)); try { return new Intl.NumberFormat("en-OM", { style: "currency", currency: "OMR" }).format(n); } catch { return "ر.ع. " + n.toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 }); } }
 
 async function load() {
   loading.value = true;
@@ -1180,7 +1180,7 @@ async function fetchInvoices(q = "") {
     invoices.value = r.map(x => {
       const due = flt(x.outstanding_amount);
       const label = due > 0
-        ? `${x.name} · ₹${Number(due).toLocaleString("en-IN",{minimumFractionDigits:2})} due${x.customer_name ? ` · ${x.customer_name}` : ""}`
+        ? `${x.name} · OMR ${Number(due).toLocaleString("en-OM",{minimumFractionDigits:3})} due${x.customer_name ? ` · ${x.customer_name}` : ""}`
         : `${x.name} · Paid${x.customer_name ? ` · ${x.customer_name}` : ""}`;
       return { ...x, label, value: x.name };
     });

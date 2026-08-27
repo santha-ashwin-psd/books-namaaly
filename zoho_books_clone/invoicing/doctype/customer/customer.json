@@ -79,7 +79,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "INR",
+   "default": "OMR",
    "fieldname": "default_currency",
    "fieldtype": "Link",
    "label": "Default Currency",
