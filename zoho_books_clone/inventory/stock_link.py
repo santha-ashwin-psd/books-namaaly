@@ -118,6 +118,66 @@ def on_purchase_invoice_submit(doc, method=None):
     )
 
 
+def cancel_sales_invoice_stock_entries(doc, method=None):
+    """
+    Cancel this Sales Invoice's auto-created Stock Entry WITHOUT rebuilding
+    it. Public so sales_invoice.py can call it before self.validate() runs
+    on an edit — validate_batches() checks live available batch qty, and if
+    the previous Material Issue is still active at that point, its own
+    deduction gets double-counted against the row being edited (blocking a
+    valid quantity increase, or in principle masking an invalid one). Doing
+    the cancel first — inside the same DB transaction as the rest of the
+    save — means a later validation failure simply rolls this back too, so
+    nothing is left inconsistent.
+    """
+    _cancel_linked_entries(doc.doctype, doc.name)
+
+
+def on_sales_invoice_update_after_submit(doc, method=None):
+    """
+    Rebuild the auto-created stock entry whenever a submitted Sales Invoice
+    (with Update Inventory on Submit checked) is edited.
+
+    Mirrors on_purchase_invoice_update_after_submit(): the old Material
+    Issue/Receipt is cancelled first so its stock and GL impact are
+    reversed, then a new stock entry is created from the current invoice
+    values.
+
+    If Update Inventory on Submit is off (or was turned off during the
+    edit), the old auto-created stock entry is simply cancelled and no
+    replacement is made.
+
+    Note: by the time this runs, cancel_sales_invoice_stock_entries() has
+    normally already removed the old entry (called early in
+    sales_invoice.py's on_update_after_submit, before validate()) — the
+    cancel here is a harmless no-op in that case and only does real work if
+    this is ever invoked on its own.
+    """
+    # Remove the stock movement created from the previous version of the invoice
+    # (no-op if cancel_sales_invoice_stock_entries() already did it).
+    _cancel_linked_entries(doc.doctype, doc.name)
+
+    # If inventory tracking is disabled on the updated invoice, do not recreate it.
+    if not flt(getattr(doc, "update_stock", 0)):
+        frappe.msgprint(
+            _("Stock Entry updated: previous automatic stock movement was cancelled."),
+            indicator="blue",
+            alert=True,
+        )
+        return
+
+    # Recreate the stock movement using the UPDATED invoice data.
+    on_sales_invoice_submit(doc, method)
+
+    frappe.msgprint(
+        _("Stock Entry updated automatically from Sales Invoice {0}.").format(
+            frappe.bold(doc.name)
+        ),
+        indicator="green",
+        alert=True,
+    )
+
+
 def on_purchase_invoice_cancel(doc, method=None):
     """Reverse the auto-receipt Stock Entry when a Purchase Invoice is cancelled."""
     _cancel_linked_entries(doc.doctype, doc.name)

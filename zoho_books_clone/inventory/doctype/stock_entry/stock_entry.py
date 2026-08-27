@@ -356,6 +356,13 @@ class StockEntry(Document):
     def on_submit(self):
         self._make_sle()
         self._post_gl_entries()   # Audit-4: link inventory to accounting
+        # Commit once, after BOTH the stock ledger and GL entries are
+        # posted, not in the middle (see _make_sle). If _post_gl_entries()
+        # were to fail, everything up to here still rolls back together —
+        # doc.submit() being reported as failed now always means nothing
+        # from this submit was persisted, instead of leaving stock quietly
+        # updated with no matching journal entry.
+        frappe.db.commit()
 
     def _make_sle(self):
         direction = SE_TYPE_DIRECTION.get(self.stock_entry_type, {})
@@ -401,8 +408,9 @@ class StockEntry(Document):
                     stock_value_difference=flt(row.amount),
                     batch_no=row.batch_no,
                 )
-
-        frappe.db.commit()
+        # NOTE: no commit here — on_submit() commits once, after
+        # _post_gl_entries() has also run, so the stock ledger and the GL
+        # entries it drives always land or roll back together.
 
     def _create_sle(self, item_code, warehouse, actual_qty,
                     incoming_rate, valuation_rate, stock_value_difference, batch_no=None):

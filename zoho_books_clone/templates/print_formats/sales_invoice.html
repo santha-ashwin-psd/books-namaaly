@@ -350,7 +350,8 @@
         {% if company_doc %}
           {{ company_doc.address or "" }}<br>
           {% if company_doc.city %}{{ company_doc.city }}, {% endif %}{{ company_doc.country or "India" }}<br>
-          {% if company_doc.tax_id %}<strong style="color:var(--ink-700)">GSTIN:</strong> {{ company_doc.tax_id }}{% endif %}
+          {# GSTIN label disabled — Oman uses VAT, not GST #}
+          {# {% if company_doc.tax_id %}<strong style="color:var(--ink-700)">GSTIN:</strong> {{ company_doc.tax_id }}{% endif %} #}
         {% else %}
           Tamil Nadu, India
         {% endif %}
@@ -420,7 +421,8 @@
             {% if item.description and item.description != item.item_name %}
               <div class="item-desc">{{ item.description }}</div>
             {% endif %}
-            {% if item.gst_hsn_code %}<div class="item-hsn">HSN: {{ item.gst_hsn_code }}</div>{% endif %}
+            {# HSN code disabled — India GST-specific, no Oman equivalent #}
+            {# {% if item.gst_hsn_code %}<div class="item-hsn">HSN: {{ item.gst_hsn_code }}</div>{% endif %} #}
           </td>
           <td class="mono">{{ item.qty }}&nbsp;<span style="font-size:10.5px;color:var(--ink-500)">{{ item.uom or "pcs" }}</span></td>
           <td class="mono">{{ fc(item.rate) }}</td>

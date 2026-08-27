@@ -11,10 +11,13 @@ class Supplier(Document):
             frappe.throw(_("Supplier Name is required"))
         if self.email_id and "@" not in self.email_id:
             frappe.throw(_("Please enter a valid email address"))
+        # GST/GSTIN format enforcement disabled — Oman uses VAT registration numbers, not GSTIN
+        # if self.tax_id:
+        #     self.tax_id = self.tax_id.strip().upper()
+        #     if not _GSTIN_RE.match(self.tax_id):
+        #         frappe.throw(_("Invalid GSTIN: {0}. Expected format: 22AAAAA0000A1Z5").format(self.tax_id))
         if self.tax_id:
             self.tax_id = self.tax_id.strip().upper()
-            if not _GSTIN_RE.match(self.tax_id):
-                frappe.throw(_("Invalid GSTIN: {0}. Expected format: 22AAAAA0000A1Z5").format(self.tax_id))
         if not self.is_new() and self.has_value_changed("opening_balance"):
             from zoho_books_clone.accounts.opening_balance import guard_opening_balance_edit
             guard_opening_balance_edit("Supplier", self.name)

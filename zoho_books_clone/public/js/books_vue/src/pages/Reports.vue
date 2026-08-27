@@ -163,24 +163,54 @@
       <div v-else class="empty-msg">Run the report to see results.</div>
     </div>
 
-    <!-- GST Summary -->
-    <div v-if="activeReport === 'gst'" class="books-card report-card">
-      <div class="books-card-title">GST Summary</div>
-      <template v-if="gstLoading"><div class="loading-shimmer" style="height:80px;border-radius:8px"></div></template>
-      <template v-else-if="gst?.length">
+    <!-- VAT Summary -->
+    <div v-if="activeReport === 'vat'" class="books-card report-card">
+      <div class="books-card-title">VAT Summary</div>
+      <template v-if="vatLoading"><div class="loading-shimmer" style="height:80px;border-radius:8px"></div></template>
+      <template v-else-if="vat">
         <div class="gst-cards">
-          <div v-for="g in gst" :key="g.tax_type" class="gst-card">
+          <div class="gst-card">
             <div class="gst-card-header">
-              <span class="badge badge-blue">{{ g.tax_type }}</span>
+              <span class="badge badge-blue">Output VAT (on Sales)</span>
             </div>
             <div class="gst-card-body">
               <div class="gst-kv">
                 <span class="gst-kv-label">Invoice Count</span>
-                <span class="gst-kv-value mono-sm">{{ g.invoice_count }}</span>
+                <span class="gst-kv-value mono-sm">{{ vat.output_invoice_count }}</span>
               </div>
               <div class="gst-kv">
-                <span class="gst-kv-label">Total Tax</span>
-                <span class="gst-kv-value mono-sm green fw-600">{{ fmt(g.total_tax) }}</span>
+                <span class="gst-kv-label">Total VAT Collected</span>
+                <span class="gst-kv-value mono-sm green fw-600">{{ fmt(vat.output_vat) }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="gst-card">
+            <div class="gst-card-header">
+              <span class="badge badge-blue">Input VAT (on Purchases)</span>
+            </div>
+            <div class="gst-card-body">
+              <div class="gst-kv">
+                <span class="gst-kv-label">Invoice Count</span>
+                <span class="gst-kv-value mono-sm">{{ vat.input_invoice_count }}</span>
+              </div>
+              <div class="gst-kv">
+                <span class="gst-kv-label">Total VAT Reclaimable</span>
+                <span class="gst-kv-value mono-sm green fw-600">{{ fmt(vat.input_vat) }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="gst-card" style="border:1px solid var(--accent, #4C6EF5)">
+            <div class="gst-card-header">
+              <span class="badge" :class="vat.net_vat_payable >= 0 ? 'badge-orange' : 'badge-green'">
+                {{ vat.net_vat_payable >= 0 ? 'Net VAT Payable' : 'Net VAT Refundable' }}
+              </span>
+            </div>
+            <div class="gst-card-body">
+              <div class="gst-kv">
+                <span class="gst-kv-label">Output VAT − Input VAT</span>
+                <span class="gst-kv-value mono-sm fw-600" :style="{color: vat.net_vat_payable >= 0 ? '#D9480F' : '#2B8A3E'}">
+                  {{ fmt(Math.abs(vat.net_vat_payable)) }}
+                </span>
               </div>
             </div>
           </div>
@@ -198,6 +228,7 @@
         </div>
       </div>
       <template v-if="arLoading"><div class="loading-shimmer" style="height:120px;border-radius:8px"></div></template>
+
       <template v-else-if="arAging.length">
         <div class="aging-cards">
           <div v-for="r in arAging" :key="r.customer" class="aging-card">
@@ -736,7 +767,7 @@ const activeReport = ref("pl");
 const { data: pl,  loading: plLoading,  execute: loadPl  } = useFrappeCall("zoho_books_clone.db.queries.get_profit_and_loss");
 const { data: bs,  loading: bsLoading,  execute: loadBs  } = useFrappeCall("zoho_books_clone.db.queries.get_balance_sheet_totals");
 const { data: cf,  loading: cfLoading,  execute: loadCf  } = useFrappeCall("zoho_books_clone.db.queries.get_cash_flow");
-const { data: gst, loading: gstLoading, execute: loadGst } = useFrappeCall("zoho_books_clone.db.queries.get_gst_summary");
+const { data: vat, loading: vatLoading, execute: loadVat } = useFrappeCall("zoho_books_clone.db.queries.get_vat_summary");
 const { data: tb,  loading: tbLoading,  execute: loadTb  } = useFrappeCall("zoho_books_clone.db.queries.get_trial_balance");
 
 const arAging  = ref([]);
@@ -842,7 +873,7 @@ async function runReport() {
   }
   if (activeReport.value === "bs")  await loadBs({ company, as_of_date: toDate.value });
   if (activeReport.value === "cf")  await loadCf(args);
-  if (activeReport.value === "gst") await loadGst(args);
+  if (activeReport.value === "vat") await loadVat(args);
   if (activeReport.value === "tb")  await loadTb(args);
   if (activeReport.value === "ar") {
     arLoading.value = true; arRan.value = true;
@@ -974,7 +1005,7 @@ const reports = [
   { key: "pl",  label: "Profit & Loss",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>` },
   { key: "bs",  label: "Balance Sheet",  icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="8" y1="3" x2="8" y2="21"/></svg>` },
   { key: "cf",  label: "Cash Flow",      icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>` },
-  { key: "gst", label: "GST Summary",    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
+  { key: "vat", label: "VAT Summary",    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
   { key: "items", label: "Item-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>` },
   { key: "customers", label: "Customer-wise Sales", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
   { key: "profit", label: "Profit-wise", icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>` },
@@ -1102,6 +1133,8 @@ const reports = [
 .badge-blue   { background: #E7F5FF; color: #1971C2; }
 .badge-muted  { background: #F1F3F5; color: #868E96; }
 .badge-danger { background: #FFF5F5; color: #C92A2A; }
+.badge-orange { background: #FFF4E6; color: #D9480F; }
+.badge-green  { background: #EBFBEE; color: #2B8A3E; }
 
 @media (max-width: 768px) {
   .date-range-bar { padding: 12px 14px; gap: 8px; }

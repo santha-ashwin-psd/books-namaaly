@@ -130,7 +130,7 @@ def _append_round_off_entry(gl_map: list[dict], doc, invert: bool = False) -> No
 
 # ─── Sales Invoice ─────────────────────────────────────────────────────────────
 
-def post_sales_invoice(doc) -> None:
+def post_sales_invoice(doc, replace_existing=False) -> None:
     """
     DR Receivable / CR Income (+ tax accounts) on Sales Invoice submit.
 
@@ -199,7 +199,18 @@ def post_sales_invoice(doc) -> None:
                 "remarks":      f"{tax.description} — Invoice {doc.name}",
             })
     _append_round_off_entry(gl_map, doc)
-    make_gl_entries(gl_map)
+
+    if replace_existing:
+        from zoho_books_clone.accounts.doctype.general_ledger_entry.general_ledger_entry import (
+            replace_voucher_gl_entries,
+        )
+        replace_voucher_gl_entries(
+            doc.doctype,
+            doc.name,
+            gl_map,
+        )
+    else:
+        make_gl_entries(gl_map)
 
 
 # ─── Purchase Invoice ──────────────────────────────────────────────────────────

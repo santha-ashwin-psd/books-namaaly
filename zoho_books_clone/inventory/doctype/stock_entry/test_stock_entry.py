@@ -371,13 +371,17 @@ class TestPostGlEntries(unittest.TestCase):
 
 class TestOnSubmit(unittest.TestCase):
 
-    def test_on_submit_calls_make_sle_then_post_gl(self):
+    @patch.object(frappe.db, "commit")
+    def test_on_submit_calls_make_sle_then_post_gl(self, mock_commit):
         doc = _make_se(stock_entry_type="Material Issue")
         calls = []
         doc._make_sle = lambda: calls.append("sle")
         doc._post_gl_entries = lambda: calls.append("gl")
         doc.on_submit()
         self.assertEqual(calls, ["sle", "gl"])
+        # commit now happens once, in on_submit(), after both steps --
+        # not inside _make_sle() partway through (see stock_link fix).
+        mock_commit.assert_called_once()
 
 
 if __name__ == "__main__":

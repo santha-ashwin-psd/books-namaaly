@@ -7,7 +7,7 @@
 
   <div style="background:#f0f4ff;border:1px solid #c5d0fa;border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:#3b4a7a;display:flex;gap:12px;align-items:flex-start">
     <span style="font-size:18px;margin-top:-1px">✉️</span>
-    <div><strong>How email works in Books:</strong> By default, invoices, payment reminders, and customer email are sent from the built-in platform account (<em>Books by PS Digitise</em>). Turn on <strong>Enable Company SMTP</strong> below to send that business email from your own address instead. Sign-in &amp; password-reset OTPs always use the platform account and are never affected by these settings.</div>
+    <div><strong>How email works in Books:</strong> By default, invoices, payment reminders, and customer email are sent from the built-in platform account (<em>Books by Tareqix</em>). Turn on <strong>Enable Company SMTP</strong> below to send that business email from your own address instead. Sign-in &amp; password-reset OTPs always use the platform account and are never affected by these settings.</div>
   </div>
 
   <div v-if="loading" style="padding:40px;text-align:center;color:#868E96">Loading…</div>
@@ -18,7 +18,7 @@
         <input type="checkbox" :checked="form.smtp_enabled" @change="form.smtp_enabled = $event.target.checked ? 1 : 0" style="width:16px;height:16px;cursor:pointer;margin-top:2px"/>
         <span>
           <span style="font-size:14px;font-weight:600;color:#1a1a2e;display:block">Enable Company SMTP</span>
-          <span style="font-size:12px;color:#868e96">{{ form.smtp_enabled ? 'On — invoices & business email are sent from your SMTP server below.' : 'Off — business email is sent from the platform account (Books by PS Digitise).' }}</span>
+          <span style="font-size:12px;color:#868e96">{{ form.smtp_enabled ? 'On — invoices & business email are sent from your SMTP server below.' : 'Off — business email is sent from the platform account (Books by Tareqix).' }}</span>
         </span>
       </label>
 

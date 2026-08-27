@@ -40,7 +40,7 @@
         <template v-else>
           <tr v-for="t in filtered" :key="t.name" class="inv-row" @click="openEdit(t)">
             <td data-label="Template" class="td-id"><span class="inv-link">{{ t.template_name }}</span></td>
-            <td data-label="Type">{{ t.tax_type || 'GST' }}</td>
+            <td data-label="Type">{{ t.tax_type || 'VAT' }}</td>
             <td data-label="Components" class="text-muted" style="font-size:12px">{{ t.rateLabel || '—' }}</td>
             <td data-label="Rate" class="ta-r">{{ t.headlineRate != null ? t.headlineRate + '%' : '—' }}</td>
             <td data-label="Applies To">
@@ -90,7 +90,7 @@
         <div class="tt-body">
           <div class="tt-field" style="margin-bottom:16px">
             <label class="tt-label">Template Name <span class="tt-req">*</span></label>
-            <input v-model="form.template_name" class="b-input" :placeholder="form.tax_type==='VAT' ? 'e.g. VAT 5%' : form.tax_type==='GST' ? 'e.g. GST 18%' : 'e.g. Cess 1%'" :disabled="!!editing" />
+            <input v-model="form.template_name" class="b-input" :placeholder="form.tax_type==='VAT' ? 'e.g. VAT 5%' : 'e.g. WHT 3%'" :disabled="!!editing" />
           </div>
 
           <div class="tt-field" style="margin-bottom:16px">
@@ -109,21 +109,11 @@
           <div class="tt-field" style="margin-bottom:6px">
             <label class="tt-label">Tax Regime</label>
             <div class="tt-pills">
-              <button v-for="t in ['GST','VAT','Custom']" :key="t" type="button" class="tt-pill" :class="{active:form.tax_type===t}" @click="setType(t)">{{ t }}</button>
+              <button v-for="t in ['VAT','Custom']" :key="t" type="button" class="tt-pill" :class="{active:form.tax_type===t}" @click="setType(t)">{{ t }}</button>
             </div>
           </div>
 
-          <!-- GST quick-fill: build CGST + SGST + IGST from a single total -->
-          <div v-if="form.tax_type==='GST'" class="tt-quickfill">
-            <div>
-              <div class="tt-qf-label">Quick fill</div>
-              <div class="tt-qf-sub">Enter a total GST % — we'll add CGST, SGST &amp; IGST rows you can edit.</div>
-            </div>
-            <div class="tt-qf-input">
-              <input v-model.number="quick" type="number" min="0" step="0.5" class="b-input" placeholder="e.g. 18" style="width:90px" />
-              <button class="tt-qf-btn" @click="quickFillGst" :disabled="!quick">Generate</button>
-            </div>
-          </div>
+          <!-- GST quick-fill retired: Oman uses single-rate VAT, no CGST/SGST/IGST split -->
 
           <!-- Component rows editor (all regimes) -->
           <div class="tt-section">
@@ -145,19 +135,7 @@
             <button class="tt-row-del" @click="removeRow(i)" title="Remove"><span v-html="icon('trash',13)"></span></button>
           </div>
           <div v-if="!form.rows.length" class="tt-norows">
-            {{ form.tax_type==='GST'
-              ? 'No components yet — add CGST + SGST (used for same-state sales) and IGST (used for other-state sales).'
-              : form.tax_type==='VAT' ? 'Add a VAT component.' : 'Add tax components.' }}
-          </div>
-
-          <!-- GST intra/inter preview -->
-          <div v-if="form.tax_type==='GST' && form.rows.length" class="tt-note">
-            <span v-html="icon('info',14)"></span>
-            <span>
-              <strong>Same-state (intra):</strong> {{ intraLabel || '—' }} = <strong>{{ intraRate }}%</strong>.
-              <strong>Other-state (inter):</strong> {{ interLabel || '—' }} = <strong>{{ interRate }}%</strong>.
-              Invoices &amp; bills post to the account head on each row, chosen automatically by Place of Supply.
-            </span>
+            {{ form.tax_type==='VAT' ? 'Add a VAT component.' : 'Add tax components.' }}
           </div>
 
           <div class="tt-grid2" style="margin-top:20px">
@@ -210,7 +188,7 @@ const editing   = ref(null);
 const saving    = ref(false);
 const quick     = ref(null);
 
-const form = reactive({ template_name: "", applies_to: "Both", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
+const form = reactive({ template_name: "", applies_to: "Both", tax_type: "VAT", is_default: 0, disabled: 0, rows: [] });
 
 const allowedComponents = computed(() => COMPONENTS_BY_TYPE[form.tax_type] || COMPONENTS_BY_TYPE.Custom);
 
@@ -275,6 +253,7 @@ async function load() {
   try {
     const rows = await apiList("Tax Template", {
       fields: ["name", "template_name", "tax_type", "applies_to", "is_default", "disabled"],
+      filters: [["tax_type", "=", "VAT"]],
       order: "template_name asc", limit: 200,
     }) || [];
     // Was previously one apiGet() per row here (N+1 -- up to 200 extra
@@ -329,7 +308,7 @@ const filtered = computed(() => {
 function openNew() {
   editing.value = null;
   quick.value = null;
-  Object.assign(form, { template_name: "", applies_to: "Both", tax_type: "GST", is_default: 0, disabled: 0, rows: [] });
+  Object.assign(form, { template_name: "", applies_to: "Both", tax_type: "VAT", is_default: 0, disabled: 0, rows: [] });
   drawer.value = true;
 }
 function openEdit(t) {

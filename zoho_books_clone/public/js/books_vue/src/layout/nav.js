@@ -21,7 +21,7 @@ export const NAV = [
   { path: "/payments-received",             label: "Payments Received",icon: "rupee",      module: "payments"   },
   { path: "/credit-notes",                  label: "Credit Notes",     icon: "creditnote", module: "invoices"   },
   // { path: "/proforma-invoices",             label: "Proforma Invoices",icon: "file",       module: "invoices"   },
-  { path: "/eway-bills",                    label: "E-Way Bills",      icon: "truck",      module: "invoices"   },
+  // { path: "/eway-bills",                    label: "E-Way Bills",      icon: "truck",      module: "invoices"   }, // GST-only, no Oman equivalent
 
   { section: "Purchases" },
   { path: "/expenses",                      label: "Expenses",         icon: "expense",    module: "bills"      },
@@ -53,6 +53,7 @@ export const NAV = [
   { path: "/accounting/opening-balances",   label: "Opening Balances", icon: "opening",    module: "accounts"   },
   { path: "/accounting/cost-centers",       label: "Cost Centers",     icon: "costcenter", module: "accounts"   },
   { path: "/accounting/fiscal-years",       label: "Fiscal Years",     icon: "fiscal",     module: "accounts"   },
+  { path: "/gst/tax-templates",             label: "Tax Templates",    icon: "percent",    module: "accounts"   },
 
   { section: "Inventory" },
   { path: "/inventory/items",               label: "Items",            icon: "box",        module: "inventory"  },
@@ -108,12 +109,13 @@ export const NAV = [
   { path: "/manufacturing/reports",          label: "Mfg Reports",         icon: "chart",      module: "inventory" },
   { path: "/manufacturing/settings",         label: "Mfg Settings",        icon: "gear",       module: "inventory" },
 
-  { section: "GST/Taxes" },
-  { path: "/gst/tax-templates",             label: "Tax Templates",    icon: "percent",    module: "taxes"      },
-  { path: "/gst/gstr1",                     label: "GSTR-1",           icon: "gstfile",    module: "accounts"   },
-  { path: "/gst/gstr3b",                    label: "GSTR-3B",          icon: "gstfile",    module: "accounts"   },
-  { path: "/gst/einvoice",                  label: "e-Invoice",        icon: "qr",         module: "accounts"   },
-  { path: "/gst/tds",                       label: "TDS",              icon: "percent",    module: "accounts"   },
+  // GST-specific section disabled — Oman uses VAT, not GST (India-specific returns/e-Invoice/TDS).
+  // Tax Templates moved to the Accounting section above (now VAT-only).
+  // { section: "GST/Taxes" },
+  // { path: "/gst/gstr1",                     label: "GSTR-1",           icon: "gstfile",    module: "accounts"   },
+  // { path: "/gst/gstr3b",                    label: "GSTR-3B",          icon: "gstfile",    module: "accounts"   },
+  // { path: "/gst/einvoice",                  label: "e-Invoice",        icon: "qr",         module: "accounts"   },
+  // { path: "/gst/tds",                       label: "TDS",              icon: "percent",    module: "accounts"   },
 
   { section: "Reports" },
   { path: "/reports",                       label: "All Reports",      icon: "chart",      module: "reports"    },

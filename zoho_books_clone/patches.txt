@@ -105,3 +105,17 @@ zoho_books_clone.patches.v1_15.backfill_scrap_reuse_phase3_fields
 # msgprint flagged this until Phase 5 landed). New columns/doctype involved,
 # so must run after schema sync (post_model_sync). Safe to re-run.
 zoho_books_clone.patches.v1_16.backfill_asset_lifecycle_buildout
+
+# Oman VAT migration: disables (never deletes) the default India-GST Tax
+# Templates and GST-specific Accounts (CGST/SGST/IGST Input+Payable) seeded
+# by bootstrap.py for every company. Historical GL Entries/Tax Lines that
+# reference them are untouched -- disabling only hides them from future
+# document/tax-template pickers. Safe to re-run.
+zoho_books_clone.patches.v1_17.disable_stale_gst_accounts
+
+# Oman VAT migration, part 2: seeds "Input VAT"/"Output VAT" accounts and
+# matching "Input VAT 5%"/"Output VAT 5%" Tax Templates (tax_type "VAT",
+# single-line, no CGST/SGST/IGST split) for every company. Companion to
+# v1_17 -- run after it. Idempotent, only inserts missing rows. Safe to
+# re-run.
+zoho_books_clone.patches.v1_18.seed_vat_tax_templates

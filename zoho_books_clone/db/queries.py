@@ -476,6 +476,53 @@ def get_gst_summary(company: str, from_date: str, to_date: str) -> list[dict]:
 
 
 @frappe.whitelist()
+def get_vat_summary(company: str, from_date: str, to_date: str) -> dict:
+    """Net VAT payable for a period: Output VAT (Sales Invoices) minus
+    Input VAT (Purchase Invoices), for Oman-style single-rate VAT.
+
+    Returns a dict rather than a list since callers need the net figure,
+    not just a row-per-tax-type breakdown (there is only one VAT line,
+    unlike GST's CGST/SGST/IGST split).
+    """
+    output = frappe.db.sql("""
+        SELECT
+            COUNT(DISTINCT t.parent) AS invoice_count,
+            COALESCE(SUM(t.tax_amount), 0) AS total_tax
+        FROM `tabTax Line` t
+        JOIN `tabSales Invoice` si ON si.name = t.parent AND t.parenttype = 'Sales Invoice'
+        WHERE si.company        = %(company)s
+          AND si.docstatus      = 1
+          AND si.posting_date   BETWEEN %(from_date)s AND %(to_date)s
+          AND t.tax_amount      != 0
+          AND t.tax_type        = 'VAT'
+    """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)[0]
+
+    input_ = frappe.db.sql("""
+        SELECT
+            COUNT(DISTINCT t.parent) AS invoice_count,
+            COALESCE(SUM(t.tax_amount), 0) AS total_tax
+        FROM `tabTax Line` t
+        JOIN `tabPurchase Invoice` pi ON pi.name = t.parent AND t.parenttype = 'Purchase Invoice'
+        WHERE pi.company        = %(company)s
+          AND pi.docstatus      = 1
+          AND pi.posting_date   BETWEEN %(from_date)s AND %(to_date)s
+          AND t.tax_amount      != 0
+          AND t.tax_type        = 'VAT'
+    """, {"company": company, "from_date": from_date, "to_date": to_date}, as_dict=True)[0]
+
+    output_vat = flt(output.total_tax)
+    input_vat = flt(input_.total_tax)
+
+    return {
+        "output_vat": output_vat,
+        "output_invoice_count": output.invoice_count,
+        "input_vat": input_vat,
+        "input_invoice_count": input_.invoice_count,
+        "net_vat_payable": output_vat - input_vat,
+    }
+
+
+@frappe.whitelist()
 def get_item_wise_sales(company: str, from_date: str, to_date: str) -> list[dict]:
     """Item-wise sales summary: qty sold, revenue, and avg rate per item for a period."""
     return frappe.db.sql("""

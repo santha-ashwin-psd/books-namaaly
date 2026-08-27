@@ -22,7 +22,7 @@ class SalesInvoice(Document):
         self.validate_accounts()
         self.set_status()
         self.set_due_date()
-        self._set_customer_gstin()
+        # self._set_customer_gstin()  # GST-only, disabled for Oman VAT
         if self.posting_date and self.company:
             try:
                 self.fiscal_year = validate_fiscal_year(self.posting_date, self.company)
@@ -31,11 +31,11 @@ class SalesInvoice(Document):
             except Exception:
                 pass  # ignore only unexpected errors (missing FY on draft is OK)
 
-    def _set_customer_gstin(self):
-        if self.customer and not self.customer_gstin:
-            gstin = frappe.db.get_value("Customer", self.customer, "tax_id")
-            if gstin:
-                self.customer_gstin = gstin
+    # def _set_customer_gstin(self):  # GST-only, disabled for Oman VAT
+    #     if self.customer and not self.customer_gstin:
+    #         gstin = frappe.db.get_value("Customer", self.customer, "tax_id")
+    #         if gstin:
+    #             self.customer_gstin = gstin
 
     def validate_items(self):
         if not self.items:
@@ -283,7 +283,52 @@ class SalesInvoice(Document):
             if getattr(self, "update_stock", 0) and getattr(self, "sales_order", None):
                 self._release_reserved_qty(direction=-1)
             self._maybe_auto_send_email()
+    def on_update_after_submit(self):
+            """
+            Re-sync accounting and stock after editing a submitted Sales Invoice.
+            """
 
+            # Cancel the OLD auto-created Stock Entry before validate() runs.
+            # validate_batches() (inside validate()) checks live available batch
+            # qty — if the previous Material Issue were still active here, its
+            # deduction would be double-counted against the row being edited,
+            # wrongly blocking a valid quantity increase. This is inside the
+            # same DB transaction as the rest of the save, so if validate()
+            # throws afterwards, this cancel is rolled back too.
+            from zoho_books_clone.inventory.stock_link import (
+                cancel_sales_invoice_stock_entries,
+            )
+
+            cancel_sales_invoice_stock_entries(self)
+
+            self.validate()
+
+            self.outstanding_amount = self.grand_total
+
+            # Replace old GL entries with updated accounting
+            post_sales_invoice(self, replace_existing=True)
+
+            # Keep outstanding amount and status synchronized
+            self.db_set(
+                "outstanding_amount",
+                self.grand_total,
+                update_modified=False,
+            )
+
+            self.db_set(
+                "status",
+                "Submitted",
+                update_modified=False,
+            )
+
+            # Synchronize linked Stock Entry (only relevant when this invoice
+            # itself owns the stock movement, i.e. Update Inventory on Submit).
+            from zoho_books_clone.inventory.stock_link import (
+                on_sales_invoice_update_after_submit,
+            )
+
+            on_sales_invoice_update_after_submit(self)  
+            
     def _maybe_auto_send_email(self):
         """Send invoice email automatically if the per-company flag is on."""
         try:

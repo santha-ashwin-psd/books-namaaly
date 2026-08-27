@@ -59,7 +59,7 @@ import Expenses               from "./pages/Expenses.vue";
 import Payments               from "./pages/Payments.vue";
 import DebitNotes             from "./pages/DebitNotes.vue";
 import Recurring              from "./pages/Recurring.vue";
-import EwayBills              from "./pages/EwayBills.vue";
+// import EwayBills              from "./pages/EwayBills.vue"; // GST-only, no Oman equivalent
 import BankAccounts           from "./pages/BankAccounts.vue";
 import BankTransactions       from "./pages/BankTransactions.vue";
 import BankReconciliation     from "./pages/BankReconciliation.vue";
@@ -71,10 +71,10 @@ import InventoryAdjustments    from "./pages/InventoryAdjustments.vue";
 import StockLedger            from "./pages/StockLedger.vue";
 import StockValuation         from "./pages/StockValuation.vue";
 import ReorderAlerts          from "./pages/ReorderAlerts.vue";
-import GSTReturn1             from "./pages/GSTReturn1.vue";
-import GSTReturn3B            from "./pages/GSTReturn3B.vue";
-import EInvoice               from "./pages/EInvoice.vue";
-import TDS                    from "./pages/TDS.vue";
+// import GSTReturn1             from "./pages/GSTReturn1.vue"; // GST-only, Oman uses VAT
+// import GSTReturn3B            from "./pages/GSTReturn3B.vue"; // GST-only, Oman uses VAT
+// import EInvoice               from "./pages/EInvoice.vue"; // India GST e-Invoice, no Oman equivalent
+// import TDS                    from "./pages/TDS.vue"; // India-specific TDS
 import TaxTemplates           from "./pages/TaxTemplates.vue";
 import ExpenseCategories      from "./pages/ExpenseCategories.vue";
 import Reports                from "./pages/Reports.vue";
@@ -328,7 +328,7 @@ const routes = [
   { path: "/debit-notes",       name: "debit-notes",      component: DebitNotes,     meta: { module: "bills"    } },
   { path: "/recurring-bills",   name: "recurring-bills",  component: RecurringBills, meta: { module: "bills"    } },
   { path: "/recurring",         name: "recurring",        component: Recurring,      meta: { module: "invoices" } },
-  { path: "/eway-bills",        name: "eway-bills",       component: EwayBills,      meta: { module: "invoices" } },
+  // { path: "/eway-bills",        name: "eway-bills",       component: EwayBills,      meta: { module: "invoices" } }, // GST-only
   { path: "/banking/accounts",       name: "banking-accounts",       component: BankAccounts,       meta: { module: "accounts" } },
   { path: "/banking/transactions",   name: "banking-transactions",   component: BankTransactions,   meta: { module: "accounts" } },
   { path: "/banking/reconciliation", name: "banking-reconciliation", component: BankReconciliation, meta: { module: "accounts" } },
@@ -343,11 +343,11 @@ const routes = [
   { path: "/inventory/reorder-alerts", name: "reorder-alerts",  component: ReorderAlerts,  meta: { module: "inventory" } },
   { path: "/inventory/price-lists",    name: "price-lists",     component: PriceLists,     meta: { module: "inventory" } },
   { path: "/inventory/batches",        name: "inventory-batches", component: InventoryBatches, meta: { module: "inventory" } },
-  { path: "/gst/gstr1",    name: "gstr1",    component: GSTReturn1,  meta: { module: "accounts" } },
-  { path: "/gst/gstr3b",   name: "gstr3b",   component: GSTReturn3B, meta: { module: "accounts" } },
-  { path: "/gst/einvoice", name: "einvoice", component: EInvoice,    meta: { module: "invoices" } },
-  { path: "/gst/tds",      name: "tds",      component: TDS,         meta: { module: "accounts" } },
-  { path: "/gst/tax-templates", name: "tax-templates", component: TaxTemplates, meta: { module: "taxes" } },
+  // { path: "/gst/gstr1",    name: "gstr1",    component: GSTReturn1,  meta: { module: "accounts" } }, // GST-only
+  // { path: "/gst/gstr3b",   name: "gstr3b",   component: GSTReturn3B, meta: { module: "accounts" } }, // GST-only
+  // { path: "/gst/einvoice", name: "einvoice", component: EInvoice,    meta: { module: "invoices" } }, // GST-only
+  // { path: "/gst/tds",      name: "tds",      component: TDS,         meta: { module: "accounts" } }, // India-specific
+  { path: "/gst/tax-templates", name: "tax-templates", component: TaxTemplates, meta: { module: "accounts" } },
   { path: "/reports",      name: "reports",  component: Reports,     meta: { module: null       } },
   { path: "/bulk-import",        name: "bulk-import",       component: BulkImport,       meta: { module: "admin"    } },
   { path: "/delivery-challans",   name: "delivery-challans",   component: DeliveryChallans,   meta: { module: "invoices" } },

@@ -162,7 +162,7 @@
             <td style="text-align:center" @click.stop>
               <div class="inv-row-actions" style="display:flex;gap:4px;justify-content:center">
                 <button class="inv-act-btn" @click="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="inv.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="inv.docstatus===0 || (inv.docstatus===1 && flt(inv.outstanding_amount)>0)" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
                 <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click="openPayment(inv)">₹</button>
               </div>
@@ -217,7 +217,7 @@
           </div>
           <div class="inv-mc-footer">
             <button class="inv-mc-btn" @click.stop="openView(inv)">View</button>
-            <button v-if="inv.docstatus===0" class="inv-mc-btn" :disabled="!$canEdit('invoices')" @click.stop="openEdit(inv)">Edit</button>
+            <button v-if="inv.docstatus===0 || (inv.docstatus===1 && flt(inv.outstanding_amount)>0)" class="inv-mc-btn" :disabled="!$canEdit('invoices')" @click.stop="openEdit(inv)">Edit</button>
             <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-mc-btn inv-mc-pay" :disabled="!$canEdit('invoices')" @click.stop="openPayment(inv)">Pay</button>
             <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-mc-btn inv-mc-danger" :disabled="!$canDelete('invoices')" @click.stop="confirmAction('delete',inv)">Delete</button>
           </div>
@@ -259,7 +259,7 @@
               </div>
               <div style="display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px">
                 <button class="inv-act-btn" @click.stop="openView(inv)" title="View"><span v-html="icon('eye',13)"></span></button>
-                <button v-if="inv.docstatus===0" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
+                <button v-if="inv.docstatus===0 || (inv.docstatus===1 && flt(inv.outstanding_amount)>0)" class="inv-act-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Edit'" @click.stop="openEdit(inv)"><span v-html="icon('edit',13)"></span></button>
                 <button v-if="inv.outstanding_amount>0&&inv.docstatus===1" class="inv-act-btn inv-act-pay" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : 'Record Payment'" @click.stop="openPayment(inv)">₹</button>
                 <button v-if="inv.docstatus===0||inv.docstatus===2" class="inv-act-btn" style="color:#dc2626" :disabled="!$canDelete('invoices')" :title="!$canDelete('invoices') ? 'Not permitted' : 'Delete'" @click.stop="confirmAction('delete',inv)"><span v-html="icon('trash',13)"></span></button>
               </div>
@@ -323,15 +323,16 @@
                   <SearchableSelect v-model="form.customer" :options="customers"
                     placeholder="Select customer"
                     :createable="true" createDoctype="Customer"
+                    :disabled="invEditMode === 'submitted'"
                     @update:modelValue="onCustomerChange"/>
                 </div>
                 <div>
                   <label class="inv-lbl">Invoice Date <span class="inv-req">*</span></label>
-                  <input v-model="form.posting_date" type="date" class="inv-fi"/>
+                  <input v-model="form.posting_date" type="date" class="inv-fi" :disabled="invEditMode === 'submitted'"/>
                 </div>
                 <div>
                   <label class="inv-lbl">Due Date</label>
-                  <input v-model="form.due_date" type="date" class="inv-fi"/>
+                  <input v-model="form.due_date" type="date" class="inv-fi" :disabled="invEditMode === 'submitted'"/>
                 </div>
               </div>
               <!-- Lower section: field rows on the left, inventory toggle card on the right -->
@@ -341,7 +342,7 @@
                   <div class="inv-details-row2-4col">
                     <div>
                       <label class="inv-lbl">Title / Project</label>
-                      <input v-model="form.po_no" class="inv-fi" placeholder="Project name or short description"/>
+                      <input v-model="form.po_no" class="inv-fi" placeholder="Project name or short description" :disabled="invEditMode === 'submitted'"/>
                     </div>
                     <div>
                       <label class="inv-lbl">Payment Terms</label>
@@ -352,7 +353,7 @@
                     </div>
                     <div>
                       <label class="inv-lbl">Cost Center</label>
-                      <select v-model="form.cost_center" class="inv-fi">
+                      <select v-model="form.cost_center" class="inv-fi" :disabled="invEditMode === 'submitted'">
                         <option value="">— Select —</option>
                         <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
                       </select>
@@ -377,7 +378,7 @@
                       <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
                         <span>🌐</span> Outside India — Not applicable for export invoices
                       </div>
-                      <select v-else v-model="form.place_of_supply" class="inv-fi">
+                      <select v-else v-model="form.place_of_supply" class="inv-fi" :disabled="invEditMode === 'submitted'">
                         <option value="">— Select State —</option>
                         <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
                       </select>
@@ -400,6 +401,7 @@
   v-model="form.set_warehouse"
   :options="warehouses"
   placeholder="Select warehouse stock will be dispatched from…"
+  :disabled="invEditMode === 'submitted'"
   @search="fetchWarehouses"
   @update:modelValue="onWarehouseChange"
 />
@@ -691,8 +693,13 @@
           <div class="add-footer-status">{{ editingName ? 'Editing: ' + editingName : 'New invoice — unsaved changes' }}</div>
           <div class="add-footer-actions">
             <button class="add-btn-cancel" @click="drawerOpen=false">Cancel</button>
-            <button class="add-btn-draft" :disabled="drawerSaving" @click="saveInvoice(0)">
-              Save Draft
+            <button
+              class="add-btn-draft"
+              :disabled="drawerSaving || !(editingName ? $canEdit('invoices') : $canCreate('invoices'))"
+              :title="!(editingName ? $canEdit('invoices') : $canCreate('invoices')) ? 'Read-only access' : ''"
+              @click="saveInvoice(0)"
+            >
+              {{ drawerSaving ? 'Saving...' : (editingName ? 'Save Changes' : 'Save Draft') }}
             </button>
             <div style="position:relative">
               <button class="add-btn-more" :disabled="drawerSaving" @click="moreActionsOpen=!moreActionsOpen">
@@ -700,7 +707,13 @@
                 <svg class="add-btn-more-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               <div v-if="moreActionsOpen" class="add-more-menu" v-click-outside="()=>moreActionsOpen=false">
-                <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveInvoice(1);moreActionsOpen=false">
+                <!-- A submitted invoice is already docstatus=1 — re-running submit
+                     here would either error against the backend's submitted-doc
+                     guard or, worse, attempt to submit it a second time. Only
+                     offer this for normal (draft) editing, same rule as
+                     Bills.vue's "Save & Submit" button (v-if="... billEditMode
+                     !== 'submitted'"). -->
+                <button v-if="invEditMode !== 'submitted'" class="add-more-menu-item" :disabled="drawerSaving" @click="saveInvoice(1);moreActionsOpen=false">
                   <span v-html="icon('check',13)"></span> Submit Invoice
                 </button>
                 <button class="add-more-menu-item" :disabled="drawerSaving" @click="saveInvoice(0, true);moreActionsOpen=false">
@@ -783,7 +796,7 @@
 
         <!-- Action buttons bar -->
         <div class="inv-action-bar">
-          <button v-if="viewInv.docstatus===0" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewInv)">
+          <button v-if="viewInv.docstatus===0 || (viewInv.docstatus===1 && flt(viewInv.outstanding_amount)>0)" class="inv-ab-btn" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="viewOpen=false;openEdit(viewInv)">
             <span v-html="icon('edit',13)"></span> <span class="ab-label">Edit</span>
           </button>
           <button v-if="viewInv.docstatus===0" class="inv-ab-btn" style="color:#16a34a;border-color:rgba(22,163,106,.3)" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="submitInv(viewInv)">
@@ -1645,6 +1658,12 @@ const showPreview       = ref(false);
 // ── Drawer (create/edit) ───────────────────────────────────────────────
 const drawerOpen   = ref(false);
 const editingName  = ref(null);
+// "normal" | "submitted" -- mirrors Bills.vue's billEditMode. Set by
+// openEdit() from the document's own docstatus so the editor knows whether
+// it's editing a draft or a submitted invoice, and locks the header fields
+// that shouldn't change once GL/stock entries have already been posted
+// (see the :disabled="invEditMode==='submitted'" bindings in the template).
+const invEditMode  = ref("normal");
 const drawerSaving = ref(false);
 // Map of fiscal year name -> lock_date fetched from server; used to block saves
 // to locked periods before even hitting the API.
@@ -2805,6 +2824,7 @@ async function copyLastItems() {
 // ── Drawer open ────────────────────────────────────────────────────────
 function openAdd() {
   editingName.value=null;
+  invEditMode.value="normal";
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
@@ -2816,7 +2836,14 @@ function openAdd() {
 }
 async function openEdit(inv) {
   editingName.value=inv.name;
+  // "submitted" whenever the document itself is already submitted (docstatus
+  // 1) -- same rule as Bills.vue's openEdit. The Edit button that reaches
+  // this function is only ever shown for docstatus 0, or docstatus 1 with an
+  // outstanding balance, so "submitted" here always means "editing a
+  // submitted invoice that still has money owed on it", never a draft.
+  invEditMode.value = inv.docstatus === 1 ? "submitted" : "normal";
   Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:1,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+
 
   customerAddresses.value=[];
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
@@ -2844,8 +2871,26 @@ async function openEdit(inv) {
       if (form.set_warehouse) {
   await fetchWarehouseStock(form.set_warehouse);
 }
-    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false,has_batch_no:0,batch_no:it.batch_no||"",batch_expiry_date:it.batch_expiry_date||"",batchOptions:[],_batchQty:null}));
+    lines.value=(doc.items||[]).map((it,i)=>({id:Date.now()+i,item_code:it.item_code||"",item_name:it.item_name||"",description:it.description||"",hsn_code:it.hsn_code||"",qty:flt(it.qty)||1,rate:flt(it.rate)||0,_standardRate:flt(it.mrp)||0,uom:it.uom||"Nos",discount_percentage:flt(it.discount_percentage)||0,discount_amount:flt(it.discount_amount)||0,amount:flt(it.amount)||0,tax_code:it.tax_code||"",income_account:it.income_account||"",collapsed:false,has_batch_no:0,batch_no:it.batch_no||"",batch_expiry_date:it.batch_expiry_date||"",batchOptions:[],_batchQty:null,
+      // Preserve the child row's own identity + any QC link already stamped
+      // on it (same fix as Bills.vue's openEdit). Without forwarding `name`,
+      // saveInvoice()'s payload has no way to tell Frappe "update this row"
+      // instead of "insert a new one" — every save would otherwise replace
+      // the whole Sales Invoice Item table with fresh rows, silently
+      // discarding quality_inspection links the QC engine's Outgoing
+      // before_submit hook stamped on the previous rows.
+      name: it.name || null,
+      quality_inspection: it.quality_inspection || "",
+      so_item: it.so_item || null,
+    }));
     if (!lines.value.length) addLine();
+    // Recompute discount_amount/amount from qty, rate & discount_percentage
+    // rather than trusting the stored amount as-is — keeps the edit form in
+    // sync even if the saved doc's amount predates a discount/rounding fix,
+    // and guarantees Save -> Edit -> Save is idempotent (same formula in,
+    // same formula out) instead of silently re-persisting a stale total.
+    // Same fix as Bills.vue's openEdit.
+    lines.value.forEach(calcLine);
     // Base Price is a read-only reference showing the Item's own standard_rate
     // (independent of whatever rate/discount ended up on the saved line), so
     // it needs to be resolved from the Item master rather than the invoice row.
@@ -2910,6 +2955,29 @@ async function saveInvoice(docstatus, andNew = false) {
   // that batch currently has in stock (also enforced server-side).
   const batchErr = lines.value.filter(l=>l.item_code).map(batchQtyError).find(Boolean);
   if (batchErr) { toast(batchErr,"error"); return; }
+  // Re-validate each selected batch against the Batch master right before
+  // save. The picker (fetchLineBatches) only ever offers batches that had
+  // stock in this warehouse at the time it was queried, but that can go
+  // stale between selection and save (another sale consumes the batch, an
+  // admin disables it, etc.) — same race Bills.vue guards against.
+  //
+  // Adapted for Sales Invoice being a stock-OUT transaction: unlike
+  // Bills.vue/PurchaseReceipts.vue, which auto-create a Batch record when
+  // one doesn't exist yet (because receiving stock is what brings a batch
+  // into existence), a Sales Invoice must never create a batch — it can
+  // only consume a batch that was already received. So "batch not found"
+  // here is a hard rejection, not a create-on-the-fly case.
+  if (form.update_stock) {
+    for (const l of lines.value.filter(l=>l.item_code)) {
+      if (!l.has_batch_no || !l.batch_no) continue;
+      const existing = await apiList("Batch", { fields: ["name", "disabled", "item"], filters: [["name", "=", l.batch_no]], limit: 1 }).catch(() => []);
+      if (!existing.length) { toast(`Batch "${l.batch_no}" for "${l.item_code}" no longer exists — reselect a batch.`, "error"); return; }
+      if (existing[0].disabled) { toast(`Batch "${l.batch_no}" is disabled and can't be used.`, "error"); return; }
+      if (existing[0].item && existing[0].item !== l.item_code) {
+        toast(`Batch "${l.batch_no}" belongs to item "${existing[0].item}", not "${l.item_code}".`, "error"); return;
+      }
+    }
+  }
   // Check if the posting date falls in a locked fiscal period before hitting the server.
   const lockedUpTo = checkPostingDateLocked(form.posting_date);
   if (lockedUpTo) {
@@ -2948,7 +3016,18 @@ async function saveInvoice(docstatus, andNew = false) {
   drawerSaving.value=true;
   try {
     const company=await resolveCompany();
-    const invItems=lines.value.filter(l=>l.item_code).map(l=>({item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||"",income_account:l.income_account||"",batch_no:l.has_batch_no?(l.batch_no||""):"",batch_expiry_date:l.has_batch_no?(l.batch_expiry_date||""):""}));
+    const invItems=lines.value.filter(l=>l.item_code).map(l=>({
+      // Forward the existing child row's own name (when this line came from
+      // an already-saved invoice via openEdit) so Frappe updates that row in
+      // place instead of deleting it and inserting a new one. Row identity is
+      // what the QC engine's `quality_inspection` link depends on — also
+      // forward quality_inspection itself so a link stamped by a prior
+      // before_submit hook survives the mandatory save-before-submit.
+      ...(l.name ? { name: l.name } : {}),
+      item_code:l.item_code,item_name:l.item_name||l.item_code,description:l.description||l.item_name||l.item_code,qty:flt(l.qty),rate:flt(l.rate),mrp:flt(l._standardRate)||0,uom:l.uom||"Nos",amount:flt(l.amount),hsn_code:l.hsn_code||"",discount_percentage:flt(l.discount_percentage)||0,discount_amount:flt(l.discount_amount)||0,tax_code:l.tax_code||"",income_account:l.income_account||"",batch_no:l.has_batch_no?(l.batch_no||""):"",batch_expiry_date:l.has_batch_no?(l.batch_expiry_date||""):"",
+      quality_inspection: l.quality_inspection || "",
+      so_item: l.so_item || null,
+    }));
     const taxes=computeTaxRows(discountedLines.value.filter(l=>l.item_code), taxTemplates.value, {
       companyState: companyGstState.value,
       placeOfSupply: form.place_of_supply,
@@ -3088,7 +3167,17 @@ async function duplicateInvoice(inv) {
   try {
     const doc=await apiGet("Sales Invoice",inv.name);
     delete doc.name; doc.docstatus=0; doc.posting_date=todayStr(); doc.due_date=dueDateDefault(); doc.outstanding_amount=0; doc.status="Draft";
-    (doc.items||[]).forEach(it=>{ delete it.name; });
+    // A duplicated invoice is a brand-new document with brand-new child rows —
+    // it must not carry over the source row's identity (`name`) or anything
+    // keyed to that identity. `quality_inspection` is a link stamped onto a
+    // *specific* row by the QC engine's before_submit hook; leaving it on a
+    // copied row would misattribute an inspection that was never actually
+    // performed against this new invoice's stock movement.
+    (doc.items||[]).forEach(it=>{
+      delete it.name;
+      delete it.quality_inspection;
+      delete it.so_item;
+    });
     (doc.taxes||[]).forEach(tx=>{ delete tx.name; });
     const saved=await apiSave(doc);
     toast("Duplicated as "+saved.name);
