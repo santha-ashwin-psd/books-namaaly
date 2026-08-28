@@ -403,7 +403,7 @@ function blankForm() {
     name: null, sales_person_name: "", employee_id: "", status: "Active",
     department: "", designation: "", reports_to: "", email_id: "", mobile_no: "",
     phone: "", commission_rate: 0, address_line1: "", address_line2: "",
-    city: "", state: "", pincode: "", country: "India", disabled: 0,
+    city: "", state: "", pincode: "", country: "Oman", disabled: 0,
   };
 }
 const form = reactive(blankForm());

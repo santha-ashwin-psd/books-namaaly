@@ -188,7 +188,7 @@
               <div class="sc-preview-company-name">{{ form.default_company || 'Company Name' }}</div>
               <div class="sc-preview-company-addr">{{ form.company_address || '123 Business Park, Sector 62' }}</div>
               <div class="sc-preview-company-addr">{{ [form.company_city, form.company_state, form.company_pincode].filter(Boolean).join(', ') || 'City, State 000000' }}</div>
-              <div class="sc-preview-company-addr">{{ form.company_country || 'India' }}</div>
+              <div class="sc-preview-company-addr">{{ form.company_country || 'Oman' }}</div>
             </div>
           </div>
           <div class="sc-preview-divider"></div>
@@ -500,7 +500,7 @@ const route = useRoute();
 const form = reactive({
   default_company: "", default_currency: "INR", fiscal_year_start_month: "April",
   invoice_prefix: "INV", gstin: "", gst_state: "", logo_url: "",
-  company_address: "", company_city: "", company_country: "India",
+  company_address: "", company_city: "", company_country: "Oman",
   company_state: "", company_pincode: "",
   company_phone: "", company_email: "", company_website: "",
   auto_send_invoice: 0, send_payment_reminders: 0,

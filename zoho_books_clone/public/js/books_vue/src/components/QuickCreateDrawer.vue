@@ -331,12 +331,12 @@ watch(() => state.open, (open) => {
     Object.assign(form, {
       customer_name: state.prefill, customer_type: "Company",
       gst_treatment: "Registered Business",
-      email_id: "", mobile_no: "", tax_id: "", country: "India", state: "", payment_terms: "",
+      email_id: "", mobile_no: "", tax_id: "", country: "Oman", state: "", payment_terms: "",
     });
   } else if (state.doctype === "Supplier") {
     Object.assign(form, {
       supplier_name: state.prefill, supplier_type: "Company",
-      email_id: "", mobile_no: "", tax_id: "", country: "India", state: "", payment_terms: "",
+      email_id: "", mobile_no: "", tax_id: "", country: "Oman", state: "", payment_terms: "",
     });
   } else if (state.doctype === "Item") {
     Object.assign(form, {
@@ -347,7 +347,7 @@ watch(() => state.open, (open) => {
   } else if (state.doctype === "Warehouse") {
     Object.assign(form, {
       warehouse_name: state.prefill, warehouse_type: "Stores",
-      parent_warehouse: "", address_line_1: "", city: "", state: "", pin: "", country: "India",
+      parent_warehouse: "", address_line_1: "", city: "", state: "", pin: "", country: "Oman",
     });
   } else if (state.doctype === "Account") {
     Object.assign(form, {

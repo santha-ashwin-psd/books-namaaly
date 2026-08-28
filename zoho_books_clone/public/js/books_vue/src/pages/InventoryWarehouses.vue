@@ -903,7 +903,7 @@ const allItems       = ref([]);
 
 const form = reactive({
   name: "", warehouse_name: "", warehouse_type: "Stores",
-  parent_warehouse: "", city: "", country: "India", state: "", address_line1: "", pincode: "",
+  parent_warehouse: "", city: "", country: "Oman", state: "", address_line1: "", pincode: "",
   is_group: 0, disabled: 0,
   racks: [], // [{ rack_no, notes }] — label-only, leaf warehouses only
 });

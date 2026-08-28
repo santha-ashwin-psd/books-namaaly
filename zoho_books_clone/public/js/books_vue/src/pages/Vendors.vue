@@ -1231,9 +1231,9 @@ const form = reactive({
   tax_id: "", default_currency: "OMR", payment_terms: "",
   email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
   address_line1: "", address_line2: "",
-  city: "", state: "", pincode: "", country: "India",
+  city: "", state: "", pincode: "", country: "Oman",
   ship_address_line1: "", ship_address_line2: "",
-  ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
+  ship_city: "", ship_state: "", ship_pincode: "", ship_country: "Oman",
   default_payable_account: "", disabled: 0,
   tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0, notes: "",
 });
@@ -1316,9 +1316,9 @@ function resetForm() {
     tax_id: "", default_currency: "OMR", payment_terms: "",
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
     address_line1: "", address_line2: "",
-    city: "", state: "", pincode: "", country: "India",
+    city: "", state: "", pincode: "", country: "Oman",
     ship_address_line1: "", ship_address_line2: "",
-    ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
+    ship_city: "", ship_state: "", ship_pincode: "", ship_country: "Oman",
     default_payable_account: "", disabled: 0,
     tds_applicable: 0, tds_section: "", pan: "", opening_balance: 0, notes: "",
   });
@@ -1339,7 +1339,7 @@ function onShipSameChange() {
     form.ship_city          = "";
     form.ship_state         = "";
     form.ship_pincode       = "";
-    form.ship_country       = "India";
+    form.ship_country       = "Oman";
   }
 }
 
@@ -1377,13 +1377,13 @@ async function openEdit(name) {
       city: doc.city || "",
       state: doc.state || "",
       pincode: doc.pincode || "",
-      country: doc.country || "India",
+      country: doc.country || "Oman",
       ship_address_line1: doc.ship_address_line1 || "",
       ship_address_line2: doc.ship_address_line2 || "",
       ship_city: doc.ship_city || "",
       ship_state: doc.ship_state || "",
       ship_pincode: doc.ship_pincode || "",
-      ship_country: doc.ship_country || "India",
+      ship_country: doc.ship_country || "Oman",
       default_payable_account: doc.default_payable_account || "",
       disabled: doc.disabled || 0,
       tds_applicable: doc.tds_applicable || 0,
@@ -1477,13 +1477,13 @@ async function saveVendor() {
       city: form.city.trim(),
       state: form.state.trim(),
       pincode: form.pincode.trim(),
-      country: form.country.trim() || "India",
+      country: form.country.trim() || "Oman",
       ship_address_line1: form.ship_address_line1.trim(),
       ship_address_line2: form.ship_address_line2.trim(),
       ship_city: form.ship_city.trim(),
       ship_state: form.ship_state.trim(),
       ship_pincode: form.ship_pincode.trim(),
-      ship_country: form.ship_country.trim() || "India",
+      ship_country: form.ship_country.trim() || "Oman",
       default_payable_account: form.default_payable_account,
       disabled: form.disabled ? 1 : 0,
       tds_applicable: form.tds_applicable ? 1 : 0,
@@ -1511,7 +1511,7 @@ async function saveVendor() {
             address_line1: addr.address_line1,
             address_line2: addr.address_line2 || "",
             city: addr.city || "", state: addr.state || "",
-            pincode: addr.pincode || "", country: addr.country || "India",
+            pincode: addr.pincode || "", country: addr.country || "Oman",
             phone: addr.phone || "",
             links: [{ link_doctype: "Supplier", link_name: savedName }],
           });
@@ -1526,7 +1526,7 @@ async function saveVendor() {
             address_line1: firstBilling.address_line1,
             address_line2: firstBilling.address_line2 || "",
             city: firstBilling.city || "", state: firstBilling.state || "",
-            pincode: firstBilling.pincode || "", country: firstBilling.country || "India",
+            pincode: firstBilling.pincode || "", country: firstBilling.country || "Oman",
           });
         } catch {}
       }
@@ -2001,7 +2001,7 @@ const vendorKpiCards = computed(() => [
   {
     key: "total_payable", label: "Total Payable", format: "currency",
     value: totalPayable.value, sub: "accounts payable",
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg>`,
     iconBg: "#fef2f2", valueClass: "bk-kpi-red",
   },
 ]);

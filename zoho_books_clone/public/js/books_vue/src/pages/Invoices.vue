@@ -93,7 +93,7 @@
   <!-- Secondary stats -->
   <div class="bk-stat-grid inv-mobile-summary">
     <div class="bk-stat-card inv-stat-count"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month</div><div class="bk-stat-value">{{ invThisMonth.count }}</div></div><div class="bk-stat-icon" style="background:#dbeafe;color:#2563eb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div></div>
-    <div class="bk-stat-card inv-stat-revenue"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Revenue</div><div class="bk-stat-value" style="font-size:16px">{{ fmtAmt(invThisMonth.revenue) }}</div></div><div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg></div></div></div>
+    <div class="bk-stat-card inv-stat-revenue"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Revenue</div><div class="bk-stat-value" style="font-size:16px">{{ fmtAmt(invThisMonth.revenue) }}</div></div><div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg></div></div></div>
     <div class="bk-stat-card inv-stat-receivable"><div class="bk-stat-content"><div><div class="bk-stat-label">Total Receivable</div><div class="bk-stat-value bk-kpi-amber" style="font-size:16px">{{ fmtAmt(summary.totalDue) }}</div></div><div class="bk-stat-icon" style="background:#fef3c7;color:#d97706"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div></div></div>
     <div class="bk-stat-card inv-stat-average"><div class="bk-stat-content"><div><div class="bk-stat-label">Avg Invoice Value</div><div class="bk-stat-value" style="font-size:16px">{{ fmtAmt(invAvg) }}</div></div><div class="bk-stat-icon" style="background:#e5e7eb;color:#6b7280"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div></div></div>
   </div>
@@ -372,16 +372,6 @@
                       <label class="inv-lbl">Sales Person</label>
                       <SearchableSelect v-model="form.sales_person" :options="salesPersons"
                         placeholder="Select sales person"/>
-                    </div>
-                    <div>
-                      <label class="inv-lbl">Place of Supply</label>
-                      <div v-if="isOverseas" class="inv-fi" style="background:#dbeafe;color:#1d4ed8;font-size:12px;display:flex;align-items:center;gap:6px;padding:8px 10px;border-color:#bfdbfe">
-                        <span>🌐</span> Outside India — Not applicable for export invoices
-                      </div>
-                      <select v-else v-model="form.place_of_supply" class="inv-fi" :disabled="invEditMode === 'submitted'">
-                        <option value="">— Select State —</option>
-                        <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
-                      </select>
                     </div>
                   </div>
                 </div>
@@ -761,7 +751,7 @@
                   :disabled="!$canEdit('invoices')"
                   :title="!$canEdit('invoices') ? 'Read-only access' : ''"
                   @click="openPayment(viewInv)">
-            <span v-html="icon('indianrupee',15)"></span> <div class="ab-label"> Receive Payment</div>
+            <span v-html="icon('currency',15)"></span> <div class="ab-label"> Receive Payment</div>
           </button>
           <button class="inv-ab-btn" style="padding:7px 12px;font-size:13px" @click="viewOpen=false">
             <span v-html="icon('x',14)"></span> <span class="ab-label">Close</span>
@@ -934,19 +924,10 @@
                 <div class="inv-dmeta-date-sub" v-if="viewInv.due_date">{{ fmtDateDay(viewInv.due_date) }}</div>
               </div>
 
-              <!-- Place of Supply -->
-              <div class="inv-details-meta-col">
-                <div class="inv-dmeta-icon-row">
-                  <span class="inv-dmeta-icon" v-html="icon('map-pin',13)"></span>
-                  <span class="inv-dmeta-lbl">Place of Supply</span>
-                </div>
-                <div class="inv-dmeta-date-val" style="font-size:14px">{{ viewInv.place_of_supply || '—' }}</div>
-              </div>
-
               <!-- Balance Due -->
               <div class="inv-details-meta-col col-balance">
                 <div class="inv-dmeta-icon-row">
-                  <span class="inv-dmeta-icon" v-html="icon('indianrupee',13)"></span>
+                  <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                   <span class="inv-dmeta-lbl">Balance Due</span>
                 </div>
                 <div class="inv-balance-val"
@@ -1228,7 +1209,7 @@
                 No payments recorded against this invoice.
                 <div v-if="viewInv.outstanding_amount>0&&viewInv.docstatus===1" style="margin-top:12px">
                   <button class="inv-view-cta" :disabled="!$canEdit('invoices')" :title="!$canEdit('invoices') ? 'Read-only access' : ''" @click="openPayment(viewInv)">
-                    <span v-html="icon('indianrupee',14)"></span> Record Payment
+                    <span v-html="icon('currency',14)"></span> Record Payment
                   </button>
                 </div>
               </div>
@@ -1676,7 +1657,7 @@ const form = reactive({
   payment_terms:"", place_of_supply:"33-Tamil Nadu", billing_address:"",
   billing_address_name:"", shipping_address:"", shipping_address_name:"",
   terms:"", remarks:"", docstatus:0,
-  currency:"INR", exchange_rate:1, gst_treatment:"",
+  currency:"OMR", exchange_rate:1, gst_treatment:"",
   price_list:"",
   update_stock:1, set_warehouse:"",
   logo:"",
@@ -1690,7 +1671,7 @@ const customerAddresses     = ref([]);
 const addrModal = reactive({
   open: false, saving: false, forField: "billing",
   address_title: "", address_type: "Billing",
-  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
+  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
 });
 const selectedBillingAddr  = computed(() => customerAddresses.value.find(a => a.name === form.billing_address_name) || null);
 const selectedShippingAddr = computed(() => customerAddresses.value.find(a => a.name === form.shipping_address_name) || null);
@@ -2024,7 +2005,7 @@ const timelineSteps = computed(()=>{
   return [
     {label:"Draft",   done:true,       icon:"file-text", date:inv.creation},
     {label:"Sent",    done:isSubmitted, icon:"send",      date:isSubmitted?inv.modified:null},
-    {label:"Paid",    done:isPaid,      icon:"indianrupees", date:isPaid?inv.modified:null},
+    {label:"Paid",    done:isPaid,      icon:"currency", date:isPaid?inv.modified:null},
     ...(!isPaid ? [{label:"Overdue", done:isOverdue(inv), danger:isOverdue(inv), icon:"alert-circle", date:isOverdue(inv)?inv.due_date:null}] : []),
   ];
 });
@@ -2770,7 +2751,7 @@ function onShippingAddrSelect(opt) {
   form.shipping_address = opt ? formatAddress(opt) : "";
 }
 function openAddrModal(field) {
-  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 async function saveNewAddress() {
   if (!addrModal.address_title.trim()) return toast.error("Address Title is required");
@@ -2782,7 +2763,7 @@ async function saveNewAddress() {
       address_title: addrModal.address_title, address_type: addrModal.address_type,
       address_line1: addrModal.address_line1, address_line2: addrModal.address_line2 || "",
       city: addrModal.city || "", state: addrModal.state || "",
-      pincode: addrModal.pincode || "", country: addrModal.country || "India",
+      pincode: addrModal.pincode || "", country: addrModal.country || "Oman",
       links: form.customer ? [{ doctype: "Address", link_doctype: "Customer", link_name: form.customer }] : [],
     };
     const saved = await apiSave(doc);
@@ -2828,7 +2809,7 @@ function openAdd() {
   moreActionsOpen.value=false;
   Object.assign(collapsed,{branding:false,details:false,billing:true,lines:false,notes:true});
   lines.value=[{id:Date.now(),item_code:"",item_name:"",description:"",hsn_code:"",qty:1,rate:0,uom:"Nos",discount_percentage:0,discount_amount:0,amount:0,tax_code:"",income_account:"",collapsed:false,has_batch_no:0,batch_no:"",batch_expiry_date:"",batchOptions:[],_batchQty:null}];
-  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"INR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:1,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:"",posting_date:todayStr(),due_date:dueDateDefault(),po_no:"",payment_terms:"Net 30",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:0,currency:"OMR",exchange_rate:1,gst_treatment:"",price_list:"",update_stock:1,set_warehouse:"",logo:"",cost_center:"",sales_person:"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
   customerAddresses.value=[];
   customerBillingAddrs.value=[]; customerShippingAddrs.value=[]; sameAsBillingAddr.value=false;
   fetchWarehouses("");
@@ -2842,7 +2823,7 @@ async function openEdit(inv) {
   // outstanding balance, so "submitted" here always means "editing a
   // submitted invoice that still has money owed on it", never a draft.
   invEditMode.value = inv.docstatus === 1 ? "submitted" : "normal";
-  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"INR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:1,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
+  Object.assign(form,{customer:inv.customer||"",currency:inv.currency||"OMR",exchange_rate:inv.exchange_rate||1,price_list:inv.price_list||"",posting_date:inv.posting_date||todayStr(),due_date:inv.due_date||dueDateDefault(),po_no:"",payment_terms:"",place_of_supply:"33-Tamil Nadu",billing_address:"",billing_address_name:"",shipping_address:"",shipping_address_name:"",terms:"",remarks:"",docstatus:inv.docstatus||0,update_stock:1,set_warehouse:"",sales_person:inv.sales_person||"",discount_type:"Percentage",additional_discount_percentage:0,additional_discount_amount:0});
 
 
   customerAddresses.value=[];
@@ -2860,7 +2841,7 @@ async function openEdit(inv) {
       billing_address:doc.billing_address||"",billing_address_name:doc.billing_address_name||"",
       shipping_address:doc.shipping_address||"",shipping_address_name:doc.shipping_address_name||"",
       terms:doc.terms||"",remarks:doc.remarks||"",docstatus:doc.docstatus||0,
-      currency:doc.currency||"INR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
+      currency:doc.currency||"OMR",exchange_rate:doc.exchange_rate||1,gst_treatment:doc.gst_category||"",
       price_list:doc.price_list||"",
       update_stock:1,set_warehouse:doc.set_warehouse||"",
       logo:doc.logo||"",cost_center:doc.cost_center||"",sales_person:doc.sales_person||"",
@@ -3042,7 +3023,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"INR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"OMR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
     // Lock onto the saved docname right away — if a stray second saveInvoice()

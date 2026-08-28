@@ -117,7 +117,7 @@
             <div class="bk-stat-value" style="color:#16a34a;font-size:16px">{{ fmtCur(summary.totalValue) }}</div>
           </div>
           <div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg>
           </div>
         </div>
       </div>
@@ -703,7 +703,7 @@
                   </div>
                   <div class="inv-details-meta-col">
                     <div class="inv-dmeta-icon-row">
-                      <span class="inv-dmeta-icon" v-html="icon('indianrupee',13)"></span>
+                      <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                       <span class="inv-dmeta-lbl">Grand Total</span>
                       <span v-if="viewDoc.currency && viewDoc.currency !== 'INR'" style="font-size:10px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:4px;padding:1px 5px;margin-left:4px">{{ viewDoc.currency }}</span>
                     </div>
@@ -1262,7 +1262,7 @@ const form = reactive({
   billing_address: "", billing_address_name: "",
   shipping_address: "", shipping_address_name: "",
   set_warehouse: "", terms: "",
-  currency: "INR", exchange_rate: 1,
+  currency: "OMR", exchange_rate: 1,
 });
 
 // ── Address state ─────────────────────────────────────────────────────
@@ -1270,7 +1270,7 @@ const customerAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false, forField: "billing",
   address_title: "", address_type: "Billing",
-  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
+  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
 });
 const selectedBillingAddr  = computed(() => customerAddresses.value.find(a => a.name === form.billing_address_name) || null);
 const selectedShippingAddr = computed(() => customerAddresses.value.find(a => a.name === form.shipping_address_name) || null);
@@ -1518,7 +1518,7 @@ const deliverModalQty = computed(() =>
 // ── Create / Edit ─────────────────────────────────────────────────────────
 function openNew() {
   editingName.value = "";
-  Object.assign(form, { customer: "", transaction_date: todayStr(), delivery_date: deliveryDefault(), po_number: "", billing_address: "", billing_address_name: "", shipping_address: "", shipping_address_name: "", set_warehouse: "", terms: "", currency: "INR", exchange_rate: 1 });
+  Object.assign(form, { customer: "", transaction_date: todayStr(), delivery_date: deliveryDefault(), po_number: "", billing_address: "", billing_address_name: "", shipping_address: "", shipping_address_name: "", set_warehouse: "", terms: "", currency: "OMR", exchange_rate: 1 });
   customerAddresses.value = [];
   lines.value = [blankLine()];
   Object.assign(collapsed, { details: false, lines: false, notes: true });
@@ -1533,7 +1533,7 @@ async function openEdit(o) {
     billing_address: "", billing_address_name: "",
     shipping_address: "", shipping_address_name: "",
     set_warehouse: "", terms: o.terms || "",
-    currency: o.currency || "INR", exchange_rate: o.exchange_rate || 1,
+    currency: o.currency || "OMR", exchange_rate: o.exchange_rate || 1,
   });
   lines.value = [blankLine()];
   Object.assign(collapsed, { details: false, lines: false, notes: true });
@@ -1664,7 +1664,7 @@ function onShippingAddrSelect(opt) {
   form.shipping_address = opt ? formatAddress(opt) : "";
 }
 function openAddrModal(field) {
-  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 async function saveNewAddress() {
   if (!addrModal.address_title.trim()) return toast.error("Address Title is required");
@@ -1676,7 +1676,7 @@ async function saveNewAddress() {
       address_title: addrModal.address_title, address_type: addrModal.address_type,
       address_line1: addrModal.address_line1, address_line2: addrModal.address_line2 || "",
       city: addrModal.city || "", state: addrModal.state || "",
-      pincode: addrModal.pincode || "", country: addrModal.country || "India",
+      pincode: addrModal.pincode || "", country: addrModal.country || "Oman",
       links: form.customer ? [{ doctype: "Address", link_doctype: "Customer", link_name: form.customer }] : [],
     };
     const saved = await apiSave(doc);
@@ -1799,7 +1799,7 @@ async function saveSO(newStatus) {
       // Sales Order is is_submittable=0 — docstatus is never settable here
       // and Frappe silently drops it; status is the only confirm signal.
       terms: form.terms || "",
-      currency: form.currency || "INR",
+      currency: form.currency || "OMR",
       exchange_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
       items: lines.value.filter(l => l.item_code).map(l => { calcLine(l); return {
         doctype: "Sales Order Item", item_code: l.item_code,

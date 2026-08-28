@@ -136,7 +136,7 @@ let _tempCounter = 0;
 const form = reactive({
   address_type: "Billing",
   address_line1: "", address_line2: "",
-  city: "", state: "", pincode: "", country: "India", phone: "",
+  city: "", state: "", pincode: "", country: "Oman", phone: "",
 });
 
 const byType = (type) => addresses.value.filter(a => a.address_type === type);
@@ -171,7 +171,7 @@ async function loadAddresses() {
 function openNew(type) {
   editingAddr.value = null;
   Object.assign(form, { address_type: type, address_line1: "", address_line2: "",
-                        city: "", state: "", pincode: "", country: "India", phone: "" });
+                        city: "", state: "", pincode: "", country: "Oman", phone: "" });
   showForm.value = true;
 }
 
@@ -184,7 +184,7 @@ function openEdit(addr) {
     city:          addr.city || "",
     state:         addr.state || "",
     pincode:       addr.pincode || "",
-    country:       addr.country || "India",
+    country:       addr.country || "Oman",
     phone:         addr.phone || "",
   });
   showForm.value = true;
@@ -208,7 +208,7 @@ async function save() {
       city:    form.city.trim(),
       state:   form.state.trim(),
       pincode: form.pincode.trim(),
-      country: form.country.trim() || "India",
+      country: form.country.trim() || "Oman",
       phone:   form.phone.trim(),
     };
     const updated = editingAddr.value
@@ -232,7 +232,7 @@ async function save() {
       city:     form.city.trim(),
       state:    form.state.trim(),
       pincode:  form.pincode.trim(),
-      country:  form.country.trim() || "India",
+      country:  form.country.trim() || "Oman",
       phone:    form.phone.trim(),
       links: [{ link_doctype: props.partyDoctype, link_name: props.partyName }],
     };

@@ -118,7 +118,7 @@
       <!-- Header -->
       <div class="inv-dh">
         <div class="exp-dh-left">
-          <div class="exp-dh-icon"><span v-html="icon('indianrupee',16)"></span></div>
+          <div class="exp-dh-icon"><span v-html="icon('currency',16)"></span></div>
           <div>
             <div class="inv-dh-title">{{ editingName ? 'Edit Expense' : 'New Expense' }}</div>
             <div class="inv-dh-sub">{{ editingName ? editingName : 'Fill in the details below' }}</div>
@@ -261,7 +261,7 @@
         <!-- View Header -->
         <div class="exp-view-head">
           <div class="exp-view-head-left">
-            <div class="exp-view-head-icon"><span v-html="icon('indianrupee',18)"></span></div>
+            <div class="exp-view-head-icon"><span v-html="icon('currency',18)"></span></div>
             <div>
               <div class="exp-view-num">{{ viewDoc.name }}</div>
               <div class="exp-view-sub">{{ categoryLabel(viewDoc.expense_type)||'Expense' }}</div>

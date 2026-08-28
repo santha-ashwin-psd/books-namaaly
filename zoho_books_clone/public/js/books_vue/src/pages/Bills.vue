@@ -35,7 +35,7 @@
     </div>
     <div class="bk-stat-grid">
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Bills</div><div class="bk-stat-value">{{ billThisMonth.count }}</div></div><div class="bk-stat-icon" style="background:#dbeafe;color:#2563eb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div></div>
-      <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Spend</div><div class="bk-stat-value" style="font-size:16px">{{ fmtCur(billThisMonth.spend) }}</div></div><div class="bk-stat-icon" style="background:#fee2e2;color:#dc2626"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg></div></div></div>
+      <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Spend</div><div class="bk-stat-value" style="font-size:16px">{{ fmtCur(billThisMonth.spend) }}</div></div><div class="bk-stat-icon" style="background:#fee2e2;color:#dc2626"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg></div></div></div>
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">Total Payable</div><div class="bk-stat-value bk-kpi-amber" style="font-size:16px">{{ fmtCur(summary.totalDue) }}</div></div><div class="bk-stat-icon" style="background:#fef3c7;color:#d97706"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div></div></div>
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">Avg Bill Value</div><div class="bk-stat-value" style="font-size:16px">{{ fmtCur(billAvg) }}</div></div><div class="bk-stat-icon" style="background:#e5e7eb;color:#6b7280"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div></div></div>
     </div>
@@ -270,13 +270,6 @@
                   <select v-model="form.cost_center" class="inv-fi" :disabled="billEditMode === 'submitted'">
                     <option value="">— Select —</option>
                     <option v-for="cc in costCenters" :key="cc" :value="cc">{{ cc }}</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="inv-lbl">Place of Supply</label>
-                  <select v-model="form.place_of_supply" class="inv-fi" :disabled="billEditMode === 'submitted'">
-                    <option value="">— Select State —</option>
-                    <option v-for="s in INDIAN_STATES" :key="s" :value="s">{{ s }}</option>
                   </select>
                 </div>
               </div>
@@ -571,7 +564,7 @@
                       class="inv-view-cta"
                       :disabled="!$canCreate('payments')" :title="!$canCreate('payments') ? 'Read-only access' : ''"
                       @click="payBill(viewDoc)">
-                <span v-html="icon('indianrupee',15)"></span> Record Payment
+                <span v-html="icon('currency',15)"></span> Record Payment
               </button>
               <button class="inv-ab-btn" style="padding:7px 12px;font-size:13px" @click="viewOpen=false">
                 <span v-html="icon('x',14)"></span> <span class="ab-label">Close</span>
@@ -679,7 +672,7 @@
                 </div>
                 <div class="inv-details-meta-col col-balance">
                   <div class="inv-dmeta-icon-row">
-                    <span class="inv-dmeta-icon" v-html="icon('indianrupee',13)"></span>
+                    <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                     <span class="inv-dmeta-lbl">Balance Due</span>
                   </div>
                   <div class="inv-balance-val"
@@ -785,10 +778,6 @@
                 <div v-if="viewDoc.cost_center" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
                   <span style="color:#6b7280;font-weight:600">Cost Center:</span>
                   <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:5px;padding:2px 10px;font-weight:600">{{ viewDoc.cost_center }}</span>
-                </div>
-                <div v-if="viewDoc.place_of_supply" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
-                  <span style="color:#6b7280;font-weight:600">Place of Supply:</span>
-                  <span style="background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;border-radius:5px;padding:2px 10px;font-weight:600">{{ viewDoc.place_of_supply }}</span>
                 </div>
                 <div v-if="viewDoc.set_warehouse" style="margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12.5px">
                   <span style="color:#6b7280;font-weight:600">Receiving Warehouse:</span>
@@ -1128,7 +1117,7 @@ const vendorAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false,
   address_title: "", address_type: "Billing", address_line1: "", address_line2: "",
-  city: "", state: "", pincode: "", country: "India",
+  city: "", state: "", pincode: "", country: "Oman",
 });
 
 function formatAddress(a) {
@@ -1165,7 +1154,7 @@ function onBillingAddrSelect(opt) {
   form.billing_address = opt ? formatAddress(opt) : "";
 }
 function openAddrModal() {
-  Object.assign(addrModal, { open: true, saving: false, address_title: "", address_type: "Billing", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, address_title: "", address_type: "Billing", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 
 async function saveNewAddress() {
@@ -1178,7 +1167,7 @@ async function saveNewAddress() {
       address_title: addrModal.address_title, address_type: addrModal.address_type,
       address_line1: addrModal.address_line1, address_line2: addrModal.address_line2 || "",
       city: addrModal.city || "", state: addrModal.state || "",
-      pincode: addrModal.pincode || "", country: addrModal.country || "India",
+      pincode: addrModal.pincode || "", country: addrModal.country || "Oman",
       links: form.supplier ? [{ doctype: "Address", link_doctype: "Supplier", link_name: form.supplier }] : [],
     };
     const saved = await apiSave(doc);
@@ -1818,7 +1807,7 @@ async function saveBill(submit) {
       billing_address_name: form.billing_address_name || "",
       cost_center: form.cost_center || "",
       place_of_supply: form.place_of_supply || "",
-      currency: form.currency || "INR",
+      currency: form.currency || "OMR",
       conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
       discount_type: form.discount_type || "Percentage",
       additional_discount_percentage: form.discount_type === "Percentage" ? flt(form.additional_discount_percentage) : 0,

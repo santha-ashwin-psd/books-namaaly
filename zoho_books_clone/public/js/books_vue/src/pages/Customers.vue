@@ -1149,25 +1149,7 @@
             </div>
 
             <div class="cus-form-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
-              <transition name="gst-field">
-                <div v-if="activeRule.showPlaceOfSupply">
-                  <label class="inv-lbl">
-                    Place of Supply
-                    <span v-if="activeRule.requirePlaceOfSupply" class="nim-req">*</span>
-                  </label>
-                  <select v-model="form.place_of_supply" class="inv-fi" style="cursor:pointer"
-                    :style="formErrors.place_of_supply?'border-color:#dc2626;background:#fff5f5':''"
-                    @change="delete formErrors.place_of_supply">
-                    <option value="">— Select State —</option>
-                    <option v-for="s in PLACE_OF_SUPPLY" :key="s" :value="s">{{s}}</option>
-                  </select>
-                  <div v-if="formErrors.place_of_supply" style="margin-top:4px;font-size:12px;color:#dc2626">{{formErrors.place_of_supply}}</div>
-                </div>
-              </transition>
-              <div v-if="!activeRule.showPlaceOfSupply" style="padding:12px 14px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;font-size:12.5px;color:#0369a1;line-height:1.5;display:flex;align-items:flex-start;gap:8px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>
-                Place of Supply not applicable for <strong>{{form.gst_treatment}}</strong> customers.
-              </div>
+              <!-- Place of Supply (Indian states) hidden — Oman rollout, no GST POS concept -->
               <div>
                 <label class="inv-lbl">Customer Source</label>
                 <select v-model="form.source" class="inv-fi" style="cursor:pointer">
@@ -1559,9 +1541,9 @@ const form = reactive({
   email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
   dispatched_through: "", destination: "",
   address_line1: "", address_line2: "",
-  city: "", state: "", pincode: "", country: "India",
+  city: "", state: "", pincode: "", country: "Oman",
   ship_address_line1: "", ship_address_line2: "",
-  ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
+  ship_city: "", ship_state: "", ship_pincode: "", ship_country: "Oman",
   payment_terms: "", place_of_supply: "", source: "",
   pan_no: "", opening_balance: 0,
   tds_applicable: 0, tds_section: "",
@@ -1721,7 +1703,7 @@ const custKpiCards = computed(() => [
   {
     key: "outstanding", label: "Total Outstanding", format: "currency",
     value: totalOutstanding.value, sub: "receivable",
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg>`,
     iconBg: "#fff7ed", valueClass: "bk-kpi-amber",
   },
 ]);
@@ -1805,8 +1787,8 @@ function resetForm() {
     tax_id: "", default_currency: "INR", credit_limit: 0,
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
     dispatched_through: "", destination: "",
-    address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
-    ship_address_line1: "", ship_address_line2: "", ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
+    address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
+    ship_address_line1: "", ship_address_line2: "", ship_city: "", ship_state: "", ship_pincode: "", ship_country: "Oman",
     payment_terms: "", place_of_supply: "", source: "", pan_no: "", opening_balance: 0,
     tds_applicable: 0, tds_section: "",
     bank_name: "", bank_account_no: "", bank_ifsc: "", notes: "", disabled: 0,
@@ -1853,13 +1835,13 @@ async function openEdit(name) {
       city: doc.city || "",
       state: doc.state || "",
       pincode: doc.pincode || "",
-      country: doc.country || "India",
+      country: doc.country || "Oman",
       ship_address_line1: doc.ship_address_line1 || "",
       ship_address_line2: doc.ship_address_line2 || "",
       ship_city: doc.ship_city || "",
       ship_state: doc.ship_state || "",
       ship_pincode: doc.ship_pincode || "",
-      ship_country: doc.ship_country || "India",
+      ship_country: doc.ship_country || "Oman",
       payment_terms: doc.payment_terms || "",
       place_of_supply: doc.place_of_supply || "",
       source: doc.source || "",
@@ -1893,7 +1875,7 @@ function onShipSameChange() {
     form.ship_city          = "";
     form.ship_state         = "";
     form.ship_pincode       = "";
-    form.ship_country       = "India";
+    form.ship_country       = "Oman";
   }
 }
 
@@ -1961,7 +1943,7 @@ async function saveCustomer() {
             address_line1: addr.address_line1,
             address_line2: addr.address_line2 || "",
             city: addr.city || "", state: addr.state || "",
-            pincode: addr.pincode || "", country: addr.country || "India",
+            pincode: addr.pincode || "", country: addr.country || "Oman",
             phone: addr.phone || "",
             links: [{ link_doctype: "Customer", link_name: savedName }],
           });
@@ -1976,7 +1958,7 @@ async function saveCustomer() {
             address_line1: firstBilling.address_line1,
             address_line2: firstBilling.address_line2 || "",
             city: firstBilling.city || "", state: firstBilling.state || "",
-            pincode: firstBilling.pincode || "", country: firstBilling.country || "India",
+            pincode: firstBilling.pincode || "", country: firstBilling.country || "Oman",
           });
         } catch {}
       }

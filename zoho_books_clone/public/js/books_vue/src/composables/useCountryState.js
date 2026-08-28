@@ -36,6 +36,10 @@ export const COUNTRY_STATES = {
   "United Arab Emirates": [
     "Abu Dhabi","Ajman","Dubai","Fujairah","Ras Al Khaimah","Sharjah","Umm Al Quwain",
   ],
+  "Oman": [
+    "Muscat","Dhofar","Musandam","Al Buraimi","Ad Dakhiliyah","Al Batinah North",
+    "Al Batinah South","Al Sharqiyah North","Al Sharqiyah South","Adh Dhahirah","Al Wusta",
+  ],
   "Germany": [
     "Baden-Württemberg","Bavaria","Berlin","Brandenburg","Bremen","Hamburg",
     "Hesse","Lower Saxony","Mecklenburg-Vorpommern","North Rhine-Westphalia",
@@ -122,6 +126,8 @@ const _rest = [
 ].filter(c => !_mapped.includes(c));
 
 export const COUNTRIES = [..._mapped, ..._rest.sort()];
+
+export const DEFAULT_COUNTRY = "Oman";
 
 /** Returns the list of states for a given country, or [] if unknown. */
 export function statesFor(country) {

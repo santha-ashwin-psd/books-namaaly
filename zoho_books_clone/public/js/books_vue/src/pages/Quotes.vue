@@ -764,7 +764,7 @@
                 </div>
                 <div class="inv-details-meta-col">
                   <div class="inv-dmeta-icon-row">
-                    <span class="inv-dmeta-icon" v-html="icon('indianrupee',13)"></span>
+                    <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                     <span class="inv-dmeta-lbl">Grand Total</span>
                   </div>
                   <div class="inv-balance-val">
@@ -1254,7 +1254,7 @@ const form = reactive({
   billing_address_name: "",
   shipping_address: "",
   shipping_address_name: "",
-  currency: "INR",
+  currency: "OMR",
   exchange_rate: 1,
   logo: "",  // stores the Frappe file URL from logo_attach field
 });
@@ -1264,7 +1264,7 @@ const customerAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false, forField: "billing",
   address_title: "", address_type: "Billing",
-  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
+  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
 });
 const selectedBillingAddr  = computed(() => customerAddresses.value.find(a => a.name === form.billing_address_name) || null);
 const selectedShippingAddr = computed(() => customerAddresses.value.find(a => a.name === form.shipping_address_name) || null);
@@ -1663,7 +1663,7 @@ function onShippingAddrSelect(opt) {
   form.shipping_address = opt ? formatAddress(opt) : "";
 }
 function openAddrModal(field) {
-  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: field === "billing" ? "Billing" : "Shipping", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 async function saveNewAddress() {
   if (!addrModal.address_title.trim()) return toast.error("Address Title is required");
@@ -1675,7 +1675,7 @@ async function saveNewAddress() {
       address_title: addrModal.address_title, address_type: addrModal.address_type,
       address_line1: addrModal.address_line1, address_line2: addrModal.address_line2 || "",
       city: addrModal.city || "", state: addrModal.state || "",
-      pincode: addrModal.pincode || "", country: addrModal.country || "India",
+      pincode: addrModal.pincode || "", country: addrModal.country || "Oman",
       links: form.customer ? [{ doctype: "Address", link_doctype: "Customer", link_name: form.customer }] : [],
     };
     const saved = await apiSave(doc);
@@ -1775,7 +1775,7 @@ function openNew() {
     title: "", terms: "", remarks: "",
     billing_address: "", billing_address_name: "",
     shipping_address: "", shipping_address_name: "",
-    currency: "INR", exchange_rate: 1, logo: "",
+    currency: "OMR", exchange_rate: 1, logo: "",
   });
   showPreview.value = false;
   lines.value = [blankLine()];
@@ -1792,7 +1792,7 @@ async function openEdit(q) {
   Object.assign(form, {
     customer: q.customer || "", transaction_date: q.transaction_date || todayStr(),
     valid_till: q.valid_till || validTillDefault(), title: q.title || "",
-    terms: q.terms || "", currency: q.currency || "INR",
+    terms: q.terms || "", currency: q.currency || "OMR",
     exchange_rate: q.exchange_rate || 1, remarks: "",
     billing_address: "", billing_address_name: "",
     shipping_address: "", shipping_address_name: "",
@@ -1927,7 +1927,7 @@ async function saveQT(newStatus, andNew = false) {
       remarks: form.remarks || "",
       billing_address: form.billing_address || "", billing_address_name: form.billing_address_name || "",
       shipping_address: form.shipping_address || "", shipping_address_name: form.shipping_address_name || "",
-      currency: form.currency || "INR",
+      currency: form.currency || "OMR",
       exchange_rate: form.currency === "INR" ? 1 : (flt(form.exchange_rate) || 1),
       items: qtItems, taxes,
       logo: resolvedLogoPath,
@@ -2282,7 +2282,7 @@ async function downloadQuotePdf(mode = 'pdf') {
     customer_name: doc.customer_name || doc.customer,
     transaction_date: doc.transaction_date, valid_till: doc.valid_till,
     title: doc.title || "", billing_address: doc.billing_address || doc.address_display || "",
-    currency: doc.currency || "INR", items: doc.items || [], taxes: doc.taxes || [],
+    currency: doc.currency || "OMR", items: doc.items || [], taxes: doc.taxes || [],
     subtotal: doc.net_total != null ? flt(doc.net_total) : flt(doc.grand_total) - flt(doc.total_tax),
     totalTax: flt(doc.total_tax), grandTotal: flt(doc.grand_total),
     terms: doc.terms || "", company: doc.company || window.__booksCompany || "",
@@ -2318,7 +2318,7 @@ async function printQuote(data) {
       customer_name: doc.customer_name || doc.customer,
       transaction_date: doc.transaction_date, valid_till: doc.valid_till,
       title: doc.title || "", billing_address: doc.billing_address || doc.address_display || "",
-      currency: doc.currency || "INR", items: doc.items || [], taxes: doc.taxes || [],
+      currency: doc.currency || "OMR", items: doc.items || [], taxes: doc.taxes || [],
       subtotal: doc.net_total != null ? flt(doc.net_total) : flt(doc.grand_total) - flt(doc.total_tax),
       totalTax: flt(doc.total_tax), grandTotal: flt(doc.grand_total),
       terms: doc.terms || "", company: doc.company || window.__booksCompany || "",

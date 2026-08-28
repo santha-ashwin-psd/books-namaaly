@@ -719,7 +719,7 @@ const customerAddresses = ref([]);
 const addrModal = reactive({
   open: false, forField: "shipping", saving: false,
   address_title: "", address_type: "Shipping",
-  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
+  address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
 });
 
 const selectedBillingAddr  = computed(() => customerAddresses.value.find(a => a.name === form.billing_address_name) || null);
@@ -1268,7 +1268,7 @@ function onShippingAddrSelect(opt) {
 }
 function openAddrModal(field) {
   const addrType = field === "billing" ? "Billing" : "Shipping";
-  Object.assign(addrModal, { open: true, saving: false, forField: field, address_type: addrType, address_title: "", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, forField: field, address_type: addrType, address_title: "", address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 
 async function saveNewAddress() {
@@ -1285,7 +1285,7 @@ async function saveNewAddress() {
       city:          addrModal.city || "",
       state:         addrModal.state || "",
       pincode:       addrModal.pincode || "",
-      country:       addrModal.country || "India",
+      country:       addrModal.country || "Oman",
       links: form.customer ? [{ doctype: "Address", link_doctype: "Customer", link_name: form.customer }] : [],
     };
     const saved = await apiSave(addrDoc);

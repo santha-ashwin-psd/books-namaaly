@@ -318,7 +318,7 @@ const openMenuName = ref("");
 const form = reactive({
   account_name: "", bank_name: "", account_type: "Current", account_holder_name: "",
   account_number: "", ifsc_code: "", micr_code: "", branch: "",
-  gl_account: "", currency: "INR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
+  gl_account: "", currency: "OMR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
 });
 
 // Live accounting preview — shows Dr/Cr labels like Chart of Accounts
@@ -331,7 +331,7 @@ const accountingPreview = computed(() => {
   const netTxns = flt(editingCurrentBalance.value) - flt(editingOriginalOpening.value);
   // Closing = new opening + same net transaction movement
   const closingAmt = signedOpening + netTxns;
-  const cur = form.currency || 'INR';
+  const cur = form.currency || 'OMR';
   const fmt = (v) => new Intl.NumberFormat('en-IN', { style:'currency', currency: cur, minimumFractionDigits:2 }).format(Math.abs(v));
   const drCr = (v) => v >= 0 ? '(Dr)' : '(Cr)';
   const cls  = (v) => v >= 0 ? 'ba-acct-pos' : 'ba-acct-neg';
@@ -404,7 +404,7 @@ function clearFilters() { typeFilter.value = "all"; search.value = ""; }
 function reconClass(pct) { return (pct || 0) >= 80 ? "high" : (pct || 0) >= 40 ? "mid" : "low"; }
 function maskAcct(n) { if (!n || n.length < 4) return n; return "•".repeat(Math.max(0, n.length - 4)) + n.slice(-4); }
 function fmtCur(v, cur) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur || "INR", minimumFractionDigits: 2 }).format(flt(v));
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: cur || "OMR", minimumFractionDigits: 2 }).format(flt(v));
 }
 
 function toggleMenu(name) { openMenuName.value = openMenuName.value === name ? "" : name; }
@@ -413,7 +413,7 @@ function resetForm() {
   Object.assign(form, {
     account_name: "", bank_name: "", account_type: "Current", account_holder_name: "",
     account_number: "", ifsc_code: "", micr_code: "", branch: "",
-    gl_account: "", currency: "INR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
+    gl_account: "", currency: "OMR", opening_balance: 0, opening_balance_type: "Debit", is_default: false,
   });
 }
 
@@ -437,7 +437,7 @@ async function openEdit(a) {
     account_type: full.account_type || "Current", account_holder_name: full.account_holder_name || "",
     account_number: full.account_number || "", ifsc_code: full.ifsc_code || "",
     micr_code: full.micr_code || "", branch: full.branch || "",
-    gl_account: full.gl_account || "", currency: full.currency || "INR",
+    gl_account: full.gl_account || "", currency: full.currency || "OMR",
     opening_balance: Math.abs(flt(full.opening_balance)),
     opening_balance_type: flt(full.opening_balance) < 0 ? 'Credit' : 'Debit',
     is_default: !!full.is_default,
@@ -489,7 +489,7 @@ async function saveAccount() {
       account_type: form.account_type, account_holder_name: form.account_holder_name || "",
       account_number: form.account_number || "", ifsc_code: form.ifsc_code || "",
       micr_code: form.micr_code || "", branch: form.branch || "",
-      gl_account: form.gl_account || "", currency: form.currency || "INR",
+      gl_account: form.gl_account || "", currency: form.currency || "OMR",
       is_default: form.is_default ? 1 : 0, company: co,
       opening_balance: form.opening_balance_type === 'Credit' ? -Math.abs(flt(form.opening_balance)) : Math.abs(flt(form.opening_balance)),
     };
@@ -517,7 +517,7 @@ async function setDefault(a) {
       account_type: full.account_type || "Current", account_holder_name: full.account_holder_name || "",
       account_number: full.account_number || "", ifsc_code: full.ifsc_code || "",
       micr_code: full.micr_code || "", branch: full.branch || "",
-      gl_account: full.gl_account || "", currency: full.currency || "INR",
+      gl_account: full.gl_account || "", currency: full.currency || "OMR",
       is_default: 1, company: full.company || (await resolveCompany()),
       opening_balance: flt(full.opening_balance),
     }, { module: "banking", action: "edit" });

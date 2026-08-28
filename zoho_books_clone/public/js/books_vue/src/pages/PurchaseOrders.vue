@@ -36,7 +36,7 @@
     <div class="bk-stat-grid">
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month</div><div class="bk-stat-value">{{ poThisMonth.count }}</div></div><div class="bk-stat-icon" style="background:#dbeafe;color:#2563eb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div></div>
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">This Month Value</div><div class="bk-stat-value bk-kpi-blue" style="font-size:16px">{{ fmtCur(poThisMonth.value) }}</div></div><div class="bk-stat-icon" style="background:#cffafe;color:#0891b2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div></div></div>
-      <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">Procurement Value</div><div class="bk-stat-value bk-kpi-green" style="font-size:16px">{{ fmtCur(summary.totalValue) }}</div></div><div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg></div></div></div>
+      <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">Procurement Value</div><div class="bk-stat-value bk-kpi-green" style="font-size:16px">{{ fmtCur(summary.totalValue) }}</div></div><div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="6"/></svg></div></div></div>
       <div class="bk-stat-card"><div class="bk-stat-content"><div><div class="bk-stat-label">Closed</div><div class="bk-stat-value bk-kpi-green">{{ counts.closed }}</div></div><div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#16a34a" stroke-width="1.8"/><polyline points="7 12.5 10.5 16 17 9" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div></div>
     </div>
 
@@ -550,7 +550,7 @@
                 </div>
                 <div class="inv-details-meta-col col-balance">
                   <div class="inv-dmeta-icon-row">
-                    <span class="inv-dmeta-icon" v-html="icon('indianrupee',13)"></span>
+                    <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                     <span class="inv-dmeta-lbl">Total Value</span>
                   </div>
                   <div class="inv-balance-val">{{ fmtCur(viewDoc.grand_total) }}</div>
@@ -1016,7 +1016,7 @@ const vendorAddresses = ref([]);
 const addrModal = reactive({
   open: false, saving: false, forField: "",
   address_title: "", address_type: "Billing", address_line1: "", address_line2: "",
-  city: "", state: "", pincode: "", country: "India",
+  city: "", state: "", pincode: "", country: "Oman",
 });
 
 let _id = 1;
@@ -1385,7 +1385,7 @@ function onDeliveryAddrSelect(opt) {
 }
 function openAddrModal(field) {
   const addrType = field === "billing" ? "Billing" : "Shipping";
-  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: addrType, address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India" });
+  Object.assign(addrModal, { open: true, saving: false, forField: field, address_title: "", address_type: addrType, address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman" });
 }
 
 async function saveNewAddress() {
@@ -1402,7 +1402,7 @@ async function saveNewAddress() {
       city: addrModal.city || "",
       state: addrModal.state || "",
       pincode: addrModal.pincode || "",
-      country: addrModal.country || "India",
+      country: addrModal.country || "Oman",
       links: form.supplier ? [{ doctype: "Address", link_doctype: "Supplier", link_name: form.supplier }] : [],
     };
     const saved = await apiSave(doc);
