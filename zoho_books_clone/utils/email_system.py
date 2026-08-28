@@ -28,7 +28,7 @@ _DEFAULT_SMTP = {
     "use_tls":    True,
     "use_ssl":    False,
     "from_email": "wecode18@gmail.com",
-    "from_name":  "Books by Tareqix",
+    "from_name":  "Books by Namaaly",
 }
 
 
