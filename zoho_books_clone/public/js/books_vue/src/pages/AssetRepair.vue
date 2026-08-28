@@ -44,17 +44,17 @@
         <div class="bk-kpi-icon" style="background:#eef2ff;color:#4338ca"><span v-html="icon('trend',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Capitalized</div>
-          <div class="bk-kpi-value" style="color:#4338ca">{{ INR(totalCapitalized) }}</div>
+          <div class="bk-kpi-value" style="color:#4338ca">{{ OMR(totalCapitalized) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">added to asset value</div>
         </div>
       </div>
     </div>
     <div class="bk-kpi-card clickable" @click="filterStatus=''">
       <div class="bk-kpi-inner">
-        <div class="bk-kpi-icon" style="background:#fef3c7;color:#92400e"><span v-html="icon('rupee',22)"></span></div>
+        <div class="bk-kpi-icon" style="background:#fef3c7;color:#92400e"><span v-html="icon('rial',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Expensed</div>
-          <div class="bk-kpi-value bk-kpi-amber">{{ INR(totalExpensed) }}</div>
+          <div class="bk-kpi-value bk-kpi-amber">{{ OMR(totalExpensed) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">period cost</div>
         </div>
       </div>
@@ -93,7 +93,7 @@
             <td><span class="inv-link">{{ row.name }}</span></td>
             <td>{{ row.asset_name || row.asset }}<div class="asset-code">{{ row.asset }}</div></td>
             <td><span class="ar-type-badge" :class="row.is_capitalized ? 'ar-type-cap' : 'ar-type-exp'">{{ row.is_capitalized ? 'Capitalized' : 'Expensed' }}</span></td>
-            <td class="ta-r mono-sm">{{ INR(row.repair_cost) }}</td>
+            <td class="ta-r mono-sm">{{ OMR(row.repair_cost) }}</td>
             <td class="text-muted" style="font-size:12.5px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.description }}</td>
             <td><span class="inv-status-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
             <td style="text-align:center" @click.stop>
@@ -132,7 +132,7 @@
           </div>
           <div style="font-size:12px;color:#6b7280;margin-top:4px">{{ row.asset_name || row.asset }} • {{ row.is_capitalized ? 'Capitalized' : 'Expensed' }}</div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
-            <span class="mono-sm">{{ INR(row.repair_cost) }}</span>
+            <span class="mono-sm">{{ OMR(row.repair_cost) }}</span>
           </div>
         </div>
       </div>
@@ -165,11 +165,11 @@
             <div v-if="repair.docstatus===1" class="ar-notice" :class="{'ar-notice-cap': repair.is_capitalized}">
               <span v-html="icon(repair.is_capitalized ? 'trend' : 'info',14)"></span>
               <span v-if="repair.is_capitalized">
-                Submitted — {{ INR(repair.repair_cost) }} capitalized onto Asset {{ repair.asset }}'s purchase cost and
+                Submitted — {{ OMR(repair.repair_cost) }} capitalized onto Asset {{ repair.asset }}'s purchase cost and
                 current value. Depreciation schedule was not regenerated (see notes).
               </span>
               <span v-else>
-                Submitted — {{ INR(repair.repair_cost) }} posted as a period expense. No change to the asset's value.
+                Submitted — {{ OMR(repair.repair_cost) }} posted as a period expense. No change to the asset's value.
               </span>
             </div>
 
@@ -214,11 +214,11 @@
                 </div>
 
                 <div v-if="selectedAsset" class="ar-preview-box">
-                  <div class="ar-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ INR(selectedAsset.purchase_cost) }}</span></div>
-                  <div class="ar-preview-row"><span>Current Value</span><span class="mono-sm">{{ INR(selectedAsset.current_value) }}</span></div>
+                  <div class="ar-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ OMR(selectedAsset.purchase_cost) }}</span></div>
+                  <div class="ar-preview-row"><span>Current Value</span><span class="mono-sm">{{ OMR(selectedAsset.current_value) }}</span></div>
                   <div v-if="repair.is_capitalized" class="ar-preview-row">
                     <span>New Purchase Cost / Current Value (after repair)</span>
-                    <span class="mono-sm fw-600" style="color:#4338ca">{{ INR(flt(selectedAsset.current_value) + flt(repair.repair_cost)) }}</span>
+                    <span class="mono-sm fw-600" style="color:#4338ca">{{ OMR(flt(selectedAsset.current_value) + flt(repair.repair_cost)) }}</span>
                   </div>
                 </div>
               </div>
@@ -283,7 +283,7 @@
               </div>
               <div class="add-card-body" :class="{collapsed:collapsed.snapshot}">
                 <div class="ar-preview-box">
-                  <div class="ar-preview-row"><span>Repair Cost</span><span class="mono-sm">{{ INR(repair.repair_cost) }}</span></div>
+                  <div class="ar-preview-row"><span>Repair Cost</span><span class="mono-sm">{{ OMR(repair.repair_cost) }}</span></div>
                   <div class="ar-preview-row"><span>GL Posted</span><span class="mono-sm">{{ repair.gl_posted ? 'Yes' : 'No' }}</span></div>
                   <div class="ar-preview-row"><span>Capitalized Amount Applied</span><span class="mono-sm">{{ repair.capitalized_amount_applied ? 'Yes' : 'No' }}</span></div>
                 </div>
@@ -334,7 +334,7 @@ const toast = useToast();
 const { confirm } = useConfirm();
 
 function flt(n) { const x = Number(n); return isNaN(x) ? 0 : x; }
-function INR(n) {
+function OMR(n) {
   if (n == null || isNaN(n)) return 'OMR 0.00';
   return 'OMR ' + Number(n).toLocaleString('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }

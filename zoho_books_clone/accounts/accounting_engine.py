@@ -58,9 +58,9 @@ def _get_tds_payable(company: str) -> str | None:
 
 
 def _get_round_off_account(company: str) -> str | None:
-    """Account that absorbs the paise-level Round Off adjustment (Sec 170,
+    """Account that absorbs the baisa-level Round Off adjustment (Sec 170,
     CGST Act) between the pre-round (net + tax) total and the rounded
-    Grand Total, so GL debits/credits stay balanced to the rupee."""
+    Grand Total, so GL debits/credits stay balanced to the rial."""
     acct = frappe.db.get_value(
         "Account",
         {"account_name": ["like", "%Round Off%"], "company": company, "is_group": 0},

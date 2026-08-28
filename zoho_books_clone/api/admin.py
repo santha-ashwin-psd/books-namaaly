@@ -603,7 +603,7 @@ def get_notifications():
             notifs.append({
                 "type":"overdue_invoice","icon":"alert","color":"#C92A2A","bg":"#FFF5F5",
                 "title":"Overdue Invoice",
-                "body":f"{inv['name']} — {inv['customer_name']} — ₹{flt(inv['outstanding_amount']):,.2f}",
+                "body":f"{inv['name']} — {inv['customer_name']} — OMR {flt(inv['outstanding_amount']):,.2f}",
                 "link":f"#/invoices/{inv['name']}","date":str(inv["due_date"]),
             })
     except Exception:
@@ -620,7 +620,7 @@ def get_notifications():
             notifs.append({
                 "type":"bill_due","icon":"purchase","color":"#E67700","bg":"#FFF8F0",
                 "title":"Bill Due",
-                "body":f"{bill['name']} — {bill['supplier_name']} — ₹{flt(bill['outstanding_amount']):,.2f}",
+                "body":f"{bill['name']} — {bill['supplier_name']} — OMR {flt(bill['outstanding_amount']):,.2f}",
                 "link":"#/purchases","date":str(bill["due_date"]),
             })
     except Exception:
@@ -684,7 +684,7 @@ def get_company_settings():
 
     result = {
         "default_company": company_name,
-        "default_currency": "INR",
+        "default_currency": "OMR",
         "fiscal_year_start_month": "April",
         "invoice_prefix": "INV",
         "gstin": "",
@@ -717,7 +717,7 @@ def get_company_settings():
     if company_name and frappe.db.exists("Books Company", company_name):
         try:
             co = frappe.get_doc("Books Company", company_name)
-            result["default_currency"]        = co.currency or "INR"
+            result["default_currency"]        = co.currency or "OMR"
             result["fiscal_year_start_month"] = co.fiscal_year_start_month or "April"
             result["gstin"]                   = co.gstin or ""
             result["gst_state"]               = co.gst_state or ""

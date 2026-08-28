@@ -5,16 +5,16 @@ from zoho_books_clone.api.session import _get_company
 from zoho_books_clone.db.validators import validate_fiscal_year
 
 # Currencies to auto-refresh on the Settings page
-_KNOWN_CURRENCIES = []  # INR-only: no external currencies to refresh
+_KNOWN_CURRENCIES = []  # OMR-only: no external currencies to refresh
 
 
-def get_live_exchange_rate(from_currency, to_currency="INR"):
+def get_live_exchange_rate(from_currency, to_currency="OMR"):
     """
-    Real-time exchange rate (from_currency → to_currency, default INR).
+    Real-time exchange rate (from_currency → to_currency, default OMR).
     Flow: same-day Frappe cache → live API → stale cache.
     """
     from_currency = (from_currency or "").upper().strip()
-    to_currency   = (to_currency   or "INR").upper().strip()
+    to_currency   = (to_currency   or "OMR").upper().strip()
     if from_currency == to_currency:
         return {"rate": 1.0, "source": "identity", "date": nowdate()}
 
@@ -79,11 +79,11 @@ def get_live_exchange_rate(from_currency, to_currency="INR"):
 
 @frappe.whitelist(allow_guest=False, methods=["GET", "POST"])
 def refresh_all_exchange_rates():
-    """Fetch and cache live rates for all known currencies against INR. Called from Settings page."""
+    """Fetch and cache live rates for all known currencies against OMR. Called from Settings page."""
     results = {}
     for cur in _KNOWN_CURRENCIES:
         try:
-            results[cur] = get_live_exchange_rate(cur, "INR")
+            results[cur] = get_live_exchange_rate(cur, "OMR")
         except Exception:
             results[cur] = {"rate": None, "source": "error"}
     return results
@@ -126,7 +126,7 @@ def get_invoice_email_defaults(invoice_name):
         f"Please find your invoice <b>{inv.name}</b> details below:<br><br>"
         f"<table style='border-collapse:collapse;font-size:14px'>"
         f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Invoice #</td><td><b>{inv.name}</b></td></tr>"
-        f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Amount</td><td><b>₹{inv.grand_total:,.2f}</b></td></tr>"
+        f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Amount</td><td><b>OMR {inv.grand_total:,.2f}</b></td></tr>"
         f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Due Date</td><td>{inv.due_date}</td></tr>"
         f"</table><br>"
         f"Kindly make the payment by the due date.<br><br>"
@@ -210,8 +210,8 @@ def get_quote_email_defaults(quote_name):
     items_html = "".join(
         f"<tr><td style='padding:6px 12px;border-bottom:1px solid #f0f2f5'>{r.item_name or r.item_code}</td>"
         f"<td style='padding:6px 12px;border-bottom:1px solid #f0f2f5;text-align:right'>{flt(r.qty):.2f}</td>"
-        f"<td style='padding:6px 12px;border-bottom:1px solid #f0f2f5;text-align:right'>₹{flt(r.rate):,.2f}</td>"
-        f"<td style='padding:6px 12px;border-bottom:1px solid #f0f2f5;text-align:right'>₹{flt(r.amount):,.2f}</td></tr>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #f0f2f5;text-align:right'>OMR {flt(r.rate):,.2f}</td>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #f0f2f5;text-align:right'>OMR {flt(r.amount):,.2f}</td></tr>"
         for r in (quot.items or [])
     )
     body = (
@@ -225,7 +225,7 @@ def get_quote_email_defaults(quote_name):
         f"<th style='padding:8px 12px;text-align:right;border-bottom:2px solid #e4e8f0'>Amount</th>"
         f"</tr></thead><tbody>{items_html}</tbody>"
         f"<tfoot><tr><td colspan='3' style='padding:8px 12px;text-align:right;font-weight:700'>Grand Total</td>"
-        f"<td style='padding:8px 12px;text-align:right;font-weight:700;color:#2563EB'>₹{flt(quot.grand_total):,.2f}</td></tr></tfoot>"
+        f"<td style='padding:8px 12px;text-align:right;font-weight:700;color:#2563EB'>OMR {flt(quot.grand_total):,.2f}</td></tr></tfoot>"
         f"</table><br>"
         f"This quotation is valid until <b>{quot.valid_till or 'N/A'}</b>.<br><br>"
         f"Please reply to accept or discuss any changes.<br><br>"
@@ -374,7 +374,7 @@ def get_payment_defaults(invoice_name):
         "customer": inv.customer,
         "grand_total": flt(inv.grand_total),
         "balance_due": outstanding,
-        "currency": inv.currency or "INR",
+        "currency": inv.currency or "OMR",
         "payment_number": str(next_num),
         "payment_date": nowdate(),
         "bank_accounts": bank_accounts,
@@ -418,7 +418,7 @@ def record_payment(
 
     inv      = frappe.get_doc("Sales Invoice", invoice_name)
     company  = inv.company or frappe.db.get_default("company")
-    currency = inv.currency or "INR"
+    currency = inv.currency or "OMR"
 
     # Fiscal year lock — block payments into a locked or closed period
     validate_fiscal_year(payment_date, company)
@@ -689,7 +689,7 @@ def record_payment_multi(
             )
         invoices[inv.name] = (inv, outstanding)
         company = company or (inv.company or frappe.db.get_default("company"))
-        currency = currency or (inv.currency or "INR")
+        currency = currency or (inv.currency or "OMR")
 
     # Fiscal year lock — block payments into a locked or closed period
     validate_fiscal_year(payment_date, company)
@@ -1246,7 +1246,7 @@ Rules:
 _SUMMARY_SYSTEM_PROMPT = """\
 You are a financial analyst assistant. Given business metrics, write a concise health summary for the business owner.
 Return ONLY valid JSON: {"reply": "your analysis here"}
-Be specific with numbers. 3-5 sentences. Mention what's going well and what needs attention. Use ₹ for amounts.
+Be specific with numbers. 3-5 sentences. Mention what's going well and what needs attention. Use OMR for amounts.
 """
 
 _EMAIL_SYSTEM_PROMPT = """\
@@ -1345,7 +1345,7 @@ def get_ai_alerts():
         if int(od.cnt or 0):
             alerts.append({
                 "type": "overdue", "icon": "⚠️",
-                "text": f"{od.cnt} overdue invoice{'s' if int(od.cnt)!=1 else ''} — ₹{float(od.tot or 0):,.0f}",
+                "text": f"{od.cnt} overdue invoice{'s' if int(od.cnt)!=1 else ''} — OMR {float(od.tot or 0):,.0f}",
                 "action": "show_overdue",
             })
         # Due within 3 days (but not overdue)
@@ -1358,7 +1358,7 @@ def get_ai_alerts():
         if int(soon.cnt or 0):
             alerts.append({
                 "type": "due_soon", "icon": "🔔",
-                "text": f"{soon.cnt} invoice{'s' if int(soon.cnt)!=1 else ''} due within 3 days — ₹{float(soon.tot or 0):,.0f}",
+                "text": f"{soon.cnt} invoice{'s' if int(soon.cnt)!=1 else ''} due within 3 days — OMR {float(soon.tot or 0):,.0f}",
                 "action": "show_unpaid",
             })
         # Low stock items
@@ -1411,7 +1411,7 @@ def ai_enhance_email(subject, body, invoice_name=None):
         try:
             inv = frappe.get_doc("Sales Invoice", invoice_name)
             context = (f"Invoice {inv.name} for {inv.customer_name or inv.customer}, "
-                       f"amount ₹{flt(inv.grand_total):,.2f}, due date {inv.due_date or 'N/A'}.")
+                       f"amount OMR {flt(inv.grand_total):,.2f}, due date {inv.due_date or 'N/A'}.")
         except Exception:
             pass
     prompt = (
@@ -1595,7 +1595,7 @@ def ai_chat(messages, pro_mode=0, system=None):
                 FROM `tabSales Invoice`
                 WHERE docstatus=1 AND company=%s AND posting_date BETWEEN %s AND %s
             """, (company, from_d, to_d), as_dict=True)[0]
-            return {"reply": f"📈 Revenue — {label}\n\nTotal: ₹{float(row.total or 0):,.2f}\nInvoices: {int(row.cnt or 0)}"}
+            return {"reply": f"📈 Revenue — {label}\n\nTotal: OMR {float(row.total or 0):,.2f}\nInvoices: {int(row.cnt or 0)}"}
         except Exception as e:
             frappe.log_error(str(e), "AI Revenue")
             return {"reply": "Couldn't fetch revenue data right now."}
@@ -1611,9 +1611,9 @@ def ai_chat(messages, pro_mode=0, system=None):
                 FROM `tabSales Invoice`
                 WHERE docstatus=1 AND outstanding_amount>0 AND due_date<%s AND company=%s
             """, (nowdate(), company), as_dict=True)[0]
-            msg = f"💰 Outstanding Receivables\n\nTotal: ₹{float(row.total or 0):,.2f} ({int(row.cnt or 0)} invoices)"
+            msg = f"💰 Outstanding Receivables\n\nTotal: OMR {float(row.total or 0):,.2f} ({int(row.cnt or 0)} invoices)"
             if int(od.cnt or 0):
-                msg += f"\nOf which overdue: ₹{float(od.total or 0):,.2f} ({int(od.cnt)} invoices)"
+                msg += f"\nOf which overdue: OMR {float(od.total or 0):,.2f} ({int(od.cnt)} invoices)"
             return {"reply": msg, "action": "show_outstanding"}
         except Exception as e:
             frappe.log_error(str(e), "AI Outstanding")
@@ -1630,7 +1630,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             if not rows:
                 return {"reply": "No invoice data found yet."}
             lines = "\n".join(
-                f"{i+1}. {r.customer} — ₹{float(r.total):,.0f} ({int(r.cnt)} inv)"
+                f"{i+1}. {r.customer} — OMR {float(r.total):,.0f} ({int(r.cnt)} inv)"
                 for i, r in enumerate(rows)
             )
             return {"reply": f"🏆 Top {limit} Customers\n\n{lines}"}
@@ -1648,7 +1648,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             cnt = int(row.cnt or 0)
             if cnt == 0:
                 return {"reply": "✅ No overdue invoices — all caught up!"}
-            return {"reply": f"⚠️ Overdue Invoices\n\nCount: {cnt}\nTotal: ₹{float(row.total or 0):,.2f}",
+            return {"reply": f"⚠️ Overdue Invoices\n\nCount: {cnt}\nTotal: OMR {float(row.total or 0):,.2f}",
                     "action": "show_overdue"}
         except Exception as e:
             frappe.log_error(str(e), "AI Overdue Count")
@@ -1663,7 +1663,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             cnt = int(row.cnt or 0)
             if cnt == 0:
                 return {"reply": "✅ No unpaid bills — you're all clear!", "action": "show_bills"}
-            return {"reply": f"🧾 Unpaid Bills\n\nCount: {cnt}\nTotal: ₹{float(row.total or 0):,.2f}",
+            return {"reply": f"🧾 Unpaid Bills\n\nCount: {cnt}\nTotal: OMR {float(row.total or 0):,.2f}",
                     "action": "show_bills"}
         except Exception as e:
             frappe.log_error(str(e), "AI Bills")
@@ -1677,7 +1677,7 @@ def ai_chat(messages, pro_mode=0, system=None):
                 FROM `tabPayment Entry`
                 WHERE docstatus=1 AND payment_type='Receive' AND company=%s AND posting_date BETWEEN %s AND %s
             """, (company, from_d, to_d), as_dict=True)[0]
-            return {"reply": f"💵 Payments Received — {label}\n\nTotal collected: ₹{float(row.total or 0):,.2f}\nPayment entries: {int(row.cnt or 0)}"}
+            return {"reply": f"💵 Payments Received — {label}\n\nTotal collected: OMR {float(row.total or 0):,.2f}\nPayment entries: {int(row.cnt or 0)}"}
         except Exception as e:
             frappe.log_error(str(e), "AI Payment Received")
             return {"reply": "Couldn't fetch payment data."}
@@ -1690,7 +1690,7 @@ def ai_chat(messages, pro_mode=0, system=None):
                 FROM `tabPurchase Invoice`
                 WHERE docstatus=1 AND company=%s AND posting_date BETWEEN %s AND %s
             """, (company, from_d, to_d), as_dict=True)[0]
-            return {"reply": f"🧾 Expenses — {label}\n\nTotal purchase amount: ₹{float(row.total or 0):,.2f}\nBills: {int(row.cnt or 0)}"}
+            return {"reply": f"🧾 Expenses — {label}\n\nTotal purchase amount: OMR {float(row.total or 0):,.2f}\nBills: {int(row.cnt or 0)}"}
         except Exception as e:
             frappe.log_error(str(e), "AI Expense Total")
             return {"reply": "Couldn't fetch expense data."}
@@ -1708,7 +1708,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             """, (company, from_d, to_d))[0][0] or 0)
             profit = rev - exp
             sign = "📈" if profit >= 0 else "📉"
-            return {"reply": f"{sign} Profit Estimate — {label}\n\nRevenue: ₹{rev:,.2f}\nExpenses: ₹{exp:,.2f}\nNet: ₹{profit:,.2f}\n\n(Estimate only — excludes non-invoice transactions)"}
+            return {"reply": f"{sign} Profit Estimate — {label}\n\nRevenue: OMR {rev:,.2f}\nExpenses: OMR {exp:,.2f}\nNet: OMR {profit:,.2f}\n\n(Estimate only — excludes non-invoice transactions)"}
         except Exception as e:
             frappe.log_error(str(e), "AI Profit Estimate")
             return {"reply": "Couldn't compute profit estimate."}
@@ -1724,7 +1724,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             if not rows:
                 return {"reply": "No purchase data found yet."}
             lines = "\n".join(
-                f"{i+1}. {r.supplier} — ₹{float(r.total):,.0f} ({int(r.cnt)} bills)"
+                f"{i+1}. {r.supplier} — OMR {float(r.total):,.0f} ({int(r.cnt)} bills)"
                 for i, r in enumerate(rows)
             )
             return {"reply": f"🏭 Top {limit} Suppliers\n\n{lines}"}
@@ -1797,7 +1797,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             if not rows:
                 return {"reply": f"No sales data for {label}."}
             lines = "\n".join(
-                f"{i+1}. {r.item_name} — {int(r.total_qty or 0)} units (₹{float(r.total_amt or 0):,.0f})"
+                f"{i+1}. {r.item_name} — {int(r.total_qty or 0)} units (OMR {float(r.total_amt or 0):,.0f})"
                 for i, r in enumerate(rows)
             )
             return {"reply": f"🔥 Top {limit} Selling Items — {label}\n\n{lines}"}
@@ -1834,7 +1834,7 @@ def ai_chat(messages, pro_mode=0, system=None):
             """, as_dict=True)[0]
             val = float(row.total_value or 0)
             items = int(row.item_cnt or 0)
-            return {"reply": f"🏭 Total Stock Value\n\n₹{val:,.2f} across {items} item{'s' if items != 1 else ''} in stock"}
+            return {"reply": f"🏭 Total Stock Value\n\nOMR {val:,.2f} across {items} item{'s' if items != 1 else ''} in stock"}
         except Exception as e:
             frappe.log_error(str(e), "AI Stock Value")
             return {"reply": "Couldn't fetch stock value."}
@@ -1856,12 +1856,12 @@ def ai_chat(messages, pro_mode=0, system=None):
                 pct = int((rev_m - rev_lm) / rev_lm * 100)
                 trend = f"up {pct}%" if pct >= 0 else f"down {abs(pct)}%"
             data_ctx = (
-                f"This month revenue: ₹{rev_m:,.0f} ({trend + ' vs last month' if trend else 'first month data'}).\n"
-                f"Last month revenue: ₹{rev_lm:,.0f}.\n"
-                f"Outstanding receivables: ₹{float(outstd.cnt_tot or 0):,.0f} ({int(outstd.cnt or 0)} invoices).\n"
-                f"Overdue: {int(overdue.cnt or 0)} invoices worth ₹{float(overdue.tot or 0):,.0f}.\n"
+                f"This month revenue: OMR {rev_m:,.0f} ({trend + ' vs last month' if trend else 'first month data'}).\n"
+                f"Last month revenue: OMR {rev_lm:,.0f}.\n"
+                f"Outstanding receivables: OMR {float(outstd.cnt_tot or 0):,.0f} ({int(outstd.cnt or 0)} invoices).\n"
+                f"Overdue: {int(overdue.cnt or 0)} invoices worth OMR {float(overdue.tot or 0):,.0f}.\n"
                 f"Top customer: {top_cust[0].customer if top_cust else 'N/A'}.\n"
-                f"Unpaid bills owed: ₹{float(bills):,.0f}."
+                f"Unpaid bills owed: OMR {float(bills):,.0f}."
             )
             summary = _llm_parse([{"role": "user", "content": data_ctx}], system=_SUMMARY_SYSTEM_PROMPT)
             return {"reply": summary.get("reply", data_ctx)}
@@ -1985,7 +1985,7 @@ def _run_pro_action(action, data, company):
             doc.stock_uom  = data.get("uom", "Nos") or "Nos"
             doc.standard_rate = float(data.get("rate") or 0)
             doc.insert(ignore_permissions=True)
-            return {"reply": f"✅ Item **{name}** created at ₹{doc.standard_rate:,.2f}.", "action": "show_items"}
+            return {"reply": f"✅ Item **{name}** created at OMR {doc.standard_rate:,.2f}.", "action": "show_items"}
 
         if action == "create_quotation":
             customer = (data.get("customer") or "").strip()
@@ -2038,7 +2038,7 @@ def _run_pro_action(action, data, company):
             pe.insert(ignore_permissions=True)
             pe.submit()
             status = "fully paid ✅" if amount >= float(inv.outstanding_amount) else "partially paid"
-            return {"reply": f"✅ Payment of ₹{amount:,.2f} recorded for **{inv_name}** — now {status}.", "action": "show_all_invoices"}
+            return {"reply": f"✅ Payment of OMR {amount:,.2f} recorded for **{inv_name}** — now {status}.", "action": "show_all_invoices"}
 
         if action == "cancel_invoice":
             inv_name = (data.get("invoice") or "").strip()
@@ -2055,7 +2055,7 @@ def _run_pro_action(action, data, company):
             if not item_name: return {"reply": "Item name is required."}
             frappe.db.set_value("Item", item_name, "standard_rate", new_rate)
             frappe.db.commit()
-            return {"reply": f"✅ **{item_name}** price updated to ₹{new_rate:,.2f}.", "action": "show_items"}
+            return {"reply": f"✅ **{item_name}** price updated to OMR {new_rate:,.2f}.", "action": "show_items"}
 
         if action == "create_purchase_order":
             supplier  = (data.get("supplier") or "").strip()

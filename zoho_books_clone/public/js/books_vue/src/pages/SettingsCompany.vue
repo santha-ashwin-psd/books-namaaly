@@ -498,7 +498,7 @@ const { toast } = useToast();
 const route = useRoute();
 
 const form = reactive({
-  default_company: "", default_currency: "INR", fiscal_year_start_month: "April",
+  default_company: "", default_currency: "OMR", fiscal_year_start_month: "April",
   invoice_prefix: "INV", gstin: "", gst_state: "", logo_url: "",
   company_address: "", company_city: "", company_country: "Oman",
   company_state: "", company_pincode: "",

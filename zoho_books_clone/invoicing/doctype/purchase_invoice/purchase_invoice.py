@@ -73,12 +73,12 @@ class PurchaseInvoice(Document):
         self.net_total = round(net, 2)
         self.total_tax = round(tax_total, 2)
         # GST rule (Sec 170, CGST Act): the invoice total is rounded off to
-        # the nearest rupee, with the adjustment shown as its own "Round
+        # the nearest rial, with the adjustment shown as its own "Round
         # Off" line — same treatment as Sales Invoice. Without this, the
-        # paise-level remainder between (net + tax) and the whole-rupee
+        # baisa-level remainder between (net + tax) and the whole-rial
         # grand_total previously had nowhere to go, so the AP credit posted
         # in post_purchase_invoice() (which uses grand_total) could land a
-        # few paise off from the debit legs (which use net_total/tax_total)
+        # few baisa off from the debit legs (which use net_total/tax_total)
         # — an out-of-balance GL entry that made_gl_entries() would reject.
         pre_round_total = net + tax_total
         self.grand_total = round(pre_round_total)
@@ -152,7 +152,7 @@ class PurchaseInvoice(Document):
                     frappe.throw(_(
                         "Cannot submit Debit Note {0}: the Purchase Invoice {1} "
                         "already has its claimable value fully used "
-                        "(remaining: ₹{2:,.2f}, this note: ₹{3:,.2f})."
+                        "(remaining: OMR {2:,.2f}, this note: OMR {3:,.2f})."
                     ).format(
                         self.name,
                         self.return_against,
@@ -317,4 +317,3 @@ class PurchaseInvoice(Document):
             {"outstanding_amount": new_outstanding, "status": new_status},
             update_modified=False,
         )
-   

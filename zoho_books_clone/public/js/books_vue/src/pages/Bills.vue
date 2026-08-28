@@ -900,7 +900,7 @@
                 voucher-type="Purchase Invoice"
                 :voucher-no="viewDoc.name"
                 label="Bill"
-                :currency="viewDoc.currency || 'INR'"
+                :currency="viewDoc.currency || 'OMR'"
               />
             </div>
           </template>
@@ -1681,7 +1681,7 @@ const taxLines = computed(() =>
 const taxAmount = computed(() => taxLines.value.reduce((s, t) => s + t.amount, 0));
 const tdsAmount = computed(() => form.tds_applicable && form.tds_rate > 0 ? Math.round(netTotal.value * form.tds_rate / 100 * 100) / 100 : 0);
 // GST rule (Sec 170, CGST Act): the total is rounded off to the nearest
-// rupee, with the adjustment shown as its own "Round Off" line — mirrors
+// rial, with the adjustment shown as its own "Round Off" line — mirrors
 // Invoices.vue's preRoundTotal/roundOff, and keeps this preview in sync
 // with what purchase_invoice.py's calculate_totals() will actually save.
 const preRoundTotal = computed(() => netTotal.value + taxAmount.value - tdsAmount.value);
@@ -1808,7 +1808,7 @@ async function saveBill(submit) {
       cost_center: form.cost_center || "",
       place_of_supply: form.place_of_supply || "",
       currency: form.currency || "OMR",
-      conversion_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
+      conversion_rate: form.currency === "OMR" ? 1 : (form.exchange_rate || 1),
       discount_type: form.discount_type || "Percentage",
       additional_discount_percentage: form.discount_type === "Percentage" ? flt(form.additional_discount_percentage) : 0,
       additional_discount_amount: flt(discountAmount.value),

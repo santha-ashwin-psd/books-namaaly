@@ -82,7 +82,7 @@ class TestComputeBinValuation(unittest.TestCase):
     # ── New Phase 3 branch: Landed Cost Voucher value-only adjustment ──────────
 
     def test_value_only_adjustment_bumps_value_without_moving_qty(self):
-        # 100 units on hand @ rate 100 (value 10,000). LCV capitalizes ₹700
+        # 100 units on hand @ rate 100 (value 10,000). LCV capitalizes OMR 700
         # of freight against this row — matches the client's worked example.
         new_qty, new_value, new_rate = compute_bin_valuation(
             old_qty=100, old_value=10000, delta_qty=0, stock_value_difference=700,

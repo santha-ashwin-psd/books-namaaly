@@ -23,7 +23,7 @@ def _clip_description(text):
 
 def create_bank_transaction_row(
     bank_account_gl, date, credit, debit, company,
-    currency="INR", description="", reference_number="",
+    currency="OMR", description="", reference_number="",
     payment_entry=None, journal_entry=None,
 ):
     """Create an Unreconciled Bank Transaction row mirroring a real GL
@@ -85,7 +85,7 @@ def create_bank_transaction_row(
         "bank_account":     bank_acc,
         "credit":           flt(credit),   # Bank statement convention: credit = money IN
         "debit":            flt(debit),    # Bank statement convention: debit  = money OUT
-        "currency":         currency or "INR",
+        "currency":         currency or "OMR",
         # description is a Data field -- Frappe hard-caps those at 140 chars
         # and insert() throws (rather than silently truncating) if exceeded.
         # A payment covering many invoices/bills can easily build a longer
@@ -151,7 +151,7 @@ def create_bank_transaction_from_payment_entry(pe):
         credit=main_deposit,
         debit=main_withdrawal,
         company=pe.company,
-        currency=pe.currency or "INR",
+        currency=pe.currency or "OMR",
         description=pe.remarks or f"Payment Entry {pe.name}",
         reference_number=ref,
         payment_entry=pe.name,
@@ -164,7 +164,7 @@ def create_bank_transaction_from_payment_entry(pe):
             credit=charge_deposit,
             debit=charge_withdrawal,
             company=pe.company,
-            currency=pe.currency or "INR",
+            currency=pe.currency or "OMR",
             description=f"Bank charges — {pe.name}",
             reference_number=f"{ref}-CHG",
             payment_entry=pe.name,

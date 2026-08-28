@@ -145,7 +145,7 @@ class WorkOrder(Document):
 		routing (e.g. Mixing -> Filling -> Packaging) starts logging actual
 		time on its first operation well before the later ones begin --
 		switching the WHOLE total to "actual mode" the moment any one row
-		gets a Job Card would make every not-yet-started row contribute ₹0
+		gets a Job Card would make every not-yet-started row contribute OMR 0
 		instead of its planned cost, understating the true cost-to-date
 		(and, via complete_work_order's operating_cost_this_run snapshot,
 		understating FG valuation for any partial completion recorded while

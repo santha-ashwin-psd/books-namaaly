@@ -44,7 +44,7 @@
         <div class="bk-kpi-icon" style="background:#fee2e2;color:#b91c1c"><span v-html="icon('trend',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Total Impairment</div>
-          <div class="bk-kpi-value" style="color:#b91c1c">{{ INR(totalImpairment) }}</div>
+          <div class="bk-kpi-value" style="color:#b91c1c">{{ OMR(totalImpairment) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">write-downs</div>
         </div>
       </div>
@@ -54,7 +54,7 @@
         <div class="bk-kpi-icon" style="background:#dcfce7;color:#15803d"><span v-html="icon('trend',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Total Revaluation</div>
-          <div class="bk-kpi-value" style="color:#15803d">{{ INR(totalRevaluation) }}</div>
+          <div class="bk-kpi-value" style="color:#15803d">{{ OMR(totalRevaluation) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">write-ups</div>
         </div>
       </div>
@@ -95,8 +95,8 @@
             <td><span class="inv-link">{{ row.name }}</span></td>
             <td>{{ row.asset_name || row.asset }}<div class="asset-code">{{ row.asset }}</div></td>
             <td><span class="ava-type-badge" :class="row.adjustment_type==='Impairment (Write-down)' ? 'ava-type-down' : 'ava-type-up'">{{ shortType(row.adjustment_type) }}</span></td>
-            <td class="ta-r mono-sm text-muted">{{ INR(row.current_value_before ?? row._preview_before) }}</td>
-            <td class="ta-r mono-sm">{{ INR(row.new_value) }}</td>
+            <td class="ta-r mono-sm text-muted">{{ OMR(row.current_value_before ?? row._preview_before) }}</td>
+            <td class="ta-r mono-sm">{{ OMR(row.new_value) }}</td>
             <td class="ta-r mono-sm fw-600" :class="deltaClass(row)">{{ deltaDisplay(row) }}</td>
             <td><span class="inv-status-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
             <td style="text-align:center" @click.stop>
@@ -135,7 +135,7 @@
           </div>
           <div style="font-size:12px;color:#6b7280;margin-top:4px">{{ row.asset_name || row.asset }} • {{ shortType(row.adjustment_type) }}</div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
-            <span class="mono-sm">{{ INR(row.new_value) }}</span>
+            <span class="mono-sm">{{ OMR(row.new_value) }}</span>
             <span class="mono-sm fw-600" :class="deltaClass(row)">{{ deltaDisplay(row) }}</span>
           </div>
         </div>
@@ -169,8 +169,8 @@
             <div v-if="adj.docstatus===1" class="ava-notice" :class="{'ava-notice-down': adj.adjustment_type==='Impairment (Write-down)'}">
               <span v-html="icon('check',14)"></span>
               <span>
-                Submitted — Asset {{ adj.asset }}'s current value moved from {{ INR(adj.current_value_before) }} to
-                {{ INR(adj.new_value) }} ({{ adj.adjustment_amount > 0 ? '+' : '' }}{{ INR(adj.adjustment_amount) }}).
+                Submitted — Asset {{ adj.asset }}'s current value moved from {{ OMR(adj.current_value_before) }} to
+                {{ OMR(adj.new_value) }} ({{ adj.adjustment_amount > 0 ? '+' : '' }}{{ OMR(adj.adjustment_amount) }}).
                 Original purchase cost is untouched.
               </span>
             </div>
@@ -234,7 +234,7 @@
                 <div class="inv-fg inv-fg2">
                   <div>
                     <label class="inv-lbl">Current Value (Before)</label>
-                    <input :value="INR(currentValueBefore)" class="inv-fi" disabled/>
+                    <input :value="OMR(currentValueBefore)" class="inv-fi" disabled/>
                   </div>
                   <div>
                     <label class="inv-lbl">New Value <span class="inv-req">*</span></label>
@@ -243,16 +243,16 @@
                 </div>
 
                 <div v-if="selectedAsset" class="ava-preview-box">
-                  <div class="ava-preview-row"><span>Original Purchase Cost</span><span class="mono-sm">{{ INR(selectedAsset.purchase_cost) }}</span></div>
-                  <div class="ava-preview-row"><span>Current Value</span><span class="mono-sm">{{ INR(currentValueBefore) }}</span></div>
+                  <div class="ava-preview-row"><span>Original Purchase Cost</span><span class="mono-sm">{{ OMR(selectedAsset.purchase_cost) }}</span></div>
+                  <div class="ava-preview-row"><span>Current Value</span><span class="mono-sm">{{ OMR(currentValueBefore) }}</span></div>
                   <div class="ava-preview-row" v-if="adj.new_value !== null && adj.new_value !== ''">
                     <span>{{ livePreviewAmount < 0 ? 'Impairment (Write-down)' : 'Revaluation (Write-up)' }}</span>
                     <span class="mono-sm fw-600" :class="livePreviewAmount < 0 ? 'ava-neg' : 'ava-pos'">
-                      {{ livePreviewAmount > 0 ? '+' : '' }}{{ INR(livePreviewAmount) }}
+                      {{ livePreviewAmount > 0 ? '+' : '' }}{{ OMR(livePreviewAmount) }}
                     </span>
                   </div>
                   <div v-if="flt(adj.new_value) > flt(selectedAsset.purchase_cost)" class="ava-warn">
-                    New Value cannot exceed original Purchase Cost ({{ INR(selectedAsset.purchase_cost) }}).
+                    New Value cannot exceed original Purchase Cost ({{ OMR(selectedAsset.purchase_cost) }}).
                   </div>
                 </div>
               </div>
@@ -298,9 +298,9 @@
               </div>
               <div class="add-card-body" :class="{collapsed:collapsed.snapshot}">
                 <div class="ava-preview-box">
-                  <div class="ava-preview-row"><span>Current Value (Before)</span><span class="mono-sm">{{ INR(adj.current_value_before) }}</span></div>
-                  <div class="ava-preview-row"><span>New Value</span><span class="mono-sm">{{ INR(adj.new_value) }}</span></div>
-                  <div class="ava-preview-row"><span>Adjustment Amount</span><span class="mono-sm fw-600" :class="adj.adjustment_amount < 0 ? 'ava-neg' : 'ava-pos'">{{ adj.adjustment_amount > 0 ? '+' : '' }}{{ INR(adj.adjustment_amount) }}</span></div>
+                  <div class="ava-preview-row"><span>Current Value (Before)</span><span class="mono-sm">{{ OMR(adj.current_value_before) }}</span></div>
+                  <div class="ava-preview-row"><span>New Value</span><span class="mono-sm">{{ OMR(adj.new_value) }}</span></div>
+                  <div class="ava-preview-row"><span>Adjustment Amount</span><span class="mono-sm fw-600" :class="adj.adjustment_amount < 0 ? 'ava-neg' : 'ava-pos'">{{ adj.adjustment_amount > 0 ? '+' : '' }}{{ OMR(adj.adjustment_amount) }}</span></div>
                   <div class="ava-preview-row"><span>GL Posted</span><span class="mono-sm">{{ adj.gl_posted ? 'Yes' : 'No' }}</span></div>
                 </div>
               </div>
@@ -350,7 +350,7 @@ const toast = useToast();
 const { confirm } = useConfirm();
 
 function flt(n) { const x = Number(n); return isNaN(x) ? 0 : x; }
-function INR(n) {
+function OMR(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return 'OMR 0.00';
   return 'OMR ' + Number(n).toLocaleString('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
@@ -463,12 +463,12 @@ function shortType(t) {
 function deltaDisplay(row) {
   const amt = row.adjustment_amount;
   if (amt !== undefined && amt !== null && amt !== 0) {
-    return (amt > 0 ? '+' : '') + INR(amt);
+    return (amt > 0 ? '+' : '') + OMR(amt);
   }
   // Draft rows: no posted delta yet, derive a preview from new_value vs before if known.
   if (row.current_value_before != null) {
     const d = flt(row.new_value) - flt(row.current_value_before);
-    return (d > 0 ? '+' : '') + INR(d);
+    return (d > 0 ? '+' : '') + OMR(d);
   }
   return '—';
 }
@@ -618,7 +618,7 @@ function validate() {
     toast.error('New Value must be zero or greater.'); return false;
   }
   if (selectedAsset.value && flt(adj.value.new_value) > flt(selectedAsset.value.purchase_cost)) {
-    toast.error(`New Value cannot exceed the asset's original Purchase Cost (${INR(selectedAsset.value.purchase_cost)}).`);
+    toast.error(`New Value cannot exceed the asset's original Purchase Cost (${OMR(selectedAsset.value.purchase_cost)}).`);
     return false;
   }
   if (flt(adj.value.new_value) === currentValueBefore.value) {
@@ -665,7 +665,7 @@ async function save(targetStatus) {
 async function cancelAdjustment() {
   const ok = await confirm({
     title: 'Cancel Adjustment',
-    body: `Cancel ${adj.value.name}? This reverses the GL entries and restores Asset ${adj.value.asset}'s current value to ${INR(adj.value.current_value_before)}.`,
+    body: `Cancel ${adj.value.name}? This reverses the GL entries and restores Asset ${adj.value.asset}'s current value to ${OMR(adj.value.current_value_before)}.`,
     okLabel: 'Cancel Adjustment',
     okStyle: 'danger',
   });

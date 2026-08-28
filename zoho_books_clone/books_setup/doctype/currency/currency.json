@@ -130,7 +130,7 @@
    "print_width": "",
    "fieldname": "fraction",
    "fieldtype": "Data",
-   "label": "Fraction (e.g. Paise)"
+   "label": "Fraction (e.g. Baisa)"
   },
   {
    "creation": "2026-03-17 11:02:53.037714",

@@ -66,7 +66,7 @@
           <div class="add-card">
             <div class="add-card-header" @click="collapsed.purchase = !collapsed.purchase">
               <div class="add-card-title">
-                <span class="add-card-title-icon"><span v-html="icon('rupee',16)"></span></span>
+                <span class="add-card-title-icon"><span v-html="icon('rial',16)"></span></span>
                 Purchase Details
               </div>
               <span class="add-card-chevron" :class="{collapsed:collapsed.purchase}"><span v-html="icon('chevD',14)"></span></span>

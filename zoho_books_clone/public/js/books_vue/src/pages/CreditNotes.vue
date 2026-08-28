@@ -464,7 +464,7 @@
               voucher-type="Sales Invoice"
               :voucher-no="viewDoc.name"
               label="Credit Note"
-              :currency="viewDoc.currency || 'INR'"
+              :currency="viewDoc.currency || 'OMR'"
             />
           </template>
           <template v-if="viewTab==='details'">

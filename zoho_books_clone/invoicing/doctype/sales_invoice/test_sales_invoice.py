@@ -14,7 +14,7 @@ class TestSalesInvoice(FrappeTestCase):
             self.company = frappe.get_doc({
                 "doctype": "Books Company",
                 "company_name": self.company_name,
-                "currency": "INR",
+                "currency": "OMR",
                 "is_active": 1,
             }).insert(ignore_permissions=True)
         else:
@@ -92,7 +92,7 @@ class TestSalesInvoice(FrappeTestCase):
                 "account_name": name,
                 "account_type": account_type,
                 "company": self.company_name,
-                "currency": "INR",
+                "currency": "OMR",
             }).insert(ignore_permissions=True)
             return doc.name
         else:

@@ -645,7 +645,7 @@ const { confirm } = useConfirm();
 // ── Currency list ────────────────────────────────────────────────────────────
 const CURRENCY_LIST = [
   { code: "OMR",  name: "Omani Rial" },
-  { code: "INR",  name: "Indian Rupee" },
+  { code: "OMR",  name: "Omani Rial" },
   { code: "USD",  name: "US Dollar" },
   { code: "EUR",  name: "Euro" },
   { code: "GBP",  name: "British Pound" },
@@ -721,7 +721,7 @@ const csvPreviewRows   = ref([]);
 const importingCSV     = ref(false);
 
 // ── Currency symbol map ──────────────────────────────────────────────────────
-const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR ", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", JPY: "¥", CAD: "C$", AUD: "A$" };
+const CURRENCY_SYMBOLS = { OMR: "OMR ", OMR: "OMR ", USD: "$", EUR: "€", GBP: "£", AED: "د.إ", SGD: "S$", JPY: "¥", CAD: "C$", AUD: "A$" };
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const filteredLists = computed(() => {

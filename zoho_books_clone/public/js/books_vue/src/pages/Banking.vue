@@ -32,7 +32,7 @@
             <div class="acct-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
             </div>
-            <span class="acct-currency">{{ acct.currency || "INR" }}</span>
+            <span class="acct-currency">{{ acct.currency || "OMR" }}</span>
           </div>
           <div class="acct-name">{{ acct.account_name }}</div>
           <div class="acct-bank">{{ acct.bank_name || "—" }}</div>

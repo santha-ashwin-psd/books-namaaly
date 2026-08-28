@@ -395,7 +395,7 @@ function exportCSV() {
   a.download = `GSTR-3B_${period.value}.csv`; a.click();
 }
 
-function fmtCur(v) { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2}).format(flt(v)); }
+function fmtCur(v) { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"OMR",minimumFractionDigits:2}).format(flt(v)); }
 
 onMounted(load);
 </script>

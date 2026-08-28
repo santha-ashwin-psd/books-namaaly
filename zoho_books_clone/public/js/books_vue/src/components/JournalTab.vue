@@ -40,7 +40,7 @@ const props = defineProps({
   voucherNo:   { type: String, required: true },
   /** Heading shown above the table, e.g. "Invoice", "Expense" */
   label:       { type: String, default: "" },
-  currency:    { type: String, default: "INR" },
+  currency:    { type: String, default: "OMR" },
 });
 
 const rows = ref([]);

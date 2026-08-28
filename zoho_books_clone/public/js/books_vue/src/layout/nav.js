@@ -18,7 +18,7 @@ export const NAV = [
   { path: "/invoices",                      label: "Invoices",         icon: "file",       module: "invoices"   },
   { path: "/recurring",                     label: "Recurring",        icon: "recurring",  module: "invoices"   },
   { path: "/delivery-challans",             label: "Delivery Challans",icon: "truck",      module: "invoices"   },
-  { path: "/payments-received",             label: "Payments Received",icon: "rupee",      module: "payments"   },
+  { path: "/payments-received",             label: "Payments Received",icon: "rial",      module: "payments"   },
   { path: "/credit-notes",                  label: "Credit Notes",     icon: "creditnote", module: "invoices"   },
   // { path: "/proforma-invoices",             label: "Proforma Invoices",icon: "file",       module: "invoices"   },
   // { path: "/eway-bills",                    label: "E-Way Bills",      icon: "truck",      module: "invoices"   }, // GST-only, no Oman equivalent
@@ -65,7 +65,7 @@ export const NAV = [
   { path: "/inventory/stock-ledger",        label: "Stock Ledger",     icon: "ledger",     module: "inventory"  },
   { path: "/inventory/valuation",           label: "Valuation",        icon: "chart",      module: "inventory"  },
   { path: "/inventory/reorder-alerts",      label: "Reorder Alerts",   icon: "alert",      module: "inventory"  },
-  { path: "/inventory/price-lists",         label: "Price Lists",      icon: "rupee",      module: "inventory"  },
+  { path: "/inventory/price-lists",         label: "Price Lists",      icon: "rial",      module: "inventory"  },
   { path: "/inventory/batches",             label: "Batch Tracking",   icon: "qr",         module: "inventory"  },
   { path: "/inventory/settings",            label: "Settings",         icon: "gear",       module: "inventory"  },
 
@@ -130,7 +130,7 @@ export const NAV = [
   { path: "/settings/email-templates",      label: "Email Templates",  icon: "mail",       module: "admin"      },
   // { path: "/settings/number-series",        label: "Number Series",    icon: "hash",       module: "admin"      },
   // { path: "/settings/payment-terms",        label: "Payment Terms",    icon: "calendar",   module: "admin"      },
-  // { path: "/settings/currency-exchange", label: "Currency", icon: "currency", module: "admin" }, // INR-only: hidden
+  // { path: "/settings/currency-exchange", label: "Currency", icon: "currency", module: "admin" }, // OMR-only: hidden
   { path: "/settings/roles",                label: "Roles",            icon: "shield",     module: "admin"      },
   // { path: "/settings/organization",         label: "Organization",     icon: "org",        module: "admin"      },
   // { path: "/settings/security",             label: "Security",         icon: "lock",       module: null         },

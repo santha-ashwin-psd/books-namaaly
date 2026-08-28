@@ -27,8 +27,8 @@
   /* ─── Helpers ────────────────────────────────────────────────── */
   function fmt(v, c) {
     if (v == null || v === "") return "—";
-    try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: c || "INR", maximumFractionDigits: 2 }).format(v); }
-    catch { return "₹" + Number(v).toLocaleString("en-IN"); }
+    try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: c || "OMR", maximumFractionDigits: 2 }).format(v); }
+    catch { return "OMR " + Number(v).toLocaleString("en-IN"); }
   }
   function fmtDate(v) {
     if (!v) return "—";
@@ -356,7 +356,7 @@
     vendors: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     fileplus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>',
     payment: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/>',
-    rupee: '<path d="M18 7H6M18 11H6M12 7v10M6 11c0 3.31 2.69 6 6 6s6-2.69 6-6"/>',
+    rial: '<path d="M18 7H6M18 11H6M12 7v10M6 11c0 3.31 2.69 6 6 6s6-2.69 6-6"/>',
     alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
     coa: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
     journal: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
@@ -427,7 +427,7 @@
     "Item": [
       { f:"item_name",    l:"Item Name",   req:true,  type:"text"   },
       { f:"item_group",   l:"Item Group",  req:false, type:"text"   },
-      { f:"standard_rate",l:"Rate (₹)",    req:false, type:"number" },
+      { f:"standard_rate",l:"Rate (OMR)",    req:false, type:"number" },
       { f:"stock_uom",    l:"UOM",         req:false, type:"text", placeholder:"Nos" },
     ],
     "Customer": [
@@ -695,7 +695,7 @@
         naming_series: "INV-.YYYY.-.#####",
         customer: "", customer_name: "",
         posting_date: today(), due_date: today(),
-        currency: "INR",
+        currency: "OMR",
         debit_to: "", income_account: "",
         source_name: "", source_type: "",
         items: [{ item_name: "", description: "", qty: 1, rate: 0, amount: 0 }],
@@ -830,7 +830,7 @@
           posting_date: form.posting_date,
           due_date: form.due_date || form.posting_date,
           company: form.company,
-          currency: form.currency || "INR",
+          currency: form.currency || "OMR",
           debit_to: form.debit_to,
           income_account: form.income_account,
           notes: form.notes,
@@ -958,8 +958,8 @@
               <th style="width:30%">Item Name</th>
               <th style="width:26%">Description</th>
               <th style="width:10%;text-align:center">Qty</th>
-              <th style="width:16%;text-align:right">Rate (₹)</th>
-              <th style="width:14%;text-align:right">Amount (₹)</th>
+              <th style="width:16%;text-align:right">Rate (OMR)</th>
+              <th style="width:14%;text-align:right">Amount (OMR)</th>
               <th style="width:4%"></th>
             </tr>
           </thead>
@@ -1015,7 +1015,7 @@
               <th style="width:20%">Type</th>
               <th style="width:30%">Description</th>
               <th style="width:14%;text-align:center">Rate %</th>
-              <th style="width:32%;text-align:right">Amount (₹)</th>
+              <th style="width:32%;text-align:right">Amount (OMR)</th>
               <th style="width:4%"></th>
             </tr>
           </thead>
@@ -1144,7 +1144,7 @@
 
       function buildInvoiceHtml(inv) {
         if (!inv) return "<p style='color:#888;padding:20px'>Loading invoice details…</p>";
-        const amt = n => "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const amt = n => "OMR " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const items = inv.items || [];
         const taxes = inv.taxes || [];
 
@@ -1477,7 +1477,7 @@
         supplier: "", supplier_name: "",
         posting_date: today(), due_date: today(),
         bill_no: "",
-        company: co(), currency: "INR",
+        company: co(), currency: "OMR",
         credit_to: "", expense_account: "",
         items: [{ item_name: "", qty: 1, rate: 0, amount: 0 }],
         taxes: [],
@@ -1549,7 +1549,7 @@
           supplier: form.supplier,
           posting_date: form.posting_date, due_date: form.due_date || form.posting_date,
           bill_no: form.bill_no,
-          company: form.company, currency: form.currency || "INR",
+          company: form.company, currency: form.currency || "OMR",
           credit_to: form.credit_to, expense_account: form.expense_account,
           items: form.items.filter(i => i.item_name || flt(i.rate)).map((i, idx) => ({
             doctype: "Purchase Invoice Item",
@@ -1631,8 +1631,8 @@
           <thead><tr>
             <th style="width:42%">Item Name</th>
             <th style="width:14%;text-align:center">Qty</th>
-            <th style="width:22%;text-align:right">Rate (₹)</th>
-            <th style="width:18%;text-align:right">Amount (₹)</th>
+            <th style="width:22%;text-align:right">Rate (OMR)</th>
+            <th style="width:18%;text-align:right">Amount (OMR)</th>
             <th style="width:4%"></th>
           </tr></thead>
           <tbody>
@@ -1687,7 +1687,7 @@
       const form = reactive({
         naming_series: "PAY-.YYYY.-.#####",
         payment_type: "Receive", party_type: "Customer", party: "", party_name: "",
-        payment_date: today(), paid_amount: 0, currency: "INR",
+        payment_date: today(), paid_amount: 0, currency: "OMR",
         mode_of_payment: "Bank Transfer", reference_no: "",
         paid_from: "", paid_to: "", company: co(),
         remarks: "",
@@ -2734,7 +2734,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const paymentsOpen = ref(false);
       const form = reactive({
         customer: "", posting_date: "", due_date: "", debit_to: "", income_account: "",
-        currency: "INR", notes: "", company: "",
+        currency: "OMR", notes: "", company: "",
         items: [{ item_name: "", description: "", qty: 1, rate: 0, amount: 0 }],
         taxes: []
       });
@@ -2770,7 +2770,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         Object.assign(form, {
           customer: inv.value.customer || "", posting_date: inv.value.posting_date || "",
           due_date: inv.value.due_date || "", debit_to: savedDebitTo,
-          income_account: savedIncomeAcct, currency: inv.value.currency || "INR",
+          income_account: savedIncomeAcct, currency: inv.value.currency || "OMR",
           notes: inv.value.notes || "", company: inv.value.company || "",
           items: (inv.value.items || []).map(i => ({ ...i })),
           taxes: (inv.value.taxes || []).map(t => ({ ...t })),
@@ -2848,7 +2848,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
         function w(n) { if (!n) return ""; if (n < 20) return a[n] + " "; if (n < 100) return b[Math.floor(n / 10)] + " " + (n % 10 ? a[n % 10] + " " : ""); if (n < 1000) return a[Math.floor(n / 100)] + " Hundred " + (n % 100 ? w(n % 100) : ""); if (n < 100000) return w(Math.floor(n / 1000)) + "Thousand " + (n % 1000 ? w(n % 1000) : ""); if (n < 10000000) return w(Math.floor(n / 100000)) + "Lakh " + (n % 100000 ? w(n % 100000) : ""); return w(Math.floor(n / 10000000)) + "Crore " + (n % 10000000 ? w(n % 10000000) : ""); }
         const r = Math.floor(n), p = Math.round((n - r) * 100);
-        return "Indian Rupee " + w(r).trim() + (p ? " and " + w(p).trim() + " Paise" : "") + " Only";
+        return "Omani Rial " + w(r).trim() + (p ? " and " + w(p).trim() + " Baisa" : "") + " Only";
       }
       const statusBadgeCls = computed(() => {
         const s = inv.value?.status;
@@ -3072,7 +3072,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <!-- Row 2: Amount + Bank Charges -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:6px">
               <div>
-                <label style="display:block;font-size:12px;font-weight:600;color:#dc2626;margin-bottom:6px">Amount Received (INR)*</label>
+                <label style="display:block;font-size:12px;font-weight:600;color:#dc2626;margin-bottom:6px">Amount Received (OMR)*</label>
                 <input v-model.number="recPay.amount" type="number" min="0" step="0.01" style="width:100%;padding:8px 12px;border:2px solid #2563EB;border-radius:6px;font-size:13px;font-weight:600"/>
                 <div style="font-size:11px;color:#2563EB;margin-top:4px;cursor:pointer">PAN: <span style="text-decoration:underline">Add PAN</span></div>
               </div>
@@ -3613,7 +3613,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         customer_name: "", customer_type: "Company", salutation: "",
         first_name: "", last_name: "", company_name: "",
         gst_treatment: "Registered Business",
-        tax_id: "", default_currency: "INR", credit_limit: 0,
+        tax_id: "", default_currency: "OMR", credit_limit: 0,
         email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
         // billing address
         address_line1: "", address_line2: "",
@@ -3805,7 +3805,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           name: "", customer_name: "", customer_type: "Company", salutation: "",
           first_name: "", last_name: "", company_name: "",
           gst_treatment: "Registered Business",
-          tax_id: "", default_currency: "INR", credit_limit: 0,
+          tax_id: "", default_currency: "OMR", credit_limit: 0,
           email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
           address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "India",
           ship_address_line1: "", ship_address_line2: "", ship_city: "", ship_state: "", ship_pincode: "", ship_country: "India",
@@ -3838,7 +3838,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             company_name: doc.company_name || "",
             gst_treatment: doc.gst_treatment || "Registered Business",
             tax_id: doc.tax_id || "",
-            default_currency: doc.default_currency || "INR",
+            default_currency: doc.default_currency || "OMR",
             credit_limit: doc.credit_limit || 0,
             email_id: doc.email_id || "",
             mobile_code: mno.startsWith("+") && mno.includes(" ") ? mno.split(" ")[0] : "+91",
@@ -4066,7 +4066,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{c.customer_name}}</div>
-              <div style="font-size:12px;color:#6B7280;margin-top:2px;">₹0.00</div>
+              <div style="font-size:12px;color:#6B7280;margin-top:2px;">OMR 0.00</div>
             </div>
             <span class="b-badge" :class="c.disabled?'b-badge-red':'b-badge-green'" style="font-size:10px">{{c.disabled?'Disabled':'Active'}}</span>
           </div>
@@ -4160,7 +4160,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 <span style="color:#6B7280">Customer Type</span><span style="font-weight:600;color:#111827">{{selectedCustomer.customer_type||'Business'}}</span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:12.5px">
-                <span style="color:#6B7280">Default Currency</span><span style="font-weight:600;color:#111827">{{selectedCustomer.default_currency||'INR'}}</span>
+                <span style="color:#6B7280">Default Currency</span><span style="font-weight:600;color:#111827">{{selectedCustomer.default_currency||'OMR'}}</span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:12.5px;align-items:center">
                 <span style="color:#6B7280">Portal Status</span>
@@ -4206,9 +4206,9 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               </thead>
               <tbody>
                 <tr>
-                  <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 0">INR- Indian Rupee</td>
+                  <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 0">OMR- Omani Rial</td>
                   <td style="text-align:right;font-size:13px;font-weight:700;color:#2563EB;padding:10px 0;">{{fmt(selectedCustomer.credit_limit||0)}}</td>
-                  <td style="text-align:right;font-size:13px;font-weight:700;color:#111827;padding:10px 0;">₹0.00</td>
+                  <td style="text-align:right;font-size:13px;font-weight:700;color:#111827;padding:10px 0;">OMR 0.00</td>
                 </tr>
               </tbody>
             </table>
@@ -4484,7 +4484,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               <div>
                 <label class="nim-label">Currency</label>
                 <select v-model="form.default_currency" class="nim-input" style="cursor:pointer">
-                  <option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option><option>JPY</option><option>CAD</option><option>AUD</option>
+                  <option>OMR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option><option>JPY</option><option>CAD</option><option>AUD</option>
                 </select>
               </div>
               <div>
@@ -4496,7 +4496,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 </select>
               </div>
               <div>
-                <label class="nim-label">Credit Limit ({{{'INR':'₹','USD':'$','EUR':'€','GBP':'£','AED':'د.إ','SGD':'S$'}[form.default_currency]||'₹'}})</label>
+                <label class="nim-label">Credit Limit ({{{'OMR':'OMR ','USD':'$','EUR':'€','GBP':'£','AED':'د.إ','SGD':'S$'}[form.default_currency]||'OMR '}})</label>
                 <input v-model.number="form.credit_limit" type="number" min="0" class="nim-input" placeholder="0 = unlimited"
                   :style="formErrors.credit_limit?'border-color:#dc2626;background:#fff5f5':''"
                   @input="delete formErrors.credit_limit"
@@ -4650,7 +4650,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <div class="cust-sec-label">Opening Balance</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
               <div>
-                <label class="nim-label">Opening Balance (₹)</label>
+                <label class="nim-label">Opening Balance (OMR)</label>
                 <input v-model.number="form.opening_balance" type="number" min="0" class="nim-input" placeholder="0.00"
                   :style="formErrors.opening_balance?'border-color:#dc2626;background:#fff5f5':''"
                   @input="delete formErrors.opening_balance"
@@ -4786,7 +4786,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const form = reactive({
         name: "",
         supplier_name: "", supplier_type: "Company",
-        tax_id: "", default_currency: "INR", payment_terms: "",
+        tax_id: "", default_currency: "OMR", payment_terms: "",
         email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
         address_line1: "", address_line2: "",
         city: "", state: "", pincode: "", country: "India",
@@ -4845,7 +4845,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       function resetForm() {
         Object.assign(form, {
           name: "", supplier_name: "", supplier_type: "Company",
-          tax_id: "", default_currency: "INR", payment_terms: "",
+          tax_id: "", default_currency: "OMR", payment_terms: "",
           email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
           address_line1: "", address_line2: "",
           city: "", state: "", pincode: "", country: "India",
@@ -4878,7 +4878,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             supplier_name: doc.supplier_name || "",
             supplier_type: doc.supplier_type || "Company",
             tax_id: doc.tax_id || "",
-            default_currency: doc.default_currency || "INR",
+            default_currency: doc.default_currency || "OMR",
             payment_terms: doc.payment_terms || "",
             email_id: doc.email_id || "",
             mobile_code: (doc.mobile_no || "").includes(" ") && (doc.mobile_no || "").startsWith("+") ? doc.mobile_no.split(" ")[0] : "+91",
@@ -5109,7 +5109,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               {{v.supplier_name||v.name}}
             </div>
             <div style="font-size:11.5px;color:#6B7280;margin-top:2px">
-              ₹0.00 outstanding
+              OMR 0.00 outstanding
               <span v-if="v.disabled" style="margin-left:6px;font-size:10px;font-weight:600;color:#6B7280;background:#F3F4F6;padding:1px 5px;border-radius:10px">Disabled</span>
             </div>
           </div>
@@ -5250,7 +5250,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
               <div style="display:flex;justify-content:space-between;font-size:12.5px">
                 <span style="color:#6B7280">Default Currency</span>
-                <span style="font-weight:600;color:#111827">{{selectedVendor.default_currency||'INR'}}</span>
+                <span style="font-weight:600;color:#111827">{{selectedVendor.default_currency||'OMR'}}</span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:12.5px;align-items:center">
                 <span style="color:#6B7280">Portal Status</span>
@@ -5301,9 +5301,9 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               </thead>
               <tbody>
                 <tr>
-                  <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px">INR</td>
-                  <td style="font-size:13px;font-weight:600;color:#E67700;text-align:right;padding:10px 12px;">₹0.00</td>
-                  <td style="font-size:13px;font-weight:600;color:#059669;text-align:right;padding:10px 16px;">₹0.00</td>
+                  <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px">OMR</td>
+                  <td style="font-size:13px;font-weight:600;color:#E67700;text-align:right;padding:10px 12px;">OMR 0.00</td>
+                  <td style="font-size:13px;font-weight:600;color:#059669;text-align:right;padding:10px 16px;">OMR 0.00</td>
                 </tr>
               </tbody>
             </table>
@@ -5380,7 +5380,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 <div class="nim-field">
                   <label class="nim-label">Currency</label>
                   <select v-model="form.default_currency" class="nim-select">
-                    <option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option>
+                    <option>OMR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option>
                   </select>
                 </div>
                 <div class="nim-field">
@@ -5959,8 +5959,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                     <th style="width:28%">Item / Service </th>
                     <th style="width:25%">Description</th>
                     <th style="width:10%;text-align:center">Qty</th>
-                    <th style="width:16%;text-align:right">Rate (₹)</th>
-                    <th style="width:16%;text-align:right">Amount (₹)</th>
+                    <th style="width:16%;text-align:right">Rate (OMR)</th>
+                    <th style="width:16%;text-align:right">Amount (OMR)</th>
                     <th style="width:5%"></th>
                   </tr></thead>
                   <tbody>
@@ -5989,7 +5989,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:20%">Type</th><th style="width:30%">Description</th>
                     <th style="width:14%;text-align:center">Rate %</th>
-                    <th style="width:32%;text-align:right">Amount (₹)</th><th style="width:4%"></th>
+                    <th style="width:32%;text-align:right">Amount (OMR)</th><th style="width:4%"></th>
                   </tr></thead>
                   <tbody>
                     <tr v-for="(tax,i) in form.taxes" :key="i" class="nim-tr">
@@ -6128,7 +6128,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         try { tpl = JSON.parse(localStorage.getItem('zb_tpl_quote') || '{}'); } catch {}
         const ac = tpl.accentColor || '#7048E8';
         const isPro = tpl.template === 'professional';
-        const fmt2 = n => "₹" + Number(n||0).toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2});
+        const fmt2 = n => "OMR " + Number(n||0).toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2});
         const thStyle = `padding:8px 10px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;background:#f8f9fc;border-bottom:2px solid #e4e8f0;text-align:left`;
         const tdStyle = `padding:8px 10px;font-size:12px;color:#374151;vertical-align:middle;border-bottom:1px solid #f1f3f7`;
         const rows = (q.items||[]).map((it,i) => `<tr>
@@ -6532,7 +6532,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         const b=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
         function w(n){if(!n)return"";if(n<20)return a[n]+" ";if(n<100)return b[Math.floor(n/10)]+" "+(n%10?a[n%10]+" ":"");if(n<1000)return a[Math.floor(n/100)]+" Hundred "+(n%100?w(n%100):"");if(n<100000)return w(Math.floor(n/1000))+"Thousand "+(n%1000?w(n%1000):"");if(n<10000000)return w(Math.floor(n/100000))+"Lakh "+(n%100000?w(n%100000):"");return w(Math.floor(n/10000000))+"Crore "+(n%10000000?w(n%10000000):"");}
         const r=Math.floor(n),p=Math.round((n-r)*100);
-        return "Indian Rupee "+w(r).trim()+(p?" and "+w(p).trim()+" Paise":"")+" Only";
+        return "Omani Rial "+w(r).trim()+(p?" and "+w(p).trim()+" Baisa":"")+" Only";
       }
 
       const statusBadgeCls = computed(() => {
@@ -7517,8 +7517,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:28%">Item / Service <span class="nim-req">*</span></th><th style="width:25%">Description</th>
                     <th style="width:10%;text-align:center">Qty</th>
-                    <th style="width:16%;text-align:right">Rate (₹)</th>
-                    <th style="width:16%;text-align:right">Amount (₹)</th>
+                    <th style="width:16%;text-align:right">Rate (OMR)</th>
+                    <th style="width:16%;text-align:right">Amount (OMR)</th>
                     <th style="width:5%"></th>
                   </tr></thead>
                   <tbody>
@@ -7547,7 +7547,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:20%">Type</th><th style="width:30%">Description</th>
                     <th style="width:14%;text-align:center">Rate %</th>
-                    <th style="width:32%;text-align:right">Amount (₹)</th><th style="width:4%"></th>
+                    <th style="width:32%;text-align:right">Amount (OMR)</th><th style="width:4%"></th>
                   </tr></thead>
                   <tbody>
                     <tr v-for="(tax,i) in form.taxes" :key="i" class="nim-tr">
@@ -7949,7 +7949,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         const b=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
         function w(n){if(!n)return"";if(n<20)return a[n]+" ";if(n<100)return b[Math.floor(n/10)]+" "+(n%10?a[n%10]+" ":"");if(n<1000)return a[Math.floor(n/100)]+" Hundred "+(n%100?w(n%100):"");if(n<100000)return w(Math.floor(n/1000))+"Thousand "+(n%1000?w(n%1000):"");if(n<10000000)return w(Math.floor(n/100000))+"Lakh "+(n%100000?w(n%100000):"");return w(Math.floor(n/10000000))+"Crore "+(n%10000000?w(n%10000000):"");}
         const r=Math.floor(n),p=Math.round((n-r)*100);
-        return "Indian Rupee "+w(r).trim()+(p?" and "+w(p).trim()+" Paise":"")+" Only";
+        return "Omani Rial "+w(r).trim()+(p?" and "+w(p).trim()+" Baisa":"")+" Only";
       }
 
       const statusBadgeCls = computed(()=>{
@@ -9175,7 +9175,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:30%">Item / Service</th><th style="width:26%">Description</th>
                     <th style="width:10%;text-align:center">Qty</th>
-                    <th style="width:16%;text-align:right">Rate (₹)</th>
+                    <th style="width:16%;text-align:right">Rate (OMR)</th>
                     <th style="width:14%;text-align:right">Amount</th>
                     <th style="width:4%"></th>
                   </tr></thead>
@@ -9205,7 +9205,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:20%">Type</th><th style="width:30%">Description</th>
                     <th style="width:14%;text-align:center">Rate %</th>
-                    <th style="width:32%;text-align:right">Amount (₹)</th><th style="width:4%"></th>
+                    <th style="width:32%;text-align:right">Amount (OMR)</th><th style="width:4%"></th>
                   </tr></thead>
                   <tbody>
                     <tr v-for="(tax,i) in form.taxes" :key="i" class="nim-tr">
@@ -9738,7 +9738,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <th style="width:30%">Item <span style="color:#e03131">*</span></th>
                   <th style="width:26%">Description</th>
                   <th style="width:10%;text-align:center">Qty</th>
-                  <th style="width:16%;text-align:right">Rate (₹)</th>
+                  <th style="width:16%;text-align:right">Rate (OMR)</th>
                   <th style="width:14%;text-align:right">Amount</th>
                   <th style="width:4%"></th>
                 </tr></thead>
@@ -9899,9 +9899,9 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             paid_from: paidFrom,
             paid_to: paidTo,
             company,
-            currency: "INR",
-            paid_from_account_currency: "INR",
-            paid_to_account_currency: "INR",
+            currency: "OMR",
+            paid_from_account_currency: "OMR",
+            paid_to_account_currency: "OMR",
             source_exchange_rate: 1,
             target_exchange_rate: 1,
             reference_no: form.ref.trim(),
@@ -10412,12 +10412,12 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 <div class="nim-field"><label class="nim-label">Description</label><input v-model="form.description" class="nim-input" placeholder="Product description"/></div>
                 <div class="nim-field"><label class="nim-label">Quantity</label><input v-model.number="form.quantity" type="number" min="0" class="nim-input"/></div>
                 <div class="nim-field"><label class="nim-label">Unit</label><select v-model="form.unit" class="nim-select"><option>NOS</option><option>KGS</option><option>MTR</option><option>LTR</option><option>BOX</option><option>PCS</option></select></div>
-                <div class="nim-field"><label class="nim-label">Taxable Value (₹)</label><input v-model.number="form.taxable_value" type="number" min="0" class="nim-input"/></div>
+                <div class="nim-field"><label class="nim-label">Taxable Value (OMR)</label><input v-model.number="form.taxable_value" type="number" min="0" class="nim-input"/></div>
               </div>
               <div class="nim-grid-3 nim-mb">
-                <div class="nim-field"><label class="nim-label">IGST (₹)</label><input v-model.number="form.igst" type="number" min="0" step="0.01" class="nim-input"/></div>
-                <div class="nim-field"><label class="nim-label">CGST (₹)</label><input v-model.number="form.cgst" type="number" min="0" step="0.01" class="nim-input"/></div>
-                <div class="nim-field"><label class="nim-label">SGST (₹)</label><input v-model.number="form.sgst" type="number" min="0" step="0.01" class="nim-input"/></div>
+                <div class="nim-field"><label class="nim-label">IGST (OMR)</label><input v-model.number="form.igst" type="number" min="0" step="0.01" class="nim-input"/></div>
+                <div class="nim-field"><label class="nim-label">CGST (OMR)</label><input v-model.number="form.cgst" type="number" min="0" step="0.01" class="nim-input"/></div>
+                <div class="nim-field"><label class="nim-label">SGST (OMR)</label><input v-model.number="form.sgst" type="number" min="0" step="0.01" class="nim-input"/></div>
               </div>
               <div class="cust-sec-label">Transport</div>
               <div class="nim-grid-3 nim-mb">
@@ -11366,8 +11366,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                     <th style="width:28%">Item / Service</th>
                     <th style="width:25%">Description</th>
                     <th style="width:10%;text-align:center">Qty</th>
-                    <th style="width:16%;text-align:right">Rate (₹)</th>
-                    <th style="width:16%;text-align:right">Amount (₹)</th>
+                    <th style="width:16%;text-align:right">Rate (OMR)</th>
+                    <th style="width:16%;text-align:right">Amount (OMR)</th>
                     <th style="width:5%"></th>
                   </tr></thead>
                   <tbody>
@@ -11387,7 +11387,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                             @mouseover="$event.target.style.background='#F8F9FC'"
                             @mouseout="$event.target.style.background=''">
                             <div style="font-weight:500">{{it.item_name||it.name}}</div>
-                            <div style="font-size:11px;color:#9ca3af">₹{{it.standard_rate||0}}</div>
+                            <div style="font-size:11px;color:#9ca3af">OMR {{it.standard_rate||0}}</div>
                           </div>
                         </div>
                       </td>
@@ -11428,7 +11428,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                   <thead><tr>
                     <th style="width:20%">Type</th><th style="width:30%">Description</th>
                     <th style="width:14%;text-align:center">Rate %</th>
-                    <th style="width:32%;text-align:right">Amount (₹)</th>
+                    <th style="width:32%;text-align:right">Amount (OMR)</th>
                     <th style="width:4%"></th>
                   </tr></thead>
                   <tbody>
@@ -12590,7 +12590,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       function exportCSV(e, payment) {
         e.stopPropagation();
         exportMenuFor.value = null;
-        const headers = ["Payment #","Party","Party Type","Mode","Date","Type","Amount (INR)"];
+        const headers = ["Payment #","Party","Party Type","Mode","Date","Type","Amount (OMR)"];
         const row = [
           payment.name,
           payment.party        || "",
@@ -12857,8 +12857,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
     { id:"other",      label:"Other",             icon:"💵", color:"#868E96", bg:"#F1F3F5" },
   ];
   const CAT_MAP_BANK = Object.fromEntries(TXN_CATEGORIES.map(c => [c.id, c]));
-  function fmtINR(v) { const n = Math.abs(Number(v || 0)); return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2 }); }
-  function fmtINRc(v) { const n = Number(v || 0); if (Math.abs(n) >= 10000000) return "₹" + (n / 10000000).toFixed(2) + "Cr"; if (Math.abs(n) >= 100000) return "₹" + (n / 100000).toFixed(1) + "L"; if (Math.abs(n) >= 1000) return "₹" + (n / 1000).toFixed(1) + "K"; return "₹" + Math.abs(n).toFixed(0); }
+  function fmtINR(v) { const n = Math.abs(Number(v || 0)); return "OMR " + n.toLocaleString("en-IN", { minimumFractionDigits: 2 }); }
+  function fmtINRc(v) { const n = Number(v || 0); if (Math.abs(n) >= 10000000) return "OMR " + (n / 10000000).toFixed(2) + "Cr"; if (Math.abs(n) >= 100000) return "OMR " + (n / 100000).toFixed(1) + "L"; if (Math.abs(n) >= 1000) return "OMR " + (n / 1000).toFixed(1) + "K"; return "OMR " + Math.abs(n).toFixed(0); }
   function maskAcct(n) { if (!n || n.length < 4) return n || "—"; return "••••" + n.slice(-4); }
 
   /* ══════════════════════════════════════════════════
@@ -12875,7 +12875,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const showDel = ref(false);
       const deleteTarget = ref(null);
       const glAccounts = ref([]);
-      const form = reactive({ name:"", type:"Current", bank:"", acct_no:"", ifsc:"", branch:"", holder:"", micr:"", currency:"INR", opening:0, balance:0, od_limit:0, gl_account:"", cost_center:"", rm:"", rm_phone:"", website:"", cif:"", status:"Active", is_default:0 });
+      const form = reactive({ name:"", type:"Current", bank:"", acct_no:"", ifsc:"", branch:"", holder:"", micr:"", currency:"OMR", opening:0, balance:0, od_limit:0, gl_account:"", cost_center:"", rm:"", rm_phone:"", website:"", cif:"", status:"Active", is_default:0 });
 
       const heroStats = computed(() => {
         const active = allAccounts.value.filter(a => a.status === "Active");
@@ -12901,7 +12901,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             branch:        a.branch || "",
             holder:        a.account_holder_name || "",
             micr:          a.micr_code || "",
-            currency:      a.currency || "INR",
+            currency:      a.currency || "OMR",
             opening:       flt(a.opening_balance),
             // balance = API-computed: opening_balance + SUM(credit-debit from transactions)
             balance:       flt(a.balance) !== 0 ? flt(a.balance) : flt(a.current_balance),
@@ -12951,12 +12951,12 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
 
       function openAdd() {
         drawerMode.value = "add"; editingName.value = null;
-        Object.assign(form, { name:"", type:"Current", bank:"", acct_no:"", ifsc:"", branch:"", holder:"", micr:"", currency:"INR", opening:0, balance:0, od_limit:0, gl_account:"", cost_center:"", rm:"", rm_phone:"", website:"", cif:"", status:"Active", is_default:0 });
+        Object.assign(form, { name:"", type:"Current", bank:"", acct_no:"", ifsc:"", branch:"", holder:"", micr:"", currency:"OMR", opening:0, balance:0, od_limit:0, gl_account:"", cost_center:"", rm:"", rm_phone:"", website:"", cif:"", status:"Active", is_default:0 });
         drawerOpen.value = true;
       }
       function openEdit(a) {
         drawerMode.value = "edit"; editingName.value = a.name;
-        Object.assign(form, { name:a.name, type:a.type||"Current", bank:a.bank||"", acct_no:a.acct_no||"", ifsc:a.ifsc||"", branch:a.branch||"", holder:a.holder||"", micr:a.micr||"", currency:a.currency||"INR", opening:flt(a.opening), balance:flt(a.balance), od_limit:flt(a.od_limit), gl_account:a.gl_account||"", cost_center:a.cost_center||"", rm:a.rm||"", rm_phone:a.rm_phone||"", website:a.website||"", cif:a.cif||"", status:a.status||"Active", is_default:a.is_default||0 });
+        Object.assign(form, { name:a.name, type:a.type||"Current", bank:a.bank||"", acct_no:a.acct_no||"", ifsc:a.ifsc||"", branch:a.branch||"", holder:a.holder||"", micr:a.micr||"", currency:a.currency||"OMR", opening:flt(a.opening), balance:flt(a.balance), od_limit:flt(a.od_limit), gl_account:a.gl_account||"", cost_center:a.cost_center||"", rm:a.rm||"", rm_phone:a.rm_phone||"", website:a.website||"", cif:a.cif||"", status:a.status||"Active", is_default:a.is_default||0 });
         drawerOpen.value = true;
       }
       async function saveAccount() {
@@ -12973,7 +12973,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             branch:              form.branch,
             account_holder_name: form.holder,
             micr_code:           form.micr,
-            currency:            form.currency || "INR",
+            currency:            form.currency || "OMR",
             account_type:        form.type || "Current",
             gl_account:          form.gl_account,
             status:              form.status || "Active",
@@ -13002,7 +13002,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             branch:        fullDoc.branch || "",
             holder:        fullDoc.account_holder_name || "",
             micr:          fullDoc.micr_code || "",
-            currency:      fullDoc.currency || "INR",
+            currency:      fullDoc.currency || "OMR",
             opening:       flt(fullDoc.opening_balance),
             // balance = API-computed value: opening_balance + SUM(credit-debit from transactions)
             balance:       flt(fullDoc.balance) !== 0 ? flt(fullDoc.balance) : flt(fullDoc.current_balance),
@@ -13115,7 +13115,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         </div>
         <div class="bk-acct-footer">
           <div><div style="font-size:11px;color:#868E96">Opening</div><div style="font-size:12.5px;font-weight:600;font-family:var(--mono)">{{fmtINR(a.opening)}}</div></div>
-          <div style="text-align:right"><div style="font-size:11px;color:#868E96">{{a.od_limit?'OD Limit':'Currency'}}</div><div style="font-size:12.5px;font-weight:600;font-family:var(--mono)">{{a.od_limit?fmtINR(a.od_limit):a.currency||'INR'}}</div></div>
+          <div style="text-align:right"><div style="font-size:11px;color:#868E96">{{a.od_limit?'OD Limit':'Currency'}}</div><div style="font-size:12.5px;font-weight:600;font-family:var(--mono)">{{a.od_limit?fmtINR(a.od_limit):a.currency||'OMR'}}</div></div>
         </div>
       </div>
       <!-- Add card -->
@@ -13173,7 +13173,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               </div>
               <div><label class="bk-fl">Currency</label>
                 <select class="bk-fi" v-model="form.currency">
-                  <option value="INR">₹ INR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
+                  <option value="OMR">OMR OMR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
                 </select>
               </div>
             </div>
@@ -13214,9 +13214,9 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           </div>
           <div class="bk-sec-lbl">Balance</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-            <div><label class="bk-fl">Opening Balance (₹)</label><input class="bk-fi" type="number" v-model="form.opening" placeholder="0.00" style="font-family:var(--mono)"/></div>
-            <div><label class="bk-fl">Current Balance (₹)</label><input class="bk-fi" type="number" v-model="form.balance" placeholder="0.00" style="font-family:var(--mono)"/></div>
-            <div v-if="showOD"><label class="bk-fl">Overdraft Limit (₹)</label><input class="bk-fi" type="number" v-model="form.od_limit" placeholder="0" style="font-family:var(--mono)"/></div>
+            <div><label class="bk-fl">Opening Balance (OMR)</label><input class="bk-fi" type="number" v-model="form.opening" placeholder="0.00" style="font-family:var(--mono)"/></div>
+            <div><label class="bk-fl">Current Balance (OMR)</label><input class="bk-fi" type="number" v-model="form.balance" placeholder="0.00" style="font-family:var(--mono)"/></div>
+            <div v-if="showOD"><label class="bk-fl">Overdraft Limit (OMR)</label><input class="bk-fi" type="number" v-model="form.od_limit" placeholder="0" style="font-family:var(--mono)"/></div>
           </div>
           <div class="bk-sec-lbl">Contact</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -13594,7 +13594,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
 
       // ── Finalise ──────────────────────────────────────────────────────────
       async function finalise() {
-        if (!isBalanced.value) { toast("Difference must be ₹0 before finalising", "error"); return; }
+        if (!isBalanced.value) { toast("Difference must be OMR 0 before finalising", "error"); return; }
         if (!checkedIds.value.length) {
           // Nothing unchecked — might already be fully reconciled
           if (!unclearedTxns.value.length) {
@@ -13664,7 +13664,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <input type="date" class="b-input" v-model="stmtDate"/>
       </div>
       <div>
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#868E96;margin-bottom:5px">Closing Balance (₹)</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#868E96;margin-bottom:5px">Closing Balance (OMR)</div>
         <input type="number" class="b-input" v-model.number="stmtBalance" placeholder="0.00" style="font-family:var(--mono);width:160px"/>
       </div>
       <button class="b-btn b-btn-primary" style="background:#0C8599;border-color:#0C8599;padding:9px 22px" @click="load" :disabled="loading">
@@ -13908,8 +13908,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           transfers.value.unshift({ id: res.from_transaction, date: form.date, from: form.from_account, to: form.to_account, amount: flt(form.amount), description: form.description || "Transfer" });
           showForm.value = false;
           // Show the updated balances returned by the backend
-          const fromBal = res.from_balance != null ? ` · ${form.from_account}: ₹${flt(res.from_balance).toLocaleString("en-IN")}` : "";
-          const toBal   = res.to_balance   != null ? ` · ${form.to_account}: ₹${flt(res.to_balance).toLocaleString("en-IN")}` : "";
+          const fromBal = res.from_balance != null ? ` · ${form.from_account}: OMR ${flt(res.from_balance).toLocaleString("en-IN")}` : "";
+          const toBal   = res.to_balance   != null ? ` · ${form.to_account}: OMR ${flt(res.to_balance).toLocaleString("en-IN")}` : "";
           toast(`Transfer posted — ${res.from_transaction}${fromBal}${toBal}`);
           form.amount = 0; form.description = "";
         } catch(e) { toast("Transfer failed: " + e.message, "error"); }
@@ -13978,7 +13978,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Amount (₹) <span style="color:#C92A2A">*</span></label>
+            <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Amount (OMR) <span style="color:#C92A2A">*</span></label>
             <input type="number" class="b-input" v-model="form.amount" placeholder="0.00" style="font-family:var(--mono)"/>
           </div>
           <div>
@@ -14212,7 +14212,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 <option v-for="a in bankAccounts" :key="a" :value="a">{{a}}</option>
               </select>
             </div>
-            <div><label class="bk-fl">Amount (₹)</label><input type="number" class="bk-fi" v-model="form.amount" placeholder="0.00" style="font-family:var(--mono)"/></div>
+            <div><label class="bk-fl">Amount (OMR)</label><input type="number" class="bk-fi" v-model="form.amount" placeholder="0.00" style="font-family:var(--mono)"/></div>
             <div><label class="bk-fl">Due / Presentation Date</label><input type="date" class="bk-fi" v-model="form.due_date"/></div>
           </div>
           <div style="margin-bottom:12px">
@@ -14408,13 +14408,13 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       <div style="font-size:13px;color:#868E96;margin-bottom:20px">Count physical cash by denomination to verify petty cash balance</div>
       <div style="max-width:480px">
         <div v-for="d in DENOM" :key="d" style="display:grid;grid-template-columns:80px 1fr 1fr;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F1F3F5">
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono)">₹{{d}}</div>
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono)">OMR {{d}}</div>
           <div style="display:flex;align-items:center;gap:8px">
             <button @click="denomCount[d]=Math.max(0,(denomCount[d]||0)-1)" style="width:28px;height:28px;border-radius:6px;border:1px solid #CDD5E0;background:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">−</button>
             <input type="number" :value="denomCount[d]||0" @input="denomCount[d]=Math.max(0,parseInt($event.target.value)||0)" style="width:70px;text-align:center;border:1px solid #CDD5E0;border-radius:6px;padding:5px;font-family:var(--mono);font-size:14px;outline:none" min="0"/>
             <button @click="denomCount[d]=(denomCount[d]||0)+1" style="width:28px;height:28px;border-radius:6px;border:1px solid #CDD5E0;background:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">+</button>
           </div>
-          <div class="mono fw-600" style="text-align:right;font-size:14px">₹{{((denomCount[d]||0)*d).toLocaleString("en-IN")}}</div>
+          <div class="mono fw-600" style="text-align:right;font-size:14px">OMR {{((denomCount[d]||0)*d).toLocaleString("en-IN")}}</div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;font-size:16px;font-weight:700;border-top:2px solid #E2E8F0;margin-top:4px">
           <span>Total Physical Cash</span>
@@ -14454,7 +14454,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           </div>
           <div style="margin-bottom:12px"><label class="bk-fl">Description <span style="color:#C92A2A">*</span></label><input class="bk-fi" v-model="entryForm.desc" placeholder="What is this cash for?"/></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-            <div><label class="bk-fl">Amount (₹) <span style="color:#C92A2A">*</span></label><input type="number" class="bk-fi" v-model="entryForm.amount" placeholder="0.00" style="font-family:var(--mono)"/></div>
+            <div><label class="bk-fl">Amount (OMR) <span style="color:#C92A2A">*</span></label><input type="number" class="bk-fi" v-model="entryForm.amount" placeholder="0.00" style="font-family:var(--mono)"/></div>
             <div><label class="bk-fl">Person / Party</label><input class="bk-fi" v-model="entryForm.person" placeholder="Who paid / received?"/></div>
           </div>
           <div style="margin-bottom:12px"><label class="bk-fl">Category</label>
@@ -14501,7 +14501,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
   </div>
   <div class="b-card" style="padding:0;overflow:hidden">
     <table class="b-table">
-      <thead><tr><th>Account Name</th><th>Type</th><th>Parent</th><th class="ta-r">Balance (₹)</th></tr></thead>
+      <thead><tr><th>Account Name</th><th>Type</th><th>Parent</th><th class="ta-r">Balance (OMR)</th></tr></thead>
       <tbody>
         <template v-if="loading"><tr v-for="n in 8" :key="n"><td colspan="4" style="padding:14px"><div class="b-shimmer" style="height:12px"></div></td></tr></template>
         <template v-else>
@@ -14684,7 +14684,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         if (!v && v !== 0) return "—";
         const n = Number(v);
         if (n === 0) return "—";
-        return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+        return "OMR " + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
       }
 
       async function load() {
@@ -15012,7 +15012,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <span class="coa-sec-lbl">Opening Balance</span>
           <div class="coa-fg coa-fg2">
             <div>
-              <label class="coa-lbl">Opening Balance (₹)</label>
+              <label class="coa-lbl">Opening Balance (OMR)</label>
               <input v-model="form.opening" type="number" min="0" step="0.01" class="coa-fi" placeholder="0.00" style=""/>
             </div>
             <div>
@@ -15112,7 +15112,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       function fmtINR(v) {
         if (!v && v !== 0) return "—";
         const n = Number(v); if (n === 0) return "—";
-        return "₹" + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+        return "OMR " + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2 });
       }
       function fmtDate(d) {
         if (!d) return "—";
@@ -15327,7 +15327,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
     </div>
     <div class="jen-sum-card">
       <div class="jen-sum-lbl" style="color:#2f9e44">Total Debits</div>
-      <div class="jen-sum-val" style="color:#2f9e44">{{summary.totalDr>=1000?'₹'+(summary.totalDr/1000).toFixed(1)+'K':fmtINR(summary.totalDr)||'₹0'}}</div>
+      <div class="jen-sum-val" style="color:#2f9e44">{{summary.totalDr>=1000?'OMR '+(summary.totalDr/1000).toFixed(1)+'K':fmtINR(summary.totalDr)||'OMR 0'}}</div>
     </div>
     <div class="jen-sum-card">
       <div class="jen-sum-lbl" style="color:#c92a2a">Drafts</div>
@@ -15486,10 +15486,10 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <div class="jen-balance-bar" :class="lines.length&&(totalDr>0||totalCr>0)?(balanced?'jen-bal-ok':'jen-bal-err'):'jen-bal-zero'">
             <div style="display:flex;align-items:center;gap:8px">
               <span v-html="icon(balanced&&(totalDr>0)?'check':'info',14)"></span>
-              <span>{{!lines.length||(totalDr===0&&totalCr===0)?'Add debit and credit lines':balanced?'Balanced — ready to post':'Difference: ₹'+Math.abs(totalDr-totalCr).toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
+              <span>{{!lines.length||(totalDr===0&&totalCr===0)?'Add debit and credit lines':balanced?'Balanced — ready to post':'Difference: OMR '+Math.abs(totalDr-totalCr).toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
             </div>
             <div style="font-weight:700">
-              <span v-if="totalDr>0||totalCr>0">Dr: ₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}} / Cr: ₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
+              <span v-if="totalDr>0||totalCr>0">Dr: OMR {{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}} / Cr: OMR {{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</span>
             </div>
           </div>
 
@@ -15531,8 +15531,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 </tr>
                 <tr class="jen-total-row">
                   <td colspan="3" style="padding:8px 10px;font-size:12px;font-weight:700;color:#868e96;text-transform:uppercase;letter-spacing:.04em">Totals</td>
-                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#c92a2a">₹{{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
-                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#2f9e44">₹{{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
+                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#c92a2a">OMR {{totalDr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
+                  <td style="text-align:right;padding:8px 10px;font-weight:700;color:#2f9e44">OMR {{totalCr.toLocaleString('en-IN',{minimumFractionDigits:2})}}</td>
                   <td colspan="2"></td>
                 </tr>
               </tbody>
@@ -15664,7 +15664,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const showResetModal = ref(false);
 
       function r2(v){return Math.round(Number(v||0)*100)/100;}
-      function fmtINR(v){const n=Number(v||0);if(n===0)return"₹0";return"₹"+Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:2});}
+      function fmtINR(v){const n=Number(v||0);if(n===0)return"OMR 0";return"OMR "+Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:2});}
       function guessRT(t){t=(t||"").toLowerCase();if(t==="income"||t.includes("income"))return"Income";if(t==="expense"||t.includes("expense")||t==="depreciation")return"Expense";if(t==="payable"||t==="liability"||t==="credit card")return"Liability";if(t==="equity"||t.includes("retained"))return"Equity";return"Asset";}
 
       async function load(){
@@ -15843,7 +15843,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <template v-if="isSec(type)">
           <div style="display:grid;grid-template-columns:1fr 130px 130px;align-items:center;gap:10px;padding:8px 16px;background:#F8F9FC;border-top:1px solid #F1F3F5">
             <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96">Account</div>
-            <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;text-align:right">Balance (₹)</div>
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;text-align:right">Balance (OMR)</div>
             <div style="font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96">Dr / Cr</div>
           </div>
           <div v-for="a in secAccts(type)" :key="a.name" class="ob-acct-row">
@@ -15943,7 +15943,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const fForm = reactive({name:"",code:"",parent:"",type:"Department",color:CC_COLORS[0],budget:"",budget_period:"Annual",alert_pct:80,budget_action:"Warn",is_group:0,status:"Active",desc:""});
 
       function r2(v){return Math.round(Number(v||0)*100)/100;}
-      function fmtINR(v){const n=Number(v||0);if(n===0)return"₹0";return"₹"+Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:0});}
+      function fmtINR(v){const n=Number(v||0);if(n===0)return"OMR 0";return"OMR "+Math.abs(n).toLocaleString("en-IN",{minimumFractionDigits:0});}
       function pct(spent,budget){if(!budget)return 0;return Math.min(100,Math.round(spent/budget*100));}
       function saveLocal(){try{localStorage.setItem("books_cost_centers",JSON.stringify(allCC.value));}catch{}}
       function loadLocal(){try{return JSON.parse(localStorage.getItem("books_cost_centers")||"null");}catch{return null;}}
@@ -16287,7 +16287,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#868E96;margin-bottom:10px;margin-top:20px;padding-top:20px;border-top:1px solid #E2E8F0">Budget</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div>
-              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Annual Budget (₹)</label>
+              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Annual Budget (OMR)</label>
               <input v-model="fForm.budget" class="b-input" type="number" min="0" step="1000" placeholder="0" style="font-family:var(--mono)"/>
             </div>
             <div>
@@ -17172,8 +17172,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const plView=ref("detail"),plCompare=ref(false),plOpenGroups=ref(new Set());
       const bsView=ref("statement"),bsOpenGroups=ref(new Set());
       const cfView=ref("statement"),cfOpenSecs=ref(new Set(["ops","inv","fin"]));
-      const _f=v=>"₹"+Math.abs(Number(v||0)).toLocaleString("en-IN",{minimumFractionDigits:0});
-      const _fc=v=>{const n=Math.abs(Number(v||0));return n>=10000000?"₹"+(n/1e7).toFixed(2)+"Cr":n>=100000?"₹"+(n/1e5).toFixed(2)+"L":_f(v);};
+      const _f=v=>"OMR "+Math.abs(Number(v||0)).toLocaleString("en-IN",{minimumFractionDigits:0});
+      const _fc=v=>{const n=Math.abs(Number(v||0));return n>=10000000?"OMR "+(n/1e7).toFixed(2)+"Cr":n>=100000?"OMR "+(n/1e5).toFixed(2)+"L":_f(v);};
       const _e=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       const _p=(a,b)=>b?Math.round((a-b)/Math.abs(b)*1000)/10:null;
 
@@ -17470,7 +17470,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
     <!-- Currency -->
     <div>
       <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#868E96;margin-bottom:4px">Currency</div>
-      <select class="b-input" style="min-width:100px"><option>₹ INR</option><option>$ USD</option></select>
+      <select class="b-input" style="min-width:100px"><option>OMR OMR</option><option>$ USD</option></select>
     </div>
     <!-- Actions -->
     <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
@@ -18316,7 +18316,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <div style="padding:16px">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:#6B7280">
                 Amount is displayed in your base currency
-                <span style="background:#2F9E44;color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px">INR</span>
+                <span style="background:#2F9E44;color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px">OMR</span>
               </div>
               <div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:10px">Expense</div>
               <table style="width:100%;border-collapse:collapse">
@@ -18480,7 +18480,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <div class="nim-section-label">Amount &amp; Tax</div>
             <div class="nim-grid-3 nim-mb">
               <div>
-                <label class="nim-label">Amount (₹) <span class="nim-req">*</span></label>
+                <label class="nim-label">Amount (OMR) <span class="nim-req">*</span></label>
                 <input class="nim-input" type="number" min="0" step="0.01" v-model.number="form.amount" placeholder="0.00"/>
               </div>
               <div>
@@ -19062,7 +19062,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                     <th style="padding:8px 10px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Date</th>
                     <th style="padding:8px 10px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Type</th>
                     <th style="padding:8px 10px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Description</th>
-                    <th style="padding:8px 10px;text-align:right;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Amount (₹)</th>
+                    <th style="padding:8px 10px;text-align:right;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Amount (OMR)</th>
                     <th style="padding:8px 10px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#868E96;border-bottom:1px solid #E8ECF0">Receipt No.</th>
                     <th style="padding:8px 10px;border-bottom:1px solid #E8ECF0;width:32px"></th>
                   </tr>
@@ -19373,7 +19373,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
   <template v-if="viewMode==='table'">
     <div class="b-card" style="padding:0;overflow:hidden">
       <table class="b-table">
-        <thead><tr><th>Item Code</th><th>Name</th><th>Group</th><th>Type</th><th>UOM</th><th class="ta-r">Rate (₹)</th><th class="ta-r">GST %</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Item Code</th><th>Name</th><th>Group</th><th>Type</th><th>UOM</th><th class="ta-r">Rate (OMR)</th><th class="ta-r">GST %</th><th>Status</th><th></th></tr></thead>
         <tbody>
           <template v-if="loading"><tr v-for="n in 6" :key="n"><td colspan="9" style="padding:14px"><div class="b-shimmer" style="height:12px"></div></td></tr></template>
           <tr v-else-if="!filtered.length"><td colspan="9" class="b-empty">No items found</td></tr>
@@ -19484,8 +19484,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <!-- Pricing & Tax -->
           <template v-else-if="drawerTab==='pricing'">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-              <div><label class="nim-label">Selling Rate (₹)</label><input type="number" class="nim-input" v-model="form.standard_rate" min="0" style="font-family:var(--mono)"/></div>
-              <div><label class="nim-label">Buying Rate (₹)</label><input type="number" class="nim-input" v-model="form.standard_buying_rate" min="0" style="font-family:var(--mono)"/></div>
+              <div><label class="nim-label">Selling Rate (OMR)</label><input type="number" class="nim-input" v-model="form.standard_rate" min="0" style="font-family:var(--mono)"/></div>
+              <div><label class="nim-label">Buying Rate (OMR)</label><input type="number" class="nim-input" v-model="form.standard_buying_rate" min="0" style="font-family:var(--mono)"/></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
               <div><label class="nim-label">GST Rate (%)</label>
@@ -19998,7 +19998,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               <th v-if="needsSource" style="padding:4px 6px;text-align:left">From WH</th>
               <th v-if="needsTarget" style="padding:4px 6px;text-align:left">To WH</th>
               <th style="padding:4px 6px;text-align:right;width:80px">Qty</th>
-              <th style="padding:4px 6px;text-align:right;width:100px">Rate (₹)</th>
+              <th style="padding:4px 6px;text-align:right;width:100px">Rate (OMR)</th>
               <th style="padding:4px 6px;text-align:right;width:110px">Amount</th>
               <th style="width:28px"></th>
             </tr></thead>
@@ -21684,7 +21684,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <input v-model.number="poQty" type="number" min="1" class="nim-input" style="font-family:var(--mono)"/>
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Unit Rate (₹)</label>
+            <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Unit Rate (OMR)</label>
             <input v-model.number="poPrice" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/>
           </div>
           <div>
@@ -21750,7 +21750,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
           <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Preferred Supplier</label>
             <input v-model="ruleForm.supplier" class="nim-input" placeholder="Vendor name"/></div>
-          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Buying Price (₹)</label>
+          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Buying Price (OMR)</label>
             <input v-model.number="ruleForm.buying_price" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/></div>
         </div>
       </div>
@@ -21956,9 +21956,9 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <div v-for="[lbl,val] in [
           ['Customer',selectedInv.customer],['Customer Name',selectedInv.customer_name||'—'],
           ['Date',fmtDate(selectedInv.posting_date)],['Status',selectedInv.status||'—'],
-          ['Net (Taxable)','₹'+fmt(selectedInv.net_total)],['Total Tax','₹'+fmt(selectedInv.total_tax)],
-          ['CGST (est.)','₹'+fmt(flt(selectedInv.total_tax)/2)],['SGST (est.)','₹'+fmt(flt(selectedInv.total_tax)/2)],
-          ['Grand Total','₹'+fmt(selectedInv.grand_total)],['IGST','₹0 (intra-state)'],
+          ['Net (Taxable)','OMR '+fmt(selectedInv.net_total)],['Total Tax','OMR '+fmt(selectedInv.total_tax)],
+          ['CGST (est.)','OMR '+fmt(flt(selectedInv.total_tax)/2)],['SGST (est.)','OMR '+fmt(flt(selectedInv.total_tax)/2)],
+          ['Grand Total','OMR '+fmt(selectedInv.grand_total)],['IGST','OMR 0 (intra-state)'],
         ]" :key="lbl" style="background:var(--surf2,#F8F9FC);border-radius:6px;padding:10px 12px">
           <div style="font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">{{lbl}}</div>
           <div style="font-size:13px;font-weight:600;word-break:break-all">{{val}}</div>
@@ -22102,7 +22102,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           filingStatus.value = "Filed";
           showPayModal.value = false;
           payRef.value = "";
-          toast(`GSTR-3B filed — GST payment of ₹${fmt(net)} posted to GL`, "success");
+          toast(`GSTR-3B filed — GST payment of OMR ${fmt(net)} posted to GL`, "success");
         } catch(e) {
           toast("GL posting failed: " + e.message, "error");
         }
@@ -22564,8 +22564,8 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <!-- Details grid -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div v-for="[lbl,val] in [
-            ['Customer',selectedInv.customer],['Net Total','₹'+fmt(selectedInv.net_total)],
-            ['Invoice Date',fmtDate(selectedInv.posting_date)],['Grand Total','₹'+fmt(selectedInv.grand_total)],
+            ['Customer',selectedInv.customer],['Net Total','OMR '+fmt(selectedInv.net_total)],
+            ['Invoice Date',fmtDate(selectedInv.posting_date)],['Grand Total','OMR '+fmt(selectedInv.grand_total)],
             ['Ack No.',selectedInv.ack_no||'—'],['Ack Date',fmtDate(selectedInv.ack_date)||'—'],
             ['e-Way Bill',selectedInv.ewaybill||'—'],['Status',selectedInv.einv_cancelled?'Cancelled':selectedInv.irn?'Generated':'Pending'],
           ]" :key="lbl" style="background:var(--surf2,#F8F9FC);border-radius:6px;padding:9px 12px">
@@ -22619,7 +22619,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         <div style="display:flex;flex-direction:column;gap:8px">
           <div v-for="[item, ok] in [
             ['GSTIN registered',true],
-            ['Annual turnover > ₹10 Cr',true],
+            ['Annual turnover > OMR 10 Cr',true],
             ['NIC IRP API integrated',false],
             ['Digital signature certificate',false],
           ]" :key="item" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surf2,#F8F9FC);border-radius:6px">
@@ -22664,17 +22664,17 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         "194I":"Rent — Office Premises","192":"Salary Payment","195":"Payment to Non-Resident"
       };
       const RATE_CHART = [
-        {sec:"192",  title:"Salary",                        rate:"Slab rates",      limit:"₹2.5L / 3L / 5L",        higher:"20%"},
-        {sec:"194A", title:"Interest (Bank / Non-bank)",    rate:"10%",             limit:"₹40,000 / ₹5,000",        higher:"20%"},
-        {sec:"194B", title:"Lottery & Game Winnings",       rate:"30%",             limit:"₹10,000",                 higher:"30%"},
-        {sec:"194C", title:"Contractors & Sub-contractors", rate:"1% (indiv) / 2%", limit:"Single ₹30K, Annual ₹1L", higher:"20%"},
-        {sec:"194D", title:"Insurance Commission",          rate:"5%",              limit:"₹15,000",                 higher:"20%"},
-        {sec:"194H", title:"Commission & Brokerage",        rate:"5%",              limit:"₹15,000",                 higher:"20%"},
-        {sec:"194I", title:"Rent — Plant & Machinery",      rate:"2%",              limit:"₹2,40,000",               higher:"20%"},
-        {sec:"194I", title:"Rent — Land / Building",        rate:"10%",             limit:"₹2,40,000",               higher:"20%"},
-        {sec:"194J", title:"Professional / Technical Fees", rate:"10% (2% tech)",   limit:"₹30,000",                 higher:"20%"},
-        {sec:"194R", title:"Perquisites & Benefits",        rate:"10%",             limit:"₹20,000",                 higher:"20%"},
-        {sec:"194Q", title:"Purchase of Goods",             rate:"0.1%",            limit:"₹50 Lakh",                higher:"5%"},
+        {sec:"192",  title:"Salary",                        rate:"Slab rates",      limit:"OMR 2.5L / 3L / 5L",        higher:"20%"},
+        {sec:"194A", title:"Interest (Bank / Non-bank)",    rate:"10%",             limit:"OMR 40,000 / OMR 5,000",        higher:"20%"},
+        {sec:"194B", title:"Lottery & Game Winnings",       rate:"30%",             limit:"OMR 10,000",                 higher:"30%"},
+        {sec:"194C", title:"Contractors & Sub-contractors", rate:"1% (indiv) / 2%", limit:"Single OMR 30K, Annual OMR 1L", higher:"20%"},
+        {sec:"194D", title:"Insurance Commission",          rate:"5%",              limit:"OMR 15,000",                 higher:"20%"},
+        {sec:"194H", title:"Commission & Brokerage",        rate:"5%",              limit:"OMR 15,000",                 higher:"20%"},
+        {sec:"194I", title:"Rent — Plant & Machinery",      rate:"2%",              limit:"OMR 2,40,000",               higher:"20%"},
+        {sec:"194I", title:"Rent — Land / Building",        rate:"10%",             limit:"OMR 2,40,000",               higher:"20%"},
+        {sec:"194J", title:"Professional / Technical Fees", rate:"10% (2% tech)",   limit:"OMR 30,000",                 higher:"20%"},
+        {sec:"194R", title:"Perquisites & Benefits",        rate:"10%",             limit:"OMR 20,000",                 higher:"20%"},
+        {sec:"194Q", title:"Purchase of Goods",             rate:"0.1%",            limit:"OMR 50 Lakh",                higher:"5%"},
         {sec:"195",  title:"Payments to Non-Residents",     rate:"20% (DTAA)",      limit:"Nil",                     higher:"20%"},
       ];
       const RETURN_FORMS = [
@@ -23006,7 +23006,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             <td style="font-family:var(--mono);font-size:12px">{{c.serial}}</td>
             <td><span style="background:#EEF2FF;color:#3B5BDB;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">{{c.quarter}}</span></td>
             <td class="num" style="font-family:var(--mono)">{{fmt(c.tds)}}</td>
-            <td class="num" style="font-family:var(--mono)">{{c.surcharge?'₹'+fmt(c.surcharge):'—'}}</td>
+            <td class="num" style="font-family:var(--mono)">{{c.surcharge?'OMR '+fmt(c.surcharge):'—'}}</td>
             <td class="num" style="font-family:var(--mono);font-weight:700;color:#0C8599">{{fmt(c.total)}}</td>
             <td><span style="background:#EBFBEE;color:#2F9E44;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">{{c.status}}</span></td>
           </tr>
@@ -23142,11 +23142,11 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           </div>
           <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
             <div v-for="[lbl,val,color] in [
-              ['Gross Payment','₹'+fmt(viewEntry.amount),'var(--txt,#1A1D23)'],
+              ['Gross Payment','OMR '+fmt(viewEntry.amount),'var(--txt,#1A1D23)'],
               ['TDS Rate',viewEntry.rate+'%','var(--txt,#1A1D23)'],
-              ['Basic TDS','₹'+fmt(viewEntry.tds),'#0C8599'],
-              ['Surcharge','₹'+fmt(viewEntry.surcharge||0),'#E67700'],
-              ['Cess ('+flt(viewEntry.cess)+'%)','₹'+fmt(Math.round(flt(viewEntry.tds)*flt(viewEntry.cess)/100*100)/100),'#868E96'],
+              ['Basic TDS','OMR '+fmt(viewEntry.tds),'#0C8599'],
+              ['Surcharge','OMR '+fmt(viewEntry.surcharge||0),'#E67700'],
+              ['Cess ('+flt(viewEntry.cess)+'%)','OMR '+fmt(Math.round(flt(viewEntry.tds)*flt(viewEntry.cess)/100*100)/100),'#868E96'],
             ]" :key="lbl" style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #F1F3F5;font-size:13px">
               <span style="color:var(--muted)">{{lbl}}</span>
               <span :style="{fontFamily:'var(--mono)',fontWeight:600,color:color}">{{val}}</span>
@@ -23213,7 +23213,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           <div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;padding-top:14px;border-top:1px solid var(--border)">Amount &amp; TDS Calculation</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px">
             <div>
-              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Gross Payment (₹) *</label>
+              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Gross Payment (OMR) *</label>
               <input v-model.number="form.amount" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)" @input="calcTDS"/>
             </div>
             <div>
@@ -23221,7 +23221,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               <input v-model.number="form.rate" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)" @input="calcTDS"/>
             </div>
             <div>
-              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">TDS Amount (₹)</label>
+              <label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">TDS Amount (OMR)</label>
               <input :value="flt(form.tds_total).toFixed(2)" class="nim-input" style="font-family:var(--mono);background:#F8F9FC" readonly/>
             </div>
           </div>
@@ -23296,13 +23296,13 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             </select></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">TDS Amount (₹)</label>
+          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">TDS Amount (OMR)</label>
             <input v-model.number="challanForm.tds" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/></div>
-          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Surcharge (₹)</label>
+          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Surcharge (OMR)</label>
             <input v-model.number="challanForm.surcharge" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/></div>
-          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Interest (₹)</label>
+          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Interest (OMR)</label>
             <input v-model.number="challanForm.interest" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/></div>
-          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Penalty (₹)</label>
+          <div><label style="display:block;font-size:11.5px;font-weight:600;color:#495057;margin-bottom:4px">Penalty (OMR)</label>
             <input v-model.number="challanForm.penalty" type="number" min="0" step="0.01" class="nim-input" style="font-family:var(--mono)"/></div>
         </div>
         <div style="background:#E0F7FA;border:1px solid rgba(12,133,153,.2);border-radius:8px;padding:11px 16px;display:flex;justify-content:space-between;font-size:13px">
@@ -23495,12 +23495,12 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
       const aiResult = reactive({ status: "", message: "", type: "", actions: [], data: null });
 
       const COMMANDS = [
-        { icon: "file", label: "Create invoice for [customer] ₹[amount]", hint: "Create invoice for Prasath ₹80,000" },
-        { icon: "fileplus", label: "Create invoice for [customer] [item] ₹[rate]", hint: "Create invoice for hari laptop ₹50,000" },
+        { icon: "file", label: "Create invoice for [customer] OMR [amount]", hint: "Create invoice for Prasath OMR 80,000" },
+        { icon: "fileplus", label: "Create invoice for [customer] [item] OMR [rate]", hint: "Create invoice for hari laptop OMR 50,000" },
         { icon: "payment", label: "Record payment for [invoice]", hint: "Record payment for INV-2026-00005" },
         { icon: "alert", label: "Show overdue invoices", hint: "Show overdue invoices" },
         { icon: "search", label: "Find invoices for [customer]", hint: "Find invoices for hari" },
-        { icon: "rupee", label: "Show total outstanding", hint: "Show total outstanding" },
+        { icon: "rial", label: "Show total outstanding", hint: "Show total outstanding" },
       ];
 
       const filteredCommands = computed(() => {
@@ -23575,7 +23575,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             customer: parsed.customer,
             posting_date: today,
             due_date: parsed.due_date || today,
-            company, currency: "INR", items,
+            company, currency: "OMR", items,
             notes: parsed.notes || "",
           };
           const saved = await apiGET("zoho_books_clone.api.books_data.save_doc", { doc: JSON.stringify(doc) });
@@ -23601,7 +23601,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           const total = overdue.reduce((s, i) => s + parseFloat(i.outstanding_amount || 0), 0);
           aiResult.status = overdue.length ? "warning" : "success";
           aiResult.type = "invoice_list";
-          aiResult.message = overdue.length ? `${overdue.length} overdue invoices — Total ₹${total.toLocaleString("en-IN")}` : "No overdue invoices! All caught up.";
+          aiResult.message = overdue.length ? `${overdue.length} overdue invoices — Total OMR ${total.toLocaleString("en-IN")}` : "No overdue invoices! All caught up.";
           aiResult.data = overdue;
           return;
         }
@@ -23618,7 +23618,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           const total = list.reduce((s, i) => s + parseFloat(i.grand_total || 0), 0);
           aiResult.status = list.length ? "success" : "info";
           aiResult.type = "invoice_list";
-          aiResult.message = list.length ? `${list.length} invoices for "${customer}" — Total ₹${total.toLocaleString("en-IN")}` : `No invoices found for "${customer}"`;
+          aiResult.message = list.length ? `${list.length} invoices for "${customer}" — Total OMR ${total.toLocaleString("en-IN")}` : `No invoices found for "${customer}"`;
           aiResult.data = list;
           return;
         }
@@ -23654,7 +23654,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
           payment: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
           alert: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
           search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-          rupee: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+          rial: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
         };
         return icons[name] || icons.file;
       }
@@ -23713,7 +23713,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
         {
           icon: "📊",
           title: "Accounting & Invoicing",
-          body: "Create invoices, record payments, manage your Chart of Accounts, and track every rupee — all in one place.",
+          body: "Create invoices, record payments, manage your Chart of Accounts, and track every rial — all in one place.",
         },
         {
           icon: "📦",
@@ -23961,7 +23961,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
               <div class="ai-card-meta">
                 <span class="ai-meta-pill">{{aiResult.data?.name}}</span>
                 <span class="ai-meta-pill">{{aiResult.data?.customer_name || aiResult.data?.customer}}</span>
-                <span class="ai-meta-pill">₹{{Number(aiResult.data?.grand_total||0).toLocaleString("en-IN")}}</span>
+                <span class="ai-meta-pill">OMR {{Number(aiResult.data?.grand_total||0).toLocaleString("en-IN")}}</span>
               </div>
             </div>
           </div>
@@ -23973,7 +23973,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
             </div>
             <div>
               <div class="ai-card-title">{{aiResult.message}}</div>
-              <div style="font-size:22px;font-weight:800;color:#fff;margin-top:4px">₹{{Number(aiResult.data?.amount||0).toLocaleString("en-IN")}}</div>
+              <div style="font-size:22px;font-weight:800;color:#fff;margin-top:4px">OMR {{Number(aiResult.data?.amount||0).toLocaleString("en-IN")}}</div>
               <div class="ai-card-sub">across {{aiResult.data?.count}} invoices</div>
             </div>
           </div>
@@ -24007,7 +24007,7 @@ window.addEventListener('load', function(){ setTimeout(go, 600); });
                 </div>
                 <div style="text-align:right">
                   <div class="ai-list-amt" :style="{color:inv.outstanding_amount>0?'#f87171':'#34d399'}">
-                    ₹{{Number(inv.outstanding_amount||inv.grand_total||0).toLocaleString("en-IN")}}
+                    OMR {{Number(inv.outstanding_amount||inv.grand_total||0).toLocaleString("en-IN")}}
                   </div>
                 </div>
               </div>
@@ -25714,8 +25714,8 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
                 <td style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7">1</td>
                 <td style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7"><div style="font-weight:500">Sample Item</div><div style="font-size:11px;color:#9ca3af">Item description</div></td>
                 <td v-if="tableColumns.qty" style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7;text-align:right">1.00</td>
-                <td v-if="tableColumns.rate" style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7;text-align:right">₹5,000.00</td>
-                <td v-if="tableColumns.amount" style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7;text-align:right">₹5,000.00</td>
+                <td v-if="tableColumns.rate" style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7;text-align:right">OMR 5,000.00</td>
+                <td v-if="tableColumns.amount" style="padding:11px 14px;font-size:13px;color:#374151;border-bottom:1px solid #f2f4f7;text-align:right">OMR 5,000.00</td>
               </tr>
             </tbody>
           </table>
@@ -25728,9 +25728,9 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
               <div style="font-size:10px;color:#6b7280">{{upiId||'yourname@upi'}}</div>
             </div>
             <div style="flex:1;max-width:260px;margin-left:auto">
-              <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-top:1px solid #e5e7eb"><span style="color:#6b7280">Sub Total</span><span>₹5,000.00</span></div>
-              <div style="display:flex;justify-content:space-between;padding:9px 0;font-size:15px;font-weight:700;border-top:2px solid #e5e7eb"><span>Total</span><span>₹5,000.00</span></div>
-              <div style="display:flex;justify-content:space-between;padding:8px;font-size:13px;font-weight:600;background:#fff5f5;border-radius:4px;margin-top:4px"><span style="color:#dc2626">Balance Due</span><span style="color:#dc2626">₹5,000.00</span></div>
+              <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-top:1px solid #e5e7eb"><span style="color:#6b7280">Sub Total</span><span>OMR 5,000.00</span></div>
+              <div style="display:flex;justify-content:space-between;padding:9px 0;font-size:15px;font-weight:700;border-top:2px solid #e5e7eb"><span>Total</span><span>OMR 5,000.00</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px;font-size:13px;font-weight:600;background:#fff5f5;border-radius:4px;margin-top:4px"><span style="color:#dc2626">Balance Due</span><span style="color:#dc2626">OMR 5,000.00</span></div>
             </div>
           </div>
           <div v-if="showSignature" style="display:flex;justify-content:flex-end;margin-top:32px">
@@ -26227,7 +26227,7 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
   /* ── P1-3: Company Settings ─────────────────────────────────────────────── */
   const SettingsCompany = defineComponent({ name: "SettingsCompany",
     setup() {
-      const form = reactive({ default_company:"", default_currency:"INR", fiscal_year_start_month:"April",
+      const form = reactive({ default_company:"", default_currency:"OMR", fiscal_year_start_month:"April",
         invoice_prefix:"INV", gstin:"", gst_state:"", logo_url:"",
         company_address:"", company_city:"", company_state:"", company_pincode:"",
         company_phone:"", company_email:"", company_website:"",
@@ -26850,7 +26850,7 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
         <!-- Body -->
         <div class="nim-field">
           <label class="nim-label">Email Body <span style="color:#c92a2a">*</span></label>
-          <textarea class="nim-input" v-model="form.response" rows="10" placeholder="Dear {{customer_name}},&#10;&#10;Your invoice {{invoice_no}} of ₹{{amount}} is due on {{due_date}}." style="font-size:12.5px;resize:vertical"></textarea>
+          <textarea class="nim-input" v-model="form.response" rows="10" placeholder="Dear {{customer_name}},&#10;&#10;Your invoice {{invoice_no}} of OMR {{amount}} is due on {{due_date}}." style="font-size:12.5px;resize:vertical"></textarea>
         </div>
         <!-- Preview toggle -->
         <div v-if="form.use_html && form.response">
@@ -27442,15 +27442,15 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
         <div style="background:#EBFBEE;border:1px solid #b2f2bb;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#2F9E44;margin-bottom:6px">Realised Gain</div>
-          <div style="font-size:24px;font-weight:800;color:#2F9E44">₹{{pnlSummary.gain.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div style="font-size:24px;font-weight:800;color:#2F9E44">OMR {{pnlSummary.gain.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
         </div>
         <div style="background:#FFF5F5;border:1px solid #ffc9c9;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#C92A2A;margin-bottom:6px">Realised Loss</div>
-          <div style="font-size:24px;font-weight:800;color:#C92A2A">₹{{pnlSummary.loss.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div style="font-size:24px;font-weight:800;color:#C92A2A">OMR {{pnlSummary.loss.toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
         </div>
         <div :style="'background:'+(pnlSummary.net>=0?'#E8EAF6':'#FFF5F5')+';border:1px solid '+(pnlSummary.net>=0?'#c5cae9':'#ffc9c9')+';border-radius:12px;padding:18px 20px'">
           <div :style="'font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')+';margin-bottom:6px'">Net P&amp;L</div>
-          <div :style="'font-size:24px;font-weight:800;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')">{{pnlSummary.net>=0?'+':''}}₹{{Math.abs(pnlSummary.net).toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
+          <div :style="'font-size:24px;font-weight:800;color:'+(pnlSummary.net>=0?'#1A237E':'#C92A2A')">{{pnlSummary.net>=0?'+':''}}OMR {{Math.abs(pnlSummary.net).toLocaleString('en-IN',{minimumFractionDigits:2})}}</div>
         </div>
         <div style="background:#FFF8F0;border:1px solid #ffd8a8;border-radius:12px;padding:18px 20px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#E67700;margin-bottom:6px">Transactions</div>
@@ -27483,7 +27483,7 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
               <td style="padding:10px 14px;font-weight:600">{{r.amountFC.toLocaleString()}}</td>
               <td style="padding:10px 14px">
                 <span :style="'font-weight:700;color:'+(r.gainLoss>=0?'#2F9E44':'#C92A2A')">
-                  {{r.gainLoss>=0?'+':''}}₹{{Math.abs(r.gainLoss).toLocaleString('en-IN',{minimumFractionDigits:2})}}
+                  {{r.gainLoss>=0?'+':''}}OMR {{Math.abs(r.gainLoss).toLocaleString('en-IN',{minimumFractionDigits:2})}}
                 </span>
               </td>
             </tr>
@@ -27660,7 +27660,7 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
           { label:"Total Currencies", value: currencies.value.length,   sub:"configured",   color:"#1A237E", bg:"#E8EAF6", border:"#c5cae9" },
           { label:"Active",           value: active,                     sub:"in use",        color:"#2F9E44", bg:"#EBFBEE", border:"#b2f2bb" },
           { label:"Avg. Daily Change",value: (avgChg>=0?"+":"")+avgChg.toFixed(2)+"%", sub:"vs yesterday", color:avgChg>=0?"#2F9E44":"#C92A2A", bg:avgChg>=0?"#EBFBEE":"#FFF5F5", border:avgChg>=0?"#b2f2bb":"#ffc9c9" },
-          { label:"Base Currency",    value:"INR",                       sub:"Indian Rupee",  color:"#E67700", bg:"#FFF8F0", border:"#ffd8a8" },
+          { label:"Base Currency",    value:"OMR",                       sub:"Omani Rial",  color:"#E67700", bg:"#FFF8F0", border:"#ffd8a8" },
         ];
       });
 
@@ -27673,13 +27673,13 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
         });
       });
 
-      const conv = reactive({ from:"USD", to:"INR", amount:1, result:83.25 });
+      const conv = reactive({ from:"USD", to:"OMR", amount:1, result:83.25 });
       const convRate = computed(() => {
-        if (conv.from === "INR") {
+        if (conv.from === "OMR") {
           const tgt = currencies.value.find(c => c.code === conv.to);
           return tgt ? 1/tgt.mid : 1;
         }
-        if (conv.to === "INR") {
+        if (conv.to === "OMR") {
           const src = currencies.value.find(c => c.code === conv.from);
           return src ? src.mid : 1;
         }
@@ -27691,15 +27691,15 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
       });
 
       const allConvCurrencies = computed(() => [
-        { code:"INR", name:"Indian Rupee" },
+        { code:"OMR", name:"Omani Rial" },
         ...currencies.value.map(c => ({ code:c.code, name:c.name }))
       ]);
 
       const quickRefCurrencies = computed(() => currencies.value.filter(c => c.code !== conv.from).slice(0, 8));
 
       function quickRefValue(c) {
-        if (conv.from === "INR") { return c.mid ? 1/c.mid : 0; }
-        if (c.code === "INR") {
+        if (conv.from === "OMR") { return c.mid ? 1/c.mid : 0; }
+        if (c.code === "OMR") {
           const src = currencies.value.find(x => x.code === conv.from);
           return src ? src.mid : 1;
         }
@@ -27779,7 +27779,7 @@ select.bk-fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
           const c = currencies.value.find(x => x.code === rateForm.currency);
           if (c) { c.buy = rateForm.buy; c.mid = rateForm.mid; c.sell = rateForm.sell; c.change = parseFloat(chg.toFixed(2)); }
           try {
-            await apiSave({ doctype:"Currency Exchange", from_currency:rateForm.currency, to_currency:"INR", exchange_rate:rateForm.mid, date:rateForm.date });
+            await apiSave({ doctype:"Currency Exchange", from_currency:rateForm.currency, to_currency:"OMR", exchange_rate:rateForm.mid, date:rateForm.date });
           } catch {}
           toast("Rate added", "success");
           showRateDrawer.value = false;

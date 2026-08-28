@@ -48,7 +48,7 @@ def _clear_other_defaults(company: str, keep_name: str) -> None:
         frappe.db.set_value("Bank Account", nm, "is_default", 0, update_modified=False)
 
 
-def _ensure_gl_account(account_name: str, company: str, currency: str = "INR") -> str:
+def _ensure_gl_account(account_name: str, company: str, currency: str = "OMR") -> str:
     """
     Return a leaf GL Account for a bank account, creating one if needed.
 
@@ -82,7 +82,7 @@ def _ensure_gl_account(account_name: str, company: str, currency: str = "INR") -
         "parent_account": parent,
         "is_group":       0,
         "account_type":   "Bank",
-        "currency":       currency or "INR",
+        "currency":       currency or "OMR",
         "company":        company,
     })
     acc.insert(ignore_permissions=True)
@@ -150,7 +150,7 @@ def save_bank_account(
     branch: str = "",
     account_holder_name: str = "",
     micr_code: str = "",
-    currency: str = "INR",
+    currency: str = "OMR",
     account_type: str = "Current",
     gl_account: str = "",
     status: str = "Active",
@@ -217,7 +217,7 @@ def save_bank_account(
         doc.branch               = branch
         doc.account_holder_name  = account_holder_name
         doc.micr_code            = micr_code
-        doc.currency             = currency or "INR"
+        doc.currency             = currency or "OMR"
         doc.account_type         = account_type or "Current"
         doc.gl_account           = gl_account
         doc.status               = status or "Active"
@@ -254,7 +254,7 @@ def save_bank_account(
         "branch":              branch,
         "account_holder_name": account_holder_name,
         "micr_code":           micr_code,
-        "currency":            currency or "INR",
+        "currency":            currency or "OMR",
         "account_type":        account_type or "Current",
         "gl_account":          gl_account,
         "status":              status or "Active",

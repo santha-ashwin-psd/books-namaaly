@@ -164,10 +164,10 @@ class SalesInvoice(Document):
         self.net_total = round(net, 2)
         self.total_tax = round(tax_total, 2)
         # GST rule (Sec 170, CGST Act): the invoice total is rounded off to
-        # the nearest rupee, with the adjustment shown as its own "Round
-        # Off" line — e.g. a computed total of ₹35,503.59 is invoiced (and
-        # collected) as ₹35,504.00. Without this the saved grand_total just
-        # carries the raw paise remainder straight into the list/ledger.
+        # the nearest rial, with the adjustment shown as its own "Round
+        # Off" line — e.g. a computed total of OMR 35,503.59 is invoiced (and
+        # collected) as OMR 35,504.00. Without this the saved grand_total just
+        # carries the raw baisa remainder straight into the list/ledger.
         pre_round_total = net + tax_total
         self.grand_total = round(pre_round_total)
         self.round_off = round(self.grand_total - pre_round_total, 2)
@@ -262,7 +262,7 @@ class SalesInvoice(Document):
                     frappe.throw(_(
                         "Cannot submit Credit Note {0}: the Sales Invoice {1} "
                         "already has its claimable value fully used "
-                        "(remaining: ₹{2:,.2f}, this note: ₹{3:,.2f})."
+                        "(remaining: OMR {2:,.2f}, this note: OMR {3:,.2f})."
                     ).format(
                         self.name,
                         self.return_against,
@@ -460,7 +460,7 @@ class SalesInvoice(Document):
             ).format(self.name, ", ".join(r.parent for r in linked)))
 
     def _get_currency_symbol(self):
-        cur = self.currency or "INR"
+        cur = self.currency or "OMR"
         sym = frappe.db.get_value("Currency", cur, "symbol")
         return sym or (cur + " ")
 
@@ -471,7 +471,7 @@ class SalesInvoice(Document):
             frappe.throw(_("Customer {0} has no email").format(self.customer))
 
         sym = self._get_currency_symbol()
-        cur = self.currency or "INR"
+        cur = self.currency or "OMR"
         subject = f"Invoice {self.name} ({cur})"
         body = (
             f"Dear {self.customer_name},<br><br>"

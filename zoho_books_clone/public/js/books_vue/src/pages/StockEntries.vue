@@ -525,7 +525,7 @@
                 voucher-type="Stock Entry"
                 :voucher-no="viewDoc.name"
                 label="Stock Entry"
-                :currency="viewDoc.currency || 'INR'"
+                :currency="viewDoc.currency || 'OMR'"
               />
             </template>
             <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the stock entry is submitted.</div>

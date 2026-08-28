@@ -176,8 +176,8 @@ def _validate_gl_balance(gl_map: list[dict]) -> None:
             "Unbalanced GL entries: total debit {0} ≠ total credit {1}. "
             "All debits must equal all credits."
         ).format(
-            frappe.bold(f"₹{total_debit:,.2f}"),
-            frappe.bold(f"₹{total_credit:,.2f}"),
+            frappe.bold(f"OMR {total_debit:,.2f}"),
+            frappe.bold(f"OMR {total_credit:,.2f}"),
         ))
 
 
@@ -226,7 +226,7 @@ def _reverse_gl_entries(voucher_type: str, voucher_no: str) -> set[str]:
             "party_type":   row.party_type or "",
             "party":        row.party or "",
             "cost_center":  row.cost_center or "",
-            "currency":     row.currency or "INR",
+            "currency":     row.currency or "OMR",
             "remarks":      f"Reversal of GL Entry {row.name}",
             "company":      row.company,
             "fiscal_year":  row.fiscal_year or "",

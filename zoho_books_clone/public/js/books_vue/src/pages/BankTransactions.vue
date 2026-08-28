@@ -186,7 +186,7 @@
             voucher-type="Bank Transaction"
             :voucher-no="viewDoc.name"
             label="Bank Transaction"
-            :currency="viewDoc.currency || 'INR'"
+            :currency="viewDoc.currency || 'OMR'"
           />
         </div>
         <div class="bt-dfooter">

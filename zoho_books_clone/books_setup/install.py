@@ -131,7 +131,7 @@ def seed_naming_series():
 def seed_currencies():
     currencies = [
         ("OMR", "ر.ع.", "Baisa", 1000, "#,###.###"),
-        ("INR", "₹", "Paise",  100, "#,##,###.##"),
+        ("OMR", "OMR ", "Baisa",  100, "#,##,###.##"),
         ("USD", "$", "Cents",  100, "#,###.##"),
         ("EUR", "€", "Cents",  100, "#,###.##"),
         ("GBP", "£", "Pence",  100, "#,###.##"),

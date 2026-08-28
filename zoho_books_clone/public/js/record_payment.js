@@ -80,7 +80,7 @@
   };
 
   function buildDialog(invoiceName, d) {
-    var symbol = d.currency === "INR" ? "Rs." : (d.currency + " ");
+    var symbol = d.currency === "OMR" ? "Rs." : (d.currency + " ");
 
     /* ── select options ── */
     var modeOptions = (d.payment_modes && d.payment_modes.length

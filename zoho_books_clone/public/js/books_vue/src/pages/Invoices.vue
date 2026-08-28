@@ -1098,7 +1098,7 @@
                       voucher-type="Sales Invoice"
                       :voucher-no="viewInv.name"
                       label="Invoice"
-                      :currency="viewInv.currency || 'INR'"
+                      :currency="viewInv.currency || 'OMR'"
                     />
                   </template>
                   <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the invoice is submitted.</div>
@@ -1604,7 +1604,7 @@ function matchIndianState(raw) {
   if (!clean) return "";
   return INDIAN_STATES.find(s => s.split("-").slice(1).join("-").toLowerCase() === clean) || "";
 }
-const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR " };
+const CURRENCY_SYMBOLS = { OMR: "OMR ", OMR: "OMR " };
 const TEMPLATES = [
   { key:"classic", label:"Classic" },
   { key:"modern",  label:"Modern"  },
@@ -1729,9 +1729,9 @@ const confirmModal = reactive({ open:false, loading:false, title:"", message:"",
 // ── Helpers ────────────────────────────────────────────────────────────
 const currencySymbol = computed(() => CURRENCY_SYMBOLS[form.currency] || "OMR ");
 function fmtAmt(v, currency) {
-  const cur = currency || form.currency || "INR";
+  const cur = currency || form.currency || "OMR";
   const sym = CURRENCY_SYMBOLS[cur] || "OMR ";
-  const locale = cur === "INR" ? "en-IN" : "en-US";
+  const locale = cur === "OMR" ? "en-IN" : "en-US";
   return sym + Number(v||0).toLocaleString(locale,{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 const isOverseas = computed(() => form.gst_treatment === "Overseas");
@@ -1899,7 +1899,7 @@ function lineAmountWithTax(line) {
 
 const taxAmount  = computed(()=>taxLines.value.reduce((s,t)=>s+t.amount,0));
 // GST rule (Sec 170, CGST Act): the invoice total is rounded off to the
-// nearest rupee. Without this step the app's total (e.g. OMR 35,503.61) will
+// nearest rial. Without this step the app's total (e.g. OMR 35,503.61) will
 // never match the printed/e-invoice total (OMR 35,504.00), which always
 // carries an explicit Round Off line.
 const preRoundTotal = computed(()=>netTotal.value+taxAmount.value);
@@ -2678,7 +2678,7 @@ async function onCustomerChange() {
   addressLoading.value=true;
   try {
     const custDoc = await apiGet("Customer", form.customer);
-    form.currency = "INR";
+    form.currency = "OMR";
     form.exchange_rate = 1;
     // Apply payment terms
     if (custDoc?.payment_terms && !form.payment_terms) { form.payment_terms = custDoc.payment_terms; applyPaymentTerms(); }
@@ -3023,7 +3023,7 @@ async function saveInvoice(docstatus, andNew = false) {
     const pendingDataUrl = (form.logo||"").startsWith("data:") ? form.logo : "";
     const resolvedLogoPath = pendingDataUrl ? "" : (form.logo || "");
 
-    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"OMR",price_list:form.price_list||"",exchange_rate:form.currency==="INR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
+    const doc={doctype:"Sales Invoice",customer:form.customer,posting_date:form.posting_date,due_date:form.due_date||form.posting_date,po_no:form.po_no||"",payment_terms:form.payment_terms||"",billing_address:form.billing_address||"",billing_address_name:form.billing_address_name||"",shipping_address:shipAddr,shipping_address_name:form.shipping_address_name||"",place_of_supply:form.place_of_supply||"",remarks:form.remarks||"",terms:form.terms||"",items:invItems,taxes,company,currency:form.currency||"OMR",price_list:form.price_list||"",exchange_rate:form.currency==="OMR"?1:(form.exchange_rate||1),gst_category:form.gst_treatment==="Overseas"?"Overseas":form.gst_treatment==="SEZ"?"SEZ":"Regular",update_stock:1,set_warehouse:form.set_warehouse||"",logo:resolvedLogoPath,cost_center:form.cost_center||"",sales_person:form.sales_person||"",discount_type:form.discount_type||"Percentage",additional_discount_percentage:form.discount_type==="Percentage"?flt(form.additional_discount_percentage):0,additional_discount_amount:flt(discountAmount.value)};
     if (editingName.value) doc.name=editingName.value;
     const saved=await apiSave(doc);
     // Lock onto the saved docname right away — if a stray second saveInvoice()

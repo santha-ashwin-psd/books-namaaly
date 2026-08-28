@@ -487,7 +487,7 @@
                 voucher-type="Payment Entry"
                 :voucher-no="viewPmt.name"
                 label="Payment"
-                :currency="viewPmt.paid_from_account_currency || viewPmt.currency || 'INR'"
+                :currency="viewPmt.paid_from_account_currency || viewPmt.currency || 'OMR'"
               />
             </template>
             <div v-else style="color:#9ca3af;font-size:13px;padding:8px 0">Journal entries are posted once the payment is submitted.</div>

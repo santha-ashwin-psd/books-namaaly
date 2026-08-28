@@ -44,7 +44,7 @@
         <div class="bk-kpi-icon" style="background:#dcfce7;color:#16a34a"><span v-html="icon('trend',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Total Gain</div>
-          <div class="bk-kpi-value bk-kpi-green">{{ INR(totalGain) }}</div>
+          <div class="bk-kpi-value bk-kpi-green">{{ OMR(totalGain) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">sale &gt; net book value</div>
         </div>
       </div>
@@ -54,7 +54,7 @@
         <div class="bk-kpi-icon" style="background:#fee2e2"><span v-html="icon('trend',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Total Loss</div>
-          <div class="bk-kpi-value bk-kpi-red">{{ INR(totalLoss) }}</div>
+          <div class="bk-kpi-value bk-kpi-red">{{ OMR(totalLoss) }}</div>
           <div class="bk-kpi-trend bk-trend-neutral">scrap + sale below NBV</div>
         </div>
       </div>
@@ -93,9 +93,9 @@
             <td><span class="inv-link">{{ row.name }}</span></td>
             <td>{{ row.asset_name || row.asset }}<div class="asset-code">{{ row.asset }}</div></td>
             <td><span class="ad-type-badge" :class="row.disposal_type==='Sale' ? 'ad-type-sale' : 'ad-type-scrap'">{{ row.disposal_type }}</span></td>
-            <td class="ta-r mono-sm">{{ INR(row.net_book_value_snapshot) }}</td>
+            <td class="ta-r mono-sm">{{ OMR(row.net_book_value_snapshot) }}</td>
             <td class="ta-r mono-sm" :class="flt(row.gain_loss_amount) >= 0 ? 'ad-gain' : 'ad-loss'">
-              {{ flt(row.gain_loss_amount) >= 0 ? '+' : '' }}{{ INR(row.gain_loss_amount) }}
+              {{ flt(row.gain_loss_amount) >= 0 ? '+' : '' }}{{ OMR(row.gain_loss_amount) }}
             </td>
             <td><span class="inv-status-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
             <td style="text-align:center" @click.stop>
@@ -134,8 +134,8 @@
           </div>
           <div style="font-size:12px;color:#6b7280;margin-top:4px">{{ row.asset_name || row.asset }} • {{ row.disposal_type }}</div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
-            <span class="mono-sm">{{ INR(row.net_book_value_snapshot) }}</span>
-            <span class="mono-sm" :class="flt(row.gain_loss_amount) >= 0 ? 'ad-gain' : 'ad-loss'">{{ INR(row.gain_loss_amount) }}</span>
+            <span class="mono-sm">{{ OMR(row.net_book_value_snapshot) }}</span>
+            <span class="mono-sm" :class="flt(row.gain_loss_amount) >= 0 ? 'ad-gain' : 'ad-loss'">{{ OMR(row.gain_loss_amount) }}</span>
           </div>
         </div>
       </div>
@@ -217,16 +217,16 @@
                 </div>
 
                 <div v-if="selectedAsset" class="ad-preview-box">
-                  <div class="ad-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ INR(selectedAsset.purchase_cost) }}</span></div>
-                  <div class="ad-preview-row"><span>Accumulated Depreciation</span><span class="mono-sm">{{ INR(flt(selectedAsset.purchase_cost) - flt(selectedAsset.current_value)) }}</span></div>
-                  <div class="ad-preview-row"><span>Net Book Value</span><span class="mono-sm fw-600">{{ INR(selectedAsset.current_value) }}</span></div>
+                  <div class="ad-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ OMR(selectedAsset.purchase_cost) }}</span></div>
+                  <div class="ad-preview-row"><span>Accumulated Depreciation</span><span class="mono-sm">{{ OMR(flt(selectedAsset.purchase_cost) - flt(selectedAsset.current_value)) }}</span></div>
+                  <div class="ad-preview-row"><span>Net Book Value</span><span class="mono-sm fw-600">{{ OMR(selectedAsset.current_value) }}</span></div>
                   <div v-if="disposal.disposal_type==='Sale'" class="ad-preview-row">
                     <span>Estimated Gain / (Loss)</span>
-                    <span class="mono-sm fw-600" :class="estimatedGainLoss >= 0 ? 'ad-gain' : 'ad-loss'">{{ INR(estimatedGainLoss) }}</span>
+                    <span class="mono-sm fw-600" :class="estimatedGainLoss >= 0 ? 'ad-gain' : 'ad-loss'">{{ OMR(estimatedGainLoss) }}</span>
                   </div>
                   <div v-else class="ad-preview-row">
                     <span>Estimated Loss (full NBV)</span>
-                    <span class="mono-sm fw-600 ad-loss">{{ INR(-flt(selectedAsset.current_value)) }}</span>
+                    <span class="mono-sm fw-600 ad-loss">{{ OMR(-flt(selectedAsset.current_value)) }}</span>
                   </div>
                   <div v-if="selectedAsset.is_existing_asset" style="font-size:11px;color:#94a3b8;margin-top:6px">
                     Existing Asset — no capitalization entry exists for it, so no GL entries will be posted on submit; only the asset's status will change.
@@ -239,7 +239,7 @@
             <div v-if="disposal.disposal_type==='Sale'" class="add-card">
               <div class="add-card-header" @click="collapsed.sale = !collapsed.sale">
                 <div class="add-card-title">
-                  <span class="add-card-title-icon"><span v-html="icon('rupee',16)"></span></span>
+                  <span class="add-card-title-icon"><span v-html="icon('rial',16)"></span></span>
                   Sale Details
                 </div>
                 <span class="add-card-chevron" :class="{collapsed:collapsed.sale}"><span v-html="icon('chevD',14)"></span></span>
@@ -304,10 +304,10 @@
               </div>
               <div class="add-card-body" :class="{collapsed:collapsed.snapshot}">
                 <div class="ad-preview-box">
-                  <div class="ad-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ INR(disposal.purchase_cost_snapshot) }}</span></div>
-                  <div class="ad-preview-row"><span>Accumulated Depreciation</span><span class="mono-sm">{{ INR(disposal.accumulated_depreciation_snapshot) }}</span></div>
-                  <div class="ad-preview-row"><span>Net Book Value</span><span class="mono-sm">{{ INR(disposal.net_book_value_snapshot) }}</span></div>
-                  <div class="ad-preview-row"><span>Gain / (Loss)</span><span class="mono-sm fw-600" :class="flt(disposal.gain_loss_amount) >= 0 ? 'ad-gain' : 'ad-loss'">{{ INR(disposal.gain_loss_amount) }}</span></div>
+                  <div class="ad-preview-row"><span>Purchase Cost</span><span class="mono-sm">{{ OMR(disposal.purchase_cost_snapshot) }}</span></div>
+                  <div class="ad-preview-row"><span>Accumulated Depreciation</span><span class="mono-sm">{{ OMR(disposal.accumulated_depreciation_snapshot) }}</span></div>
+                  <div class="ad-preview-row"><span>Net Book Value</span><span class="mono-sm">{{ OMR(disposal.net_book_value_snapshot) }}</span></div>
+                  <div class="ad-preview-row"><span>Gain / (Loss)</span><span class="mono-sm fw-600" :class="flt(disposal.gain_loss_amount) >= 0 ? 'ad-gain' : 'ad-loss'">{{ OMR(disposal.gain_loss_amount) }}</span></div>
                 </div>
               </div>
             </div>
@@ -359,7 +359,7 @@ const toast = useToast();
 const { confirm } = useConfirm();
 
 function flt(n) { const x = Number(n); return isNaN(x) ? 0 : x; }
-function INR(n) {
+function OMR(n) {
   if (n == null || isNaN(n)) return 'OMR 0.00';
   return 'OMR ' + Number(n).toLocaleString('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }

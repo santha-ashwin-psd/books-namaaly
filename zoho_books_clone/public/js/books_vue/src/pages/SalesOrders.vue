@@ -705,7 +705,7 @@
                     <div class="inv-dmeta-icon-row">
                       <span class="inv-dmeta-icon" v-html="icon('currency',13)"></span>
                       <span class="inv-dmeta-lbl">Grand Total</span>
-                      <span v-if="viewDoc.currency && viewDoc.currency !== 'INR'" style="font-size:10px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:4px;padding:1px 5px;margin-left:4px">{{ viewDoc.currency }}</span>
+                      <span v-if="viewDoc.currency && viewDoc.currency !== 'OMR'" style="font-size:10px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:4px;padding:1px 5px;margin-left:4px">{{ viewDoc.currency }}</span>
                     </div>
                     <div class="inv-balance-val">
                       {{ fmtAmt(viewDoc.grand_total, viewDoc.currency) }}
@@ -1625,7 +1625,7 @@ async function onCustomerChange() {
     if (firstShipping) { form.shipping_address_name = firstShipping.name; form.shipping_address = formatAddress(firstShipping); }
     if (custDoc?.default_currency) {
       form.currency = custDoc.default_currency;
-      form.exchange_rate = form.currency !== "INR" ? (await fetchRate(form.currency, "INR") || 1) : 1;
+      form.exchange_rate = form.currency !== "OMR" ? (await fetchRate(form.currency, "OMR") || 1) : 1;
     }
   } catch {}
   addressLoading.value = false;
@@ -1800,7 +1800,7 @@ async function saveSO(newStatus) {
       // and Frappe silently drops it; status is the only confirm signal.
       terms: form.terms || "",
       currency: form.currency || "OMR",
-      exchange_rate: form.currency === "INR" ? 1 : (form.exchange_rate || 1),
+      exchange_rate: form.currency === "OMR" ? 1 : (form.exchange_rate || 1),
       items: lines.value.filter(l => l.item_code).map(l => { calcLine(l); return {
         doctype: "Sales Order Item", item_code: l.item_code,
         description: l.description || l.item_code,

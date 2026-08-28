@@ -71,7 +71,7 @@
 
     <!-- ══ Bulk price bar ══ -->
     <div v-if="variants.length" class="b-card iv-bulk">
-      <div class="iv-bulk-title"><span v-html="icon('rupee', 14)"></span> Bulk price change</div>
+      <div class="iv-bulk-title"><span v-html="icon('rial', 14)"></span> Bulk price change</div>
       <div class="iv-bulk-controls">
         <select v-model="bulk.field" class="iv-input iv-bulk-select">
           <option value="selling">Selling rate</option>

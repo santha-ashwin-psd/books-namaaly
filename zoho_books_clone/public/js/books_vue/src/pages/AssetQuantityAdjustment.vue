@@ -43,7 +43,7 @@
             <td><span class="inv-link">{{ row.name }}</span></td>
             <td>{{ row.asset_name || row.asset }}<div class="asset-code">{{ row.asset }}</div></td>
             <td class="ta-r mono-sm">{{ row.damaged_qty }} <span class="text-muted">of {{ row.qty_before ?? '—' }}</span></td>
-            <td class="ta-r mono-sm">{{ INR(row.write_off_net_book_value) }}</td>
+            <td class="ta-r mono-sm">{{ OMR(row.write_off_net_book_value) }}</td>
             <td><span class="inv-status-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
             <td style="text-align:center" @click.stop>
               <button class="inv-act-btn" @click="openView(row)" title="View"><span v-html="icon('eye',13)"></span></button>
@@ -87,7 +87,7 @@
               <span v-html="icon('check',14)"></span>
               <span>
                 Submitted — {{ doc.damaged_qty }} of {{ doc.qty_before }} units written off Asset {{ doc.asset }}.
-                Qty is now {{ doc.qty_after }}, Purchase Cost {{ INR(doc.purchase_cost_after) }}, Current Value {{ INR(doc.current_value_after) }}.
+                Qty is now {{ doc.qty_after }}, Purchase Cost {{ OMR(doc.purchase_cost_after) }}, Current Value {{ OMR(doc.current_value_after) }}.
               </span>
             </div>
 
@@ -134,9 +134,9 @@
 
                 <div v-if="selectedAsset && doc.damaged_qty" class="aqa-preview-box">
                   <div class="aqa-preview-row"><span>Remaining Qty</span><span class="mono-sm">{{ previewRemainingQty }}</span></div>
-                  <div class="aqa-preview-row"><span>Purchase Cost Written Off</span><span class="mono-sm">{{ INR(previewCostWrittenOff) }}</span></div>
-                  <div class="aqa-preview-row"><span>Accumulated Depreciation Written Off</span><span class="mono-sm">{{ INR(previewAccDepWrittenOff) }}</span></div>
-                  <div class="aqa-preview-row fw-600"><span>Net Book Value Written Off (Loss)</span><span class="mono-sm">{{ INR(previewNbvWrittenOff) }}</span></div>
+                  <div class="aqa-preview-row"><span>Purchase Cost Written Off</span><span class="mono-sm">{{ OMR(previewCostWrittenOff) }}</span></div>
+                  <div class="aqa-preview-row"><span>Accumulated Depreciation Written Off</span><span class="mono-sm">{{ OMR(previewAccDepWrittenOff) }}</span></div>
+                  <div class="aqa-preview-row fw-600"><span>Net Book Value Written Off (Loss)</span><span class="mono-sm">{{ OMR(previewNbvWrittenOff) }}</span></div>
                 </div>
                 <p class="aqa-hint">
                   This is a client-side preview only — the server recalculates authoritatively on submit.
@@ -149,10 +149,10 @@
               <div class="add-card-body">
                 <div class="aqa-preview-box">
                   <div class="aqa-preview-row"><span>Qty Before → After</span><span class="mono-sm">{{ doc.qty_before }} → {{ doc.qty_after }}</span></div>
-                  <div class="aqa-preview-row"><span>Purchase Cost Before → After</span><span class="mono-sm">{{ INR(doc.purchase_cost_before) }} → {{ INR(doc.purchase_cost_after) }}</span></div>
-                  <div class="aqa-preview-row"><span>Current Value Before → After</span><span class="mono-sm">{{ INR(doc.current_value_before) }} → {{ INR(doc.current_value_after) }}</span></div>
-                  <div class="aqa-preview-row"><span>Accumulated Depreciation Written Off</span><span class="mono-sm">{{ INR(doc.write_off_accumulated_depreciation) }}</span></div>
-                  <div class="aqa-preview-row fw-600"><span>Loss Posted</span><span class="mono-sm">{{ INR(doc.write_off_net_book_value) }}</span></div>
+                  <div class="aqa-preview-row"><span>Purchase Cost Before → After</span><span class="mono-sm">{{ OMR(doc.purchase_cost_before) }} → {{ OMR(doc.purchase_cost_after) }}</span></div>
+                  <div class="aqa-preview-row"><span>Current Value Before → After</span><span class="mono-sm">{{ OMR(doc.current_value_before) }} → {{ OMR(doc.current_value_after) }}</span></div>
+                  <div class="aqa-preview-row"><span>Accumulated Depreciation Written Off</span><span class="mono-sm">{{ OMR(doc.write_off_accumulated_depreciation) }}</span></div>
+                  <div class="aqa-preview-row fw-600"><span>Loss Posted</span><span class="mono-sm">{{ OMR(doc.write_off_net_book_value) }}</span></div>
                   <div class="aqa-preview-row"><span>GL Posted</span><span class="mono-sm">{{ doc.gl_posted ? 'Yes' : 'No' }}</span></div>
                 </div>
               </div>
@@ -198,7 +198,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue';
 const toast = useToast();
 
 function flt(n) { const x = Number(n); return isNaN(x) ? 0 : x; }
-function INR(n) {
+function OMR(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return 'OMR 0.00';
   return 'OMR ' + Number(n).toLocaleString('en-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }

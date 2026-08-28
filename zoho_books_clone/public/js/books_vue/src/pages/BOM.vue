@@ -150,7 +150,7 @@
               </td>
               <td><span class="bomx-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span></td>
               <td><span class="bomx-type-tag" :style="bomTypeStyle(row._role === 'sub-assembly' ? 'Sub-Assembly' : row.bom_type)">{{ row._role === 'sub-assembly' ? 'Sub-assembly' : (row.bom_type || '—') }}</span></td>
-              <td class="mono bomx-num">{{ INR(row.total_cost) }}</td>
+              <td class="mono bomx-num">{{ OMR(row.total_cost) }}</td>
               <td class="mono bomx-num">{{ row.quantity || 1 }}</td>
               <td>
                 <span class="bomx-mini-pill" :class="row.is_default ? 'yes' : 'no'">{{ row.is_default ? 'Yes' : 'No' }}</span>
@@ -308,19 +308,19 @@
                 <div class="bomx-cost-grid">
                   <div class="bomx-cost-cell">
                     <div class="bomx-cost-lbl">Material</div>
-                    <div class="bomx-cost-val">{{ INR(rm_cost) }}</div>
+                    <div class="bomx-cost-val">{{ OMR(rm_cost) }}</div>
                   </div>
                   <div class="bomx-cost-cell">
                     <div class="bomx-cost-lbl">Operations</div>
-                    <div class="bomx-cost-val">{{ INR(op_cost) }}</div>
+                    <div class="bomx-cost-val">{{ OMR(op_cost) }}</div>
                   </div>
                   <div class="bomx-cost-cell">
                     <div class="bomx-cost-lbl">Scrap Value</div>
-                    <div class="bomx-cost-val" style="color:var(--bx-red)">-{{ INR(scrap_value) }}</div>
+                    <div class="bomx-cost-val" style="color:var(--bx-red)">-{{ OMR(scrap_value) }}</div>
                   </div>
                   <div class="bomx-cost-cell bomx-cost-cell-total">
                     <div class="bomx-cost-lbl" style="color:var(--bx-mfgB)">Total Cost</div>
-                    <div class="bomx-cost-val" style="color:var(--bx-mfgB);font-size:19px">{{ INR(total_cost) }}</div>
+                    <div class="bomx-cost-val" style="color:var(--bx-mfgB);font-size:19px">{{ OMR(total_cost) }}</div>
                   </div>
                 </div>
               </div>
@@ -342,7 +342,7 @@
                     </select>
                     <div class="bomx-rm-card-amt">
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
-                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ INR((rm.qty||0)*(rm.rate||0)) }}</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ OMR((rm.qty||0)*(rm.rate||0)) }}</span>
                     </div>
                     <button v-if="rm.item_code" class="bomx-btn-icon bomx-rm-card-scrap" :class="{ 'has-mappings': scrapCountFor(rm.item_code) > 0 }"
                             @click="openScrapPanel(rm)" :title="bom.allow_alternative_item ? 'Manage scrap-reuse eligibility for this item' : 'Enable \'Allow Alternative Item\' (More Info tab) to use scrap reuse'">
@@ -366,8 +366,8 @@
                     <div class="bomx-rm-field">
                       <label>Rate (OMR)</label>
                       <input class="bomx-fi bomx-fi-mono" type="number" v-model="rm.rate" min="0" step="any" :disabled="readOnly"/>
-                      <div v-if="rmLandedInfo(rm.item_code)?.has_landed_cost" class="bomx-landed-hint" :title="`Base ${INR(rmLandedInfo(rm.item_code).base_rate)} + landed ${INR(rmLandedInfo(rm.item_code).landed_rate)} = ${INR(rmLandedInfo(rm.item_code).valuation_rate)} at ${rmLandedInfo(rm.item_code).warehouse}`">
-                        🚚 Warehouse rate incl. landed cost: {{ INR(rmLandedInfo(rm.item_code).valuation_rate) }}
+                      <div v-if="rmLandedInfo(rm.item_code)?.has_landed_cost" class="bomx-landed-hint" :title="`Base ${OMR(rmLandedInfo(rm.item_code).base_rate)} + landed ${OMR(rmLandedInfo(rm.item_code).landed_rate)} = ${OMR(rmLandedInfo(rm.item_code).valuation_rate)} at ${rmLandedInfo(rm.item_code).warehouse}`">
+                        🚚 Warehouse rate incl. landed cost: {{ OMR(rmLandedInfo(rm.item_code).valuation_rate) }}
                         <a v-if="!readOnly" href="javascript:void(0)" @click="useLandedRate(rm)">Use</a>
                       </div>
                     </div>
@@ -410,7 +410,7 @@
                     </select>
                     <div class="bomx-rm-card-amt">
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
-                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ INR((pi.qty||0)*(pi.rate||0)) }}</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-blue)">{{ OMR((pi.qty||0)*(pi.rate||0)) }}</span>
                     </div>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removePackingMaterial(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -466,7 +466,7 @@
                   </div>
                   <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="op.time_in_mins" min="0" step="any" :disabled="readOnly"/>
                   <input class="bomx-fi bomx-fi-mono bomx-tree-rate-inp" type="number" v-model="op.hour_rate" min="0" step="any" :disabled="readOnly"/>
-                  <span class="bomx-tree-cost" style="color:var(--bx-violet)">{{ INR(((op.time_in_mins||0)/60)*(op.hour_rate||0)) }}</span>
+                  <span class="bomx-tree-cost" style="color:var(--bx-violet)">{{ OMR(((op.time_in_mins||0)/60)*(op.hour_rate||0)) }}</span>
                   <div class="bomx-tree-actions">
                     <button v-if="!readOnly" class="bomx-btn-icon danger" @click="removeOp(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -498,13 +498,13 @@
                     <td>{{ itemNameFor(rm.item_code) || rm.item_code }} <span class="mono" style="font-size:11px;color:var(--bx-muted)">{{ rm.item_code }}</span></td>
                     <td style="text-align:right" class="mono">{{ rm.qty }}</td>
                     <td style="text-align:right" class="mono">{{ rm.uom }}</td>
-                    <td style="text-align:right" class="mono">{{ INR(rm.rate) }}</td>
-                    <td style="text-align:right;font-weight:700" class="mono">{{ INR((rm.qty||0)*(rm.rate||0)) }}</td>
+                    <td style="text-align:right" class="mono">{{ OMR(rm.rate) }}</td>
+                    <td style="text-align:right;font-weight:700" class="mono">{{ OMR((rm.qty||0)*(rm.rate||0)) }}</td>
                   </tr>
                 </tbody>
                 <tfoot><tr>
                   <td colspan="4" style="font-weight:700;color:var(--bx-mfgB)">Total Material Cost</td>
-                  <td style="text-align:right;font-weight:700;color:var(--bx-mfgB)" class="mono">{{ INR(rm_cost) }}</td>
+                  <td style="text-align:right;font-weight:700;color:var(--bx-mfgB)" class="mono">{{ OMR(rm_cost) }}</td>
                 </tr></tfoot>
               </table>
 
@@ -513,11 +513,11 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                   <div class="bomx-lo-cell">
                     <div style="font-size:13px;font-weight:600">Operation Cost</div>
-                    <div class="mono" style="font-weight:700">{{ INR(op_cost) }}</div>
+                    <div class="mono" style="font-weight:700">{{ OMR(op_cost) }}</div>
                   </div>
                   <div class="bomx-lo-cell">
                     <div style="font-size:13px;font-weight:600">Scrap Value</div>
-                    <div class="mono" style="font-weight:700;color:var(--bx-red)">-{{ INR(scrap_value) }}</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-red)">-{{ OMR(scrap_value) }}</div>
                   </div>
                 </div>
               </div>
@@ -546,7 +546,7 @@
                     </select>
                     <div class="bomx-rm-card-amt">
                       <span class="bomx-rm-card-amt-lbl">Amount</span>
-                      <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ INR((sc.qty||0)*(sc.rate||0)) }}</span>
+                      <span class="bomx-tree-cost" style="color:var(--bx-red)">{{ OMR((sc.qty||0)*(sc.rate||0)) }}</span>
                     </div>
                     <button v-if="!readOnly" class="bomx-btn-icon danger bomx-rm-card-rm" @click="removeScrap(idx)" title="Remove">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -627,10 +627,10 @@
                       <span v-if="node.is_phantom" style="font-size:10px;padding:1px 6px;background:var(--bx-mfgS);color:var(--bx-mfgB);border-radius:8px;font-weight:700;margin-left:4px">PHANTOM</span>
                       <div style="font-size:11px;color:var(--bx-muted)">{{ node.item_name }}</div>
                     </td>
-                    <td style="text-align:right" class="mono">{{ INR(node.qty) }}</td>
+                    <td style="text-align:right" class="mono">{{ OMR(node.qty) }}</td>
                     <td>{{ node.uom }}</td>
-                    <td style="text-align:right" class="mono">{{ INR(node.rate) }}</td>
-                    <td style="text-align:right;font-weight:700" class="mono">{{ INR(node.amount) }}</td>
+                    <td style="text-align:right" class="mono">{{ OMR(node.rate) }}</td>
+                    <td style="text-align:right;font-weight:700" class="mono">{{ OMR(node.amount) }}</td>
                     <td><DocLink v-if="node.sub_assembly_bom" doctype="BOM" :name="node.sub_assembly_bom" /><span v-else style="color:var(--bx-muted)">—</span></td>
                   </tr>
                 </tbody>
@@ -654,13 +654,13 @@
                     <div class="bomx-hf-label">BOM A (this)</div>
                     <div style="font-weight:700">{{ compareResult.bom1.name }}</div>
                     <div style="font-size:12px;color:var(--bx-muted)">{{ compareResult.bom1.item }} · Qty {{ compareResult.bom1.qty }}</div>
-                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ INR(compareResult.bom1.total_cost) }}</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ OMR(compareResult.bom1.total_cost) }}</div>
                   </div>
                   <div class="bomx-lo-cell">
                     <div class="bomx-hf-label">BOM B (selected)</div>
                     <div style="font-weight:700">{{ compareResult.bom2.name }}</div>
                     <div style="font-size:12px;color:var(--bx-muted)">{{ compareResult.bom2.item }} · Qty {{ compareResult.bom2.qty }}</div>
-                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ INR(compareResult.bom2.total_cost) }}</div>
+                    <div class="mono" style="font-weight:700;color:var(--bx-mfgB)">{{ OMR(compareResult.bom2.total_cost) }}</div>
                   </div>
                 </div>
                 <div class="bomx-section-lbl">Materials</div>
@@ -669,10 +669,10 @@
                   <tbody>
                     <tr v-for="m in compareResult.materials" :key="m.item_code">
                       <td>{{ m.item_code }}<div style="font-size:11px;color:var(--bx-muted)">{{ m.item_name }}</div></td>
-                      <td style="text-align:right">{{ m.bom1_qty != null ? INR(m.bom1_qty) : '—' }}</td>
-                      <td style="text-align:right">{{ m.bom1_rate != null ? INR(m.bom1_rate) : '—' }}</td>
-                      <td style="text-align:right">{{ m.bom2_qty != null ? INR(m.bom2_qty) : '—' }}</td>
-                      <td style="text-align:right">{{ m.bom2_rate != null ? INR(m.bom2_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom1_qty != null ? OMR(m.bom1_qty) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom1_rate != null ? OMR(m.bom1_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom2_qty != null ? OMR(m.bom2_qty) : '—' }}</td>
+                      <td style="text-align:right">{{ m.bom2_rate != null ? OMR(m.bom2_rate) : '—' }}</td>
                       <td style="text-align:center"><span class="bomx-badge" :class="'badge-'+m.status">{{ m.status.toUpperCase() }}</span></td>
                     </tr>
                   </tbody>
@@ -684,9 +684,9 @@
                     <tr v-for="o in compareResult.operations" :key="o.operation">
                       <td>{{ o.operation }}</td>
                       <td style="text-align:right">{{ o.bom1_time != null ? o.bom1_time : '—' }}</td>
-                      <td style="text-align:right">{{ o.bom1_rate != null ? INR(o.bom1_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ o.bom1_rate != null ? OMR(o.bom1_rate) : '—' }}</td>
                       <td style="text-align:right">{{ o.bom2_time != null ? o.bom2_time : '—' }}</td>
-                      <td style="text-align:right">{{ o.bom2_rate != null ? INR(o.bom2_rate) : '—' }}</td>
+                      <td style="text-align:right">{{ o.bom2_rate != null ? OMR(o.bom2_rate) : '—' }}</td>
                       <td style="text-align:center"><span class="bomx-badge" :class="'badge-'+o.status">{{ o.status.toUpperCase() }}</span></td>
                     </tr>
                   </tbody>
@@ -1835,8 +1835,8 @@ function printBom() {
           <td>${esc(itemNameFor(rm.item_code) || rm.item_code)}</td>
           <td style="text-align:right">${esc(fmtQty(rm.qty))}</td>
           <td>${esc(rm.uom || "Nos")}</td>
-          <td style="text-align:right">${esc(INR(rm.rate))}</td>
-          <td style="text-align:right">${esc(INR(rm.amount))}</td>
+          <td style="text-align:right">${esc(OMR(rm.rate))}</td>
+          <td style="text-align:right">${esc(OMR(rm.amount))}</td>
           <td>${esc(rm.source_warehouse || "—")}</td>
         </tr>`).join("")
     : `<tr><td colspan="7" style="text-align:center;color:#868E96">No raw materials</td></tr>`;
@@ -1847,8 +1847,8 @@ function printBom() {
           <td>${esc(op.operation)}</td>
           <td>${esc(op.workstation || "—")}</td>
           <td style="text-align:right">${esc(fmtQty(op.time_in_mins))}</td>
-          <td style="text-align:right">${esc(INR(op.hour_rate))}</td>
-          <td style="text-align:right">${esc(INR(op.cost))}</td>
+          <td style="text-align:right">${esc(OMR(op.hour_rate))}</td>
+          <td style="text-align:right">${esc(OMR(op.cost))}</td>
         </tr>`).join("")
     : "";
 
@@ -1858,8 +1858,8 @@ function printBom() {
           <td>${esc(sc.item_code)}</td>
           <td>${esc(itemNameFor(sc.item_code) || sc.item_code)}</td>
           <td style="text-align:right">${esc(fmtQty(sc.qty))}</td>
-          <td style="text-align:right">${esc(INR(sc.rate))}</td>
-          <td style="text-align:right">${esc(INR(sc.amount))}</td>
+          <td style="text-align:right">${esc(OMR(sc.rate))}</td>
+          <td style="text-align:right">${esc(OMR(sc.amount))}</td>
         </tr>`).join("")
     : "";
 
@@ -1936,10 +1936,10 @@ function printBom() {
 
           <h2>Cost Summary</h2>
           <div class="costs">
-            <div><span>Raw Material Cost</span><b>${esc(INR(b.rm_cost))}</b></div>
-            <div><span>Operating Cost</span><b>${esc(INR(b.op_cost))}</b></div>
-            <div><span>Scrap Value</span><b style="color:#C92A2A">-${esc(INR(b.scrap_value))}</b></div>
-            <div><span>Total Cost</span><b style="color:#1e3a5f">${esc(INR(b.total_cost))}</b></div>
+            <div><span>Raw Material Cost</span><b>${esc(OMR(b.rm_cost))}</b></div>
+            <div><span>Operating Cost</span><b>${esc(OMR(b.op_cost))}</b></div>
+            <div><span>Scrap Value</span><b style="color:#C92A2A">-${esc(OMR(b.scrap_value))}</b></div>
+            <div><span>Total Cost</span><b style="color:#1e3a5f">${esc(OMR(b.total_cost))}</b></div>
           </div>
         </div></div>
       </body>
@@ -1954,7 +1954,7 @@ function printBom() {
 }
 
 // ── UTIL ─────────────────────────────────────────────────────
-function INR(n) {
+function OMR(n) {
   if (n == null || isNaN(n)) return "OMR 0.00";
   return "OMR " + Number(n).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }

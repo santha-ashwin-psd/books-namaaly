@@ -515,7 +515,7 @@ function exportCSV() {
 }
 
 function fmtCur(v) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(flt(v));
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "OMR", minimumFractionDigits: 2 }).format(flt(v));
 }
 
 onMounted(() => { load(); loadExpenseAccounts(); loadSuppliers(); });

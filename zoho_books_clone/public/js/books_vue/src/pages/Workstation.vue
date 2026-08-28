@@ -299,7 +299,7 @@ function typeIcon(type) {
 }
 
 function fmtCurrency(val) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val || 0);
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'OMR', maximumFractionDigits: 0 }).format(val || 0);
 }
 
 function selectWorkstation(name) {

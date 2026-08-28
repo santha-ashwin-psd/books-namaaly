@@ -450,7 +450,7 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px;overflow:hidden;text-overflow:ellipsis">{{ selectedCustomer.default_currency || "INR" }}</td>
+                    <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px;overflow:hidden;text-overflow:ellipsis">{{ selectedCustomer.default_currency || "OMR" }}</td>
                     <td style="font-size:13px;font-weight:600;text-align:right;padding:10px 12px;overflow:hidden;text-overflow:ellipsis" :style="{color: selectedCustomer.outstanding>0?'#dc2626':'#111827'}">{{fmt(selectedCustomer.outstanding||0)}}</td>
                     <td style="font-size:13px;font-weight:600;color:#059669;text-align:right;padding:10px 16px;overflow:hidden;text-overflow:ellipsis">{{ fmt(selectedCustomer.unused_credits||0) }}</td>
                   </tr>
@@ -481,7 +481,7 @@
               <div v-show="!custSectionCollapsed.otherDetails" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;justify-content:space-between;font-size:12.5px">
                   <span style="color:#6B7280">Default Currency</span>
-                  <span style="font-weight:600;color:#111827">{{selectedCustomer.default_currency||'INR'}}</span>
+                  <span style="font-weight:600;color:#111827">{{selectedCustomer.default_currency||'OMR'}}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:12.5px;align-items:center">
                   <span style="color:#6B7280">Portal Status</span>
@@ -1537,7 +1537,7 @@ const form = reactive({
   first_name: "", last_name: "", company_name: "",
   customer_group: "", territory: "",
   gst_treatment: "Registered Business",
-  tax_id: "", default_currency: "INR", credit_limit: 0,
+  tax_id: "", default_currency: "OMR", credit_limit: 0,
   email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
   dispatched_through: "", destination: "",
   address_line1: "", address_line2: "",
@@ -1784,7 +1784,7 @@ function resetForm() {
     first_name: "", last_name: "", company_name: "",
     customer_group: "", territory: "",
     gst_treatment: "Registered Business",
-    tax_id: "", default_currency: "INR", credit_limit: 0,
+    tax_id: "", default_currency: "OMR", credit_limit: 0,
     email_id: "", mobile_code: "+91", mobile_no: "", phone: "", website: "",
     dispatched_through: "", destination: "",
     address_line1: "", address_line2: "", city: "", state: "", pincode: "", country: "Oman",
@@ -1821,7 +1821,7 @@ async function openEdit(name) {
       territory: doc.territory || "",
       gst_treatment: doc.gst_treatment || "Registered Business",
       tax_id: doc.tax_id || "",
-      default_currency: doc.default_currency || "INR",
+      default_currency: doc.default_currency || "OMR",
       credit_limit: doc.credit_limit || 0,
       email_id: doc.email_id || "",
       dispatched_through: doc.dispatched_through || "",
@@ -2757,7 +2757,7 @@ function buildImportPayload(row, isUpdate) {
   setIf("city", row.city);
   setIf("state", row.state);
   if (!isUpdate) {
-    p.default_currency = "INR";
+    p.default_currency = "OMR";
     p.gst_treatment = row.gstin ? "Registered Business" : "Unregistered Business";
   } else if (row.gstin) {
     p.gst_treatment = "Registered Business";

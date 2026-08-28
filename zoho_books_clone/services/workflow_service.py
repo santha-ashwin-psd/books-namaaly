@@ -229,7 +229,7 @@ def create_invoice_from_order(sales_order: str) -> dict:
         "customer": so.customer,
         "posting_date": today(),
         "company": so.company,
-        "currency": getattr(so, "currency", "INR"),
+        "currency": getattr(so, "currency", "OMR"),
         "sales_order": sales_order,
         "items": items,
     })
@@ -393,7 +393,7 @@ def create_bill_from_order(purchase_order: str) -> dict:
         "supplier":        po.supplier,
         "posting_date":    today(),
         "company":         po.company,
-        "currency":        getattr(po, "currency", "INR"),
+        "currency":        getattr(po, "currency", "OMR"),
         "purchase_order":  purchase_order,
         "items": [
             {

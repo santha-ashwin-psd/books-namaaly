@@ -1154,7 +1154,7 @@ const TEMPLATES = [
   { key: "modern",  label: "Modern"  },
   { key: "minimal", label: "Minimal" },
 ];
-const CURRENCY_SYMBOLS = { INR: "₹", OMR: "OMR " };
+const CURRENCY_SYMBOLS = { OMR: "OMR ", OMR: "OMR " };
 
 // ── Tax presets ──────────────────────────────────────────────────────
 const TAX_PRESETS = [
@@ -1218,21 +1218,21 @@ function validTillDefault() {
   return d.toISOString().slice(0, 10);
 }
 function fmtCur(v, currency) {
-  const cur = currency || form.currency || "INR";
-  const locale = cur === "INR" ? "en-IN" : "en-US";
+  const cur = currency || form.currency || "OMR";
+  const locale = cur === "OMR" ? "en-IN" : "en-US";
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency", currency: cur, minimumFractionDigits: 2,
     }).format(flt(v));
   } catch {
     return new Intl.NumberFormat("en-IN", {
-      style: "currency", currency: "INR", minimumFractionDigits: 2,
+      style: "currency", currency: "OMR", minimumFractionDigits: 2,
     }).format(flt(v));
   }
 }
 function fmtDocCur(v, doc) {
-  const cur = doc?.currency || "INR";
-  const locale = cur === "INR" ? "en-IN" : "en-US";
+  const cur = doc?.currency || "OMR";
+  const locale = cur === "OMR" ? "en-IN" : "en-US";
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency", currency: cur, minimumFractionDigits: 2,
@@ -1615,7 +1615,7 @@ async function onCustomerChange() {
   addressLoading.value = true;
   try {
     const custDoc = await apiGet("Customer", form.customer);
-    form.currency = "INR";
+    form.currency = "OMR";
     form.exchange_rate = 1;
     await fetchCustomerAddresses(form.customer);
     // Auto-select first billing address if available
@@ -1928,7 +1928,7 @@ async function saveQT(newStatus, andNew = false) {
       billing_address: form.billing_address || "", billing_address_name: form.billing_address_name || "",
       shipping_address: form.shipping_address || "", shipping_address_name: form.shipping_address_name || "",
       currency: form.currency || "OMR",
-      exchange_rate: form.currency === "INR" ? 1 : (flt(form.exchange_rate) || 1),
+      exchange_rate: form.currency === "OMR" ? 1 : (flt(form.exchange_rate) || 1),
       items: qtItems, taxes,
       logo: resolvedLogoPath,
     };

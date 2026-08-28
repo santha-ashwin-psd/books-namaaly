@@ -59,15 +59,15 @@ function _esc(s) {
     c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function _currencySymbol(currency) {
-  return (currency && currency !== "INR") ? currency : "₹";
+  return (currency && currency !== "OMR") ? currency : "OMR ";
 }
 function _fmt(v, currency) {
-  const symbol = (currency && currency !== "INR") ? (currency + " ") : "₹";
+  const symbol = (currency && currency !== "OMR") ? (currency + " ") : "OMR ";
   return symbol + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 // Plain number, no currency symbol — used inside the Classic template's item
 // table / totals / HSN summary, where the currency is already indicated once
-// in the column header ("Rate (₹)", "Amount (₹)", …), matching the reference
+// in the column header ("Rate (OMR)", "Amount (OMR)", …), matching the reference
 // invoice which never repeats the symbol on data rows.
 function _fmtNum(v) {
   return Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,7 +81,7 @@ function _fmtDocDate(d) {
 }
 function _numberToWords(n) {
   n = Math.round(Number(n) || 0);
-  if (n === 0) return "Rupees Zero Only";
+  if (n === 0) return "Rials Zero Only";
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
@@ -102,7 +102,7 @@ function _numberToWords(n) {
   if (lakh) parts.push(three(lakh) + " Lakh");
   if (thousand) parts.push(three(thousand) + " Thousand");
   if (rest) parts.push(three(rest));
-  return "Rupees " + parts.join(" ") + " Only";
+  return "Rials " + parts.join(" ") + " Only";
 }
 function _today() {
   return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -114,7 +114,7 @@ function _bulletList(text) {
   return `<ul>${lines.map(l => `<li>${_esc(l)}</li>`).join("")}</ul>`;
 }
 // Group line items by HSN/SAC code for the print footer's tax-rate summary
-// table (HSN/SAC Code | Taxable | CGST% | CGST₹ | SGST% | SGST₹, or IGST
+// table (HSN/SAC Code | Taxable | CGST% | CGSTOMR | SGST% | SGSTOMR , or IGST
 // variant). Amounts are derived from each item's taxable_amount × rate,
 // since that's what the per-item CGST/SGST/IGST % columns are computed from.
 function _hsnSummary(items) {
@@ -160,7 +160,7 @@ function _formatAddrLines(raw) {
 function _renderClassic(doc, cfg) {
   const brand    = _state.brandColor;
   const logo     = _logoSrc(_state.logo);
-  const currency = doc.currency || "INR";
+  const currency = doc.currency || "OMR";
   const netTotal = doc.net_total != null ? doc.net_total
     : (doc.grand_total || 0) - (doc.total_taxes_and_charges ?? doc.total_tax ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0));
   const party    = doc[cfg.partyField] || doc.customer || doc.supplier || "";
@@ -199,7 +199,7 @@ function _renderClassic(doc, cfg) {
     </tr>`).join("");
   const taxRows = (doc.taxes || []).map(t => {
     const label = (t.description || t.account_head || "Tax").replace(/[@(]?\s*[\d.]+\s*%\)?/g, "").replace(/\(\s*\)/g, "").trim();
-    return `<div class="row"><span>Add ${_esc(label)} (₹)</span><span>${_fmtNum(t.tax_amount || 0)}</span></div>`;
+    return `<div class="row"><span>Add ${_esc(label)} (OMR)</span><span>${_fmtNum(t.tax_amount || 0)}</span></div>`;
   }).join("");
   const colspan = 6 + (cfg.includeHsn ? 1 : 0) + (cfg.includeDiscount ? 1 : 0) + (includeMrp ? 1 : 0) + (includeGst ? (hasIgst ? 2 : 3) : 0);
   const hsnRows = includeGst ? _hsnSummary(doc.items) : [];
@@ -404,11 +404,11 @@ function _renderClassic(doc, cfg) {
     </div>
     <div class="bf-cell bf-cell-totals">
       <div class="tot-figs">
-        <div class="row"><span>Total Amount before Tax (₹)</span><span>${_fmtNum(netTotal)}</span></div>
+        <div class="row"><span>Total Amount before Tax (OMR)</span><span>${_fmtNum(netTotal)}</span></div>
         ${taxRows}
-        ${doc.discount_amount ? `<div class="row"><span style="color:#b91c1c">Discount (₹)</span><span style="color:#b91c1c">− ${_fmtNum(doc.discount_amount)}</span></div>` : ""}
-        ${roundOff ? `<div class="row"><span>Round Off (₹)</span><span>${roundOff > 0 ? "" : "− "}${_fmtNum(Math.abs(roundOff))}</span></div>` : ""}
-        <div class="row grand"><span>Grand Total (₹)</span><span>${_fmtNum(doc.grand_total)}</span></div>
+        ${doc.discount_amount ? `<div class="row"><span style="color:#b91c1c">Discount (OMR)</span><span style="color:#b91c1c">− ${_fmtNum(doc.discount_amount)}</span></div>` : ""}
+        ${roundOff ? `<div class="row"><span>Round Off (OMR)</span><span>${roundOff > 0 ? "" : "− "}${_fmtNum(Math.abs(roundOff))}</span></div>` : ""}
+        <div class="row grand"><span>Grand Total (OMR)</span><span>${_fmtNum(doc.grand_total)}</span></div>
       </div>
     </div>
   </div>
@@ -426,8 +426,8 @@ function _renderClassic(doc, cfg) {
 </div>`;
   })()}
   ${hsnRows.length ? `<table class="hsn-tbl"><thead><tr>
-    <th>HSN/SAC Code</th><th class="r">Taxable (₹)</th>
-    ${hasIgst ? `<th class="r">IGST %</th><th class="r">IGST (₹)</th>` : `<th class="r">CGST %</th><th class="r">CGST (₹)</th><th class="r">SGST %</th><th class="r">SGST (₹)</th>`}
+    <th>HSN/SAC Code</th><th class="r">Taxable (OMR)</th>
+    ${hasIgst ? `<th class="r">IGST %</th><th class="r">IGST (OMR)</th>` : `<th class="r">CGST %</th><th class="r">CGST (OMR)</th><th class="r">SGST %</th><th class="r">SGST (OMR)</th>`}
   </tr></thead><tbody>
     ${hsnRows.map(r => `<tr><td>${_esc(r.hsn)}</td><td class="r">${_fmtNum(r.taxable)}</td>
       ${hasIgst ? `<td class="r">${r.igstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.igstAmt)}</td>` : `<td class="r">${r.cgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.cgstAmt)}</td><td class="r">${r.sgstRate.toFixed(2)}%</td><td class="r">${_fmtNum(r.sgstAmt)}</td>`}
@@ -460,7 +460,7 @@ function _renderClassic(doc, cfg) {
 function _renderModern(doc, cfg) {
   const brand    = _state.brandColor;
   const logo     = _logoSrc(_state.logo);
-  const currency = doc.currency || "INR";
+  const currency = doc.currency || "OMR";
   const netTotal = doc.net_total != null ? doc.net_total
     : (doc.grand_total || 0) - (doc.total_taxes_and_charges ?? doc.total_tax ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0));
   const party    = doc[cfg.partyField] || doc.customer || doc.supplier || "";
@@ -577,7 +577,7 @@ function _renderModern(doc, cfg) {
 function _renderMinimal(doc, cfg) {
   const brand    = _state.brandColor;
   const logo     = _logoSrc(_state.logo);
-  const currency = doc.currency || "INR";
+  const currency = doc.currency || "OMR";
   const netTotal = doc.net_total != null ? doc.net_total
     : (doc.grand_total || 0) - (doc.total_taxes_and_charges ?? doc.total_tax ?? (doc.taxes || []).reduce((s, t) => s + (t.tax_amount || 0), 0));
   const party    = doc[cfg.partyField] || doc.customer || doc.supplier || "";

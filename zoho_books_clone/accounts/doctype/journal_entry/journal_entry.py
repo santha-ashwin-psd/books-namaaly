@@ -35,8 +35,8 @@ class JournalEntry(Document):
                 "Journal Entry is not balanced — "
                 "Total Debit {0} ≠ Total Credit {1}."
             ).format(
-                frappe.bold(f"₹{total_debit:,.2f}"),
-                frappe.bold(f"₹{total_credit:,.2f}"),
+                frappe.bold(f"OMR {total_debit:,.2f}"),
+                frappe.bold(f"OMR {total_credit:,.2f}"),
             ))
         self.total_debit  = round(total_debit,  2)
         self.total_credit = round(total_credit, 2)

@@ -447,7 +447,7 @@
       </div>
       {% endif %}
 
-      {% if cur == "INR" %}
+      {% if cur == "OMR" %}
       <div class="qr-card">
         <div class="card-title">Pay via UPI</div>
         <div id="qr-canvas"></div>
@@ -533,7 +533,7 @@
 
 </div>
 
-{% if cur == "INR" %}
+{% if cur == "OMR" %}
 <script>
 (function() {
   try {
@@ -545,7 +545,7 @@
     var upiString = "upi://pay?pa=" + encodeURIComponent(upiId)
       + "&pn=" + encodeURIComponent(companyName)
       + "&am=" + encodeURIComponent(amountText)
-      + "&cu=INR"
+      + "&cu=OMR"
       + "&tn=" + encodeURIComponent("Payment for " + invName);
     var container = document.getElementById("qr-canvas");
     new QRCode(container, {

@@ -1,6 +1,6 @@
 import { ref } from "vue";
 
-// INR-only: exchange rate is always 1. Stub retained so existing imports don't break.
+// OMR-only: exchange rate is always 1. Stub retained so existing imports don't break.
 export function useExchangeRate() {
   const rateLoading = ref(false);
   const rateSource  = ref("identity");

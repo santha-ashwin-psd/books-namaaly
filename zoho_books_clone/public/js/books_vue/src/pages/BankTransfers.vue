@@ -208,7 +208,7 @@
             voucher-type="Bank Transaction"
             :voucher-no="viewDoc.from_transaction"
             label="Bank Transfer"
-            :currency="viewDoc.currency || 'INR'"
+            :currency="viewDoc.currency || 'OMR'"
           />
         </div>
         <div class="btr-dfooter">

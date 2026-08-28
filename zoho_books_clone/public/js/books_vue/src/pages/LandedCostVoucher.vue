@@ -54,7 +54,7 @@
               <span v-else>—</span>
             </td>
             <td @click="openView(row)">{{ row.distribution_method || '—' }}</td>
-            <td @click="openView(row)" class="ta-r mono-sm">{{ INR(row.total_charges) }}</td>
+            <td @click="openView(row)" class="ta-r mono-sm">{{ OMR(row.total_charges) }}</td>
             <td @click="openView(row)">
               <span class="inv-status-badge" :class="statusClass(row)">{{ statusLabel(row) }}</span>
             </td>
@@ -114,7 +114,7 @@
 
             <div v-if="lcv.docstatus===1" class="lcv-notice">
               <span v-html="icon('check',14)"></span>
-              Submitted — {{ INR(lcv.total_capitalized_amount) }} of {{ INR(lcv.total_charges) }} in charges has been capitalized into stock value.
+              Submitted — {{ OMR(lcv.total_capitalized_amount) }} of {{ OMR(lcv.total_charges) }} in charges has been capitalized into stock value.
               <span v-if="flt(lcv.total_capitalized_amount) < flt(lcv.total_charges)">
                 The remainder stays booked as a period expense (some received stock was already issued before this voucher was submitted).
               </span>
@@ -263,11 +263,11 @@
                     <td>{{ row.item_name || row.item_code }}<div class="mono-sm" style="font-size:11px;color:#9ca3af">{{ row.item_code }}</div></td>
                     <td>{{ row.warehouse }}</td>
                     <td class="ta-r mono-sm">{{ row.received_qty }}</td>
-                    <td class="ta-r mono-sm">{{ INR(row.purchase_amount) }}</td>
-                    <td class="ta-r mono-sm">{{ INR(row.valuation_rate) }}</td>
-                    <td class="ta-r mono-sm" style="font-weight:700;color:#1e3a5f">{{ INR(row.allocated_amount) }}</td>
-                    <td class="ta-r mono-sm" style="font-weight:700;color:#059669">{{ INR(row.new_valuation_rate) }}</td>
-                    <td v-if="lcv.docstatus===1" class="ta-r mono-sm">{{ INR(row.capitalized_amount) }}</td>
+                    <td class="ta-r mono-sm">{{ OMR(row.purchase_amount) }}</td>
+                    <td class="ta-r mono-sm">{{ OMR(row.valuation_rate) }}</td>
+                    <td class="ta-r mono-sm" style="font-weight:700;color:#1e3a5f">{{ OMR(row.allocated_amount) }}</td>
+                    <td class="ta-r mono-sm" style="font-weight:700;color:#059669">{{ OMR(row.new_valuation_rate) }}</td>
+                    <td v-if="lcv.docstatus===1" class="ta-r mono-sm">{{ OMR(row.capitalized_amount) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -278,15 +278,15 @@
             <div class="lcv-grid" style="margin-top:20px">
               <div>
                 <div class="inv-lbl">Total Purchase Amount</div>
-                <div class="mono-sm" style="font-size:14px;font-weight:700">{{ INR(lcv.total_purchase_amount) }}</div>
+                <div class="mono-sm" style="font-size:14px;font-weight:700">{{ OMR(lcv.total_purchase_amount) }}</div>
               </div>
               <div>
                 <div class="inv-lbl">Total Charges</div>
-                <div class="mono-sm" style="font-size:14px;font-weight:700;color:#1e3a5f">{{ INR(lcv.total_charges) }}</div>
+                <div class="mono-sm" style="font-size:14px;font-weight:700;color:#1e3a5f">{{ OMR(lcv.total_charges) }}</div>
               </div>
               <div v-if="lcv.docstatus===1">
                 <div class="inv-lbl">Total Capitalized</div>
-                <div class="mono-sm" style="font-size:14px;font-weight:700;color:#059669">{{ INR(lcv.total_capitalized_amount) }}</div>
+                <div class="mono-sm" style="font-size:14px;font-weight:700;color:#059669">{{ OMR(lcv.total_capitalized_amount) }}</div>
               </div>
             </div>
 
@@ -301,7 +301,7 @@
                 voucher-type="Landed Cost Voucher"
                 :voucher-no="lcv.name"
                 label="Landed Cost Voucher"
-                :currency="lcv.currency || 'INR'"
+                :currency="lcv.currency || 'OMR'"
               />
             </template>
 
@@ -786,7 +786,7 @@ async function amendLcv() {
 }
 
 // ── UTIL ─────────────────────────────────────────────────────
-function INR(n) {
+function OMR(n) {
   if (n == null || isNaN(n)) return "OMR 0.00";
   return "OMR " + Number(n).toLocaleString("en-OM", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }

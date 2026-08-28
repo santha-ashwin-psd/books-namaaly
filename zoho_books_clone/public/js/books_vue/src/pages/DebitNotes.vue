@@ -694,7 +694,7 @@
               voucher-type="Purchase Invoice"
               :voucher-no="viewDoc.name"
               label="Debit Note"
-              :currency="viewDoc.currency || 'INR'"
+              :currency="viewDoc.currency || 'OMR'"
             />
           </template>
           <template v-if="viewTab==='details'">

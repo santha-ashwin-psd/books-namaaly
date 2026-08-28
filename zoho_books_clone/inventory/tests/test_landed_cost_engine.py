@@ -118,7 +118,7 @@ class TestComputeCapitalizableAmount(unittest.TestCase):
         )
 
     def test_partially_on_hand_capitalizes_proportional_share(self):
-        # 40 of 100 units still on hand -> 40% of the ₹500 charge.
+        # 40 of 100 units still on hand -> 40% of the OMR 500 charge.
         self.assertAlmostEqual(
             compute_capitalizable_amount(allocated_amount=500, received_qty=100, current_qty=40),
             200.0, places=2,
@@ -149,8 +149,8 @@ class TestComputeCapitalizableAmount(unittest.TestCase):
         )
 
     def test_matches_the_client_example(self):
-        # ABC Herbs raw materials: ₹10,000 base, ₹700 landed cost, all still
-        # on hand -> the full ₹700 capitalizes, landed cost = ₹10,700.
+        # ABC Herbs raw materials: OMR 10,000 base, OMR 700 landed cost, all still
+        # on hand -> the full OMR 700 capitalizes, landed cost = OMR 10,700.
         capitalized = compute_capitalizable_amount(
             allocated_amount=700, received_qty=100, current_qty=100
         )

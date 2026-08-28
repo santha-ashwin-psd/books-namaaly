@@ -795,7 +795,7 @@ input,button,select,textarea{font-family:var(--font)}
           <div class="fg">
             <label class="fl">Currency</label>
             <select class="fi" id="ob-currency">
-              <option value="INR">₹ INR — Indian Rupee</option>
+              <option value="OMR">OMR OMR — Omani Rial</option>
               <option value="USD">$ USD — US Dollar</option>
               <option value="EUR">€ EUR — Euro</option>
               <option value="GBP">£ GBP — British Pound</option>
@@ -1678,7 +1678,7 @@ async function submitOnboarding() {
       gstin: gstReg ? (document.getElementById("ob-gstin")?.value || "").trim() : "",
       gst_state: gstReg ? (document.getElementById("ob-state")?.value || "") : "",
       invoice_prefix: (document.getElementById("ob-prefix").value || "INV").trim(),
-      currency: document.getElementById("ob-currency").value || "INR",
+      currency: document.getElementById("ob-currency").value || "OMR",
       fy_start: document.getElementById("ob-fy-start").value || "04-01",
     });
   } catch(e) { /* non-blocking */ }

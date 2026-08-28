@@ -186,7 +186,7 @@
       </div>
       <div class="bk-kpi-card">
         <div class="bk-kpi-inner">
-          <div class="bk-kpi-icon" style="background:#FFFBEB" v-html="icon('rupee',18)"></div>
+          <div class="bk-kpi-icon" style="background:#FFFBEB" v-html="icon('rial',18)"></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Commission Earned</div>
             <div class="bk-kpi-value">{{ perfLoading ? '…' : fmtCur(performance.commission_earned||0) }}</div>
@@ -450,7 +450,7 @@ const kpiCards = computed(() => [
     value: rows.value.length
       ? (rows.value.reduce((a, s) => a + (Number(s.commission_rate) || 0), 0) / rows.value.length).toFixed(1) + "%"
       : "0%",
-    iconBg: "#FFFBEB", icon: icon("rupee", 18),
+    iconBg: "#FFFBEB", icon: icon("rial", 18),
   },
 ]);
 

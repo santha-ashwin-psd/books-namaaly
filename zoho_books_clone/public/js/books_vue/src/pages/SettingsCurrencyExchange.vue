@@ -390,7 +390,7 @@ const currencySummary = computed(() => {
     { label: "Total Currencies", value: currencies.value.length, sub: "configured", color: "#1A237E", bg: "#E8EAF6", border: "#c5cae9" },
     { label: "Active",            value: active,                  sub: "in use",      color: "#2F9E44", bg: "#EBFBEE", border: "#b2f2bb" },
     { label: "Avg. Daily Change", value: (avgChg >= 0 ? "+" : "") + avgChg.toFixed(2) + "%", sub: "vs yesterday", color: avgChg >= 0 ? "#2F9E44" : "#C92A2A", bg: avgChg >= 0 ? "#EBFBEE" : "#FFF5F5", border: avgChg >= 0 ? "#b2f2bb" : "#ffc9c9" },
-    { label: "Base Currency",     value: "INR",                   sub: "Indian Rupee",color: "#E67700", bg: "#FFF8F0", border: "#ffd8a8" },
+    { label: "Base Currency",     value: "OMR",                   sub: "Omani Rial",color: "#E67700", bg: "#FFF8F0", border: "#ffd8a8" },
   ];
 });
 
@@ -403,14 +403,14 @@ const filteredHistory = computed(() =>
   })
 );
 
-const conv = reactive({ from: "USD", to: "INR", amount: 1, result: 83.25 });
+const conv = reactive({ from: "USD", to: "OMR", amount: 1, result: 83.25 });
 
 const convRate = computed(() => {
-  if (conv.from === "INR") {
+  if (conv.from === "OMR") {
     const tgt = currencies.value.find((c) => c.code === conv.to);
     return tgt ? 1 / tgt.mid : 1;
   }
-  if (conv.to === "INR") {
+  if (conv.to === "OMR") {
     const src = currencies.value.find((c) => c.code === conv.from);
     return src ? src.mid : 1;
   }
@@ -422,7 +422,7 @@ const convRate = computed(() => {
 });
 
 const allConvCurrencies = computed(() => [
-  { code: "INR", name: "Indian Rupee" },
+  { code: "OMR", name: "Omani Rial" },
   ...currencies.value.map((c) => ({ code: c.code, name: c.name })),
 ]);
 
@@ -431,8 +431,8 @@ const quickRefCurrencies = computed(() =>
 );
 
 function quickRefValue(c) {
-  if (conv.from === "INR") return c.mid ? 1 / c.mid : 0;
-  if (c.code === "INR") {
+  if (conv.from === "OMR") return c.mid ? 1 / c.mid : 0;
+  if (c.code === "OMR") {
     const src = currencies.value.find((x) => x.code === conv.from);
     return src ? src.mid : 1;
   }
@@ -495,7 +495,7 @@ async function saveCurrency() {
       if (c) Object.assign(c, { name: currForm.name, symbol: currForm.symbol, flag: currForm.flag, buy: currForm.buy, mid: currForm.mid, sell: currForm.sell, active: currForm.active });
     }
     try {
-      await apiSave({ doctype: "Currency Exchange", from_currency: currForm.code, to_currency: "INR", exchange_rate: currForm.mid });
+      await apiSave({ doctype: "Currency Exchange", from_currency: currForm.code, to_currency: "OMR", exchange_rate: currForm.mid });
     } catch {}
     toast("Currency saved", "success");
     showCurrDrawer.value = false;
@@ -517,7 +517,7 @@ async function saveRate() {
     const c = currencies.value.find((x) => x.code === rateForm.currency);
     if (c) { c.buy = rateForm.buy; c.mid = rateForm.mid; c.sell = rateForm.sell; c.change = parseFloat(chg.toFixed(2)); }
     try {
-      await apiSave({ doctype: "Currency Exchange", from_currency: rateForm.currency, to_currency: "INR", exchange_rate: rateForm.mid, date: rateForm.date });
+      await apiSave({ doctype: "Currency Exchange", from_currency: rateForm.currency, to_currency: "OMR", exchange_rate: rateForm.mid, date: rateForm.date });
     } catch {}
     toast("Rate added", "success");
     showRateDrawer.value = false;

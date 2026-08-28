@@ -129,7 +129,7 @@ def _get_opening_balance_equity_account(company: str) -> str | None:
             "parent_account": equity_parent or "",
             "is_group":       0,
             "company":        company,
-            "currency":       "INR",
+            "currency":       "OMR",
         })
         acc.insert(ignore_permissions=True)
         return acc.name

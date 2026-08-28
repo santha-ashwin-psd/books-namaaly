@@ -170,7 +170,7 @@ def verify_signup_otp(email, otp):
         company_doc = frappe.new_doc("Books Company")
         company_doc.company_name = company_name
         company_doc.is_active = 1
-        company_doc.currency = "INR"
+        company_doc.currency = "OMR"
         company_doc.fiscal_year_start_month = "April"
         company_doc.email = email
         company_doc.insert(ignore_permissions=True)
@@ -394,7 +394,7 @@ def complete_onboarding(
     gstin="",
     gst_state="",
     invoice_prefix="INV",
-    currency="INR",
+    currency="OMR",
     fy_start="04-01",
 ):
     """Save initial company settings and bootstrap COA + FY after the onboarding wizard."""
@@ -417,7 +417,7 @@ def complete_onboarding(
                 ("gstin",            gstin),
                 ("gst_state",        gst_state),
                 ("invoice_prefix",   invoice_prefix or "INV"),
-                ("default_currency", currency or "INR"),
+                ("default_currency", currency or "OMR"),
             ]:
                 if val:
                     cur = frappe.db.get_single_value("Books Settings", field)

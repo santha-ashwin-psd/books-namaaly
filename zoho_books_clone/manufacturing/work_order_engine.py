@@ -1476,7 +1476,7 @@ def recalculate_operating_cost(work_order, refresh_hour_rates=False):
     Work Order whose Operations table had hour_rate = 0 at the moment it was
     loaded from the BOM (e.g. the BOM's operation didn't have a rate set
     yet, or an older BOM version was used) stays stuck at
-    ₹0.00 Operating Cost forever with no natural trigger to fix it --
+    OMR 0.00 Operating Cost forever with no natural trigger to fix it --
     even after the BOM is corrected.
 
     refresh_hour_rates=True additionally re-pulls hour_rate from each row's

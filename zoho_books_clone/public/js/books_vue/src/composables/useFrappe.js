@@ -56,8 +56,8 @@ export function useFrappeList(doctype, opts = {}) {
   return { list, loading, error, fetch };
 }
 
-/** Format a number as INR currency */
-export function formatCurrency(val, currency = "INR") {
+/** Format a number as OMR currency */
+export function formatCurrency(val, currency = "OMR") {
   if (val == null) return "—";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",

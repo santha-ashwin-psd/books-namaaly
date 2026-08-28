@@ -348,7 +348,7 @@ def get_landed_cost_breakdown(pairs):
     """Read-only helper powering the landed-cost visibility in Stock Valuation
     and BOM raw-material rows: for each item_code+warehouse pair, split the
     current Bin.valuation_rate into a base (purchase) rate and a landed-cost
-    rate, so the UI can show "₹10,000 base + ₹700 landed = ₹10,700" instead of
+    rate, so the UI can show "OMR 10,000 base + OMR 700 landed = OMR 10,700" instead of
     just a single opaque number.
 
     The landed portion is derived from the same active Stock Ledger Entries

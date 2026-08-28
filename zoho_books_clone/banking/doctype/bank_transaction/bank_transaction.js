@@ -1,4 +1,3 @@
-
 frappe.ui.form.on("Bank Transaction", {
   refresh(frm) {
     if (frm.doc.docstatus === 1 && frm.doc.status === "Unreconciled") {
@@ -32,7 +31,7 @@ function _find_match(frm) {
         `<tr style="cursor:pointer" onclick="frappe.db.open_in_new_tab('Payment Entry','${m.name}')">
           <td style="padding:8px 12px">${m.name}</td>
           <td style="padding:8px 12px">${m.payment_date}</td>
-          <td style="padding:8px 12px;text-align:right">₹${flt(m.paid_amount).toLocaleString("en-IN",{minimumFractionDigits:2})}</td>
+          <td style="padding:8px 12px;text-align:right">OMR ${flt(m.paid_amount).toLocaleString("en-IN",{minimumFractionDigits:2})}</td>
           <td style="padding:8px 12px">${m.party || ""}</td>
         </tr>`
       ).join("");

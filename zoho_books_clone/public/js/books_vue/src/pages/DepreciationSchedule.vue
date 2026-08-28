@@ -31,7 +31,7 @@
       </div>
       <div class="bk-kpi-card">
         <div class="bk-kpi-inner">
-          <div class="bk-kpi-icon" style="background:#dcfce7"><span v-html="icon('rupee',22)"></span></div>
+          <div class="bk-kpi-icon" style="background:#dcfce7"><span v-html="icon('rial',22)"></span></div>
           <div class="bk-kpi-body">
             <div class="bk-kpi-label">Depreciable Value</div>
             <div class="bk-kpi-value bk-kpi-green" style="font-size:20px">{{ fmt(globalSum.cost) }}</div>

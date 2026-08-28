@@ -1,4 +1,3 @@
-
 /* ── Purchase Invoice — Full working JS ─────────────────────────────────── */
 
 frappe.ui.form.on("Purchase Invoice", {
@@ -143,7 +142,7 @@ function _pi_pay_progress(frm) {
   const paid=grand-flt(frm.doc.outstanding_amount);
   const pct=Math.min(100,(paid/grand)*100);
   const color=pct>=100?"#2F9E44":pct>0?"#E67700":"#C92A2A";
-  const fmt=n=>"₹"+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
+  const fmt=n=>"OMR "+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
   frm.layout?.wrapper?.prepend(
     $(`<div class="pi-pay-bar" style="background:#fff;border:1px solid #E8ECF0;border-radius:8px;
        padding:12px 20px;margin-bottom:10px;">

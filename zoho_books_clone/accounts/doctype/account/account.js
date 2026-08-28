@@ -1,11 +1,10 @@
-
 frappe.ui.form.on("Account", {
 
   onload(frm) {
     if (frm.is_new() && !frm.doc.company)
       frm.set_value("company", frappe.defaults.get_default("company"));
     if (frm.is_new() && !frm.doc.currency)
-      frm.set_value("currency", "INR");
+      frm.set_value("currency", "OMR");
   },
 
   setup(frm) {
@@ -25,7 +24,7 @@ frappe.ui.form.on("Account", {
       frappe.call({
         method: "get_account_balance", doc: frm.doc,
         callback({ message: m }) {
-          const fmt = n => "₹"+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
+          const fmt = n => "OMR "+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
           frappe.msgprint(`
             <table style="width:100%;border-collapse:collapse;font-size:14px">
               <tr><td style="padding:8px;color:#666">Total Debit</td>
@@ -47,7 +46,7 @@ frappe.ui.form.on("Account", {
       method: "get_account_balance", doc: frm.doc,
       callback({ message: m }) {
         if (!m) return;
-        const fmt = n => "₹"+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
+        const fmt = n => "OMR "+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2});
         frm.dashboard.add_section(`
           <div style="padding:8px 0;display:flex;gap:24px;font-size:13px;flex-wrap:wrap">
             <span><span style="color:#868E96">Debit: </span><b >${fmt(m.debit)}</b></span>

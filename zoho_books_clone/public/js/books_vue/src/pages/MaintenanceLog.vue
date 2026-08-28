@@ -66,7 +66,7 @@
     </div>
     <div class="bk-kpi-card clickable" @click="statusFilter='all'">
       <div class="bk-kpi-inner">
-        <div class="bk-kpi-icon" style="background:#dcfce7"><span v-html="icon('rupee',22)"></span></div>
+        <div class="bk-kpi-icon" style="background:#dcfce7"><span v-html="icon('rial',22)"></span></div>
         <div class="bk-kpi-body">
           <div class="bk-kpi-label">Total Cost</div>
           <div class="bk-kpi-value bk-kpi-green" style="font-size:20px">{{ fmt(totalCost) }}</div>
@@ -93,7 +93,7 @@
           <div class="bk-stat-label">Avg. Cost</div>
           <div class="bk-stat-value bk-kpi-green" style="font-size:16px">{{ fmt(avgCost) }}</div>
         </div>
-        <div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><span v-html="icon('rupee',18)"></span></div>
+        <div class="bk-stat-icon" style="background:#dcfce7;color:#16a34a"><span v-html="icon('rial',18)"></span></div>
       </div>
     </div>
     <div class="bk-stat-card">

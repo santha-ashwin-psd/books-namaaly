@@ -1,4 +1,3 @@
-
 /* ── Payment Entry — Full working JS ──────────────────────────────────── */
 
 frappe.ui.form.on("Payment Entry", {
@@ -129,4 +128,4 @@ function _update_alloc_banner(frm) {
   );
 }
 
-function _fmt(n) { return "₹"+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2}); }
+function _fmt(n) { return "OMR "+flt(n).toLocaleString("en-IN",{minimumFractionDigits:2}); }

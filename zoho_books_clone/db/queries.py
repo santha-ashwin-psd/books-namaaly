@@ -1139,7 +1139,7 @@ def get_customer_statement(customer: str, company: str = "") -> dict:
     row in `invoices` — so it's visible in the statement, same as a real
     invoice — and folded into `total_outstanding`. Previously this endpoint
     ignored opening_balance entirely, so a customer with only an opening
-    balance and no invoices showed ₹0 outstanding here even though the
+    balance and no invoices showed OMR 0 outstanding here even though the
     Customers list page (a different endpoint) showed it correctly.
 
     Uses `get_opening_balance_outstanding` (net of any Payment Entry already
@@ -1213,7 +1213,7 @@ def send_customer_statement(customer: str, company: str) -> dict:
     cname = data["customer_name"]
     rows_html = "".join(
         f"<tr><td>{i['name']}</td><td>{i['posting_date']}</td><td>{i['due_date']}</td>"
-        f"<td style='text-align:right'>₹{flt(i['outstanding_amount']):,.2f}</td>"
+        f"<td style='text-align:right'>OMR {flt(i['outstanding_amount']):,.2f}</td>"
         f"<td style='color:{'#c92a2a' if i['is_overdue'] else '#2f9e44'}'>"
         f"{'Overdue' if i['is_overdue'] else 'Due'}</td></tr>"
         for i in data["invoices"]
@@ -1231,7 +1231,7 @@ def send_customer_statement(customer: str, company: str) -> dict:
   <tfoot>
     <tr style="font-weight:700;background:#f3f4f6">
       <td colspan="3">Total Outstanding</td>
-      <td style="text-align:right">₹{data['total_outstanding']:,.2f}</td><td></td>
+      <td style="text-align:right">OMR {data['total_outstanding']:,.2f}</td><td></td>
     </tr>
   </tfoot>
 </table>

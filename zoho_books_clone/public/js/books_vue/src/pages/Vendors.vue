@@ -462,7 +462,7 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px">{{ selectedVendor.default_currency || "INR" }}</td>
+                    <td style="font-size:13px;font-weight:600;color:#374151;padding:10px 16px">{{ selectedVendor.default_currency || "OMR" }}</td>
                     <td style="font-size:13px;font-weight:600;color:#E67700;text-align:right;padding:10px 12px;">{{ fmtCur(vendorSummary.outstanding || 0) }}</td>
                     <td style="font-size:13px;font-weight:600;color:#059669;text-align:right;padding:10px 16px;">{{ fmtCur(vendorSummary.dn_credit || 0) }}</td>
                   </tr>
@@ -494,7 +494,7 @@
               <div v-show="!collapsed.otherDetails" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
                 <div style="display:flex;justify-content:space-between;font-size:12.5px">
                   <span style="color:#6B7280">Default Currency</span>
-                  <span style="font-weight:600;color:#111827">{{selectedVendor.default_currency||'INR'}}</span>
+                  <span style="font-weight:600;color:#111827">{{selectedVendor.default_currency||'OMR'}}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:12.5px;align-items:center">
                   <span style="color:#6B7280">Portal Status</span>
@@ -998,7 +998,7 @@
             <div>
               <label class="inv-lbl">Default Currency</label>
               <select v-model="form.default_currency" class="inv-fi" style="cursor:pointer">
-                <option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option>
+                <option>OMR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option>
               </select>
             </div>
           </div>
@@ -1365,7 +1365,7 @@ async function openEdit(name) {
       supplier_type: doc.supplier_type || "Company",
       supplier_group: doc.supplier_group || "",
       tax_id: doc.tax_id || "",
-      default_currency: doc.default_currency || "INR",
+      default_currency: doc.default_currency || "OMR",
       payment_terms: doc.payment_terms || "",
       email_id: doc.email_id || "",
       mobile_code: mno.startsWith("+") && mno.includes(" ") ? mno.split(" ")[0] : "+91",
@@ -2137,7 +2137,7 @@ function buildImportPayload(row, isUpdate) {
   setIf("city", row.city);
   setIf("state", row.state);
   if (!isUpdate) {
-    p.default_currency = "INR";
+    p.default_currency = "OMR";
     p.gst_treatment = row.gstin ? "Registered Business" : "Unregistered Business";
   } else if (row.gstin) {
     p.gst_treatment = "Registered Business";

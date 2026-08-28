@@ -43,7 +43,7 @@ import SettingsOrganization  from "./pages/SettingsOrganization.vue";
 import SettingsSecurity      from "./pages/SettingsSecurity.vue";
 import SettingsIntegrations  from "./pages/SettingsIntegrations.vue";
 import SettingsSSO           from "./pages/SettingsSSO.vue";
-// import SettingsCurrencyExchange from "./pages/SettingsCurrencyExchange.vue"; // INR-only: hidden
+// import SettingsCurrencyExchange from "./pages/SettingsCurrencyExchange.vue"; // OMR-only: hidden
 import ChartOfAccounts        from "./pages/ChartOfAccounts.vue";
 import JournalEntries         from "./pages/JournalEntries.vue";
 import OpeningBalances        from "./pages/OpeningBalances.vue";
@@ -309,7 +309,7 @@ const routes = [
   { path: "/settings/security",          name: "settings-security",     component: SettingsSecurity,      meta: { module: null    } },
   { path: "/settings/sso",              name: "settings-sso",          component: SettingsSSO,            meta: { module: "admin" } },
   { path: "/settings/integrations",      name: "settings-integrations", component: SettingsIntegrations,  meta: { module: "admin" } },
-  // { path: "/settings/currency-exchange", name: "settings-currency", component: SettingsCurrencyExchange, meta: { module: "admin" } }, // INR-only: hidden
+  // { path: "/settings/currency-exchange", name: "settings-currency", component: SettingsCurrencyExchange, meta: { module: "admin" } }, // OMR-only: hidden
   { path: "/accounting/chart-of-accounts", name: "chart-of-accounts", component: ChartOfAccounts,  meta: { module: "accounts" } },
   { path: "/accounting/journal-entries",   name: "journal-entries",   component: JournalEntries,   meta: { module: "accounts" } },
   { path: "/accounting/opening-balances",  name: "opening-balances",  component: OpeningBalances,  meta: { module: "accounts" } },
